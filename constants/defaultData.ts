@@ -1,0 +1,149 @@
+
+import { AppData, SalaryPolicy, ExpenseCategory } from '../types';
+
+export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  // CẤP 1: CHI PHÍ CỐ ĐỊNH
+  { id: 'cat-fixed', name: 'Chi Phí Cố Định' },
+  
+  // CẤP 2 DƯỚI CỐ ĐỊNH
+  { id: 'cat-fixed-personnel', name: 'Nhân sự', parentId: 'cat-fixed' },
+  { id: 'cat-fixed-premises', name: 'Mặt bằng', parentId: 'cat-fixed' },
+  { id: 'cat-fixed-admin', name: 'Hành chính & Phần mềm', parentId: 'cat-fixed' },
+
+  // CẤP 3 DƯỚI CÁC NHÓM CỐ ĐỊNH
+  { id: 'cat-personnel-net', name: 'Nhân sự (Thực nhận)', parentId: 'cat-fixed-personnel' },
+  { id: 'cat-rent', name: 'Thuê mặt bằng', parentId: 'cat-fixed-premises' },
+  { id: 'cat-internet', name: 'Internet & Phần mềm', parentId: 'cat-fixed-admin' },
+  { id: 'cat-management', name: 'Phí quản lý & Bảo vệ', parentId: 'cat-fixed-admin' },
+  
+  // CẤP 1: CHI PHÍ BIẾN ĐỔI
+  { id: 'cat-variable', name: 'Chi Phí Biến Đổi' },
+
+  // CẤP 2 DƯỚI BIẾN ĐỔI
+  { id: 'cat-var-cogs', name: 'Giá vốn & Hàng hóa', parentId: 'cat-variable' },
+  { id: 'cat-var-ops', name: 'Vận hành & Tiện ích', parentId: 'cat-variable' },
+  { id: 'cat-var-marketing', name: 'Marketing & Bán hàng', parentId: 'cat-variable' },
+
+  // CẤP 3 DƯỚI CÁC NHÓM BIẾN ĐỔI
+  { id: 'cat-cogs', name: 'Giá vốn hàng bán (COGS)', parentId: 'cat-var-cogs' },
+  { id: 'cat-utilities', name: 'Điện & Nước', parentId: 'cat-var-ops' },
+  { id: 'cat-packaging', name: 'Phí đóng gói & Vận chuyển', parentId: 'cat-var-ops' },
+  { id: 'cat-consumables', name: 'Vật tư tiêu hao', parentId: 'cat-var-ops' },
+  { id: 'cat-repairs', name: 'Sửa chữa & Bảo trì', parentId: 'cat-var-ops' },
+  { id: 'cat-marketing', name: 'Marketing & Quảng cáo', parentId: 'cat-var-marketing' },
+
+  // CẤP 1: CHI PHÍ KHẤU HAO
+  { id: 'cat-depreciation-root', name: 'Chi Phí Khấu Hao' },
+  { id: 'cat-depreciation', name: 'Khấu hao tài sản', parentId: 'cat-depreciation-root' },
+
+  // CẤP 1: CHI PHÍ LÃI VAY
+  { id: 'cat-interest-root', name: 'Chi Phí Lãi Vay' },
+  { id: 'cat-interest', name: 'Lãi vay ngân hàng', parentId: 'cat-interest-root' },
+];
+
+export const DEFAULT_POLICIES: SalaryPolicy[] = [
+  { id: 'p-nhom-1', name: 'Nhóm 1 (Thử việc 1)', salaryType: 'daily', baseSalary: 100000, startThreshold: 0, endThreshold: 7, otRate: 15000, commissionRate: 0, seniorityBonusPerYear: 0, attendanceAllowance: 0, cleaningAllowance: 0, customerServiceAllowance: 0, dinnerAllowance: 20000, housingAllowance: 0, responsibilityAllowance: 0 },
+  { id: 'p-nhom-2', name: 'Nhóm 2 (Thử việc 2)', salaryType: 'monthly', baseSalary: 4500000, startThreshold: 8, endThreshold: 29, otRate: 20000, commissionRate: 1, seniorityBonusPerYear: 0, attendanceAllowance: 200000, cleaningAllowance: 100000, customerServiceAllowance: 100000, dinnerAllowance: 25000, housingAllowance: 0, responsibilityAllowance: 0 },
+  { id: 'p-nhom-3', name: 'Nhóm 3 (NV Chính thức tháng 1)', salaryType: 'monthly', baseSalary: 4500000, startThreshold: 30, endThreshold: 30, otRate: 25000, commissionRate: 1.5, seniorityBonusPerYear: 200000, attendanceAllowance: 300000, cleaningAllowance: 150000, customerServiceAllowance: 150000, dinnerAllowance: 30000, housingAllowance: 500000, responsibilityAllowance: 0 },
+  { id: 'p-nhom-4', name: 'Nhóm 4 (Nhân viên Chính thức)', salaryType: 'monthly', baseSalary: 5000000, startThreshold: 31, endThreshold: 365, otRate: 30000, commissionRate: 2, seniorityBonusPerYear: 300000, attendanceAllowance: 500000, cleaningAllowance: 200000, customerServiceAllowance: 200000, dinnerAllowance: 30000, housingAllowance: 500000, responsibilityAllowance: 1000000 },
+  { id: 'p-nhom-5', name: 'Nhóm 5 (Chính thức năm 2)', salaryType: 'monthly', baseSalary: 5500000, startThreshold: 366, endThreshold: 0, otRate: 35000, commissionRate: 2.5, seniorityBonusPerYear: 500000, attendanceAllowance: 500000, cleaningAllowance: 200000, customerServiceAllowance: 200000, dinnerAllowance: 30000, housingAllowance: 500000, responsibilityAllowance: 1500000 }
+];
+
+export const INITIAL_APP_DATA: AppData = {
+  employees: [], revenue: [], productGroups: [], productGroupRevenue: [], expenses: [], payroll: [], staffPerformance: [], attendance: [], overtime: [], sales: [], shortages: [], advances: [], cashflow: [], 
+  salaryPolicies: DEFAULT_POLICIES, holidays: [], violationTypes: [], violationOccurrences: [], 
+  customDeductions: ['Mất Chuyên cần', 'Mất Vệ sinh', 'Mất CSKH', 'Mất Trách nhiệm', 'Mất hỗ trợ ở'], 
+  knowledgeBase: [],
+  promotions: [],
+  expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+  shopeeRevenue: [],
+  shopeeProductGroupRevenue: [],
+  shopeeSourceData: [
+    { id: 'sku-1', sku: 'DQH02-Den-41', name: 'Dép Quai Hậu 02 - Đen - 41', importPrice: 150000, salePrice: 279000, status: 'Active' },
+    { id: 'sku-2', sku: 'DQND24-Nau-39', name: 'Dép Quai Ngang Da 24 - Nâu - 39', importPrice: 145000, salePrice: 279000, status: 'Active' },
+  ],
+  shopeeCosts: {
+    fixedCosts: [
+      { id: 'fc-1', name: 'Thuê kho bãi', quantity: 1, unitPrice: 5000000 },
+      { id: 'fc-2', name: 'Nhân viên đóng gói', quantity: 2, unitPrice: 4500000 },
+    ],
+    variableCosts: [
+      { id: 'vc-1', name: 'Băng keo & Hộp', quantity: 1, unitPrice: 3500 },
+      { id: 'vc-2', name: 'Quà tặng kèm', quantity: 1, unitPrice: 2000 },
+    ],
+    targetOrders: 150,
+    platformFeePercent: 4,
+    paymentFeePercent: 5,
+    freeshipExtraPercent: 6,
+    affiliateFeePercent: 0,
+    handlingFeePerOrder: 7185,
+    taxPercent: 1.5,
+    adsTaxPercent: 5,
+  },
+  shopeeInventoryIn: [
+    { id: 'in-1', date: '2024-10-25', sku: 'DQH02-Den-41', quantity: 100, importPrice: 150000, note: 'Nhập hàng đầu mùa' },
+    { id: 'in-2', date: '2024-10-25', sku: 'DQND24-Nau-39', quantity: 100, importPrice: 145000, note: 'Nhập hàng đầu mùa' },
+  ],
+  shopeeInventoryOut: [
+    { 
+      id: 'out-1', 
+      date: '2024-11-01', 
+      orderId: '2411014KKV8NKG', 
+      sku: 'DQH02-Den-41', 
+      productName: 'Dép Quai Hậu 02 - Đen - 41',
+      platform: 'Shopee 2',
+      quantity: 1, 
+      salePrice: 279000, 
+      customerPaid: 279000,
+      platformFee: 11160, 
+      paymentFee: 13950, 
+      freeshipExtra: 16740, 
+      affiliateFee: 0, 
+      handlingFee: 7185, 
+      adsCost: 29520, 
+      adsTax: 1476, 
+      personalIncomeTax: 4185, 
+      netProfit: 38969, 
+      address: 'ĐÀ NẴNG', 
+      shippingUnit: 'GHN', 
+      status: 'OK',
+      profitStatus: 'LÃI 2',
+      dailyOrderIndex: 1
+    },
+    { 
+      id: 'out-2', 
+      date: '2024-11-01', 
+      orderId: '2411014YTG4K2H', 
+      sku: 'DQND24-Nau-39', 
+      productName: 'Dép Quai Ngang Da 24 - Nâu - 39',
+      platform: 'Shopee 2',
+      quantity: 1, 
+      salePrice: 279000, 
+      customerPaid: 279000,
+      platformFee: 11160, 
+      paymentFee: 13950, 
+      freeshipExtra: 16740, 
+      affiliateFee: 0, 
+      handlingFee: 7185, 
+      adsCost: 29520, 
+      adsTax: 1476, 
+      personalIncomeTax: 4185, 
+      netProfit: 43969, 
+      address: 'ĐÀ NẴNG', 
+      shippingUnit: 'SPX', 
+      status: 'OK',
+      profitStatus: 'LÃI 2',
+      dailyOrderIndex: 2
+    },
+  ],
+  dailyAdsConfig: {},
+  recurringExpenses: [],
+  dailyBreakEvenConfig: {
+    monthlyFixedCosts: 50000000,
+    grossMarginPercent: 35
+  },
+  posProducts: [],
+  posOrders: [],
+  posCustomers: [],
+  inventoryTransactions: []
+};

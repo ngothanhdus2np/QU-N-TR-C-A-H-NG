@@ -1,0 +1,177 @@
+import { AppData, BrandProfile } from '../types';
+import { DEFAULT_BRAND } from '../constants/marketing';
+import { DEFAULT_POLICIES, DEFAULT_EXPENSE_CATEGORIES, INITIAL_APP_DATA } from '../constants/defaultData';
+
+export const dataMapper = {
+  mapBrandProfile(bp: any): BrandProfile {
+    return {
+      story: bp.story || DEFAULT_BRAND.story,
+      voice: bp.voice || DEFAULT_BRAND.voice,
+      targetAudience: bp.target_audience || DEFAULT_BRAND.targetAudience,
+      competitiveAdvantage: bp.competitive_advantage || DEFAULT_BRAND.competitiveAdvantage,
+      logo: bp.logo || DEFAULT_BRAND.logo,
+      inventory: bp.inventory || DEFAULT_BRAND.inventory,
+      phone: bp.phone || DEFAULT_BRAND.phone,
+      address: bp.address || DEFAULT_BRAND.address,
+      hashtags: bp.hashtags || DEFAULT_BRAND.hashtags
+    };
+  },
+
+  mergeBy<T extends { id?: string, date?: string, sku?: string }>(cloud: T[], local: T[], key: keyof T = 'id'): T[] {
+    if (!cloud || cloud.length === 0) return local || [];
+    if (!local || local.length === 0) return cloud || [];
+    
+    const merged = [...cloud];
+    local.forEach(l => {
+      const idx = merged.findIndex(c => c[key] === l[key]);
+      if (idx === -1) {
+        merged.push(l);
+      } else {
+        // If it exists in both, cloud usually wins, but we can merge properties
+        // For simplicity, we'll keep cloud, but if local has more fields, we could merge.
+        // In this app, we'll just keep cloud as source of truth if it exists.
+        merged[idx] = { ...merged[idx], ...l };
+      }
+    });
+    return merged;
+  },
+
+  mapAllData(results: any, localData: any): Partial<AppData> {
+    const cloudEmployees = (results.employees || []).map((e: any) => ({
+      id: e.id, name: e.name, position: e.position, joinDate: e.join_date || e.joinDate, resignedDate: e.resigned_date || e.resignedDate, 
+      assignedPolicyId: e.assigned_policy_id || e.assignedPolicyId, dob: e.dob, phone: e.phone, address: e.address, 
+      bankAccountNumber: e.bank_account_number || e.bankAccountNumber, bankName: e.bank_name || e.bankName, bankAccountHolder: e.bank_account_holder || e.bankAccountHolder, 
+      notes: e.notes, photoUrl: e.photo_url || e.photoUrl, bloodType: e.blood_type || e.bloodType, email: e.email
+    }));
+
+    const cloudPolicies = (results.policies || []).map((p: any) => ({
+      id: p.id, name: p.name, salaryType: p.salary_type || 'monthly', baseSalary: Number(p.base_salary) ?? 0, isProRated: p.is_pro_rated ?? false,
+      startThreshold: p.start_threshold ?? 0, endThreshold: p.end_threshold ?? 0, otRate: Number(p.ot_rate) ?? 0, commissionRate: Number(p.commission_rate) ?? 0,
+      seniorityBonusPerYear: Number(p.seniority_bonus_per_year) ?? 0, attendanceAllowance: Number(p.attendance_allowance) ?? 0,
+      cleaningAllowance: Number(p.cleaning_allowance) ?? 0, customerServiceAllowance: Number(p.customer_service_allowance) ?? 0,
+      dinnerAllowance: Number(p.dinner_allowance) ?? 0, housingAllowance: Number(p.housing_allowance) ?? 0, responsibilityAllowance: Number(p.responsibility_allowance) ?? 0
+    }));
+
+    const cloudRevenue = (results.revenue || []).map((r: any) => ({
+      id: r.id, date: r.date, totalGrossRevenue: r.total_gross_revenue || r.totalGrossRevenue || 0, discount: r.discount || 0,
+      revenueOther: r.revenue_other || r.revenueOther || 0, returnsValue: r.returns_value || r.returnsValue || 0, netRevenue: r.net_revenue || r.netRevenue || 0,
+      totalCogs: r.total_cogs || r.totalCogs || 0, grossProfit: r.gross_profit || r.grossProfit || 0
+    }));
+
+    return {
+      employees: this.mergeBy(cloudEmployees, localData?.employees || []),
+      salaryPolicies: (cloudPolicies.length > 0) ? cloudPolicies : (localData?.salaryPolicies || DEFAULT_POLICIES),
+      revenue: this.mergeBy(cloudRevenue, localData?.revenue || [], 'date'),
+      productGroups: this.mergeBy((results.pGroups || []).map((g: any) => ({ id: g.id, name: g.name, target: g.target })), localData?.productGroups || []),
+      productGroupRevenue: this.mergeBy((results.pGroupRev || []).map((r: any) => ({
+        id: r.id, date: r.date, groupId: r.group_id || r.groupId, groupName: r.group_name || r.groupName || 'Chưa phân loại', 
+        amount: Number(r.amount || r.Amount || 0), quantity: Number(r.quantity || r.Quantity || 0), 
+        returnsQuantity: Number(r.returns_quantity || r.returnsQuantity || 0), returnsValue: Number(r.returns_value || r.returnsValue || 0),
+        netRevenue: Number(r.net_revenue || r.netRevenue || 0), cogs: Number(r.cogs || r.Cogs || 0)
+      })), localData?.productGroupRevenue || []),
+      expenses: this.mergeBy((results.expenses || []).map((e: any) => ({
+        id: e.id, date: e.date, category: e.category, amount: e.amount || 0, description: e.description
+      })), localData?.expenses || []),
+      attendance: this.mergeBy((results.attendance || []).map((a: any) => ({
+        id: a.id, employeeId: a.employee_id || a.employeeId, employeeName: a.employee_name || a.employeeName, date: a.date, status: a.status, hours: a.hours || 0
+      })), localData?.attendance || []),
+      overtime: this.mergeBy((results.overtime || []).map((o: any) => ({
+        id: o.id, employeeId: o.employee_id || o.employeeId, employeeName: o.employee_name || o.employeeName, date: o.date, hours: o.hours || 0, multiplier: o.multiplier || 1
+      })), localData?.overtime || []),
+      sales: this.mergeBy((results.sales || []).map((s: any) => ({
+        id: s.id, employeeId: s.employee_id || s.employeeId, employeeName: s.employee_name || s.employeeName, date: s.date, 
+        salesAmount: s.sales_amount || s.salesAmount || 0, commissionRate: s.commission_rate || s.commissionRate || 0, commissionEarned: s.commission_earned || s.commissionEarned || 0
+      })), localData?.sales || []),
+      shortages: this.mergeBy((results.shortages || []).map((sh: any) => ({
+        id: sh.id, employeeId: sh.employee_id || sh.employeeId, employeeName: sh.employee_name || sh.employeeName, date: sh.date, amount: sh.amount || 0
+      })), localData?.shortages || []),
+      advances: this.mergeBy((results.advances || []).map((ad: any) => ({
+        id: ad.id, employeeId: ad.employee_id || ad.employeeId, employeeName: ad.employee_name || ad.employeeName, date: ad.date, amount: ad.amount || 0
+      })), localData?.advances || []),
+      payroll: this.mergeBy((results.payroll || []).map((p: any) => ({
+        id: p.id, employeeId: p.employee_id || p.employeeId, employeeName: p.employee_name || p.employeeName, month: p.month,
+        basicSalary: p.basic_salary || p.basicSalary || 0, allowance: p.allowance || 0, responsibilityPay: p.responsibility_pay || p.responsibilityPay || 0,
+        overtimePay: p.overtime_pay || p.overtimePay || 0, commissionPay: p.commission_pay || p.commissionPay || 0, seniorityBonus: p.seniority_bonus || p.seniorityBonus || 0,
+        holidayBonus: p.holiday_bonus || p.holidayBonus || 0, tetBonus: p.tet_bonus || p.tetBonus || 0, tetBonusBefore: p.tet_bonus_before || p.tetBonusBefore || 0, tetBonusAfter: p.tet_bonus_after || p.tetBonusAfter || 0, 
+        advance: p.advance || 0, shortage: p.shortage || 0, fine: p.fine || 0, netPay: p.net_pay || p.netPay || 0, seniorityDays: p.seniority_days || p.seniorityDays || 0, isOfficial: p.is_official || p.isOfficial, hasTetCommitment: p.has_tet_commitment || p.hasTetCommitment,
+        calculationNote: p.calculation_note || p.calculationNote
+      })), localData?.payroll || []),
+      staffPerformance: this.mergeBy((results.perf || []).map((pf: any) => ({
+        id: pf.id, employeeId: pf.employee_id || pf.employeeId, employeeName: pf.employee_name || pf.employeeName, month: pf.month,
+        totalSales: pf.total_sales || pf.totalSales || 0, totalIncome: pf.total_income || pf.totalIncome || 0, roi: pf.roi || 0, rank: pf.rank
+      })), localData?.staffPerformance || []),
+      knowledgeBase: this.mergeBy((results.kb || []).map((k: any) => ({
+        id: k.id, category: k.category, title: k.title, content: k.content, updatedAt: k.updated_at || k.updatedAt
+      })), localData?.knowledgeBase || []),
+      promotions: this.mergeBy((results.promotions || []).map((p: any) => ({
+        id: p.id, name: p.name, startDate: p.start_date || p.startDate, endDate: p.end_date || p.endDate, type: p.type, 
+        budget: p.budget || 0, targetRevenue: p.target_revenue || p.targetRevenue || 0, description: p.description, status: p.status,
+        giftTiers: p.gift_tiers || p.giftTiers || [],
+        actualRevenue: p.actual_revenue || p.actualRevenue || 0,
+        actualCost: p.actual_cost || p.actualCost || 0,
+        incrementalRevenue: p.incremental_revenue || p.incrementalRevenue || 0,
+        actualRoi: p.actual_roi || p.actualRoi || 0
+      })), localData?.promotions || []),
+      violationTypes: results.configs?.find((c: any) => c.key === 'violation_types')?.value || localData?.violationTypes || [],
+      violationOccurrences: results.configs?.find((c: any) => c.key === 'violation_occurrences')?.value || localData?.violationOccurrences || [],
+      customDeductions: results.configs?.find((c: any) => c.key === 'custom_penalties')?.value || localData?.customDeductions || INITIAL_APP_DATA.customDeductions,
+      holidays: results.configs?.find((c: any) => c.key === 'holidays')?.value || localData?.holidays || [],
+      responsibilityApprovals: results.configs?.find((c: any) => c.key === 'responsibility_approvals')?.value || localData?.responsibilityApprovals || [],
+      tetCampaign: results.configs?.find((c: any) => c.key === 'tet_campaign')?.value || localData?.tetCampaign || undefined,
+      expenseCategories: results.configs?.find((c: any) => c.key === 'expense_categories')?.value || localData?.expenseCategories || DEFAULT_EXPENSE_CATEGORIES,
+      dailyBreakEvenConfig: results.configs?.find((c: any) => c.key === 'daily_break_even_config')?.value || localData?.dailyBreakEvenConfig || INITIAL_APP_DATA.dailyBreakEvenConfig,
+      shopeeRevenue: this.mergeBy((results.shopeeRevenue || []).map((r: any) => ({
+        id: r.id, date: r.date, totalGrossRevenue: r.total_gross_revenue || r.totalGrossRevenue || 0, discount: r.discount || 0,
+        revenueOther: r.revenue_other || r.revenueOther || 0, returnsValue: r.returns_value || r.returnsValue || 0, netRevenue: r.net_revenue || r.netRevenue || 0,
+        totalCogs: r.total_cogs || r.totalCogs || 0, grossProfit: r.gross_profit || r.grossProfit || 0
+      })), localData?.shopeeRevenue || [], 'date'),
+      shopeeProductGroupRevenue: this.mergeBy((results.shopeeProductGroupRevenue || []).map((r: any) => ({
+        id: r.id, date: r.date, groupId: r.group_id || r.groupId, groupName: r.group_name || r.groupName || 'Chưa phân loại', 
+        amount: Number(r.amount || r.Amount || 0), quantity: Number(r.quantity || r.Quantity || 0), 
+        returnsQuantity: Number(r.returns_quantity || r.returnsQuantity || 0), returnsValue: Number(r.returns_value || r.returnsValue || 0),
+        netRevenue: Number(r.net_revenue || r.netRevenue || 0), cogs: Number(r.cogs || r.Cogs || 0)
+      })), localData?.shopeeProductGroupRevenue || []),
+      shopeeSourceData: this.mergeBy((results.shopeeSourceData || []).map((r: any) => ({
+        id: r.id, sku: r.sku, name: r.name, importPrice: r.import_price || r.importPrice || 0,
+        salePrice: r.sale_price || r.salePrice || 0, status: r.status
+      })), localData?.shopeeSourceData || [], 'sku'),
+      shopeeCosts: results.configs?.find((c: any) => c.key === 'shopee_costs')?.value || localData?.shopeeCosts || INITIAL_APP_DATA.shopeeCosts,
+      dailyAdsConfig: results.configs?.find((c: any) => c.key === 'daily_ads_config')?.value || localData?.dailyAdsConfig || INITIAL_APP_DATA.dailyAdsConfig,
+      shopeeInventoryIn: this.mergeBy((results.shopeeInventoryIn || []).map((r: any) => ({
+        id: r.id, date: r.date, sku: r.sku, quantity: r.quantity || 0,
+        importPrice: r.import_price || r.importPrice || 0, note: r.note
+      })), localData?.shopeeInventoryIn || []),
+      shopeeInventoryOut: this.mergeBy((results.shopeeInventoryOut || []).map((r: any) => ({
+        id: r.id, date: r.date, status: r.status, orderId: r.order_id || r.orderId, sku: r.sku,
+        quantity: r.quantity || r.Quantity || 0, salePrice: r.sale_price || r.salePrice || 0,
+        platformFee: r.platform_fee || r.platformFee || 0, paymentFee: r.payment_fee || r.paymentFee || 0,
+        freeshipExtra: r.freeship_extra || r.freeshipExtra || 0, affiliateFee: r.affiliate_fee || r.affiliateFee || 0,
+        handlingFee: r.handling_fee || r.handlingFee || 0, adsCost: r.ads_cost || r.adsCost || 0,
+        adsTax: r.ads_tax || r.adsTax || 0, personalIncomeTax: r.personal_income_tax || r.personalIncomeTax || 0,
+        netProfit: r.net_profit || r.netProfit || 0, address: r.address, shipping_unit: r.shipping_unit || r.shippingUnit
+      })), localData?.shopeeInventoryOut || []),
+      posProducts: this.mergeBy((results.posProducts || []).map((p: any) => ({
+        id: p.id, sku: p.sku, name: p.name, categoryId: p.category_id || p.categoryId,
+        importPrice: Number(p.import_price || p.importPrice || 0), salePrice: Number(p.sale_price || p.salePrice || 0),
+        stock: Number(p.stock || 0), minStock: Number(p.min_stock || p.minStock || 0), maxStock: Number(p.max_stock || p.maxStock || 999999),
+        unit: p.unit, brand: p.brand, barcode: p.barcode, description: p.description, warranty: p.warranty,
+        allowPoints: p.allow_points ?? p.allowPoints ?? true, weight: Number(p.weight || 0), weightUnit: p.weight_unit || p.weightUnit,
+        location: p.location, images: p.images || [], status: p.status, units: p.units || [], attributes: p.attributes || []
+      })), localData?.posProducts || []),
+      posOrders: this.mergeBy((results.posOrders || []).map((o: any) => ({
+        id: o.id, orderCode: o.order_code || o.orderCode, date: o.date, customerId: o.customer_id || o.customerId,
+        customerName: o.customer_name || o.customerName, items: o.items || [], totalAmount: Number(o.total_amount || 0),
+        discount: Number(o.discount || 0), finalAmount: Number(o.final_amount || 0), paymentMethod: o.payment_method || o.paymentMethod,
+        staffId: o.staff_id || o.staffId, notes: o.notes, pointsEarned: Number(o.points_earned || 0)
+      })), localData?.posOrders || []),
+      posCustomers: this.mergeBy((results.posCustomers || []).map((c: any) => ({
+        id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address, points: Number(c.points || 0),
+        totalSpent: Number(c.total_spent || 0), lastVisit: c.last_visit || c.lastVisit, tier: c.tier || 'Standard'
+      })), localData?.posCustomers || []),
+      inventoryTransactions: this.mergeBy((results.inventoryTransactions || []).map((t: any) => ({
+        id: t.id, date: t.date, type: t.type, items: t.items || [], note: t.note,
+        referenceId: t.reference_id || t.referenceId, staffId: t.staff_id || t.staffId
+      })), localData?.inventoryTransactions || [])
+    };
+  }
+};
