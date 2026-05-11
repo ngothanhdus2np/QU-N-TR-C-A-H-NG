@@ -71,6 +71,10 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
              <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-2">Liên hệ & CTA</span>
              <div className="space-y-3">
                <div className="flex flex-col gap-1">
+                 <label className="text-[9px] font-black uppercase text-slate-400">Tên cửa hàng</label>
+                 <input value={brandProfile.name || ""} onChange={e => onUpdate({...brandProfile, name: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="Tên cửa hàng (hiện trên hóa đơn)" />
+               </div>
+               <div className="flex flex-col gap-1">
                  <label className="text-[9px] font-black uppercase text-slate-400">Số điện thoại</label>
                  <input value={brandProfile.phone || ""} onChange={e => onUpdate({...brandProfile, phone: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="Số điện thoại" />
                </div>

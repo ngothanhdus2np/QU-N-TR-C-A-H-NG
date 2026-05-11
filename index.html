@@ -52,6 +52,25 @@
         background: #cbd5e1;
       }
 
+      /* Custom scrollbar for consultant box - more visible */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+        margin: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+        border: 2px solid #f1f5f9;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
       .input-field {
         width: 100%;
         padding: 0.75rem 1.25rem;
@@ -88,6 +107,253 @@
       }
       .btn-primary:active {
         transform: translateY(0);
+      }
+
+      /* Readable product-app type scale on top of Tailwind utility sizes. */
+      html .text-\[8px\],
+      html .text-\[9px\],
+      html .text-\[10px\],
+      html .text-\[11px\],
+      html [class*="text-[8px]"],
+      html [class*="text-[9px]"],
+      html [class*="text-[10px]"],
+      html [class*="text-[11px]"] {
+        font-size: 13px !important;
+        line-height: 1.45 !important;
+      }
+
+      html .text-xs {
+        font-size: 13.5px !important;
+        line-height: 1.45 !important;
+      }
+
+      html .text-sm {
+        font-size: 14.5px !important;
+        line-height: 1.5 !important;
+      }
+
+      html button,
+      html input,
+      html select,
+      html textarea {
+        font-size: max(13.5px, 1em);
+      }
+
+      /* Theme package: Codex-style overrides.
+         The default "classic" theme is the existing Tailwind styling. */
+      html[data-theme="codex"] {
+        --primary: #18181b;
+        --primary-hover: #000000;
+        --app-bg: #f7f7f5;
+        --surface: #ffffff;
+        --surface-muted: #f4f4f5;
+        --surface-subtle: #fafafa;
+        --border: #e4e4e7;
+        --text: #18181b;
+        --text-muted: #71717a;
+        --focus-ring: rgba(24, 24, 27, 0.08);
+        --radius-sm: 0.5rem;
+        --radius-md: 0.625rem;
+        --radius-lg: 0.875rem;
+      }
+
+      html[data-theme="codex"] body {
+        background-color: var(--app-bg);
+        color: var(--text);
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+
+      html[data-theme="codex"] h1,
+      html[data-theme="codex"] h2,
+      html[data-theme="codex"] h3,
+      html[data-theme="codex"] h4,
+      html[data-theme="codex"] h5,
+      html[data-theme="codex"] h6,
+      html[data-theme="codex"] button,
+      html[data-theme="codex"] b,
+      html[data-theme="codex"] strong,
+      html[data-theme="codex"] .font-semibold,
+      html[data-theme="codex"] .font-bold,
+      html[data-theme="codex"] .font-black {
+        letter-spacing: 0;
+      }
+
+      html[data-theme="codex"] .font-black {
+        font-weight: 600 !important;
+      }
+
+      html[data-theme="codex"] h3,
+      html[data-theme="codex"] h4,
+      html[data-theme="codex"] h5,
+      html[data-theme="codex"] h6 {
+        font-weight: 700 !important;
+        text-transform: uppercase;
+      }
+
+      html[data-theme="codex"] .uppercase {
+        text-transform: uppercase !important;
+        font-weight: 700 !important;
+      }
+
+      html[data-theme="codex"] .tracking-wider,
+      html[data-theme="codex"] .tracking-widest,
+      html[data-theme="codex"] .tracking-tight,
+      html[data-theme="codex"] [class*="tracking-["] {
+        letter-spacing: 0 !important;
+      }
+
+      html[data-theme="codex"] .bg-slate-50,
+      html[data-theme="codex"] .bg-slate-100 {
+        background-color: var(--app-bg) !important;
+      }
+
+      html[data-theme="codex"] .bg-white {
+        background-color: var(--surface) !important;
+      }
+
+      html[data-theme="codex"] .bg-indigo-50,
+      html[data-theme="codex"] .bg-blue-50,
+      html[data-theme="codex"] .bg-violet-50,
+      html[data-theme="codex"] .bg-emerald-50,
+      html[data-theme="codex"] .bg-teal-50,
+      html[data-theme="codex"] .bg-orange-50,
+      html[data-theme="codex"] .bg-amber-50,
+      html[data-theme="codex"] .bg-rose-50,
+      html[data-theme="codex"] .bg-red-50,
+      html[data-theme="codex"] .bg-green-50 {
+        background-color: var(--surface-muted) !important;
+      }
+
+      html[data-theme="codex"] .bg-indigo-600,
+      html[data-theme="codex"] .bg-blue-600,
+      html[data-theme="codex"] .bg-emerald-500,
+      html[data-theme="codex"] .bg-emerald-600,
+      html[data-theme="codex"] .bg-teal-500,
+      html[data-theme="codex"] .bg-teal-600,
+      html[data-theme="codex"] .bg-orange-500,
+      html[data-theme="codex"] .bg-orange-600,
+      html[data-theme="codex"] .bg-amber-500,
+      html[data-theme="codex"] .bg-amber-600,
+      html[data-theme="codex"] .bg-rose-500,
+      html[data-theme="codex"] .bg-rose-600,
+      html[data-theme="codex"] .bg-red-500,
+      html[data-theme="codex"] .bg-red-600,
+      html[data-theme="codex"] .hover\:bg-indigo-600:hover,
+      html[data-theme="codex"] .hover\:bg-indigo-700:hover,
+      html[data-theme="codex"] .hover\:bg-black:hover {
+        background-color: var(--primary) !important;
+      }
+
+      html[data-theme="codex"] .text-indigo-300,
+      html[data-theme="codex"] .text-indigo-400,
+      html[data-theme="codex"] .text-indigo-500,
+      html[data-theme="codex"] .text-indigo-600,
+      html[data-theme="codex"] .text-indigo-700,
+      html[data-theme="codex"] .text-blue-500,
+      html[data-theme="codex"] .text-blue-600,
+      html[data-theme="codex"] .text-violet-600,
+      html[data-theme="codex"] .text-emerald-400,
+      html[data-theme="codex"] .text-emerald-500,
+      html[data-theme="codex"] .text-emerald-600,
+      html[data-theme="codex"] .text-emerald-700,
+      html[data-theme="codex"] .text-teal-400,
+      html[data-theme="codex"] .text-teal-500,
+      html[data-theme="codex"] .text-teal-600,
+      html[data-theme="codex"] .text-teal-700,
+      html[data-theme="codex"] .text-orange-400,
+      html[data-theme="codex"] .text-orange-500,
+      html[data-theme="codex"] .text-orange-600,
+      html[data-theme="codex"] .text-orange-700,
+      html[data-theme="codex"] .text-amber-400,
+      html[data-theme="codex"] .text-amber-500,
+      html[data-theme="codex"] .text-amber-600,
+      html[data-theme="codex"] .text-amber-700,
+      html[data-theme="codex"] .text-rose-400,
+      html[data-theme="codex"] .text-rose-500,
+      html[data-theme="codex"] .text-rose-600,
+      html[data-theme="codex"] .text-rose-700,
+      html[data-theme="codex"] .text-red-400,
+      html[data-theme="codex"] .text-red-500,
+      html[data-theme="codex"] .text-red-600,
+      html[data-theme="codex"] .text-red-700,
+      html[data-theme="codex"] .text-green-400,
+      html[data-theme="codex"] .text-green-500,
+      html[data-theme="codex"] .text-green-600,
+      html[data-theme="codex"] .text-green-700 {
+        color: var(--text) !important;
+      }
+
+      html[data-theme="codex"] svg:not([class*="text-white"]) {
+        color: currentColor;
+      }
+
+      html[data-theme="codex"] .border-slate-100,
+      html[data-theme="codex"] .border-slate-200,
+      html[data-theme="codex"] .border-slate-300,
+      html[data-theme="codex"] .border-indigo-100,
+      html[data-theme="codex"] .border-indigo-200,
+      html[data-theme="codex"] .border-indigo-500,
+      html[data-theme="codex"] .border-indigo-600,
+      html[data-theme="codex"] .border-emerald-100,
+      html[data-theme="codex"] .border-emerald-200,
+      html[data-theme="codex"] .border-teal-100,
+      html[data-theme="codex"] .border-teal-200,
+      html[data-theme="codex"] .border-orange-100,
+      html[data-theme="codex"] .border-orange-200,
+      html[data-theme="codex"] .border-amber-100,
+      html[data-theme="codex"] .border-amber-200,
+      html[data-theme="codex"] .border-rose-100,
+      html[data-theme="codex"] .border-rose-200,
+      html[data-theme="codex"] .border-red-100,
+      html[data-theme="codex"] .border-red-200 {
+        border-color: var(--border) !important;
+      }
+
+      html[data-theme="codex"] .focus\:border-indigo-500:focus,
+      html[data-theme="codex"] .focus\:ring-indigo-500:focus {
+        border-color: var(--text) !important;
+        box-shadow: 0 0 0 3px var(--focus-ring) !important;
+      }
+
+      html[data-theme="codex"] .rounded-xl,
+      html[data-theme="codex"] .rounded-2xl,
+      html[data-theme="codex"] .rounded-3xl,
+      html[data-theme="codex"] [class*="rounded-[2"],
+      html[data-theme="codex"] [class*="rounded-[3"] {
+        border-radius: var(--radius-lg) !important;
+      }
+
+      html[data-theme="codex"] .rounded-lg {
+        border-radius: var(--radius-md) !important;
+      }
+
+      html[data-theme="codex"] .shadow-sm,
+      html[data-theme="codex"] .shadow-md,
+      html[data-theme="codex"] .shadow-lg,
+      html[data-theme="codex"] .shadow-xl,
+      html[data-theme="codex"] .shadow-2xl,
+      html[data-theme="codex"] [class*="shadow-["] {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+      }
+
+      html[data-theme="codex"] .btn-primary {
+        border-radius: var(--radius-lg);
+        box-shadow: none;
+      }
+
+      html[data-theme="codex"] .input-field,
+      html[data-theme="codex"] input,
+      html[data-theme="codex"] select,
+      html[data-theme="codex"] textarea {
+        border-radius: var(--radius-lg) !important;
+      }
+
+      html[data-theme="codex"] .glass-card {
+        border-color: var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: none;
       }
 
       /* Card Styling */

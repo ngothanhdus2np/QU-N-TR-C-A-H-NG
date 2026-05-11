@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Data files & artifacts
+*.xlsx
+*.xls
+COMMIT_MESSAGE.txt
+public/imports/
+tmpImage*.JPG
+tmpImage*.PNG
+tmp*

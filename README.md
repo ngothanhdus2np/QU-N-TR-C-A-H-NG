@@ -1,20 +1,44 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# CFO Brain 4.0 — Hệ thống MIS Doanh nghiệp
 
-# Run and deploy your AI Studio app
+Hệ thống quản lý thông tin doanh nghiệp tích hợp AI, thiết kế cho cửa hàng bán lẻ Việt Nam. Thay thế KiotViet với AI Agents chuyên biệt theo từng phòng ban.
 
-This contains everything you need to run your app locally.
+## Stack
 
-View your app in AI Studio: https://ai.studio/apps/81965729-8ee6-4a3d-909f-2680092cbd03
+- **Frontend**: React 19 + TypeScript + Vite + Recharts + Framer Motion
+- **Backend**: Express.js + Node.js
+- **Database**: Supabase (PostgreSQL)
+- **AI**: Anthropic Claude API (backend-only)
 
-## Run Locally
+## Backend routes
 
-**Prerequisites:**  Node.js
+- `server.ts` — bootstrap Express, middleware, Supabase, mount routes, start schedulers
+- `routes/ai.ts` — AI endpoints `/api/ai/*`
+- `routes/facebook.ts` — Facebook OAuth, posting, auto-post config/logs
+- `routes/notifications.ts` — EOD report, notifications, alerts
+- `routes/import.ts` — KiotViet import/sync
 
+## Chạy local
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Yêu cầu**: Node.js 18+
+
+```bash
+npm install
+```
+
+Tạo file `.env.local` từ template:
+```bash
+cp .env.example .env.local
+# Điền SUPABASE_URL, SUPABASE_ANON_KEY, ANTHROPIC_API_KEY
+```
+
+```bash
+npm run dev
+# App chạy tại http://localhost:3000
+```
+
+## Tài liệu
+
+- `CLAUDE.md` — Stack, rules, trạng thái hiện tại (đọc trước khi làm việc)
+- `DECISIONS.md` — Lý do đằng sau các quyết định kỹ thuật
+- `ROADMAP.md` — Lịch sử roadmap và technical debt backlog
+- `supabase_setup.sql` — SQL schema, chạy thủ công trên Supabase dashboard

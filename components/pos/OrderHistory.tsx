@@ -1,15 +1,19 @@
 
 import React, { useState } from 'react';
-import { FileText, Search, Printer, Download, X, ShoppingBag } from 'lucide-react';
+import { FileText, Search, Printer, BarChart2, X, ShoppingBag, FileDown } from 'lucide-react';
 import { POSOrder } from '../../types';
+import EndOfDayReport from './EndOfDayReport';
+import { exportToExcel } from '../../services/exportService';
 
 interface OrderHistoryProps {
   orders: POSOrder[];
+  storeName?: string;
 }
 
-const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
+const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<POSOrder | null>(null);
+  const [showEODReport, setShowEODReport] = useState(false);
 
   const filteredOrders = orders.filter(o => 
     (o.orderCode?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
@@ -82,9 +86,30 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
           </div>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-          <button className="flex items-center justify-center gap-3 px-8 py-3 bg-slate-50 text-slate-800 rounded-2xl hover:bg-slate-100 border border-slate-200 transition-all text-[11px] font-black uppercase tracking-widest flex-1 md:flex-none shadow-sm group">
-            <Download className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-            Xuất báo cáo
+          <button
+            onClick={() => exportToExcel(
+              filteredOrders.map(o => ({
+                'Mã hóa đơn': o.orderCode,
+                'Ngày giờ': new Date(o.date).toLocaleString('vi-VN'),
+                'Khách hàng': o.customerName || 'Khách vãng lai',
+                'Tiền hàng': o.totalAmount,
+                'Giảm giá': o.discount,
+                'Thực thu': o.finalAmount,
+                'Phương thức': o.paymentMethod,
+                'Loại': o.isReturn ? 'Trả hàng' : 'Bán hàng',
+              })),
+              'DonHang'
+            )}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-slate-200 text-emerald-600 rounded-2xl hover:bg-emerald-50 hover:border-emerald-200 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest shadow-sm"
+          >
+            <FileDown className="h-4 w-4" /> Xuất Excel
+          </button>
+          <button
+            onClick={() => setShowEODReport(true)}
+            className="flex items-center justify-center gap-3 px-8 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest flex-1 md:flex-none shadow-sm shadow-indigo-500/20 group"
+          >
+            <BarChart2 className="h-4 w-4" />
+            Báo cáo cuối ngày
           </button>
         </div>
       </div>
@@ -143,6 +168,15 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
         </div>
       </div>
 
+      {/* Modal Báo cáo cuối ngày */}
+      {showEODReport && (
+        <EndOfDayReport
+          orders={orders}
+          storeName={storeName}
+          onClose={() => setShowEODReport(false)}
+        />
+      )}
+
       {/* Modal Chi tiết đơn hàng */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
@@ -179,7 +213,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                       </div>
                       <div>
                         <div className="font-black text-slate-900 uppercase text-xs tracking-tight">{item.name}</div>
-                        <div className="text-[11px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{item.price.toLocaleString()}đ × {item.quantity} {item.unit || 'đv'}</div>
+                        <div className="text-[11px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{item.price.toLocaleString()}đ × {item.quantity} {(item as any).unit || 'đv'}</div>
                       </div>
                     </div>
                     <div className="font-black text-slate-900 text-base">{item.total.toLocaleString()}đ</div>

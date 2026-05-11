@@ -19,7 +19,6 @@ import {
   generateId
 } from '../businessLogic';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart as RePieChart, Pie } from 'recharts';
-import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
 
 const AnalyticsCard: React.FC<{ 

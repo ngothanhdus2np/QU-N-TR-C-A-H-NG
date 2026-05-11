@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { KnowledgeBaseArticle, AppData, SalaryPolicy, Holiday, ViolationType, ViolationOccurrence, TetCampaign } from '../types';
 import { 
   Plus, Search, Library, FileText, ChevronRight, X, Save, 
@@ -11,7 +12,6 @@ import {
   Workflow, FileSearch, FileDown, Upload
 } from 'lucide-react';
 import { marked } from 'marked';
-import { GoogleGenAI } from "@google/genai";
 
 interface Props {
   data: AppData;
@@ -135,53 +135,42 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const mimeType = file.type || 'application/octet-stream';
+    const isSupported = mimeType.startsWith('image/') || mimeType === 'application/pdf';
+    if (!isSupported) {
+      alert('Chỉ hỗ trợ file ảnh (JPG, PNG) và PDF. Định dạng DOCX chưa được hỗ trợ.');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
     setIsParsing(true);
     const reader = new FileReader();
 
     reader.onload = async (event) => {
       const base64Data = event.target?.result as string;
       const pureBase64 = base64Data.split(',')[1];
-      const mimeType = file.type || 'application/octet-stream';
 
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const model = 'gemini-3-flash-preview';
-
-        const prompt = `
-          BẠN LÀ: Chuyên gia Hệ thống Quản lý (MIS) và Kế toán trưởng.
-          NHIỆM VỤ: Đọc tài liệu đính kèm (có thể là thông báo, quy trình, hoặc văn bản ký tên).
-          YÊU CẦU:
-          1. Trích xuất toàn bộ nội dung quan trọng và chuyển thành định dạng Markdown chuyên nghiệp.
-          2. Đặt tiêu đề (Title) súc tích cho tài liệu này.
-          3. Phân loại tài liệu vào 1 trong các nhóm: Nhân sự, Vận hành, Bán hàng, Tài chính, Khác.
-          4. TRẢ VỀ JSON: {"title": "Tiêu đề", "category": "Nhóm", "content": "Nội dung Markdown chi tiết"}
-        `;
-
-        const response = await ai.models.generateContent({
-          model: model,
-          contents: [
-            {
-              parts: [
-                { inlineData: { data: pureBase64, mimeType: mimeType } },
-                { text: prompt }
-              ]
-            }
-          ],
-          config: { responseMimeType: "application/json" }
+        const response = await fetch('/api/ai/knowledge-ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data: pureBase64, mimeType }),
         });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'AI service error');
 
-        const result = JSON.parse(response.text || "{}");
+        const result = JSON.parse(data.result || '{}');
         if (result.content) {
           setAiDocSuggestion({
             ...result,
             sourceFileName: file.name,
             sourceFileData: base64Data,
-            sourceFileType: mimeType
+            sourceFileType: mimeType,
           });
         }
       } catch (err) {
-        console.error("AI Document Parsing Error:", err);
-        alert("AI không thể đọc tệp này. Vui lòng thử lại với định dạng hình ảnh hoặc PDF rõ nét hơn.");
+        console.error('AI Document Parsing Error:', err);
+        alert('AI không thể đọc tệp này. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local hoặc thử lại với ảnh/PDF rõ nét hơn.');
       } finally {
         setIsParsing(false);
         if (e.target) e.target.value = '';
@@ -551,10 +540,10 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Upload className="w-6 h-6" /></div>
                        Kho tài liệu gốc (Số hóa AI)
                     </h3>
-                    <p className="text-sm font-medium text-slate-500 mt-2">Tải lên văn bản gốc (.pdf, .png, .docx). AI Gemini 3 Flash sẽ tự động bóc tách và chuyển thành Quy chuẩn Markdown để nhân viên tra cứu nhanh.</p>
+                    <p className="text-sm font-medium text-slate-500 mt-2">Tải lên văn bản gốc (.pdf, .png, .jpg). Claude AI sẽ tự động bóc tách và chuyển thành Quy chuẩn Markdown để nhân viên tra cứu nhanh.</p>
                  </div>
                  <div className="flex-shrink-0">
-                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleDocumentUpload} accept=".pdf,.png,.jpg,.jpeg,.docx" />
+                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleDocumentUpload} accept=".pdf,.png,.jpg,.jpeg" />
                     <button 
                        onClick={() => fileInputRef.current?.click()}
                        disabled={isParsing}
@@ -692,7 +681,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                      </div>
                      <button onClick={() => setViewArticle(null)} className="p-3 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all shadow-sm"><X className="w-6 h-6" /></button>
                   </div>
-                  <div className="markdown-content prose max-w-none bg-slate-50/50 p-10 rounded-[2.5rem] border border-slate-100" dangerouslySetInnerHTML={{ __html: String(marked(viewArticle?.content || '')) }} />
+                  <div className="markdown-content prose max-w-none bg-slate-50/50 p-10 rounded-[2.5rem] border border-slate-100" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked(viewArticle?.content || '') as string) }} />
                </div>
              )}
           </div>

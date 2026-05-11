@@ -1,8 +1,8 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, User, Bot, BrainCircuit, Loader2, Sparkles, ShieldAlert, Database, PieChart, TrendingUp, Search } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import DOMPurify from 'dompurify';
+import { Send, User, Bot, BrainCircuit, Loader2, Sparkles, ShieldAlert, Database, PieChart, TrendingUp, Search, Package, Users, Megaphone, Wrench, BarChart2 } from 'lucide-react';
 import { AppData, ChatMessage, RevenueRecord, ExpenseRecord, ShopeeInventoryOutRecord, PayrollRecord } from '../types';
-import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { marked } from "marked";
 import { 
   calculateFinancialHealthScore, 
@@ -21,62 +21,73 @@ interface ChatInterfaceProps {
   isCFOReady: boolean;
 }
 
+const AGENT_META: Record<string, { label: string; color: string; icon: React.ElementType; questions: string[] }> = {
+  finance: {
+    label: 'CFO Agent', color: 'indigo',
+    icon: PieChart,
+    questions: [
+      'Kiểm tra rò rỉ dòng tiền: Chi phí nào đang chiếm tỷ trọng cao bất thường trong 30 ngày qua?',
+      'So sánh doanh thu và lợi nhuận thuần tuần này so với tuần trước.',
+      'Dựa trên chi phí cố định, dự báo ngày nào tháng này chúng ta đạt điểm hòa vốn?',
+      'Phân tích sức khỏe tài chính tháng này theo điểm số.',
+    ],
+  },
+  hr: {
+    label: 'HR Agent', color: 'amber',
+    icon: Users,
+    questions: [
+      'Danh sách nhân sự đang làm việc và dự toán quỹ lương tháng này là bao nhiêu?',
+      'Ai có thâm niên sắp chạm ngưỡng nhảy bậc lương trong 30 ngày tới?',
+      'So sánh chi phí nhân sự tháng này với doanh thu — tỉ lệ có hợp lý không?',
+    ],
+  },
+  sales: {
+    label: 'Sales Agent', color: 'emerald',
+    icon: TrendingUp,
+    questions: [
+      'So sánh doanh thu cửa hàng và Shopee tháng này — kênh nào đang tốt hơn?',
+      'Tuần nào trong tháng này có doanh thu cao nhất? Nguyên nhân có thể là gì?',
+      'Xu hướng doanh thu 3 tháng gần nhất đang tăng hay giảm?',
+    ],
+  },
+  inventory: {
+    label: 'Inventory Agent', color: 'orange',
+    icon: Package,
+    questions: [
+      'Sản phẩm nào đang sắp hết hàng hoặc đã hết? Cần nhập ngay gì?',
+      'Hàng nào bán chậm trong tháng này — có nên giảm giá hay trả NCC không?',
+    ],
+  },
+  marketing: {
+    label: 'Marketing Agent', color: 'rose',
+    icon: Megaphone,
+    questions: [
+      'Chương trình khuyến mãi nào đang có ROI tốt nhất?',
+      'So sánh hiệu quả các campaign đã chạy — cái nào nên nhân rộng?',
+    ],
+  },
+  operations: {
+    label: 'Operations Agent', color: 'slate',
+    icon: Wrench,
+    questions: [
+      'Tóm tắt phiên bán hàng POS hôm nay — doanh thu, số hóa đơn, phương thức thanh toán.',
+      'Nhà cung cấp nào đang có công nợ chưa thanh toán quá hạn?',
+      'Công nợ tổng với các NCC hiện tại là bao nhiêu?',
+    ],
+  },
+};
+
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessages, isCFOReady }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isQuerying, setIsQuerying] = useState(false);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
+  const [activeAgent, setActiveAgent] = useState<string>('finance');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { marked.setOptions({ breaks: true, gfm: true }); }, []);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
 
-  // Define Function Tools for AI
-  const tools: { functionDeclarations: FunctionDeclaration[] }[] = useMemo(() => [{
-    functionDeclarations: [
-      {
-        name: "get_metadata",
-        description: "Lấy thông tin cấu hình hệ thống bao gồm: Danh sách nhân sự, Chính sách lương (Ma trận nhảy bậc), Danh mục chi phí, và các Quy trình vận hành (SOP).",
-        parameters: { type: Type.OBJECT, properties: {} }
-      },
-      {
-        name: "query_ledgers",
-        description: "Truy vấn dữ liệu chi tiết từ các sổ cái trong một khoảng thời gian cụ thể.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            ledgerType: {
-              type: Type.STRING,
-              description: "Loại sổ cái cần truy vấn.",
-              enum: ["revenue", "shopee_revenue", "expenses", "payroll"]
-            },
-            startDate: {
-              type: Type.STRING,
-              description: "Ngày bắt đầu (YYYY-MM-DD)."
-            },
-            endDate: {
-              type: Type.STRING,
-              description: "Ngày kết thúc (YYYY-MM-DD)."
-            }
-          },
-          required: ["ledgerType", "startDate", "endDate"]
-        }
-      },
-      {
-        name: "get_financial_analysis",
-        description: "Lấy các chỉ số phân tích tài chính chuyên sâu, điểm sức khỏe, rò rỉ dòng tiền và phân tích điểm hòa vốn.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            month: {
-              type: Type.STRING,
-              description: "Tháng cần phân tích (YYYY-MM). Nếu không có, hệ thống sẽ lấy tháng gần nhất."
-            }
-          }
-        }
-      }
-    ]
-  }], []);
 
   // Tool Implementation Handlers
   const callTool = async (name: string, args: any) => {
@@ -150,6 +161,123 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
           payrollRatio: health.payrollRatio
         };
 
+      case "get_payroll_preview": {
+        const targetMonth = args?.month || new Date().toISOString().slice(0, 7);
+        const activeStaff = data.employees.filter(e => isStaffActive(e));
+        return {
+          month: targetMonth,
+          activeCount: activeStaff.length,
+          staff: activeStaff.map(e => {
+            const seniority = calculateSeniority(e.joinDate);
+            const policy = (data.salaryPolicies || []).find(p =>
+              e.assignedPolicyId
+                ? p.id === e.assignedPolicyId
+                : seniority >= p.startThreshold && (p.endThreshold === 0 || seniority <= p.endThreshold)
+            );
+            return {
+              name: e.name,
+              position: e.position,
+              joinDate: e.joinDate,
+              seniorityDays: seniority,
+              policyName: policy?.name || 'Chưa xác định',
+              estimatedBase: policy?.baseSalary || 0,
+              estimatedAllowances: policy
+                ? (policy.attendanceAllowance || 0) + (policy.cleaningAllowance || 0) +
+                  (policy.customerServiceAllowance || 0) + (policy.dinnerAllowance || 0) +
+                  (policy.housingAllowance || 0)
+                : 0,
+            };
+          }),
+          existingPayroll: (data.payroll || [])
+            .filter(p => p.month === targetMonth)
+            .map(p => ({ name: p.employeeName, netPay: p.netPay, isOfficial: p.isOfficial })),
+        };
+      }
+
+      case "get_inventory_alerts": {
+        const products = data.posProducts || [];
+        const outOfStock = products.filter(p => p.status === 'Active' && p.stock <= 0);
+        const lowStock = products.filter(p => p.status === 'Active' && p.stock > 0 && p.stock <= (p.minStock ?? 5));
+        return {
+          outOfStockCount: outOfStock.length,
+          lowStockCount: lowStock.length,
+          outOfStock: outOfStock.map(p => ({ name: p.name, sku: p.sku, stock: p.stock, minStock: p.minStock ?? 5 })),
+          lowStock: lowStock.map(p => ({ name: p.name, sku: p.sku, stock: p.stock, minStock: p.minStock ?? 5 })),
+        };
+      }
+
+      case "get_supplier_debt_summary": {
+        const debtMap = new Map<string, { supplierName: string; balance: number; lastActivity: string }>();
+        for (const r of (data.supplierDebts || [])) {
+          if (!debtMap.has(r.supplierId)) {
+            debtMap.set(r.supplierId, { supplierName: r.supplierName, balance: 0, lastActivity: r.date });
+          }
+          const entry = debtMap.get(r.supplierId)!;
+          entry.balance += r.type === 'purchase' ? r.amount : -r.amount;
+          if (r.date > entry.lastActivity) entry.lastActivity = r.date;
+        }
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const summaries = Array.from(debtMap.values()).filter(e => e.balance > 0);
+        return {
+          totalDebt: summaries.reduce((s, e) => s + e.balance, 0),
+          supplierCount: summaries.length,
+          details: summaries
+            .map(e => ({ ...e, isOverdue: e.lastActivity < thirtyDaysAgo }))
+            .sort((a, b) => b.balance - a.balance),
+        };
+      }
+
+      case "get_promotion_roi": {
+        const statusFilter = args?.status;
+        const promos = (data.promotions || [])
+          .filter(p => !statusFilter || p.status === statusFilter)
+          .map(p => ({
+            name: p.name,
+            status: p.status,
+            type: p.type,
+            startDate: p.startDate,
+            endDate: p.endDate,
+            budget: p.budget,
+            targetRevenue: p.targetRevenue,
+            actualRevenue: p.actualRevenue || 0,
+            actualCost: p.actualCost || p.budget,
+            roi: p.actualRoi ?? (p.actualRevenue && p.budget
+              ? +((p.actualRevenue - (p.actualCost || p.budget)) / (p.actualCost || p.budget) * 100).toFixed(1)
+              : null),
+            achieved: p.actualRevenue
+              ? (p.actualRevenue / p.targetRevenue * 100).toFixed(1) + '%'
+              : 'Chưa có dữ liệu',
+          }));
+        return { total: promos.length, promotions: promos };
+      }
+
+      case "get_pos_session_summary": {
+        const sessionDate = args?.date || new Date().toISOString().split('T')[0];
+        const orders = (data.posOrders || []).filter(o => o.date.startsWith(sessionDate) && !o.isReturn);
+        const returns = (data.posOrders || []).filter(o => o.date.startsWith(sessionDate) && o.isReturn);
+        const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+        for (const o of orders) {
+          for (const item of o.items) {
+            const cur = productMap.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
+            cur.quantity += item.quantity;
+            cur.revenue += item.total;
+            productMap.set(item.productId, cur);
+          }
+        }
+        return {
+          date: sessionDate,
+          orderCount: orders.length,
+          returnCount: returns.length,
+          totalRevenue: orders.reduce((s, o) => s + o.finalAmount, 0),
+          totalReturns: returns.reduce((s, o) => s + o.finalAmount, 0),
+          cashOrders: orders.filter(o => o.paymentMethod === 'Cash').length,
+          bankOrders: orders.filter(o => o.paymentMethod === 'Bank').length,
+          topProducts: Array.from(productMap.values())
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 5),
+        };
+      }
+
       default:
         return { error: "Công cụ không tồn tại" };
     }
@@ -159,8 +287,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
     if (!input.trim() || isLoading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input };
-    const history = Array.isArray(messages) ? messages : [];
-    const newMessages = [...history, userMessage];
+    // Giữ tối đa 6 message cuối (3 turns) — tránh input tokens tăng không giới hạn
+    const history = (Array.isArray(messages) ? messages : []).slice(-6);
+    const newMessages = [...(Array.isArray(messages) ? messages : []), userMessage];
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
@@ -168,80 +297,76 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
     setCurrentTool(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const modelName = 'gemini-3.1-pro-preview';
-      const today = new Date().toISOString().split('T')[0];
-      
-      const systemInstruction = `
-        BẠN LÀ: SIÊU AI CFO & CHUYÊN GIA PHÂN TÍCH TÀI CHÍNH TỐI CAO.
-        NGÀY HIỆN TẠI: ${today}
-        PHONG CÁCH: Executive, cực kỳ khắt khe về con số, phân tích sâu, chuyên nghiệp.
-        
-        NHIỆM VỤ:
-        1. AI TỰ QUYẾT ĐỊNH TRUY VẤN: Bạn PHẢI sử dụng các công cụ (tools) được cung cấp để lấy dữ liệu thực tế trước khi đưa ra bất kỳ nhận xét nào. Không được đoán dựa trên dữ liệu cũ.
-        2. QUẢN TRỊ NHÂN SỰ: Khi gọi 'get_metadata', bạn PHẢI kiểm tra kỹ trường 'status' và 'resignedDate' của từng nhân viên. Tuyệt đối không tính lương hoặc tính vào định biên nhân sự cho những người có trạng thái 'Resigned' ở thời điểm hiện tại.
-        3. PHÂN TÍCH KHOẢNG THỜI GIAN: Khi người dùng hỏi về bất kỳ khoảng thời gian nào (hôm nay, tuần trước, quý 1, hoặc ngày cụ thể), bạn phải tự tính toán ngày bắt đầu/kết thúc và gọi 'query_ledgers'.
-        4. TƯ DUY PHÂN TÍCH:
-           - Luôn so sánh tương quan (Ví dụ: Doanh thu vs Chi phí, Lương vs Doanh thu).
-           - Sử dụng 'get_financial_analysis' để có cái nhìn tổng quát về sức khỏe tài chính.
-           - Nếu người dùng hỏi về nhân sự, hãy gọi 'get_metadata' để xem thâm niên và chính sách lương thực tế.
-        5. CẤU TRÚC PHẢN HỒI: 
-           - Bắt đầu bằng một cái nhìn tổng quát (Executive Summary).
-           - Sử dụng bảng Markdown để trình bày số liệu.
-           - Đưa ra nhận xét sắc bén về các "điểm rò rỉ" hoặc cơ hội tối ưu.
-           - Kết thúc bằng 2-3 đề xuất hành động cụ thể.
+      // Step 1: classify domain (fast haiku call, ~200ms)
+      let domain = 'finance';
+      try {
+        const classifyRes = await fetch('/api/ai/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: input }),
+        });
+        if (classifyRes.ok) {
+          const classifyData = await classifyRes.json();
+          domain = classifyData.domain || 'finance';
+        }
+      } catch { /* fallback to finance */ }
+      setActiveAgent(domain);
 
-        LƯU Ý: Nếu dữ liệu truy vấn trả về trống, hãy thông báo rõ ràng cho người dùng thay vì phân tích dựa trên dữ liệu mặc định.
-      `;
-
-      // Function Calling Loop
-      let currentIteration = 0;
-      const maxIterations = 5;
-      let contents: any[] = [
-        ...history.map(m => ({ role: m.role, parts: [{ text: m.content }] })),
-        { role: 'user', parts: [{ text: input }] }
+      // Claude tool use loop — tool execution happens on frontend (data is local)
+      type ClaudeMsg = { role: 'user' | 'assistant'; content: any };
+      const claudeMessages: ClaudeMsg[] = [
+        ...history.map(m => ({
+          role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user', content: input },
       ];
 
-      let finalResponse = "";
+      let currentIteration = 0;
+      const maxIterations = 5;
+      let finalResponse = '';
 
       while (currentIteration < maxIterations) {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents,
-          config: { systemInstruction, temperature: 0.1, tools },
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: claudeMessages, domain }),
         });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'AI service error');
 
-        const functionCalls = response.functionCalls;
-        
-        if (functionCalls && functionCalls.length > 0) {
+        const content: any[] = data.content;
+        const toolUseBlocks = content.filter((b: any) => b.type === 'tool_use');
+        const textBlock = content.find((b: any) => b.type === 'text');
+
+        if (toolUseBlocks.length > 0) {
           setIsQuerying(true);
-          const toolResponses: any[] = [];
-          
-          for (const call of functionCalls) {
-            const result = await callTool(call.name, call.args);
-            toolResponses.push({
-              functionResponse: {
-                name: call.name,
-                response: { result },
-                id: call.id
-              }
+          // Append assistant turn (contains tool_use blocks)
+          claudeMessages.push({ role: 'assistant', content });
+          // Execute each tool locally and collect results
+          const toolResults: any[] = [];
+          for (const block of toolUseBlocks) {
+            const result = await callTool(block.name, block.input);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result),
             });
           }
-
-          // Add the model's call and our response back to history
-          contents.push(response.candidates?.[0]?.content);
-          contents.push({ role: 'user', parts: toolResponses });
+          // Append user turn with tool results
+          claudeMessages.push({ role: 'user', content: toolResults });
           currentIteration++;
         } else {
-          finalResponse = response.text || "Bộ não AI CFO đang tái khởi động. Vui lòng hỏi lại.";
+          finalResponse = textBlock?.text || 'Bộ não AI CFO đang tái khởi động. Vui lòng hỏi lại.';
           break;
         }
       }
 
+      if (!finalResponse) finalResponse = 'Đã đạt giới hạn số vòng truy vấn. Vui lòng thử câu hỏi ngắn hơn.';
       setMessages([...newMessages, { role: 'model', content: finalResponse }]);
     } catch (error) {
       console.error(error);
-      setMessages([...newMessages, { role: 'model', content: "Hệ thống AI đang gặp khó khăn khi truy cập dữ liệu chuyên sâu. Vui lòng thử lại với câu hỏi ngắn hơn." }]);
+      setMessages([...newMessages, { role: 'model', content: 'Hệ thống AI đang gặp khó khăn khi truy cập dữ liệu chuyên sâu. Vui lòng thử lại với câu hỏi ngắn hơn.' }]);
     } finally {
       setIsLoading(false);
       setIsQuerying(false);
@@ -266,6 +391,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
             </div>
           </div>
         </div>
+        {/* Active agent badge */}
+        {(() => {
+          const meta = AGENT_META[activeAgent] ?? AGENT_META['finance'];
+          const AgentIcon = meta.icon;
+          return (
+            <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+              <AgentIcon className="w-3.5 h-3.5 text-slate-300" />
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{meta.label}</span>
+            </div>
+          );
+        })()}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-10 space-y-10 bg-slate-50/20 no-scrollbar">
@@ -279,19 +415,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
                <p className="text-slate-900 font-black text-2xl uppercase tracking-tight">Kế Toán Trưởng AI (Audit Core)</p>
                <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-2 leading-relaxed">Tôi đã được nâng cấp cơ chế Truy vấn thông minh. Tôi có thể lọc dữ liệu theo bất kỳ khoảng thời gian nào bạn yêu cầu.</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 w-full">
-               <button onClick={() => setInput("Kiểm tra rò rỉ dòng tiền: Chi phí nào đang chiếm tỷ trọng cao bất thường trong 30 ngày qua?")} className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all flex items-center gap-2 group italic">
-                 <ShieldAlert className="w-4 h-4 text-rose-500 group-hover:scale-110 transition-transform" /> Đối soát rò rỉ
-               </button>
-               <button onClick={() => setInput("So sánh doanh thu và lợi nhuận thuần của tuần này so với tuần trước. Chúng ta đang tốt lên hay tệ đi?")} className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 hover:border-emerald-200 transition-all flex items-center gap-2 group italic">
-                 <TrendingUp className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> So sánh hiệu suất
-               </button>
-               <button onClick={() => setInput("Danh sách nhân sự thực tế đang làm việc và dự toán quỹ lương tháng này là bao nhiêu? Có ai mới nhảy bậc thâm niên không?")} className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-50 hover:border-amber-200 transition-all flex items-center gap-2 group italic">
-                 <User className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> Kiểm tra định biên
-               </button>
-               <button onClick={() => setInput("Dựa trên chi phí cố định, dự báo ngày nào trong tháng này chúng ta sẽ đạt điểm hòa vốn?")} className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all flex items-center gap-2 group italic">
-                 <PieChart className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" /> Phân tích hòa vốn
-               </button>
+            {/* Agent selector tabs */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {Object.entries(AGENT_META).map(([domain, meta]) => {
+                const Icon = meta.icon;
+                const isActive = activeAgent === domain;
+                return (
+                  <button key={domain} onClick={() => setActiveAgent(domain)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-600'}`}>
+                    <Icon className="w-3 h-3" /> {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Dynamic quick questions for active agent */}
+            <div className="grid grid-cols-1 gap-3 w-full">
+              {(AGENT_META[activeAgent]?.questions ?? AGENT_META['finance'].questions).map((q, i) => (
+                <button key={i} onClick={() => setInput(q)}
+                  className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left text-slate-600 italic leading-relaxed">
+                  {q}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -301,7 +445,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
             <div className={`flex max-w-[85%] gap-5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-12 h-12 rounded-[1.25rem] flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border-2 border-slate-100 text-indigo-600'}`}>{msg.role === 'user' ? <User className="w-6 h-6" /> : <Bot className="w-6 h-6" />}</div>
               <div className={`p-8 rounded-[2.5rem] text-sm leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white font-black shadow-xl' : 'bg-white text-slate-700 border border-slate-100 shadow-xl'}`}>
-                {msg.role === 'model' ? <div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} /> : <p className="text-base">{msg.content}</p>}
+                {msg.role === 'model' ? <div className="markdown-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.content) as string) }} /> : <p className="text-base">{msg.content}</p>}
               </div>
             </div>
           </div>

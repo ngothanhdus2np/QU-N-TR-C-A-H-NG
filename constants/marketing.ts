@@ -1,13 +1,13 @@
 
 import { ContentStrategy, ProductLine, BrandProfile } from '../types';
 
-export const STRATEGY_COLORS: Record<string, { bg: string, text: string, border: string, dot: string, fill: string }> = {
-  blue: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-100', dot: 'bg-blue-400', fill: 'fill-blue-600' },
-  purple: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-100', dot: 'bg-purple-400', fill: 'fill-purple-600' },
-  green: { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-100', dot: 'bg-green-400', fill: 'fill-green-600' },
-  red: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-100', dot: 'bg-red-400', fill: 'fill-red-600' },
-  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-100', dot: 'bg-indigo-400', fill: 'fill-indigo-600' },
-  slate: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-100', dot: 'bg-slate-400', fill: 'fill-slate-600' },
+export const STRATEGY_COLORS: Record<string, { bg: string, text: string, border: string, dot: string, fill: string, hex: string }> = {
+  blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-100',   dot: 'bg-blue-400',   fill: 'fill-blue-600',   hex: '#2563eb' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-100', dot: 'bg-purple-400', fill: 'fill-purple-600', hex: '#9333ea' },
+  green:  { bg: 'bg-green-50',  text: 'text-green-600',  border: 'border-green-100',  dot: 'bg-green-400',  fill: 'fill-green-600',  hex: '#16a34a' },
+  red:    { bg: 'bg-red-50',    text: 'text-red-600',    border: 'border-red-100',    dot: 'bg-red-400',    fill: 'fill-red-600',    hex: '#dc2626' },
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-100', dot: 'bg-indigo-400', fill: 'fill-indigo-600', hex: '#4f46e5' },
+  slate:  { bg: 'bg-slate-50',  text: 'text-slate-600',  border: 'border-slate-100',  dot: 'bg-slate-400',  fill: 'fill-slate-600',  hex: '#475569' },
 };
 
 export const DEFAULT_STRATEGIES: ContentStrategy[] = [

@@ -17,7 +17,9 @@ export const TABLE_MAP: Record<string, string> = {
   posProducts: 'pos_products',
   posOrders: 'pos_orders',
   posCustomers: 'pos_customers',
-  inventoryTransactions: 'inventory_transactions'
+  inventoryTransactions: 'inventory_transactions',
+  suppliers: 'suppliers',
+  supplierDebts: 'supplier_debts'
 };
 
 
@@ -31,13 +33,24 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   if (key === 'posProducts') {
     return {
       id: item.id, sku: item.sku, name: item.name, category_id: item.categoryId,
+      category_path: item.categoryPath || null,
       import_price: n(item.importPrice), sale_price: n(item.salePrice),
-      stock: n(item.stock), min_stock: n(item.minStock),
+      stock: n(item.stock), expected_out_of_stock: item.expectedOutOfStock || null,
+      min_stock: n(item.minStock),
       max_stock: n(item.maxStock) || 999999, unit: item.unit,
-      brand: item.brand, barcode: item.barcode, description: item.description,
-      warranty: item.warranty, allow_points: !!item.allowPoints,
+      base_unit_code: item.baseUnitCode || null,
+      conversion_value: n(item.conversionValue) || 1,
+      brand: item.brand, barcode: item.barcode, attributes_text: item.attributesText || null,
+      description: item.description, note_template: item.noteTemplate || null,
+      components: item.components || null, warranty: item.warranty,
+      periodic_maintenance: item.periodicMaintenance || null,
+      allow_points: !!item.allowPoints,
       weight: n(item.weight), weight_unit: item.weightUnit,
-      location: item.location, images: item.images || [], status: item.status,
+      location: item.location, related_sku: item.relatedSku || null,
+      customer_orders: n(item.customerOrders || 0),
+      direct_sale: item.directSale !== false,
+      product_type: item.productType || 'Hàng hóa',
+      images: item.images || [], status: item.status,
       units: item.units || [], attributes: item.attributes || []
     };
   }
@@ -55,7 +68,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   if (key === 'posCustomers') {
     return {
       id: item.id, name: item.name, phone: item.phone, email: item.email,
-      address: item.address, points: n(item.points),
+      address: item.address, notes: item.notes || null, points: n(item.points),
       total_spent: n(item.totalSpent), last_visit: item.lastVisit,
       tier: item.tier
     };
@@ -139,6 +152,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   };
   if (key === 'brandProfile') return {
     id: '00000000-0000-0000-0000-000000000000',
+    name: item.name || null,
     story: item.story,
     voice: item.voice,
     target_audience: item.targetAudience,
@@ -157,6 +171,14 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
     id: item.id, date: item.date, sku: item.sku, quantity: n(item.quantity),
     import_price: n(item.importPrice), note: item.note
   };
+  if (key === 'suppliers') return {
+    id: item.id, name: item.name, phone: item.phone || null,
+    address: item.address || null, notes: item.notes || null
+  };
+  if (key === 'supplierDebts') return {
+    id: item.id, supplier_id: item.supplierId, supplier_name: item.supplierName,
+    date: item.date, type: item.type, amount: n(item.amount), description: item.description || ''
+  };
   if (key === 'shopeeInventoryOut') return {
     id: item.id, date: item.date, status: item.status, order_id: item.orderId, sku: item.sku,
     quantity: n(item.quantity), sale_price: n(item.salePrice),
@@ -169,39 +191,76 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   return item;
 };
 
+// Các bảng tài chính/nhân sự cần audit trail
+const AUDITED_TABLES = new Set([
+  'payroll_records', 'expense_records', 'revenue_records',
+  'advance_records', 'shortage_records', 'salary_policies',
+]);
+
+async function auditLog(tableName: string, recordId: string, action: string, snapshot?: any) {
+  if (!AUDITED_TABLES.has(tableName)) return;
+  try {
+    await supabase.from('audit_logs').insert({
+      table_name: tableName,
+      record_id: recordId,
+      action,
+      snapshot: snapshot ?? null,
+    });
+  } catch {
+    // Không crash app nếu bảng audit_logs chưa tồn tại
+  }
+}
+
+// Giới hạn mặc định cho time-series tables — đủ cho 2 năm hoạt động
+const DEFAULT_LIMIT = 2000;
+
 export const apiService = {
+  // Lấy một trang dữ liệu từ bất kỳ bảng nào (dùng cho lazy load / load thêm)
+  async fetchTablePage(tableName: string, limit = 100, offset = 0) {
+    const { data, error, count } = await supabase
+      .from(tableName)
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw new Error(`Lỗi fetch ${tableName}: ${error.message}`);
+    return { data: data ?? [], total: count ?? 0 };
+  },
+
   async fetchAllData() {
     try {
       const [
         employees, policies, revenue, expenses, attendance, overtime, sales, shortages, advances, payroll, perf, kb, configs, pGroups, pGroupRev, promotions, brand,
-        shopeeRevenue, shopeePGroupRev, shopeeSource, shopeeIn, shopeeOut, posProducts, posOrders, posCustomers, transactions
+        shopeeRevenue, shopeePGroupRev, shopeeSource, shopeeIn, shopeeOut, posProducts, posOrders, posCustomers, transactions,
+        suppliers, supplierDebts
       ] = await Promise.all([
-        supabase.from('employees').select('*').limit(10000),
+        supabase.from('employees').select('*').limit(500),
         supabase.from('salary_policies').select('*'),
-        supabase.from('revenue_records').select('*').limit(10000),
-        supabase.from('expense_records').select('*').limit(10000),
-        supabase.from('attendance_records').select('*').limit(10000),
-        supabase.from('overtime_records').select('*').limit(10000),
-        supabase.from('sales_records').select('*').limit(10000),
-        supabase.from('shortage_records').select('*').limit(10000),
-        supabase.from('advance_records').select('*').limit(10000),
-        supabase.from('payroll_records').select('*').limit(10000),
-        supabase.from('staff_performance').select('*').limit(10000),
+        supabase.from('revenue_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('expense_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('attendance_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('overtime_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('sales_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('shortage_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('advance_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('payroll_records').select('*').order('month', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('staff_performance').select('*').order('month', { ascending: false }).limit(DEFAULT_LIMIT),
         supabase.from('knowledge_base').select('*'),
         supabase.from('system_configs').select('*'),
         supabase.from('product_groups').select('*'),
-        supabase.from('product_group_revenue').select('*').limit(10000),
+        supabase.from('product_group_revenue').select('*').order('month', { ascending: false }).limit(DEFAULT_LIMIT),
         supabase.from('promotions').select('*'),
         supabase.from('brand_profile').select('*'),
-        supabase.from('shopee_revenue_records').select('*').limit(10000),
-        supabase.from('shopee_product_group_revenue').select('*').limit(10000),
+        supabase.from('shopee_revenue_records').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('shopee_product_group_revenue').select('*').order('month', { ascending: false }).limit(DEFAULT_LIMIT),
         supabase.from('shopee_source_data').select('*'),
-        supabase.from('shopee_inventory_in').select('*').limit(10000),
-        supabase.from('shopee_inventory_out').select('*').limit(10000),
-        supabase.from('pos_products').select('*').limit(10000),
-        supabase.from('pos_orders').select('*').limit(10000),
-        supabase.from('pos_customers').select('*').limit(10000),
-        supabase.from('inventory_transactions').select('*').limit(10000)
+        supabase.from('shopee_inventory_in').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('shopee_inventory_out').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('pos_products').select('*').limit(50000),
+        supabase.from('pos_orders').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('pos_customers').select('*').limit(2000),
+        supabase.from('inventory_transactions').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
+        supabase.from('suppliers').select('*').order('name', { ascending: true }),
+        supabase.from('supplier_debts').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT)
       ]);
 
       const res_arr = [
@@ -214,7 +273,8 @@ export const apiService = {
         { name: 'ShopeeGroupRev', res: shopeePGroupRev }, { name: 'ShopeeSource', res: shopeeSource },
         { name: 'ShopeeInvIn', res: shopeeIn }, { name: 'ShopeeInvOut', res: shopeeOut },
         { name: 'PosProducts', res: posProducts }, { name: 'PosOrders', res: posOrders },
-        { name: 'PosCustomers', res: posCustomers }, { name: 'Transactions', res: transactions }
+        { name: 'PosCustomers', res: posCustomers }, { name: 'Transactions', res: transactions },
+        { name: 'Suppliers', res: suppliers }, { name: 'SupplierDebts', res: supplierDebts }
       ];
 
       const errors = res_arr
@@ -248,7 +308,9 @@ export const apiService = {
           posProducts: posProducts.data,
           posOrders: posOrders.data,
           posCustomers: posCustomers.data,
-          inventoryTransactions: transactions.data
+          inventoryTransactions: transactions.data,
+          suppliers: suppliers.data,
+          supplierDebts: supplierDebts.data
         },
         errors: errors.length > 0 ? errors : null
       };
@@ -260,11 +322,14 @@ export const apiService = {
   async deleteItem(key: keyof AppData, id: string) {
     const tableName = TABLE_MAP[key as string];
     if (tableName) {
+      // Lưu snapshot trước khi xóa để có thể rollback
+      const { data: snapshot } = await supabase.from(tableName).select('*').eq('id', id).single();
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) {
         console.error(`Xóa thất bại [${tableName} - ${id}]:`, error);
         throw new Error(`Xóa thất bại: ${error.message}`);
       }
+      await auditLog(tableName, id, 'delete', snapshot);
       return true;
     }
     return null;
@@ -278,6 +343,7 @@ export const apiService = {
         console.error(`Xóa bảng thất bại [${tableName}]:`, error);
         throw new Error(`Xóa bảng thất bại: ${error.message}`);
       }
+      await auditLog(tableName, '*', 'clearTable');
       return true;
     }
     return null;
@@ -292,6 +358,7 @@ export const apiService = {
         console.error(`Ghi đè thất bại [${tableName} - ${item.id}]:`, error);
         throw new Error(`Ghi đè thất bại: ${error.message}`);
       }
+      await auditLog(tableName, item.id, 'upsert', payload);
       return true;
     }
     return null;
@@ -313,7 +380,6 @@ export const apiService = {
         }
         succeeded += chunk.length;
       }
-      console.log(`[Sync] Upserted ${succeeded} items to ${tableName}`);
       return true;
     }
     return null;
@@ -328,4 +394,3 @@ export const apiService = {
     return true;
   }
 };
-

@@ -5,6 +5,7 @@ import { DEFAULT_POLICIES, DEFAULT_EXPENSE_CATEGORIES, INITIAL_APP_DATA } from '
 export const dataMapper = {
   mapBrandProfile(bp: any): BrandProfile {
     return {
+      name: bp.name || DEFAULT_BRAND.name,
       story: bp.story || DEFAULT_BRAND.story,
       voice: bp.voice || DEFAULT_BRAND.voice,
       targetAudience: bp.target_audience || DEFAULT_BRAND.targetAudience,
@@ -152,11 +153,21 @@ export const dataMapper = {
       })), localData?.shopeeInventoryOut || []),
       posProducts: this.mergeBy((results.posProducts || []).map((p: any) => ({
         id: p.id, sku: p.sku, name: p.name, categoryId: p.category_id || p.categoryId,
+        categoryPath: p.category_path || p.categoryPath,
         importPrice: Number(p.import_price || p.importPrice || 0), salePrice: Number(p.sale_price || p.salePrice || 0),
-        stock: Number(p.stock || 0), minStock: Number(p.min_stock || p.minStock || 0), maxStock: Number(p.max_stock || p.maxStock || 999999),
-        unit: p.unit, brand: p.brand, barcode: p.barcode, description: p.description, warranty: p.warranty,
+        stock: Number(p.stock || 0), expectedOutOfStock: p.expected_out_of_stock || p.expectedOutOfStock,
+        minStock: Number(p.min_stock || p.minStock || 0), maxStock: Number(p.max_stock || p.maxStock || 999999),
+        unit: p.unit, baseUnitCode: p.base_unit_code || p.baseUnitCode, conversionValue: Number(p.conversion_value || p.conversionValue || 1),
+        brand: p.brand, barcode: p.barcode, attributesText: p.attributes_text || p.attributesText,
+        description: p.description, noteTemplate: p.note_template || p.noteTemplate, components: p.components,
+        warranty: p.warranty, periodicMaintenance: p.periodic_maintenance || p.periodicMaintenance,
         allowPoints: p.allow_points ?? p.allowPoints ?? true, weight: Number(p.weight || 0), weightUnit: p.weight_unit || p.weightUnit,
-        location: p.location, images: p.images || [], status: p.status, units: p.units || [], attributes: p.attributes || []
+        location: p.location, relatedSku: p.related_sku || p.relatedSku || null,
+        createdAt: p.created_at || p.createdAt || null,
+        customerOrders: Number(p.customer_orders || p.customerOrders || 0),
+        directSale: p.direct_sale ?? p.directSale ?? true,
+        productType: p.product_type || p.productType || 'Hàng hóa',
+        images: p.images || [], status: p.status, units: p.units || [], attributes: p.attributes || []
       })), localData?.posProducts || []),
       posOrders: this.mergeBy((results.posOrders || []).map((o: any) => ({
         id: o.id, orderCode: o.order_code || o.orderCode, date: o.date, customerId: o.customer_id || o.customerId,
@@ -165,13 +176,21 @@ export const dataMapper = {
         staffId: o.staff_id || o.staffId, notes: o.notes, pointsEarned: Number(o.points_earned || 0)
       })), localData?.posOrders || []),
       posCustomers: this.mergeBy((results.posCustomers || []).map((c: any) => ({
-        id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address, points: Number(c.points || 0),
-        totalSpent: Number(c.total_spent || 0), lastVisit: c.last_visit || c.lastVisit, tier: c.tier || 'Standard'
+        id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address, notes: c.notes || '',
+        points: Number(c.points || 0), totalSpent: Number(c.total_spent || 0),
+        lastVisit: c.last_visit || c.lastVisit, tier: c.tier || 'Standard'
       })), localData?.posCustomers || []),
       inventoryTransactions: this.mergeBy((results.inventoryTransactions || []).map((t: any) => ({
         id: t.id, date: t.date, type: t.type, items: t.items || [], note: t.note,
         referenceId: t.reference_id || t.referenceId, staffId: t.staff_id || t.staffId
-      })), localData?.inventoryTransactions || [])
+      })), localData?.inventoryTransactions || []),
+      suppliers: this.mergeBy((results.suppliers || []).map((s: any) => ({
+        id: s.id, name: s.name, phone: s.phone, address: s.address, notes: s.notes
+      })), localData?.suppliers || []),
+      supplierDebts: this.mergeBy((results.supplierDebts || []).map((d: any) => ({
+        id: d.id, supplierId: d.supplier_id || d.supplierId, supplierName: d.supplier_name || d.supplierName,
+        date: d.date, type: d.type, amount: Number(d.amount || 0), description: d.description || ''
+      })), localData?.supplierDebts || [])
     };
   }
 };

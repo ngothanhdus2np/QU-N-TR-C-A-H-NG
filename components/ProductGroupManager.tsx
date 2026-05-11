@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { ProductGroup, ProductGroupRevenue, RevenueRecord } from '../types';
 import { 
   Plus, Trash2, Calendar, DollarSign, Layers, Sparkles, 
@@ -13,7 +14,6 @@ import {
 } from 'lucide-react';
 import { calculateStrategicSuggestions, calculateSeasonalityAnalysis, cleanVNNumber, parseVNDate, parseHierarchyGroups, normalizeHeader, generateId, processExcelRawData, isUUID } from '../businessLogic';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
-import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
 import * as XLSX from 'xlsx';
 
@@ -320,9 +320,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
     setIsDiagnosing(true);
     setDiagnosisResult(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `
-        BẠN LÀ: SIÊU CHUYÊN GIA MIS & CHIẾN LƯỢC NGÀNH HÀNG.
+      const contextData = `
         BỐI CẢNH: Phân tích so sánh trọng tâm Tháng ${selectedMonthNum} và dự báo Tháng ${nextMonthNum}.
         DỮ LIỆU THỰC TẾ THÁNG ${selectedMonthNum}:
         ${thisMonthTactical.map(g => `- Nhóm ${g.name}: Chiếm ${g.percent.toFixed(1)}% tổng ${viewMode === 'revenue' ? 'doanh thu' : 'số lượng'}`).join('\n')}
@@ -332,11 +330,16 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
         1. Nhận định về sự chuyển dịch trọng tâm giữa 2 tháng.
         2. Cảnh báo "Điểm rơi doanh số" nếu có nhóm hàng sụt giảm mạnh vào tháng tới.
         3. Đề xuất hành động cụ thể (Nhập hàng, Clear stock, Marketing) cho 3 nhóm hàng quan trọng nhất.
-        Dùng Markdown, phong cách MIS Executive.
       `;
-      const result = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-      setDiagnosisResult(result.text || "Lỗi AI.");
-    } catch (err) { setDiagnosisResult("Lỗi kết nối AI Advisor."); }
+      const response = await fetch('/api/ai/product-group-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextData }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AI service error');
+      setDiagnosisResult(data.result || 'Lỗi AI.');
+    } catch (err) { setDiagnosisResult("Lỗi kết nối AI Advisor. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local."); }
     finally { setIsDiagnosing(false); }
   };
 
@@ -593,7 +596,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
                           </div>
                           <button onClick={() => setDiagnosisResult(null)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><X className="w-6 h-6" /></button>
                        </div>
-                       <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: String(marked.parse(String(diagnosisResult))) }} />
+                       <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(String(diagnosisResult)) as string) }} />
                     </div>
                  )}
               </div>

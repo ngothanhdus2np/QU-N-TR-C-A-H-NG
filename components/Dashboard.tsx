@@ -1,5 +1,6 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { AppData, DiagnosisRange } from '../types';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -17,7 +18,6 @@ import {
 import { calculateFinancialHealthScore, auditFinancials, calculateTimeContext, getCategoryType, getTopLevelCategory } from '../businessLogic';
 import DailyBreakEven from './DailyBreakEven';
 import TimeFilter from './TimeFilter';
-import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
 
 interface DashboardProps {
@@ -49,6 +49,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [selectedParentCategory, setSelectedParentCategory] = useState<string | null>(null);
   const [selectedTrendMonth, setSelectedTrendMonth] = useState<string | null>(null);
   const [isShrunk, setIsShrunk] = useState(false);
+  const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
+  const [eodDismissed, setEodDismissed] = useState(false);
+
+  useEffect(() => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    fetch(`/api/eod-report?date=${yesterday}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.summary) setEodReport(data); })
+      .catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     const mainContainer = document.querySelector('main');
@@ -154,6 +164,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       periodExp: totalExp,
       periodProfit: finalNetProfitCorrect,
       periodGross: totalGross,
+      payrollTotal: finalPersonnelTotal,
+      nonPayrollExp: totalExp - finalPersonnelTotal,
       activeStaffCount: activeStaff.length,
       netProfitMargin: totalRev > 0 ? (finalNetProfitCorrect / totalRev) * 100 : 0,
       opExRatio: totalRev > 0 ? (totalExp / totalRev) * 100 : 0,
@@ -430,13 +442,14 @@ const Dashboard: React.FC<DashboardProps> = ({
     setIsDiagnosing(true);
     setDiagnosisResult(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      const revGrowth = prevInsights.rev > 0 ? ((insights.periodRev - prevInsights.rev) / prevInsights.rev * 100).toFixed(1) : 'N/A';
-      const profitGrowth = prevInsights.profit !== 0 ? ((insights.periodProfit - prevInsights.profit) / Math.abs(prevInsights.profit) * 100).toFixed(1) : 'N/A';
+      const revGrowth = prevInsights.rev > 0
+        ? ((insights.periodRev - prevInsights.rev) / prevInsights.rev * 100).toFixed(1)
+        : 'N/A';
+      const profitGrowth = prevInsights.profit !== 0
+        ? ((insights.periodProfit - prevInsights.profit) / Math.abs(prevInsights.profit) * 100).toFixed(1)
+        : 'N/A';
 
-      const contextPrompt = `
-        BẠN LÀ: CHUYÊN GIA TƯ VẤN TÀI CHÍNH CẤP CAO (CFO) CHO CHUỖI BÁN LẺ GIÀY DÉP.
+      const contextData = `
         NHIỆM VỤ: Phân tích sâu sắc, so sánh và đưa ra giải pháp thực thi cho giai đoạn ${timeContext.start} đến ${timeContext.end}.
 
         DỮ LIỆU TÀI CHÍNH HIỆN TẠI:
@@ -444,7 +457,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         - Lợi nhuận ròng: ${insights.periodProfit.toLocaleString()}đ (Tăng trưởng: ${profitGrowth}%)
         - Biên LN Gộp: ${(insights.periodGross / insights.periodRev * 100).toFixed(1)}%
         - Biên LN Ròng: ${insights.netProfitMargin.toFixed(1)}%
-        
+
         CƠ CẤU CHI PHÍ TRÊN DOANH THU:
         - Giá vốn hàng bán (COGS): ${(insights.totalCogs / insights.periodRev * 100).toFixed(1)}%
         - Chi phí nhân sự: ${insights.laborCostRatio.toFixed(1)}%
@@ -452,32 +465,45 @@ const Dashboard: React.FC<DashboardProps> = ({
         - Chi phí biến đổi: ${(insights.variableCosts / insights.periodRev * 100).toFixed(1)}%
 
         NGƯỠNG AN TOÀN NGÀNH BÁN LẺ GIÀY DÉP (THAM CHIẾU):
-        - COGS: 50% - 60% (Nếu > 65% là nguy hiểm)
-        - Chi phí nhân sự: 10% - 15% (Nếu > 20% là quá cao)
-        - Chi phí mặt bằng/Cố định: 5% - 10%
-        - Biên LN Ròng: 10% - 20%
+        - COGS: 50–60% (> 65% là nguy hiểm)
+        - Chi phí nhân sự: 10–15% (> 20% là quá cao)
+        - Chi phí cố định: 5–10%
+        - Biên LN Ròng: 10–20%
 
-        YÊU CẦU PHÂN TÍCH:
-        1. SO SÁNH & ĐÁNH GIÁ: So sánh trực tiếp các chỉ số trên với ngưỡng an toàn. Chỉ rõ chỉ số nào đang "Báo động đỏ".
-        2. PHÂN TÍCH CHI PHÍ: Nhóm chi phí nào đang tăng quá mức hoặc chiếm tỷ trọng bất hợp lý? Tại sao?
-        3. NHẬN XÉT SẮC BÉN: Đưa ra nhận định "Thẳng & Thật" về sức khỏe cửa hàng (Ví dụ: "Đang bán lỗ để lấy doanh thu", "Chi phí nhân sự đang nuốt chửng lợi nhuận",...).
-        4. HƯỚNG GIẢI QUYẾT CỤ THỂ: Đưa ra ít nhất 3 giải pháp thực tế để đưa các chỉ số về ngưỡng an toàn (Ví dụ: Cắt giảm ca làm việc, đàm phán lại giá nhập, đẩy mạnh xả kho mẫu cũ,...).
-
-        PHONG CÁCH: Quyết đoán, chuyên nghiệp, số liệu dẫn chứng cụ thể, không nói chung chung.
-        ĐỊNH DẠNG: Markdown, sử dụng bảng nếu cần để so sánh.
+        YÊU CẦU:
+        1. SO SÁNH & ĐÁNH GIÁ: So sánh từng chỉ số với ngưỡng an toàn. Chỉ rõ chỉ số nào "Báo động đỏ".
+        2. PHÂN TÍCH CHI PHÍ: Nhóm nào tăng quá mức hoặc chiếm tỷ trọng bất hợp lý?
+        3. NHẬN XÉT SẮC BÉN: Đánh giá thẳng thắn sức khỏe tài chính (vd: "Đang bán lỗ để lấy doanh thu").
+        4. HƯỚNG GIẢI QUYẾT: Ít nhất 3 giải pháp thực tế để đưa chỉ số về ngưỡng an toàn.
       `;
-      const result = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: contextPrompt,
-        config: { temperature: 0.2 }
+
+      const response = await fetch('/api/ai/executive-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextData }),
       });
-      setDiagnosisResult(result.text || "Lỗi khởi tạo bản tin.");
+
+      if (!response.ok) throw new Error(`Lỗi server: ${response.status}`);
+      const data = await response.json();
+      setDiagnosisResult(data.result || 'Lỗi khởi tạo bản tin.');
     } catch (err) {
-      setDiagnosisResult("Không thể kết nối AI Advisor.");
+      setDiagnosisResult('Không thể kết nối AI Advisor. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local');
     } finally {
       setIsDiagnosing(false);
     }
   };
+
+  // Auto-run Executive Briefing once per day when data loads
+  useEffect(() => {
+    if (diagnosisResult || isDiagnosing) return;
+    if (data.revenue.length < 3 && data.expenses.length < 3) return;
+    const today = new Date().toISOString().split('T')[0];
+    const lastRun = localStorage.getItem('dashboard_briefing_date');
+    if (lastRun === today) return;
+    localStorage.setItem('dashboard_briefing_date', today);
+    runExecutiveBriefing();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.revenue.length, data.expenses.length]);
 
   // Generate month options for filter
   const monthOptions = useMemo(() => {
@@ -509,7 +535,25 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20 max-w-[1600px] mx-auto">
-      
+
+      {/* EOD REPORT BANNER */}
+      {eodReport && !eodDismissed && (
+        <div className="mb-6 mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-[2rem] flex gap-4 items-start">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-indigo-200">
+            <FileText className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Báo cáo hôm qua — {eodReport.date}</p>
+            <div className="text-sm text-slate-700 leading-relaxed markdown-content"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(eodReport.summary) as string) }} />
+          </div>
+          <button onClick={() => setEodDismissed(true)}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-indigo-100 rounded-lg transition-all shrink-0">
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* STICKY CONTROL PANEL (FILTERS + SUB-TABS) */}
       <div className={`sticky top-0 z-30 -mx-8 px-8 transition-all duration-500 ease-in-out ${
         isShrunk 
@@ -704,9 +748,73 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
 
-            <DailyBreakEven 
-              revenue={data.revenue} 
-              targetDate={timeContext.start} 
+            {/* P&L WATERFALL */}
+            <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-[0_15px_40px_-20px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">Báo cáo P&L</h3>
+                  <p className="text-xl font-black text-slate-900 mt-1">Kết quả Kinh doanh</p>
+                </div>
+                <div className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider ${insights.periodProfit >= 0 ? 'bg-teal-50 text-teal-700' : 'bg-rose-50 text-rose-700'}`}>
+                  {insights.netProfitMargin.toFixed(1)}% Biên LN
+                </div>
+              </div>
+              <div className="flex flex-col md:flex-row items-stretch gap-2">
+                {/* Doanh thu */}
+                <div className="flex-1 bg-emerald-50 rounded-2xl p-5">
+                  <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">Doanh thu</p>
+                  <p className="text-2xl font-black text-emerald-700 tracking-tighter">{(insights.periodRev / 1e6).toFixed(1)}<span className="text-sm font-bold ml-1">M đ</span></p>
+                  <div className="mt-3 h-1 bg-emerald-200 rounded-full">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">−</div>
+                {/* COGS */}
+                <div className="flex-1 bg-orange-50 rounded-2xl p-5">
+                  <p className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-2">Giá vốn (COGS)</p>
+                  <p className="text-2xl font-black text-orange-700 tracking-tighter">{(insights.totalCogs / 1e6).toFixed(1)}<span className="text-sm font-bold ml-1">M đ</span></p>
+                  <div className="mt-3 h-1 bg-orange-200 rounded-full">
+                    <div className="h-full bg-orange-500 rounded-full" style={{ width: `${insights.periodRev > 0 ? Math.min(100, insights.totalCogs / insights.periodRev * 100) : 0}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">−</div>
+                {/* Chi phí */}
+                <div className="flex-1 bg-rose-50 rounded-2xl p-5">
+                  <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-2">Chi phí OPEX</p>
+                  <p className="text-2xl font-black text-rose-700 tracking-tighter">{(insights.nonPayrollExp / 1e6).toFixed(1)}<span className="text-sm font-bold ml-1">M đ</span></p>
+                  <div className="mt-3 h-1 bg-rose-200 rounded-full">
+                    <div className="h-full bg-rose-500 rounded-full" style={{ width: `${insights.periodRev > 0 ? Math.min(100, insights.nonPayrollExp / insights.periodRev * 100) : 0}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">−</div>
+                {/* Lương */}
+                <div className="flex-1 bg-violet-50 rounded-2xl p-5">
+                  <p className="text-[9px] font-black text-violet-600 uppercase tracking-widest mb-2">Lương & Thưởng</p>
+                  <p className="text-2xl font-black text-violet-700 tracking-tighter">{(insights.payrollTotal / 1e6).toFixed(1)}<span className="text-sm font-bold ml-1">M đ</span></p>
+                  <div className="mt-3 h-1 bg-violet-200 rounded-full">
+                    <div className="h-full bg-violet-500 rounded-full" style={{ width: `${insights.periodRev > 0 ? Math.min(100, insights.payrollTotal / insights.periodRev * 100) : 0}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">=</div>
+                {/* Lợi nhuận */}
+                <div className={`flex-1 rounded-2xl p-5 ${insights.periodProfit >= 0 ? 'bg-teal-50' : 'bg-rose-100'}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${insights.periodProfit >= 0 ? 'text-teal-600' : 'text-rose-600'}`}>Lợi nhuận ròng</p>
+                  <p className={`text-2xl font-black tracking-tighter ${insights.periodProfit >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
+                    {(insights.periodProfit / 1e6).toFixed(1)}<span className="text-sm font-bold ml-1">M đ</span>
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full ${insights.periodProfit >= 0 ? 'bg-teal-500 animate-pulse' : 'bg-rose-500'}`} />
+                    <span className={`text-[9px] font-black uppercase tracking-wider ${insights.periodProfit >= 0 ? 'text-teal-600' : 'text-rose-600'}`}>
+                      {insights.periodProfit >= 0 ? 'Có lãi' : 'Đang lỗ'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DailyBreakEven
+              revenue={data.revenue}
+              targetDate={timeContext.start}
               config={{
                 monthlyFixedCosts: breakEvenAnalysis?.dailyFixedCost * (new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()) || data.dailyBreakEvenConfig?.monthlyFixedCosts || 50000000,
                 grossMarginPercent: (breakEvenAnalysis?.avgGrossMargin * 100) || data.dailyBreakEvenConfig?.grossMarginPercent || 35
@@ -1072,7 +1180,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 
                 <div className="flex-1 bg-slate-50 rounded-[2rem] p-10 border border-slate-200 overflow-y-auto no-scrollbar">
                   {diagnosisResult ? (
-                    <div className="markdown-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: marked.parse(diagnosisResult) }} />
+                    <div className="markdown-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(diagnosisResult) as string) }} />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
                       <Lightbulb className="w-12 h-12 mb-6 text-slate-400" />

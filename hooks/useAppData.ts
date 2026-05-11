@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useCallback, useReducer } from 'react';
+import { useEffect, useMemo, useCallback, useReducer, useState } from 'react';
 import { AppData, ChatMessage, BrandProfile } from '../types';
 import { INITIAL_APP_DATA, DEFAULT_POLICIES, DEFAULT_EXPENSE_CATEGORIES } from '../constants/defaultData';
 import { DEFAULT_BRAND } from '../constants/marketing';
@@ -9,8 +9,31 @@ import { dataMapper } from '../services/dataMapper';
 import { appReducer } from './appReducer';
 import { AppState } from './stateTypes';
 import { validationService } from '../services/validationService';
+import { incrementPending, getPendingCount, clearPending } from '../services/syncService';
+import { useOfflineSync } from './useOfflineSync';
 
 const localTodayStr = new Date().toLocaleDateString('sv-SE');
+
+const isNetworkSyncError = (err: any) => (
+  typeof navigator !== 'undefined' && !navigator.onLine
+) || String(err?.message || '').toLowerCase().includes('fetch')
+  || String(err?.message || '').toLowerCase().includes('network');
+
+const loadBundledPosProducts = async () => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const res = await fetch('/imports/kiotviet-products.json', { cache: 'no-store' });
+    if (!res.ok) return [];
+    const products = await res.json();
+    return Array.isArray(products) ? products : [];
+  } catch {
+    return [];
+  }
+};
+
+const POS_PRODUCTS_SEED_KEY = 'cfo_brain_pos_products_seed_version';
+const POS_PRODUCTS_SEED_VERSION = 'kiotviet_2026-05-06_12739';
 
 const initialState: AppState = {
   data: INITIAL_APP_DATA,
@@ -29,6 +52,10 @@ const initialState: AppState = {
 
 export function useAppData() {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [pendingCount, setPendingCount] = useState(() => getPendingCount());
+  
+  // === Offline Queue (IndexedDB) ===
+  const { offlinePendingCount, enqueueOp, drainQueue, isDraining } = useOfflineSync();
 
   const {
     data,
@@ -105,7 +132,7 @@ export function useAppData() {
     };
   }, [data.payroll, data.expenses, data.revenue]);
 
-  const fetchData = useCallback(async (isManual = false) => {
+  const fetchData = useCallback(async (isManual = false, silent = false) => {
     dispatch({ type: 'SET_SYNCING', payload: true });
     try {
       const { data: results, errors } = await apiService.fetchAllData();
@@ -118,7 +145,26 @@ export function useAppData() {
       }
       
       const localDataStr = localStorage.getItem('cfo_brain_local_data');
-      const localData = localDataStr ? JSON.parse(localDataStr) : null;
+      let localData = localDataStr ? JSON.parse(localDataStr) : null;
+
+      if (localStorage.getItem(POS_PRODUCTS_SEED_KEY) !== POS_PRODUCTS_SEED_VERSION) {
+        const bundledProducts = await loadBundledPosProducts();
+        if (bundledProducts.length > 0) {
+          const existingProducts = Array.isArray(localData?.posProducts) ? localData.posProducts : [];
+          const bySku = new Map<string, any>(existingProducts.map((product: any) => [product.sku || product.id, product]));
+          bundledProducts.forEach((product: any) => {
+            const key = product.sku || product.id;
+            bySku.set(key, { ...(bySku.get(key) || {}), ...product });
+          });
+          localData = { ...(localData || {}), posProducts: Array.from(bySku.values()) };
+          try {
+            localStorage.setItem('cfo_brain_local_data', JSON.stringify(localData));
+            localStorage.setItem(POS_PRODUCTS_SEED_KEY, POS_PRODUCTS_SEED_VERSION);
+          } catch (storageErr) {
+            console.error('Không thể lưu danh sách hàng hóa vào localStorage:', storageErr);
+          }
+        }
+      }
 
       if (results.brandProfile) {
         const mappedBrand = dataMapper.mapBrandProfile(results.brandProfile);
@@ -150,15 +196,13 @@ export function useAppData() {
           { key: 'productGroupRevenue', cloud: results.pGroupRev, matchKey: 'id' }
         ];
 
-        console.log("[Sync] Bắt đầu kiểm tra dữ liệu local chưa có trên Cloud...");
         for (const config of syncConfigs) {
           const cloudItems = (config.cloud || []) as any[];
           const cloudKeys = new Set(cloudItems.map((i: any) => i[config.matchKey]));
           const localItems = ((newState as any)[config.key] || []) as any[];
           const missingOnCloud = localItems.filter((i: any) => !cloudKeys.has(i[config.matchKey]));
-          
+
           if (missingOnCloud.length > 0) {
-            console.log(`[Sync] Tìm thấy ${missingOnCloud.length} bản ghi mới cho ${config.key}. Đang đẩy lên Cloud...`);
             try {
               // Validate each item before pushing
               const validItems = missingOnCloud.filter(item => {
@@ -183,18 +227,21 @@ export function useAppData() {
           }
         }
         
-        if (totalPushed > 0 || totalErrors > 0) {
-          let msg = `KẾT QUẢ ĐỒNG BỘ:\n- Đã đẩy: ${totalPushed} bản ghi.\n- Bị chặn (lỗi): ${totalErrors} bản ghi.`;
-          if (pushErrors.length > 0) msg += `\n\nChi tiết lỗi:\n${pushErrors.slice(0, 5).join('\n')}${pushErrors.length > 5 ? '\n...' : ''}`;
-          alert(msg);
-        } else {
-          alert("Dữ liệu đã đồng nhất hoàn toàn với Cloud.");
+        if (!silent) {
+          if (totalPushed > 0 || totalErrors > 0) {
+            let msg = `KẾT QUẢ ĐỒNG BỘ:\n- Đã đẩy: ${totalPushed} bản ghi.\n- Bị chặn (lỗi): ${totalErrors} bản ghi.`;
+            if (pushErrors.length > 0) msg += `\n\nChi tiết lỗi:\n${pushErrors.slice(0, 5).join('\n')}${pushErrors.length > 5 ? '\n...' : ''}`;
+            alert(msg);
+          } else {
+            alert("Dữ liệu đã đồng nhất hoàn toàn với Cloud.");
+          }
         }
       }
       
       dispatch({ type: 'SET_DATA', payload: newState });
-      console.log(`Sync Complete. posProducts count: ${newState.posProducts?.length || 0}`);
       localStorage.setItem('cfo_brain_local_data', JSON.stringify(newState));
+      clearPending();
+      setPendingCount(0);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
     } catch (err: any) {
@@ -315,14 +362,25 @@ export function useAppData() {
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
       const errorMsg = `LỖI ĐỒNG BỘ DỮ LIỆU: ${err.message || 'Lỗi kết nối hoặc ràng buộc dữ liệu'}`;
       dispatch({ type: 'SET_SYNC_ERRORS', payload: [errorMsg] });
-      throw err;
+
+      if (isNetworkSyncError(err)) {
+        for (const u of updates) {
+          await enqueueOp({
+            opType: u.isDelete ? 'deleteItem' : 'upsertItem',
+            dataKey: u.key as string,
+            payload: u.isDelete ? { id: u.item.id } : u.item,
+          });
+        }
+      } else {
+        throw err;
+      }
     } finally { dispatch({ type: 'SET_SYNCING', payload: false }); }
-  }, [state.data]);
+  }, [state.data, enqueueOp]);
 
   const pushBatch = useCallback(async (key: keyof AppData, items: any[]) => {
     dispatch({ type: 'SET_SYNCING', payload: true });
     
-    // Update Local State & Storage first
+    // Update Local State & Storage first (luôn thành công dù offline)
     const localDataStr = localStorage.getItem('cfo_brain_local_data');
     let currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
     const existingList = [...(currentLocalData[key] || [])];
@@ -344,11 +402,19 @@ export function useAppData() {
     } catch (err: any) {
       console.error(`Error pushing batch to ${key}:`, err);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
-      throw err;
+      // === Offline Queue: lưu vào IndexedDB để retry sau ===
+      if (isNetworkSyncError(err)) {
+        await enqueueOp({ opType: 'pushBatch', dataKey: key as string, payload: items });
+      } else {
+        const newCount = incrementPending();
+        setPendingCount(newCount);
+      }
     } finally {
       dispatch({ type: 'SET_SYNCING', payload: false });
     }
-  }, [state.data]);
+  }, [state.data, enqueueOp]);
+
+  const silentSync = useCallback(() => fetchData(true, true), [fetchData]);
 
   // Cleanup: Ensure categories are moved to their correct root parents
   useEffect(() => {
@@ -411,10 +477,16 @@ export function useAppData() {
     suggestedFocusProducts,
     breakEvenAnalysis,
     fetchData,
+    silentSync,
     updateData,
     updateSurgical,
     pushBatch,
     syncErrors,
-    lastSyncTime
+    lastSyncTime,
+    pendingCount,
+    // === Offline Queue ===
+    offlinePendingCount,
+    drainQueue,
+    isDraining,
   };
 }

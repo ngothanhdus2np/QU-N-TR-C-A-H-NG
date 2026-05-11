@@ -308,6 +308,9 @@ export interface AppData {
   posOrders: POSOrder[];
   posCustomers: POSCustomer[];
   inventoryTransactions: InventoryTransaction[];
+  // Nhà cung cấp
+  suppliers: Supplier[];
+  supplierDebts: SupplierDebtRecord[];
 }
 
 export interface POSProductUnit {
@@ -329,24 +332,43 @@ export interface POSProduct {
   sku: string;
   name: string;
   categoryId: string;
+  categoryPath?: string;
   importPrice: number;
   salePrice: number;
   stock: number;
+  expectedOutOfStock?: string;
   minStock: number;
   maxStock?: number;
   unit: string;
+  baseUnitCode?: string;
+  conversionValue?: number;
   units?: POSProductUnit[];
   attributes?: POSProductAttribute[];
+  attributesText?: string;
   brand?: string;
   barcode?: string;
   description?: string;
+  noteTemplate?: string;
+  components?: string;
   warranty?: string;
+  periodicMaintenance?: string;
   allowPoints?: boolean;
   weight?: number;
   weightUnit?: string;
   location?: string;
+  relatedSku?: string;
+  createdAt?: string;
   images?: string[];
   status: 'Active' | 'Inactive';
+  // Variant support
+  parentId?: string; // ID của sản phẩm cha (nếu là biến thể)
+  isParent?: boolean; // true nếu là sản phẩm cha có biến thể
+  variantAttributes?: Record<string, string>; // { "Màu sắc": "Đỏ", "Size": "M" }
+  variantCount?: number; // Số lượng biến thể (chỉ cho sản phẩm cha)
+  // KiotViet extended fields
+  customerOrders?: number;  // KH đặt — số lượng khách đặt trước
+  directSale?: boolean;     // Được bán trực tiếp
+  productType?: 'Hàng hóa' | 'Dịch vụ'; // Loại hàng
 }
 
 export interface POSOrderItem {
@@ -373,6 +395,7 @@ export interface POSOrder {
   staffId: string;
   notes?: string;
   pointsEarned: number;
+  isReturn?: boolean;
 }
 
 export interface POSCustomer {
@@ -381,6 +404,7 @@ export interface POSCustomer {
   phone: string;
   email?: string;
   address?: string;
+  notes?: string;
   points: number;
   totalSpent: number;
   lastVisit?: string;
@@ -402,6 +426,24 @@ export interface InventoryTransaction {
   note?: string;
   referenceId?: string; // OrderId or ImportId
   staffId: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface SupplierDebtRecord {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  date: string;
+  type: 'purchase' | 'payment';
+  amount: number;
+  description: string;
 }
 
 export interface DailyBreakEvenConfig {
@@ -493,6 +535,7 @@ export interface ProductLine {
 }
 
 export interface BrandProfile {
+  name?: string;
   story: string;
   voice: string;
   targetAudience: string;
@@ -534,4 +577,19 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   isTable?: boolean;
+}
+
+export interface AppAlert {
+  id: string;
+  type: 'low_stock' | 'overdue_debt' | 'revenue_drop';
+  severity: 'warning' | 'critical';
+  title: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AlertConfig {
+  defaultMinStock: number;   // Ngưỡng tồn kho tối thiểu mặc định (khi SP không set minStock)
+  debtOverdueDays: number;   // Số ngày nợ NCC chưa thanh toán bị cảnh báo
+  revenueDropPct: number;    // % doanh thu giảm so với trung bình 6 ngày (0-100)
 }

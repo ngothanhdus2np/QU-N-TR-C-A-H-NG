@@ -15,8 +15,11 @@ import POSComputer from './pos/POSComputer';
 import GoodsInventory from './pos/GoodsInventory';
 import OrderHistory from './pos/OrderHistory';
 import CustomerPoints from './pos/CustomerPoints';
+import SupplierManager from './pos/SupplierManager';
 import { AppData, BrandProfile, ChatMessage, DiagnosisRange } from '../types';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
+import ErrorBoundary from './ui/ErrorBoundary';
+import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
 
 interface MainContentProps {
   activeTab: string;
@@ -39,6 +42,8 @@ interface MainContentProps {
   updateData: (key: keyof AppData, newList: any, idToRemove?: string) => Promise<void>;
   updateSurgical: (updates: { key: keyof AppData, item: any, isDelete?: boolean }[]) => Promise<void>;
   pushBatch: (key: keyof AppData, items: any[]) => Promise<void>;
+  offlinePendingCount?: number;
+  isDraining?: boolean;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -61,7 +66,9 @@ const MainContent: React.FC<MainContentProps> = ({
   breakEvenAnalysis,
   updateData,
   updateSurgical,
-  pushBatch
+  pushBatch,
+  offlinePendingCount,
+  isDraining
 }) => {
   const [isPending, startTransition] = useTransition();
 
@@ -89,75 +96,25 @@ const MainContent: React.FC<MainContentProps> = ({
         );
       case 'pos':
         return (
-          <POSComputer 
-            products={data.posProducts || []} 
-            customers={data.posCustomers || []} 
+          <POSComputer
+            products={data.posProducts || []}
+            customers={data.posCustomers || []}
             orders={data.posOrders || []}
+            brandProfile={brandProfile}
+            currentStaffName={brandProfile?.name || 'Quản lý'}
             onGoToManagement={() => handleSetActiveTab('dashboard')}
+            offlinePendingCount={offlinePendingCount}
+            isDraining={isDraining}
             onAddCustomer={(customer) => {
               const updatedCustomers = [...(data.posCustomers || []), customer];
               updateData('posCustomers', updatedCustomers);
             }}
             onPlaceOrder={(order, updatedProducts, updatedCustomer) => {
-              // 1. Lưu đơn hàng
-              pushBatch('posOrders', [order]);
-              
-              // 2. Cập nhật tồn kho (chỉ cập nhật những hàng hóa trong đơn)
-              const stockUpdates = order.items.map(item => {
-                const p = updatedProducts.find(prod => prod.id === item.productId);
-                return { key: 'posProducts' as const, item: p };
-              });
-              updateSurgical(stockUpdates);
-              
-              // 3. Ghi log biến động kho (Sale)
-              const saleTransaction = {
-                id: crypto.randomUUID(),
-                date: order.date,
-                type: 'Sale' as const,
-                staffId: order.staffId,
-                items: order.items.map(item => {
-                  const product = (data.posProducts || []).find(p => p.id === item.productId);
-                  return {
-                    productId: item.productId,
-                    sku: item.sku,
-                    name: item.name,
-                    quantity: -item.quantity,
-                    previousStock: product?.stock || 0,
-                    newStock: (product?.stock || 0) - item.quantity
-                  };
-                }),
-                note: `Bán hàng đơn ${order.orderCode}`,
-                referenceId: order.id
-              };
-              pushBatch('inventoryTransactions', [saleTransaction]);
-              
-              // 4. Cập nhật khách hàng (nếu có)
-              if (updatedCustomer) {
-                updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
-              }
-  
-              // 5. Đồng bộ doanh thu vào Dashboard chính (revenue)
-              const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-              const existingRevenue = (data.revenue || []).find(r => r.date === today);
-              
-              if (existingRevenue) {
-                const updatedRev = { ...existingRevenue, netRevenue: (existingRevenue.netRevenue || 0) + order.finalAmount };
-                updateSurgical([{ key: 'revenue', item: updatedRev }]);
-              } else {
-                const newRevenueRecord = {
-                  id: crypto.randomUUID(),
-                  date: today,
-                  totalGrossRevenue: order.finalAmount,
-                  discount: 0,
-                  revenueOther: 0,
-                  returnsValue: 0,
-                  netRevenue: order.finalAmount,
-                  totalCogs: 0,
-                  grossProfit: order.finalAmount
-                };
-                pushBatch('revenue', [newRevenueRecord]);
-              }
-            }} 
+              processPlaceOrder({ data, order, updatedProducts, updatedCustomer, pushBatch, updateSurgical });
+            }}
+            onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems) => {
+              processReturnOrder({ data, returnOrder, updatedProducts, returnedItems, exchangeItems, pushBatch, updateSurgical });
+            }}
           />
         );
       case 'goods':
@@ -172,12 +129,22 @@ const MainContent: React.FC<MainContentProps> = ({
           />
         );
       case 'orders':
-        return <OrderHistory orders={data.posOrders || []} />;
+        return <OrderHistory orders={data.posOrders || []} storeName={brandProfile.name} />;
       case 'customers':
         return (
-          <CustomerPoints 
-            customers={data.posCustomers || []} 
+          <CustomerPoints
+            customers={data.posCustomers || []}
+            orders={data.posOrders || []}
             onUpdateCustomers={(newList) => updateData('posCustomers', newList)}
+            onUpdateSurgical={updateSurgical}
+          />
+        );
+      case 'suppliers':
+        return (
+          <SupplierManager
+            suppliers={data.suppliers || []}
+            supplierDebts={data.supplierDebts || []}
+            onUpdateSuppliers={(newList) => updateData('suppliers', newList)}
             onUpdateSurgical={updateSurgical}
           />
         );
@@ -327,9 +294,11 @@ const MainContent: React.FC<MainContentProps> = ({
           <TableSkeleton />
         </div>
       ) : (
-        <div className={['dashboard', 'pos'].includes(activeTab) ? '' : 'pt-4 md:pt-8'}>
-          {content}
-        </div>
+        <ErrorBoundary key={activeTab} moduleName={activeTab}>
+          <div className={activeTab === 'pos' ? 'h-full' : activeTab === 'dashboard' ? '' : 'pt-4 md:pt-8'}>
+            {content}
+          </div>
+        </ErrorBoundary>
       )}
     </div>
   );

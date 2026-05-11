@@ -1,5 +1,5 @@
 
-import { LayoutDashboard, ReceiptText, MessageSquareText, Landmark, UserPlus, Layers, Library, Fingerprint, Tag, Megaphone, ShoppingCart, Wallet, Monitor, Package, FileText, Users } from 'lucide-react';
+import { LayoutDashboard, ReceiptText, MessageSquareText, Landmark, UserPlus, Layers, Library, Fingerprint, Tag, Megaphone, ShoppingCart, Wallet, Monitor, Package, FileText, Users, Truck } from 'lucide-react';
 
 export const SIDEBAR_SECTIONS = [
   {
@@ -15,7 +15,8 @@ export const SIDEBAR_SECTIONS = [
       { id: 'pos', label: 'Máy Tính Tiền', icon: Monitor },
       { id: 'goods', label: 'Hàng Hóa', icon: Package },
       { id: 'orders', label: 'Đơn Hàng', icon: FileText },
-      { id: 'customers', label: 'Khách Hàng', icon: Users }
+      { id: 'customers', label: 'Khách Hàng', icon: Users },
+      { id: 'suppliers', label: 'Nhà Cung Cấp', icon: Truck }
     ]
   },
   {
@@ -30,8 +31,8 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Marketing',
     items: [
-      { id: 'promotions', label: 'Khuyến Mãi', icon: Tag, isSubItem: true },
-      { id: 'marketing', label: 'Nội dung Fanpage', icon: Megaphone, isSubItem: true }
+      { id: 'promotions', label: 'Khuyến Mãi', icon: Tag },
+      { id: 'marketing', label: 'Nội dung Fanpage', icon: Megaphone }
     ]
   },
   {
@@ -44,10 +45,8 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Hệ thống',
     items: [
-      { id: 'brand', label: 'Thương Hiệu', icon: Fingerprint, isSubItem: true },
+      { id: 'brand', label: 'Thương Hiệu', icon: Fingerprint },
       { id: 'sop', label: 'Chính Sách & Quy Trình', icon: Library }
     ]
   }
 ];
-
-// Re-importing Wallet is no longer needed as it's in the main import

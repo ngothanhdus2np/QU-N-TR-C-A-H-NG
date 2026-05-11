@@ -2,21 +2,28 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, AttendanceRecord, PayrollRecord, Employee, SalaryPolicy, Holiday, TetCampaign, ViolationType, ViolationOccurrence, ResponsibilityApproval, ShortageRecord, AdvanceRecord, ExpenseRecord, StaffPerformanceRecord } from '../types';
 import { 
-  Calculator, Clock, TrendingUp, ListChecks, 
-  Trash2, Calendar, DollarSign, Plus, Check, Banknote, HeartHandshake, Home, Utensils, Sparkles,
+  Calculator, Clock, TrendingUp, ListChecks,
+  Calendar, Check, Sparkles,
   Info, PartyPopper, Gift, Save, CalendarCheck, Flame, BadgeCheck, UserMinus,
   Archive, RotateCcw, Printer, PrinterCheck, ChevronRight, ChevronLeft, Gavel, AlertOctagon, ToggleLeft, ToggleRight, Wallet2,
   ChevronDown, Layers, Globe, HandCoins, Star, MapPin, X as LucideX, ArrowLeft, ArrowRight, Trophy, Medal, Crown, BarChart2, BookOpen,
-  Loader2, ShieldCheck, Eye, EyeOff
+  Loader2, ShieldCheck, Eye, EyeOff, FileDown
 } from 'lucide-react';
-import { 
-  calculateEmployeePayroll, 
-  calculateSeniority, 
+import {
+  calculateEmployeePayroll,
+  calculateSeniority,
   determineCurrentPolicy,
   calculateStaffRanking,
   generateId,
   isUUID
 } from '../businessLogic';
+import { exportToExcel as xlsxExport } from '../services/exportService';
+import AttendanceTab from './payroll/AttendanceTab';
+import OvertimeTab from './payroll/OvertimeTab';
+import SalesTab from './payroll/SalesTab';
+import PenaltiesTab from './payroll/PenaltiesTab';
+import SummaryTab from './payroll/SummaryTab';
+import LedgerTab from './payroll/LedgerTab';
 
 const ResponsibilityIcon = ShieldCheck;
 
@@ -759,7 +766,28 @@ const PayrollManager: React.FC<Props> = ({ data, onUpdateData, onUpdateSurgical,
             <Calendar className="w-4 h-4 text-slate-400" />
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer" />
           </div>
-          <button 
+          <button
+            onClick={() => xlsxExport(
+              archivedPayrolls.map(p => ({
+                'Tháng': p.month,
+                'Nhân viên': p.employeeName,
+                'Lương cơ bản': p.basicSalary,
+                'Phụ cấp': p.allowance,
+                'Tăng ca': p.overtimePay,
+                'Hoa hồng': p.commissionPay,
+                'Thâm niên': p.seniorityBonus,
+                'Thưởng Tết': p.tetBonus,
+                'Tạm ứng': p.advance,
+                'Phạt': p.fine,
+                'Thực lãnh': p.netPay,
+              })),
+              `BangLuong_${selectedMonth}`
+            )}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border-2 border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-all"
+          >
+            <FileDown className="w-3.5 h-3.5" /> Xuất Excel
+          </button>
+          <button
             onClick={() => setShowResigned(!showResigned)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showResigned ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white border-2 border-slate-200 text-slate-400 hover:bg-slate-50'}`}
           >
@@ -770,690 +798,82 @@ const PayrollManager: React.FC<Props> = ({ data, onUpdateData, onUpdateSurgical,
       </div>
 
       {subTab === 'attendance' && (
-        <div className="animate-in fade-in duration-300 space-y-4">
-           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><ListChecks className="w-5 h-5" /></div>
-                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tighter">Bảng Chấm Công Tháng {selectedMonth}</h3>
-              </div>
-           </div>
-           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto max-h-[70vh]">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
-                        {daysArray.map(day => (
-                          <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[42px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
-                        ))}
-                        <th className="px-3 py-4 text-center text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[60px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Tổng</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {employees.map(emp => {
-                        const isResigned = (emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "");
-                        return (
-                        <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                            <p className={`text-sm font-bold truncate ${isResigned ? 'text-slate-400' : 'text-slate-800'}`}>{emp.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
-                          </td>
-                          {daysArray.map(day => (
-                            <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                              <input type="text" defaultValue={getAttendanceCellValue(emp.id, day)} onBlur={(e) => handleAttendanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-xs font-bold outline-none border-none focus:bg-white" />
-                            </td>
-                          ))}
-                          <td className="bg-indigo-50 text-center font-black text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)]">{calculateTotalHours(emp.id)}</td>
-                        </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-        </div>
+        <AttendanceTab
+          employees={employees}
+          daysArray={daysArray}
+          selectedMonth={selectedMonth}
+          isHoliday={isHoliday}
+          getAttendanceCellValue={getAttendanceCellValue}
+          handleAttendanceInputChange={handleAttendanceInputChange}
+          calculateTotalHours={calculateTotalHours}
+        />
       )}
 
       {subTab === 'overtime' && (
-        <div className="animate-in fade-in duration-300 space-y-4">
-           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Clock className="w-5 h-5" /></div>
-                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tighter">Ghi Nhận Tăng Ca (Đơn vị: Phút)</h3>
-              </div>
-           </div>
-           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto max-h-[70vh]">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
-                        {daysArray.map(day => (
-                          <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[42px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
-                        ))}
-                        <th className="px-3 py-4 text-center text-[10px] font-black text-emerald-600 uppercase bg-emerald-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[60px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Giờ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {employees.map(emp => {
-                        const isResigned = (emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "");
-                        return (
-                        <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                            <p className={`text-sm font-bold truncate ${isResigned ? 'text-slate-400' : 'text-slate-800'}`}>{emp.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
-                          </td>
-                          {daysArray.map(day => (
-                            <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                              <input type="text" defaultValue={getOvertimeCellValue(emp.id, day)} onBlur={(e) => handleOvertimeInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-xs font-bold outline-none border-none focus:bg-emerald-50/50" />
-                            </td>
-                          ))}
-                          <td className="bg-emerald-50 text-center font-black text-emerald-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)]">{calculateTotalOvertimeHours(emp.id)}</td>
-                        </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-        </div>
+        <OvertimeTab
+          employees={employees}
+          daysArray={daysArray}
+          selectedMonth={selectedMonth}
+          isHoliday={isHoliday}
+          getOvertimeCellValue={getOvertimeCellValue}
+          handleOvertimeInputChange={handleOvertimeInputChange}
+          calculateTotalOvertimeHours={calculateTotalOvertimeHours}
+        />
       )}
 
       {subTab === 'sales' && (
-        <div className="animate-in fade-in duration-300 space-y-10">
-           {staffRankings.length > 0 && (
-              <div className="space-y-6">
-                 <div className="flex items-center gap-4 px-2">
-                    <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-xl"><Trophy className="w-6 h-6" /></div>
-                    <div>
-                       <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Bảng Vàng Doanh Số Tháng {selectedMonth.split('-').reverse().join('/')}</h3>
-                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Xếp hạng hiệu quả đóng góp doanh thu của nhân sự</p>
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {staffRankings.slice(0, 3).map((r, idx) => {
-                       const colors = [
-                          { bg: 'bg-amber-500', text: 'text-amber-500', icon: Crown, label: 'QUÁN QUÂN' },
-                          { bg: 'bg-slate-400', text: 'text-slate-400', icon: Medal, label: 'Á QUÂN' },
-                          { bg: 'bg-orange-400', text: 'text-orange-400', icon: Medal, label: 'VỀ BA' }
-                       ];
-                       const theme = colors[idx];
-                       return (
-                          <div key={r.id} className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl relative overflow-hidden group hover:-translate-y-1 transition-all">
-                             <div className={`absolute top-0 right-0 w-32 h-32 ${theme.bg}/5 rounded-full -translate-y-1/2 translate-x-1/2`}></div>
-                             <div className="flex items-center justify-between mb-6 relative z-10">
-                                <div className={`w-14 h-14 rounded-2xl ${theme.bg} text-white flex items-center justify-center shadow-lg shadow-${theme.text}/20`}>
-                                   <theme.icon className="w-8 h-8" />
-                                </div>
-                                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${theme.text}`}>{theme.label}</span>
-                             </div>
-                             <div className="relative z-10">
-                                <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{r.name}</h4>
-                                <div className="mt-4 flex items-end gap-2">
-                                   <span className="text-2xl font-black text-slate-800 tabular-nums">{(r.totalAmount || 0).toLocaleString()}</span>
-                                   <span className="text-[10px] font-bold text-slate-400 mb-1.5">VNĐ</span>
-                                </div>
-                             </div>
-                          </div>
-                       );
-                    })}
-                 </div>
-              </div>
-           )}
-
-           <div className="space-y-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-                 <div className="flex items-center gap-4">
-                    <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><TrendingUp className="w-5 h-5" /></div>
-                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tighter">Ghi nhận doanh số chi tiết (Đơn vị: Nghìn đồng)</h3>
-                 </div>
-              </div>
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                   <div className="overflow-x-auto max-h-[70vh]">
-                     <table className="w-full text-left border-collapse table-fixed">
-                       <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                         <tr>
-                           <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
-                           {daysArray.map(day => (
-                             <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[55px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
-                           ))}
-                           <th className="px-3 py-4 text-center text-[10px] font-black text-amber-600 uppercase bg-amber-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[100px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Tổng</th>
-                         </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-50">
-                         {employees.map(emp => {
-                           const isResigned = (emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "");
-                           return (
-                           <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                             <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                               <p className={`text-sm font-bold truncate ${isResigned ? 'text-slate-400' : 'text-slate-800'}`}>{emp.name}</p>
-                               <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
-                             </td>
-                             {daysArray.map(day => (
-                               <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                                 <input type="text" defaultValue={getSalesCellValue(emp.id, day)} onBlur={(e) => handleSalesInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-amber-50/50" />
-                               </td>
-                             ))}
-                             <td className="bg-amber-50 text-center font-black text-amber-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalSalesAmount(emp.id) || 0).toLocaleString()}</td>
-                           </tr>
-                         )})}
-                       </tbody>
-                     </table>
-                   </div>
-                 </div>
-           </div>
-        </div>
+        <SalesTab
+          employees={employees}
+          daysArray={daysArray}
+          selectedMonth={selectedMonth}
+          isHoliday={isHoliday}
+          staffRankings={staffRankings}
+          getSalesCellValue={getSalesCellValue}
+          handleSalesInputChange={handleSalesInputChange}
+          calculateTotalSalesAmount={calculateTotalSalesAmount}
+        />
       )}
-
       {subTab === 'penalties' && (
-        <div className="animate-in fade-in duration-500 space-y-12">
-          <div className="space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                 <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Wallet2 className="w-5 h-5" /></div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Bảng theo dõi tiền thiếu tháng {selectedMonth}</h3>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto max-h-[50vh]">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
-                        {daysArray.map(day => (
-                          <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[50px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
-                        ))}
-                        <th className="px-3 py-4 text-center text-[10px] font-black text-orange-600 uppercase bg-orange-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[100px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Tổng Thiếu</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {employees.map(emp => {
-                        const isResigned = (emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "");
-                        return (
-                        <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                            <p className={`text-sm font-bold truncate ${isResigned ? 'text-slate-400' : 'text-slate-800'}`}>{emp.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
-                          </td>
-                          {daysArray.map(day => (
-                            <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                              <input type="text" defaultValue={getShortageCellValue(emp.id, day)} onBlur={(e) => handleShortageInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-orange-50/50" />
-                            </td>
-                          ))}
-                          <td className="bg-orange-50 text-center font-black text-orange-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalShortageAmount(emp.id) || 0).toLocaleString()}</td>
-                        </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><HandCoins className="w-5 h-5" /></div>
-                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Bảng theo dõi tạm ứng tháng {selectedMonth}</h3>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto max-h-[50vh]">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
-                        {daysArray.map(day => (
-                          <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[50px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
-                        ))}
-                        <th className="px-3 py-4 text-center text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[100px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Tổng Tạm Ưng</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {employees.map(emp => {
-                        const isResigned = (emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "");
-                        return (
-                        <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                            <p className={`text-sm font-bold truncate ${isResigned ? 'text-slate-400' : 'text-slate-800'}`}>{emp.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
-                          </td>
-                          {daysArray.map(day => (
-                            <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                              <input type="text" defaultValue={getAdvanceCellValue(emp.id, day)} onBlur={(e) => handleAdvanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-indigo-50/50" />
-                            </td>
-                          ))}
-                          <td className="bg-indigo-50 text-center font-black text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalAdvanceAmount(emp.id) || 0).toLocaleString()}</td>
-                        </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                   <div className="p-2 bg-rose-50 text-rose-600 rounded-lg"><Gavel className="w-5 h-5" /></div>
-                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Ma Trận Khấu Trừ Kỷ Luật Tháng {selectedMonth}</h3>
-                </div>
-             </div>
-             
-             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto max-h-[60vh]">
-                  <table className="w-full border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
-                      <tr>
-                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase border-r border-slate-100 w-[240px] sticky left-0 top-0 bg-slate-50 z-40">Hạng mục khấu trừ</th>
-                        {employees.map(emp => (
-                          <th key={emp.id} className="px-2 py-5 text-center border-r border-slate-100 min-w-[120px]">
-                            <p className="text-[10px] font-black text-slate-800 uppercase truncate px-2">{emp.name}</p>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {violationTypes.map(vt => (
-                        <tr key={vt.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 bg-white sticky left-0 z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.01)]">
-                             <p className="text-xs font-bold text-slate-700">{vt.name}</p>
-                          </td>
-                          {employees.map(emp => (
-                            <td key={emp.id} className="p-0 border-r border-slate-100 h-14">
-                               <div className="flex h-full items-center justify-center gap-4 px-2">
-                                  {[1, 2, 3].map((num) => (
-                                    <button 
-                                      key={num}
-                                      onClick={() => toggleViolation(emp.id, vt.id, num as 1|2|3)}
-                                      className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-all ${
-                                        isViolationChecked(emp.id, vt.id, num as 1|2|3)
-                                          ? 'bg-rose-500 border-rose-500 text-white shadow-sm'
-                                          : 'bg-white border-slate-200 hover:border-rose-300'
-                                      }`}
-                                    >
-                                      {isViolationChecked(emp.id, vt.id, num as 1|2|3) && <Check className="w-3 h-3 stroke-[3]" />}
-                                    </button>
-                                  ))}
-                               </div>
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-             </div>
-          </div>
-        </div>
+        <PenaltiesTab
+          employees={employees}
+          daysArray={daysArray}
+          selectedMonth={selectedMonth}
+          isHoliday={isHoliday}
+          violationTypes={violationTypes}
+          getShortageCellValue={getShortageCellValue}
+          handleShortageInputChange={handleShortageInputChange}
+          calculateTotalShortageAmount={calculateTotalShortageAmount}
+          getAdvanceCellValue={getAdvanceCellValue}
+          handleAdvanceInputChange={handleAdvanceInputChange}
+          calculateTotalAdvanceAmount={calculateTotalAdvanceAmount}
+          toggleViolation={toggleViolation}
+          isViolationChecked={isViolationChecked}
+        />
       )}
-
       {subTab === 'summary' && (
-        <div className="animate-in fade-in duration-500 space-y-16 pb-20">
-          <section className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg">
-                  <BadgeCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Phiếu Lương Dự Thảo (Tích lũy đến hôm nay)</h3>
-                  <p className="text-sm text-slate-500 font-medium italic">Số tiền tích lũy tăng dần theo ngày công thực tế.</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8">
-              {draftPayrolls.map((payroll) => {
-                const isArchived = archivedPayrolls.some(ap => ap.employeeId === payroll.employeeId);
-                const emp = data.employees.find(e => e.id === payroll.employeeId);
-                const seniorityDays = emp ? calculateSeniority(emp.joinDate) : 0;
-                const { policy: currentPolicy } = determineCurrentPolicy(emp!, policies, seniorityDays);
-                const isApproved = responsibilityApprovals.some(ra => ra.employeeId === payroll.employeeId && ra.month === selectedMonth);
-
-                if (!currentPolicy) return null;
-
-                const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
-                const daysInMonthTotal = new Date(yearNum, monthNum, 0).getDate();
-                const monthAttendance = data.attendance.filter(a => a.employeeId === payroll.employeeId && a.date.startsWith(selectedMonth));
-                const workingDays = monthAttendance.filter(a => a.status === 'Present').length;
-                const proRateFactor = daysInMonthTotal > 0 ? (workingDays / daysInMonthTotal) : 0;
-
-                const employeeViolations = violationOccurrences.filter(vo => vo.employeeId === payroll.employeeId && vo.month === selectedMonth);
-                const checkPenalty = (keyword: string) => employeeViolations.some(vo => {
-                    const vt = violationTypes.find(v => v.id === vo.violationTypeId);
-                    if (!vt) return false;
-                    const pStr = (vo.occurrence === 1 ? vt.fine1 : vo.occurrence === 2 ? vt.fine2 : vo.occurrence === 3 ? vt.fine3 : '').toLowerCase();
-                    return pStr.includes(keyword);
-                });
-
-                const isAttendanceCut = checkPenalty('chuyên cần');
-                const isCleaningCut = checkPenalty('vệ sinh');
-                const isCSKHCut = checkPenalty('cskh');
-                const isDinnerCut = checkPenalty('ăn tối');
-                const isHousingCut = checkPenalty('hỗ trợ ở') || checkPenalty('nhà ở') || checkPenalty('mất ở');
-                const isResponsibilityCut = checkPenalty('trách nhiệm');
-
-                const isProcessing = isProcessingSettlement === payroll.employeeId;
-                const isResigned = emp ? ((emp.resignedDate && String(emp.resignedDate).trim() !== "") || (emp.resigned_date && String(emp.resigned_date).trim() !== "")) : false;
-
-                return (
-                  <div key={payroll.employeeId} className={`bg-white border border-slate-200 flex flex-col h-full rounded-[2.5rem] relative transition-all hover:shadow-2xl hover:border-slate-300 overflow-hidden ${isResigned ? 'bg-slate-50 opacity-80' : ''}`}>
-                    <div className="p-8 border-b border-slate-100 flex flex-col items-center relative">
-                      {isArchived && (
-                        <div className="absolute top-4 right-4">
-                          <span className="text-[8px] font-black bg-slate-900 text-white px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1">
-                            <Check className="w-2.5 h-2.5" /> Đã chốt
-                          </span>
-                        </div>
-                      )}
-                      <h4 className={`font-black text-xl uppercase tracking-tight text-center ${isResigned ? 'text-slate-400' : 'text-slate-900'}`}>{payroll.employeeName}</h4>
-                      <div className="mt-2">
-                        <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 border ${payroll.isOfficial ? 'border-emerald-200 text-emerald-600' : 'border-amber-200 text-amber-600'}`}>
-                          {currentPolicy.name}
-                        </span>
-                      </div>
-                      {isResigned && (
-                         <div className="mt-2 bg-rose-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase">ĐÃ NGHỈ VIỆC</div>
-                      )}
-                    </div>
-
-                    <div className="p-6 space-y-3 flex-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-700">Lương Cơ Bản (Thực nhận)</span>
-                        <span className="font-black text-slate-900">{(payroll.basicSalary || 0).toLocaleString()}</span>
-                      </div>
-
-                      <div className="space-y-1.5 pt-2">
-                        <div className="flex justify-between items-center text-[11px] font-black text-indigo-600 uppercase border-b border-slate-50 pb-1">
-                          <span>Phụ Cấp (Tích lũy theo công)</span>
-                          <span>{(payroll.allowance || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="pl-4 space-y-1">
-                          {currentPolicy.attendanceAllowance > 0 && (
-                            <AccruedDetail 
-                              label="Chuyên cần" 
-                              value={Math.round((isAttendanceCut ? 0 : currentPolicy.attendanceAllowance) * proRateFactor)} 
-                              isCut={isAttendanceCut} 
-                            />
-                          )}
-                          {currentPolicy.cleaningAllowance > 0 && (
-                            <AccruedDetail 
-                              label="Vệ sinh" 
-                              value={Math.round((isCleaningCut ? 0 : currentPolicy.cleaningAllowance) * proRateFactor)} 
-                              isCut={isCleaningCut} 
-                            />
-                          )}
-                          {currentPolicy.customerServiceAllowance > 0 && (
-                            <AccruedDetail 
-                              label="CSKH" 
-                              value={Math.round((isCSKHCut ? 0 : currentPolicy.customerServiceAllowance) * proRateFactor)} 
-                              isCut={isCSKHCut} 
-                            />
-                          )}
-                          {currentPolicy.dinnerAllowance > 0 && (
-                            <AccruedDetail 
-                              label="Ăn tối" 
-                              value={Math.round((isDinnerCut ? 0 : currentPolicy.dinnerAllowance) * workingDays)} 
-                              isCut={isDinnerCut} 
-                            />
-                          )}
-                          {currentPolicy.housingAllowance > 0 && (
-                            <AccruedDetail 
-                              label="Hỗ trợ ở" 
-                              value={Math.round((isHousingCut ? 0 : currentPolicy.housingAllowance) * proRateFactor)} 
-                              isCut={isHousingCut} 
-                            />
-                          )}
-                          {currentPolicy.responsibilityAllowance > 0 && (
-                            <div className="flex justify-between items-center py-1 group/resp">
-                               <div className="flex items-center gap-2">
-                                  <button 
-                                    onClick={() => toggleResponsibilityApproval(payroll.employeeId)}
-                                    className={`transition-all ${isApproved ? 'text-indigo-600' : 'text-slate-300'}`}
-                                  >
-                                    {isApproved ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
-                                  </button>
-                                  <span className={`text-[10px] font-bold uppercase tracking-tighter ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-400'} ${isResponsibilityCut ? 'text-rose-400' : ''}`}>
-                                    Trách nhiệm
-                                  </span>
-                               </div>
-                               <span className={`text-[10px] font-black ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-500'}`}>
-                                 {Math.round((isResponsibilityCut ? 0 : (currentPolicy.responsibilityAllowance || 0)) * proRateFactor).toLocaleString()}
-                               </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs pt-2">
-                        <span className="font-bold text-slate-700">Hoa Hồng ({(currentPolicy.commissionRate || 0)}%)</span>
-                        <span className="font-black text-emerald-600">{(payroll.commissionPay || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-700">Tăng Ca (OT)</span>
-                        <span className="font-black text-amber-600">{(payroll.overtimePay || 0).toLocaleString()}</span>
-                      </div>
-
-                      {payroll.holidayBonus > 0 && (
-                        <div className="flex justify-between items-center text-xs">
-                           <span className="font-bold text-slate-700">Thưởng Lễ</span>
-                           <span className="font-black text-amber-600">{(payroll.holidayBonus || 0).toLocaleString()}</span>
-                        </div>
-                      )}
-
-                      {payroll.tetBonus > 0 && (
-                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-2 mt-4 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 opacity-10"><PartyPopper className="w-12 h-12 text-amber-600" /></div>
-                          <div className="flex items-center gap-2 mb-1 relative z-10">
-                            <PartyPopper className="w-3.5 h-3.5 text-amber-600" />
-                            <span className="text-[9px] font-black text-amber-800 uppercase tracking-widest">Phúc lợi Tết Nguyên Đán</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] relative z-10">
-                            <span className="font-bold text-amber-700">Trước Tết (Xe & Trực chiến)</span>
-                            <span className="font-black text-amber-900">{(payroll.tetBonusBefore || 0).toLocaleString()}đ</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] relative z-10">
-                            <span className="font-bold text-amber-700">Sau Tết (Lì xì & Chuyên cần)</span>
-                            <span className="font-black text-amber-900">{(payroll.tetBonusAfter || 0).toLocaleString()}đ</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {payroll.seniorityBonus > 0 && (
-                        <div className="flex justify-between items-center text-xs">
-                           <span className="font-bold text-slate-700">Thâm Niên</span>
-                           <span className="font-black text-indigo-600">{(payroll.seniorityBonus || 0).toLocaleString()}</span>
-                        </div>
-                      )}
-
-                      {(payroll.fine > 0 || payroll.shortage > 0 || payroll.advance > 0) && (
-                        <div className="space-y-1.5 pt-2 border-t border-slate-50 mt-2">
-                          <div className="flex justify-between items-center text-[11px] font-black text-rose-500 uppercase pb-1">
-                            <span>Khấu Trừ Tài Chính</span>
-                            <span>-{((payroll.fine || 0) + (payroll.shortage || 0) + (payroll.advance || 0)).toLocaleString()}</span>
-                          </div>
-                          <div className="pl-4 space-y-1">
-                            {payroll.fine > 0 && <PaySlipDetail label="Vi phạm / Kỷ luật / vắng" value={payroll.fine} isCut={true} />}
-                            {payroll.shortage > 0 && <PaySlipDetail label="Tiền thiếu" value={payroll.shortage} isCut={true} />}
-                            {payroll.advance > 0 && <PaySlipDetail label="Tiền tạm ứng trong tháng" value={payroll.advance} isCut={true} />}
-                          </div>
-                        </div>
-                      )}
-
-                      {payroll.calculationNote && (
-                        <div className="mt-4 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                          <div className="flex items-center gap-1.5 mb-1.5 text-slate-400">
-                            <Info className="w-3 h-3" />
-                            <span className="text-[9px] font-black uppercase tracking-widest">Diễn giải cách tính</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-medium leading-relaxed italic">
-                            {payroll.calculationNote.split(' | ').map((note, i) => (
-                              <div key={i} className="flex items-start gap-1">
-                                <span className="opacity-40">•</span>
-                                <span>{note}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-6 bg-slate-900 space-y-4">
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Tổng lương thực nhận</span>
-                        <div className="text-3xl font-black text-white tabular-nums">
-                          {(payroll.netPay || 0).toLocaleString()} <span className="text-xs font-bold text-slate-500">VNĐ</span>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                           <button 
-                             onClick={() => handlePrintPayslip(payroll)}
-                             className="py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                           >
-                             <Printer className="w-3.5 h-3.5" /> In Phiếu
-                           </button>
-                           <button 
-                             onClick={() => handleFinalizeIndividual(payroll)}
-                             disabled={isArchived}
-                             className={`py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-                               isArchived 
-                                 ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700' 
-                                 : 'bg-white text-slate-900 hover:bg-indigo-50'
-                             }`}
-                           >
-                             {isArchived ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                             {isArchived ? 'Đã Chốt' : 'Chốt & Lưu'}
-                           </button>
-                        </div>
-                        
-                        {(!isResigned || isProcessing) ? (
-                          <button 
-                            onClick={() => handleSettlementAndResignation(payroll)}
-                            disabled={isProcessing || isArchived}
-                            className={`w-full py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 border ${
-                              isArchived 
-                                ? 'border-slate-700 text-slate-600 bg-slate-800/20 cursor-not-allowed' 
-                                : 'border-rose-500/30 text-rose-400 bg-rose-500/10 hover:bg-rose-500 hover:text-white'
-                            } disabled:opacity-50`}
-                          >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                            QUYẾT TOÁN NGHỈ VIỆC
-                          </button>
-                        ) : (
-                          <div className="w-full py-3.5 bg-rose-900/40 text-rose-200 border-rose-800 border rounded-xl text-center">
-                            <p className="text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-                               <ShieldCheck className="w-3.5 h-3.5" /> ĐÃ QUYẾT TOÁN
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </div>
+        <SummaryTab
+          draftPayrolls={draftPayrolls}
+          archivedPayrolls={archivedPayrolls}
+          data={data}
+          selectedMonth={selectedMonth}
+          violationOccurrences={violationOccurrences}
+          violationTypes={violationTypes}
+          responsibilityApprovals={responsibilityApprovals}
+          policies={policies}
+          isProcessingSettlement={isProcessingSettlement}
+          toggleResponsibilityApproval={toggleResponsibilityApproval}
+          handlePrintPayslip={handlePrintPayslip}
+          handleFinalizeIndividual={handleFinalizeIndividual}
+          handleSettlementAndResignation={handleSettlementAndResignation}
+        />
       )}
-
       {subTab === 'ledger' && (
-        <div className="animate-in fade-in duration-500 space-y-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Sổ Cái Quỹ Lương Đã Chốt</h3>
-                <p className="text-sm text-slate-500 font-medium italic">Lịch sử chi trả lương chính thức tháng {selectedMonth}.</p>
-              </div>
-            </div>
-            {archivedPayrolls.length > 0 && (
-              <button 
-                onClick={() => handleUndoPayroll()}
-                className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-rose-100 text-rose-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 transition-all"
-              >
-                <RotateCcw className="w-4 h-4" /> Hủy chốt toàn bộ tháng
-              </button>
-            )}
-          </div>
-
-          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
-            <div className="overflow-x-auto overflow-y-auto max-h-[650px] no-scrollbar">
-              <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
-                <thead className="bg-slate-900 text-white sticky top-0 z-30">
-                  <tr className="text-[10px] font-black uppercase tracking-widest">
-                    <th className="px-6 py-5 sticky left-0 bg-slate-900 z-40 border-r border-white/10 w-[200px]">Nhân viên</th>
-                    <th className="px-6 py-5 w-[150px]">Lương CB</th>
-                    <th className="px-6 py-5 w-[200px]">Phụ Cấp</th>
-                    <th className="px-6 py-5 w-[200px]">Thưởng Tết</th>
-                    <th className="px-6 py-5 w-[150px]">Khấu trừ</th>
-                    <th className="px-6 py-5 sticky right-0 bg-slate-900 z-40 border-l border-white/10 w-[150px]">Thực Nhận</th>
-                    <th className="px-6 py-5 text-center w-[150px]">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-[11px] font-bold bg-white">
-                  {archivedPayrolls.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-20 text-center opacity-40">
-                         <Archive className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                         <p className="text-sm font-black text-slate-500 uppercase">Chưa ghi nhận dữ liệu chốt lương cho tháng {selectedMonth}</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    archivedPayrolls.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
-                        <td className="px-6 py-5 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-50 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                          <p className="text-sm font-black text-slate-800">{p.employeeName}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">{p.isOfficial ? 'Chính thức' : 'Học việc'}</p>
-                          {p.calculationNote && (
-                            <div className="mt-2 group/note relative">
-                               <div className="flex items-center gap-1 text-[8px] text-indigo-400 font-black cursor-help">
-                                  <Info className="w-2.5 h-2.5" /> XEM LOGIC
-                               </div>
-                               <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-slate-900 text-white rounded-xl text-[9px] font-medium leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[99] shadow-2xl border border-white/10">
-                                  {p.calculationNote.split(' | ').map((line, i) => (
-                                    <div key={i} className="mb-1">• {line}</div>
-                                  ))}
-                                </div>
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-5 text-slate-600">{(p.basicSalary || 0).toLocaleString()}</td>
-                        <td className="px-6 py-5">
-                          <p className="text-indigo-600">P.Cấp: {(p.allowance || 0).toLocaleString()}</p>
-                          <p className="text-indigo-400">T.Nhiệm: {(p.responsibilityPay || 0).toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <p className="text-rose-600 font-black">Trước: {(p.tetBonusBefore || 0).toLocaleString()}</p>
-                          <p className="text-amber-600 font-black">Sau: {(p.tetBonusAfter || 0).toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-5 text-rose-500">
-                           <p>VP: {(p.fine || 0).toLocaleString()}</p>
-                           <p className="opacity-70">Thiếu: {(p.shortage || 0).toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-5 sticky right-0 bg-white group-hover:bg-slate-50 z-10 border-l border-slate-50 shadow-[-2px_0_5_rgba(0,0,0,0.02)]">
-                          <span className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-black shadow-lg">
-                            {(p.netPay || 0).toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                             <button onClick={() => handlePrintPayslip(p)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Printer className="w-4 h-4" /></button>
-                             <button onClick={() => handleUndoPayroll(p.employeeId)} className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><RotateCcw className="w-4 h-4" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <LedgerTab
+          archivedPayrolls={archivedPayrolls}
+          selectedMonth={selectedMonth}
+          handleUndoPayroll={handleUndoPayroll}
+          handlePrintPayslip={handlePrintPayslip}
+        />
       )}
       {/* Print Preview Modal */}
       {showPrintPreview && selectedPayrollForPrint && (
@@ -1666,28 +1086,6 @@ const PayrollManager: React.FC<Props> = ({ data, onUpdateData, onUpdateSurgical,
   );
 };
 
-const AccruedDetail = ({ label, value, isCut = false }: { label: string; value: number; isCut?: boolean }) => (
-  <div className="flex justify-between items-center py-1 text-[10px] border-b border-slate-50/50">
-    <span className={`font-semibold ${isCut ? 'text-rose-400' : 'text-slate-600'}`}>
-      {label}
-    </span>
-    <div className="text-right">
-       <span className={`font-black ${isCut ? 'text-rose-500' : 'text-indigo-600'}`}>
-         {(value || 0).toLocaleString()}đ
-       </span>
-       {!isCut && value > 0 && <p className="text-[7px] text-slate-400 uppercase font-bold tracking-tighter leading-none">Tích lũy</p>}
-    </div>
-  </div>
-);
-
-const PaySlipDetail = ({ label, value, isCut = false }: { label: string; value: number; isCut?: boolean }) => (
-  <div className="flex justify-between items-center py-0.5 text-[10px]">
-    <span className={`font-medium ${isCut ? 'text-rose-500' : 'text-slate-400'}`}>
-      {label}:
-    </span>
-    <span className={`font-bold ${isCut ? 'text-rose-600' : 'text-slate-600'}`}>{(value || 0).toLocaleString()}</span>
-  </div>
-);
 
 const SubTabBtn = ({ active, onClick, icon: Icon, label }: any) => (
   <button onClick={onClick} className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all font-black text-[11px] uppercase tracking-tighter whitespace-nowrap ${active ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-100' : 'text-slate-500 hover:text-slate-800'}`}>

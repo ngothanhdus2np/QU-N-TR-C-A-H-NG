@@ -1,0 +1,267 @@
+import React from 'react';
+import {
+  Activity,
+  ChevronDown,
+  Eye,
+  FileInput,
+  Keyboard,
+  LayoutGrid,
+  LogOut,
+  PackageOpen,
+  PenTool,
+  Plus,
+  Printer,
+  RefreshCw,
+  RotateCcw,
+  Scan,
+  Search,
+  ShoppingBag,
+  StickyNote,
+  Undo2,
+  X,
+} from 'lucide-react';
+import { POSProduct } from '../../types';
+import type { InvoiceTab } from './POSComputer';
+
+interface POSHeaderToolbarProps {
+  productSearchRef: React.RefObject<HTMLInputElement | null>;
+  searchResultRefs: React.MutableRefObject<(HTMLButtonElement | null)[]>;
+  searchTerm: string;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  setDebouncedSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  searchFilteredProducts: POSProduct[];
+  showProductResults: boolean;
+  setShowProductResults: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedResultIndex: number;
+  setSelectedResultIndex: React.Dispatch<React.SetStateAction<number>>;
+  addToCart: (product: POSProduct) => void;
+  tabs: InvoiceTab[];
+  activeTabId: string;
+  setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
+  closeTab: (e: React.MouseEvent, id: string) => void;
+  addNewTab: () => void;
+  setShowReturnModal: React.Dispatch<React.SetStateAction<boolean>>;
+  offlinePendingCount: number;
+  isDraining: boolean;
+  isAutoPrintEnabled: boolean;
+  setIsAutoPrintEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  showGridMenu: boolean;
+  setShowGridMenu: React.Dispatch<React.SetStateAction<boolean>>;
+  onGoToManagement?: () => void;
+}
+
+const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
+  productSearchRef,
+  searchResultRefs,
+  searchTerm,
+  setSearchTerm,
+  setDebouncedSearchTerm,
+  searchFilteredProducts,
+  showProductResults,
+  setShowProductResults,
+  selectedResultIndex,
+  setSelectedResultIndex,
+  addToCart,
+  tabs,
+  activeTabId,
+  setActiveTabId,
+  closeTab,
+  addNewTab,
+  setShowReturnModal,
+  offlinePendingCount,
+  isDraining,
+  isAutoPrintEnabled,
+  setIsAutoPrintEnabled,
+  showGridMenu,
+  setShowGridMenu,
+  onGoToManagement,
+}) => (
+  <div className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200">
+    <div className="relative w-[300px]">
+      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center text-slate-400">
+        <Search className="h-4 w-4" />
+      </div>
+      <input
+        ref={productSearchRef}
+        type="text"
+        placeholder="Tìm hàng hóa (F3)"
+        className="w-full pl-10 pr-10 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm outline-none font-bold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 placeholder:font-medium"
+        value={searchTerm}
+        onBlur={() => {
+          setTimeout(() => setShowProductResults(false), 200);
+        }}
+        onFocus={() => {
+          if (searchFilteredProducts.length > 0) setShowProductResults(true);
+        }}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (showProductResults && searchFilteredProducts.length > 0) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setSelectedResultIndex(prev => (prev + 1) % searchFilteredProducts.length);
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setSelectedResultIndex(prev => (prev - 1 + searchFilteredProducts.length) % searchFilteredProducts.length);
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              if (selectedResultIndex >= 0 && searchFilteredProducts[selectedResultIndex]) {
+                addToCart(searchFilteredProducts[selectedResultIndex]);
+                setSearchTerm('');
+                setDebouncedSearchTerm('');
+                setShowProductResults(false);
+              }
+            } else if (e.key === 'Escape') {
+              setShowProductResults(false);
+            }
+          }
+        }}
+      />
+      <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400 p-1 rounded-lg transition-colors">
+        <Scan className="h-4 w-4" />
+      </button>
+
+      {showProductResults && searchFilteredProducts.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[60] max-h-[400px] overflow-y-auto no-scrollbar">
+          {searchFilteredProducts.map((p, idx) => (
+            <button
+              key={p.id}
+              ref={(el) => { searchResultRefs.current[idx] = el; }}
+              onClick={() => {
+                addToCart(p);
+                setSearchTerm('');
+                setDebouncedSearchTerm('');
+                setShowProductResults(false);
+              }}
+              onMouseEnter={() => setSelectedResultIndex(idx)}
+              className={`w-full px-4 py-3 flex items-center gap-3 border-b border-slate-50 last:border-0 transition-all text-left ${idx === selectedResultIndex ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-slate-50'}`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 border border-slate-100">
+                {p.images && p.images[0] ? (
+                  <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
+                ) : (
+                  <PackageOpen className="h-5 w-5" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start gap-2">
+                  <span className={`text-sm font-bold truncate ${idx === selectedResultIndex ? 'text-indigo-900' : 'text-slate-800'}`}>
+                    {p.name}
+                  </span>
+                  <span className="text-indigo-600 font-mono text-[10px] font-bold shrink-0">{p.salePrice.toLocaleString()}đ</span>
+                </div>
+                <div className="flex justify-between items-center mt-0.5">
+                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">{p.sku}</span>
+                  <span className={`text-[10px] font-bold ${p.stock > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    Tồn: {p.stock}
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div className="flex items-center self-stretch ml-2 overflow-x-auto no-scrollbar max-w-[500px]">
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          onClick={() => setActiveTabId(tab.id)}
+          className={`h-full px-5 flex items-center gap-3 rounded-none font-bold text-sm border-t-2 transition-all cursor-pointer shadow-sm min-w-[140px] justify-between group ${activeTabId === tab.id ? 'bg-white text-indigo-600 border-indigo-500' : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 hover:text-slate-600'}`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{tab.name}</span>
+          </div>
+          <X
+            className={`h-4 w-4 text-slate-300 hover:text-rose-500 transition-colors ${activeTabId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            onClick={(e) => closeTab(e, tab.id)}
+          />
+        </div>
+      ))}
+      <div
+        onClick={addNewTab}
+        className="h-full flex items-center px-4 gap-2 text-slate-500 hover:text-indigo-600 cursor-pointer border-l border-slate-200 bg-slate-50 hover:bg-white transition-all"
+      >
+        <Plus className="h-5 w-5" />
+      </div>
+    </div>
+
+    <div className="flex-1" />
+
+    <div className="flex items-center gap-4 px-2 text-slate-600">
+      <button title="Lượt khách" className="hover:text-indigo-600 transition-colors"><ShoppingBag className="h-4.5 w-4.5" /></button>
+      <button
+        title="Đổi trả"
+        onClick={() => setShowReturnModal(true)}
+        className="hover:text-indigo-600 transition-colors"
+      >
+        <RotateCcw className="h-4.5 w-4.5" />
+      </button>
+      <button title="Đồng bộ" className={`relative hover:text-indigo-600 transition-colors ${isDraining ? 'text-indigo-600' : ''}`}>
+        <RefreshCw className={`h-4.5 w-4.5 ${isDraining ? 'animate-spin' : ''}`} />
+        {offlinePendingCount > 0 && !isDraining && (
+          <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-white">
+            {offlinePendingCount}
+          </span>
+        )}
+      </button>
+      <button
+        title="In (Auto)"
+        onClick={() => setIsAutoPrintEnabled(!isAutoPrintEnabled)}
+        className={`transition-all ${isAutoPrintEnabled ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+      >
+        <Printer className="h-4.5 w-4.5" />
+      </button>
+      <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-slate-700 uppercase">admin</span>
+          <ChevronDown className="h-3 w-3" />
+        </div>
+        <div className="relative">
+          <div
+            onClick={() => setShowGridMenu(!showGridMenu)}
+            className={`h-9 w-9 rounded-full flex items-center justify-center cursor-pointer transition-all ${showGridMenu ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300'}`}
+          >
+            <LayoutGrid className="h-4.5 w-4.5" />
+          </div>
+
+          {showGridMenu && (
+            <>
+              <div className="fixed inset-0 z-[100]" onClick={() => setShowGridMenu(false)} />
+              <div className="absolute right-0 top-full mt-2 w-[280px] bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-100 z-[101] overflow-hidden py-2 animate-in fade-in slide-in-from-top-4 duration-200">
+                <GridMenuItem icon={<Activity className="h-4.5 w-4.5" />} label="Xem báo cáo cuối ngày" />
+                <GridMenuItem icon={<ShoppingBag className="h-4.5 w-4.5" />} label="Xử lý đặt hàng" />
+                <GridMenuItem icon={<Undo2 className="h-4.5 w-4.5" />} label="Chọn hóa đơn trả hàng" />
+                <GridMenuItem icon={<PenTool className="h-4.5 w-4.5" />} label="Xử lý yêu cầu sửa chữa" />
+                <GridMenuItem icon={<StickyNote className="h-4.5 w-4.5 text-indigo-600" />} label="Lập phiếu thu" active />
+                <GridMenuItem icon={<FileInput className="h-4.5 w-4.5" />} label="Import file" />
+                <GridMenuItem icon={<Eye className="h-4.5 w-4.5" />} label="Tùy chọn hiển thị" />
+                <GridMenuItem icon={<Keyboard className="h-4.5 w-4.5" />} label="Phím tắt" />
+                <GridMenuItem icon={<LayoutGrid className="h-4.5 w-4.5" />} label="Quản lý" onClick={onGoToManagement} />
+                <div className="h-px bg-slate-50 my-1 mx-4" />
+                <GridMenuItem icon={<LogOut className="h-4.5 w-4.5 text-rose-500" />} label="Đăng xuất" />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const GridMenuItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) => (
+  <button
+    onClick={onClick}
+    className={`w-full px-6 py-3.5 flex items-center gap-4 transition-all text-left ${active ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
+    <span className={active ? 'text-slate-900' : 'text-slate-500'}>
+      {icon}
+    </span>
+    <span className={`text-[13px] font-bold ${active ? 'text-slate-900' : 'text-slate-700'}`}>
+      {label}
+    </span>
+  </button>
+);
+
+export default POSHeaderToolbar;

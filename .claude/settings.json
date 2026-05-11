@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run dev)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(python3 -c *)",
+      "Bash(pip3 install *)",
+      "Bash(npm uninstall *)",
+      "Bash(sed -n '790,800p' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/pos/GoodsInventory.tsx\")",
+      "Bash(sed -n '194,200p' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/pos/OrderHistory.tsx\")",
+      "Bash(sed -n '800,830p' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/pos/POSComputer.tsx\")",
+      "Bash(awk '/activeSubTab === .diagnosis/{p=1} p{print NR\": \"$0} /^      \\\\}$/{if\\(p\\){p=0}}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/RevenueManager.tsx\")",
+      "Bash(awk 'NR>=794 && NR<=795 {print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/PayrollManager.tsx\")",
+      "Bash(awk 'NR>=838 && NR<=839 {print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/PayrollManager.tsx\")",
+      "Bash(awk 'NR>=882 && NR<=883 {print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/PayrollManager.tsx\")",
+      "Bash(awk 'NR>=969 && NR<=970 {print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/PayrollManager.tsx\")",
+      "Bash(awk 'NR>=1113 && NR<=1114 {print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/PayrollManager.tsx\")",
+      "Bash(python3)",
+      "Bash(git diff *)",
+      "Read(//tmp/**)",
+      "Bash(cat /tmp/session_diff.txt | head -300)",
+      "Read(//private/tmp/**)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(node -e ' *)",
+      "Bash(awk 'NR==1582,/^      case '\\\\''kho'\\\\''/{print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/pos/GoodsInventory.tsx\")",
+      "Bash(python3 -)",
+      "Read(//Users/apple/phucsang app/QU-N-träC-A-H-NG/components/pos/**)",
+      "Bash(git add *)"
+    ],
+    "additionalDirectories": [
+      "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude/hooks/PostToolUse.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}

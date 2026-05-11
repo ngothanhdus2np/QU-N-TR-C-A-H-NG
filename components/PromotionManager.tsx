@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { Plus, Calendar, Tag, Target, DollarSign, Trash2, Edit2, CheckCircle2, Clock, AlertCircle, XCircle, BarChart3, ChevronRight, Gift, Ticket, Percent, TrendingUp, Info, MessageSquareText, Library, Sparkles, BrainCircuit, Loader2 } from 'lucide-react';
 import { PromotionPlan, RevenueRecord, GiftTier, ExpenseRecord } from '../types';
 import { generateId } from '../businessLogic';
-import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
 
 interface PromotionManagerProps {
@@ -172,42 +172,55 @@ const PromotionManager: React.FC<PromotionManagerProps> = ({ promotions, revenue
   const runAiAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      
-      const context = {
-        promotions: promotions.map(p => ({
-          name: p.name,
-          type: p.type,
-          budget: p.budget,
-          target: p.targetRevenue,
-          status: p.status,
-          actualRevenue: p.actualRevenue,
-          actualCost: p.actualCost
-        })),
-        recentRevenue: revenue.slice(-60).map(r => ({ date: r.date, rev: r.netRevenue }))
-      };
+      // Format promotions as text table — compact hơn JSON serialization
+      const promoLines = promotions.map(p => {
+        const roi = p.budget > 0 ? ((p.actualRevenue || 0) / p.budget).toFixed(1) : 'N/A';
+        return `- ${p.name} | ${p.type} | NS:${(p.budget/1e6).toFixed(1)}tr | Mục tiêu:${(p.targetRevenue/1e6).toFixed(1)}tr | TT:${((p.actualRevenue||0)/1e6).toFixed(1)}tr | Chi phí TT:${((p.actualCost||0)/1e6).toFixed(1)}tr | ROI:${roi}x | ${p.status}`;
+      }).join('\n');
 
-      const prompt = `Bạn là một Giám đốc Tài chính (CFO) chuyên nghiệp. Hãy phân tích chiến lược khuyến mãi của doanh nghiệp dựa trên dữ liệu sau:
-      
-      Dữ liệu khuyến mãi: ${JSON.stringify(context.promotions)}
-      Dữ liệu doanh thu gần đây: ${JSON.stringify(context.recentRevenue)}
-      
-      Hãy đưa ra:
-      1. Nhận xét về hiệu quả các chương trình đã chạy (ROI, Doanh thu tăng thêm).
-      2. Gợi ý chiến lược cho các chương trình sắp tới (Loại hình nào hiệu quả nhất, mốc quà tặng nào nên áp dụng).
-      3. Cảnh báo rủi ro nếu ngân sách quá cao hoặc mục tiêu không thực tế.
-      
-      Yêu cầu: Trả lời bằng tiếng Việt, định dạng Markdown chuyên nghiệp, súc tích, có các con số cụ thể.`;
+      // Aggregate 60 ngày gần nhất thành tổng theo tuần — giảm ~90% token so với raw JSON
+      const recentSlice = revenue.slice(-60);
+      const weeklyMap: Record<string, number> = {};
+      for (const r of recentSlice) {
+        const d = new Date(r.date);
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - d.getDay());
+        const key = weekStart.toISOString().slice(0, 10);
+        weeklyMap[key] = (weeklyMap[key] || 0) + (r.netRevenue || 0);
+      }
+      const weeklyLines = Object.entries(weeklyMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, total]) => `  Tuần ${week}: ${total.toLocaleString('vi-VN')}đ`)
+        .join('\n');
+      const totalRev = recentSlice.reduce((s, r) => s + (r.netRevenue || 0), 0);
+      const avgDaily = recentSlice.length > 0 ? Math.round(totalRev / recentSlice.length) : 0;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+      const contextData = `Phân tích chiến lược khuyến mãi:
+
+CHƯƠNG TRÌNH KHUYẾN MÃI:
+${promoLines}
+
+DOANH THU 60 NGÀY GẦN NHẤT (theo tuần):
+${weeklyLines}
+TB/ngày: ${avgDaily.toLocaleString('vi-VN')}đ
+
+Yêu cầu:
+1. Nhận xét hiệu quả từng chương trình (ROI, doanh thu tăng thêm so mục tiêu).
+2. Loại hình nào hiệu quả nhất — nên đẩy mạnh tiếp?
+3. Cảnh báo rủi ro nếu ngân sách hoặc mục tiêu không thực tế.
+Súc tích, dẫn chứng bằng số cụ thể.`;
+
+      const response = await fetch('/api/ai/promotion-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextData }),
       });
-
-      setAiAnalysis(response.text || 'Không có phản hồi từ AI.');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AI service error');
+      setAiAnalysis(data.result || 'Không có phản hồi từ AI.');
     } catch (error) {
       console.error('AI Analysis Error:', error);
-      setAiAnalysis('Có lỗi xảy ra khi phân tích dữ liệu. Vui lòng thử lại sau.');
+      setAiAnalysis('Có lỗi xảy ra khi phân tích dữ liệu. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -272,7 +285,7 @@ const PromotionManager: React.FC<PromotionManagerProps> = ({ promotions, revenue
           </div>
         ) : aiAnalysis ? (
           <div className="prose prose-slate max-w-none prose-headings:font-black prose-headings:text-slate-900 prose-p:text-slate-600 prose-strong:text-indigo-600">
-            <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) as string }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(aiAnalysis) as string) }} />
           </div>
         ) : (
           <div className="p-12 text-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">

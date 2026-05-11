@@ -8,7 +8,7 @@ import {
   RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ContentPlanItem, ContentStrategy, ProductLine, BrandProfile, StrategicAdvice } from '../../types';
-import { generateContentPlan, getMonthlyStrategicAdvice } from '../../services/marketingGeminiService';
+import { generateContentPlan, getMonthlyStrategicAdvice } from '../../services/marketingClaudeService';
 import { supabaseAdmin as supabase } from '../../services/supabase';
 import { STRATEGY_COLORS, DEFAULT_STRATEGIES, DEFAULT_FOCUS_PRODUCTS, DEFAULT_BRAND } from '../../constants/marketing';
 import { useSyncStorage, useCalendar } from '../../hooks/useMarketing';
@@ -786,7 +786,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
                       {strategies.map((s, idx) => (
                         <div 
                           key={s.id} 
-                          style={{ width: `${s.percentage}%`, backgroundColor: STRATEGY_COLORS[s.color as keyof typeof STRATEGY_COLORS] || s.color }} 
+                          style={{ width: `${s.percentage}%`, backgroundColor: (STRATEGY_COLORS[s.color as keyof typeof STRATEGY_COLORS] || STRATEGY_COLORS['blue']).hex }}
                           className="h-full transition-all duration-500 ease-out border-r border-white/20 last:border-r-0"
                           title={`${s.name}: ${s.percentage}%`}
                         />
@@ -807,9 +807,9 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
                               <div className="mt-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                 <div 
                                   className="h-full transition-all duration-500" 
-                                  style={{ 
-                                    width: `${Math.min(100, s.percentage)}%`, 
-                                    backgroundColor: STRATEGY_COLORS[s.color as keyof typeof STRATEGY_COLORS] || s.color 
+                                  style={{
+                                    width: `${Math.min(100, s.percentage)}%`,
+                                    backgroundColor: (STRATEGY_COLORS[s.color as keyof typeof STRATEGY_COLORS] || STRATEGY_COLORS['blue']).hex
                                   }}
                                 />
                               </div>
@@ -838,7 +838,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
                                 key={colorName}
                                 onClick={() => setStrategies(prev => prev.map(x => x.id === s.id ? {...x, color: colorName} : x))}
                                 className={`w-3 h-3 rounded-full border transition-transform hover:scale-125 ${s.color === colorName ? 'border-slate-800 scale-110' : 'border-transparent'}`}
-                                style={{ backgroundColor: colorValue }}
+                                style={{ backgroundColor: colorValue.hex }}
                               />
                             ))}
                           </div>
@@ -928,7 +928,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
                        value={selectedPost.scheduledTime || "08:00"} 
                        onChange={e => {
                          const t = e.target.value;
-                         const upd = (ls: ContentPlanItem[]) => ls.map(x => x.date === selectedPost.date ? {...x, scheduledTime: t, status: 'scheduled'} : x);
+                         const upd = (ls: ContentPlanItem[]) => ls.map(x => x.date === selectedPost.date ? {...x, scheduledTime: t, status: 'scheduled' as const} : x);
                          if (selectedPost.isDraft) setDrafts(upd); else setSchedule(upd);
                          setSelectedPost(p => p ? {...p, scheduledTime: t, status: 'scheduled'} : null);
                        }}

@@ -145,5 +145,7 @@ export const INITIAL_APP_DATA: AppData = {
   posProducts: [],
   posOrders: [],
   posCustomers: [],
-  inventoryTransactions: []
+  inventoryTransactions: [],
+  suppliers: [],
+  supplierDebts: []
 };
