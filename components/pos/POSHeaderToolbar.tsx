@@ -54,6 +54,9 @@ interface POSHeaderToolbarProps {
   onGoToManagement?: () => void;
 }
 
+const POS_TAB_MIN_WIDTH = 140;
+const POS_ADD_TAB_WIDTH = 64;
+
 const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   productSearchRef,
   searchResultRefs,
@@ -84,10 +87,40 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   onGoToManagement,
 }) => {
   const [showSortMenu, setShowSortMenu] = React.useState(false);
+  const tabStripRef = React.useRef<HTMLDivElement | null>(null);
+  const [visibleTabCount, setVisibleTabCount] = React.useState(tabs.length);
   const sortOptions = [
     { value: 'skuDesc' as const, label: 'Theo mã hàng', helper: 'Cao - thấp' },
     { value: 'priceDesc' as const, label: 'Theo giá tiền', helper: 'Cao - thấp' },
   ];
+
+  React.useEffect(() => {
+    const element = tabStripRef.current;
+    if (!element) return;
+
+    const updateVisibleTabCount = () => {
+      const availableWidth = Math.max(0, element.clientWidth - POS_ADD_TAB_WIDTH);
+      const nextCount = Math.max(1, Math.min(tabs.length, Math.floor(availableWidth / POS_TAB_MIN_WIDTH)));
+      setVisibleTabCount(prev => (prev === nextCount ? prev : nextCount));
+    };
+
+    updateVisibleTabCount();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateVisibleTabCount);
+      return () => window.removeEventListener('resize', updateVisibleTabCount);
+    }
+
+    const observer = new ResizeObserver(updateVisibleTabCount);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tabs.length]);
+
+  const normalizedVisibleTabCount = Math.min(tabs.length, visibleTabCount);
+  const activeTabIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTabId));
+  const visibleTabStart = Math.max(0, Math.min(activeTabIndex - normalizedVisibleTabCount + 1, tabs.length - normalizedVisibleTabCount));
+  const visibleTabs = tabs.slice(visibleTabStart, visibleTabStart + normalizedVisibleTabCount);
+  const hiddenTabCount = Math.max(0, tabs.length - visibleTabs.length);
 
   return (
   <div className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200">
@@ -226,31 +259,37 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       )}
     </div>
 
-    <div className="flex items-center self-stretch ml-2 overflow-x-auto no-scrollbar max-w-[500px]">
-      {tabs.map((tab) => (
-        <div
-          key={tab.id}
-          onClick={() => setActiveTabId(tab.id)}
-          className={`h-full px-5 flex items-center gap-3 rounded-none font-bold text-sm border-t-2 transition-all cursor-pointer shadow-sm min-w-[140px] justify-between group ${activeTabId === tab.id ? 'bg-white text-indigo-600 border-indigo-500' : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 hover:text-slate-600'}`}
-        >
-          <div className="flex items-center gap-2">
-            <span>{tab.name}</span>
+    <div ref={tabStripRef} className="flex items-center self-stretch ml-2 min-w-0 flex-1 overflow-hidden">
+      <div className="flex items-center self-stretch min-w-0 overflow-hidden">
+        {visibleTabs.map((tab) => (
+          <div
+            key={tab.id}
+            onClick={() => setActiveTabId(tab.id)}
+            className={`h-full px-5 flex items-center gap-3 rounded-none font-bold text-sm border-t-2 transition-all cursor-pointer shadow-sm min-w-[140px] max-w-[160px] justify-between group ${activeTabId === tab.id ? 'bg-white text-indigo-600 border-indigo-500' : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 hover:text-slate-600'}`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="truncate">{tab.name}</span>
+            </div>
+            <X
+              className={`h-4 w-4 shrink-0 text-slate-300 hover:text-rose-500 transition-colors ${activeTabId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              onClick={(e) => closeTab(e, tab.id)}
+            />
           </div>
-          <X
-            className={`h-4 w-4 text-slate-300 hover:text-rose-500 transition-colors ${activeTabId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-            onClick={(e) => closeTab(e, tab.id)}
-          />
-        </div>
-      ))}
+        ))}
+      </div>
       <div
         onClick={addNewTab}
-        className="h-full flex items-center px-4 gap-2 text-slate-500 hover:text-indigo-600 cursor-pointer border-l border-slate-200 bg-slate-50 hover:bg-white transition-all"
+        className="relative h-full w-16 shrink-0 flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer border-l border-slate-200 bg-slate-50 hover:bg-white transition-all"
+        title={hiddenTabCount > 0 ? `${hiddenTabCount} hóa đơn đang ẩn` : 'Thêm hóa đơn'}
       >
         <Plus className="h-5 w-5" />
+        {hiddenTabCount > 0 && (
+          <span className="absolute top-1.5 right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center border border-white">
+            {hiddenTabCount}
+          </span>
+        )}
       </div>
     </div>
-
-    <div className="flex-1" />
 
     <div className="flex items-center gap-4 px-2 text-slate-600">
       <button title="Lượt khách" className="hover:text-indigo-600 transition-colors"><ShoppingBag className="h-4.5 w-4.5" /></button>

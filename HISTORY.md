@@ -11,7 +11,7 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Xóa icon scanner khỏi ô tìm kiếm POS, chỉ giữ icon sắp xếp trong ô
+- Last completed: Mở rộng vùng tab hóa đơn, giữ nút `+` luôn hiện và hiển thị số hóa đơn bị ẩn trên nút `+`
 - Next recommended: Tiếp tục mục `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`
 - Files touched: `components/pos/POSHeaderToolbar.tsx`, `HISTORY.md`
 - Notes:
@@ -37,7 +37,7 @@
   - [ ] **Điểm thưởng trong nút thanh toán:** chỉ hiển thị khi có khách hàng và trong giỏ có sản phẩm được thiết lập tích điểm; nếu không thì ẩn dòng điểm thưởng
   - [ ] **Popup chọn hóa đơn trả hàng:** đồng bộ màu khi đang dùng theme Codex
   - [ ] **Nút Xem báo cáo cuối ngày:** sửa lỗi bấm không phản hồi, mở đúng trang/report đã có
-  - [ ] **Thanh thêm hóa đơn:** mở rộng tab hóa đơn đến hết khu vực giỏ hàng; khi quá chỗ vẫn giữ nút `+`, hiển thị số hóa đơn bị ẩn trên nút `+`
+  - [x] ~~**Thanh thêm hóa đơn**~~ *(xong 2026-05-12)*: mở rộng tab hóa đơn đến hết khu vực giỏ hàng; khi quá chỗ vẫn giữ nút `+`, hiển thị số hóa đơn bị ẩn trên nút `+`
   - [ ] Chạy `npx tsc --noEmit`, scoped ESLint, `npm test`, `npm run lint`
 
 ### 🟠 Ưu tiên trung bình
@@ -57,6 +57,10 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Thanh thêm hóa đơn mở rộng + ẩn tab tràn**~~ *(xong 2026-05-12)*
+  - `POSHeaderToolbar.tsx`: vùng tab hóa đơn dùng phần không gian còn lại giữa ô tìm kiếm và cụm icon bên phải.
+  - Nút `+` luôn hiển thị cố định sau vùng tab.
+  - Khi số hóa đơn vượt quá chỗ hiển thị, chỉ render các tab vừa đủ quanh tab active và badge trên nút `+` hiển thị số hóa đơn bị ẩn.
 - [x] ~~**POS: Logic tìm kiếm/sắp xếp sản phẩm**~~ *(xong 2026-05-12)*
   - `POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa, xóa icon scanner; bấm mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều cao → thấp.
   - `POSComputer.tsx`: kết quả tìm kiếm POS sort theo lựa chọn hiện tại; mặc định theo mã hàng cao → thấp.
@@ -139,6 +143,21 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 50
+
+**Đã làm:**
+- `components/pos/POSHeaderToolbar.tsx`: đổi vùng tab hóa đơn sang layout chiếm toàn bộ khoảng trống giữa ô tìm kiếm và cụm icon bên phải; bỏ giới hạn `max-w-[500px]`.
+- `components/pos/POSHeaderToolbar.tsx`: thêm đo chiều rộng vùng tab bằng `ResizeObserver`, chỉ render số tab vừa đủ quanh tab đang active; nút `+` luôn hiện và có badge số hóa đơn bị ẩn.
+- `HISTORY.md`: đánh dấu xong mục `Thanh thêm hóa đơn`.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`.
 
 ---
 
