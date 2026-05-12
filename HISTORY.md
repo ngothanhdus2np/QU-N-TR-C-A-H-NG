@@ -17,6 +17,7 @@
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
+  - Logic thật của các ô trong layout `Chuyển khoản` / `Thẻ` / `Ví` sẽ làm sau khi có trang cài đặt số tài khoản/phương thức thanh toán
   - Các mục không cần layout mẫu có thể làm xen kẽ nếu không chặn UI mẫu
   - Không đổi schema DB, không đổi nghiệp vụ tài chính/lương
 
@@ -50,6 +51,7 @@
 - [ ] **POS: CRM Customer Modal 2 cột** (chờ hình mẫu từ user) *(blocked)*
 
 ### ⏸️ Tạm hoãn — chưa có đủ điều kiện để làm
+- [ ] **POS: Logic dữ liệu cho layout Chuyển khoản / Thẻ / Ví** — chờ thiết kế trang cài đặt số tài khoản/phương thức thanh toán; sau đó mới nối dropdown tài khoản, QR, thông tin thẻ/ví và trạng thái nhận tiền thật vào layout hiện có
 - [ ] **Multi-tenant / Đa chi nhánh** — cần quyết định UX chọn chi nhánh và rollout migration `branch_id`; SQL có sẵn trong `supabase_setup.sql` nhưng chưa bật filter vì DB chưa chạy migration trên tất cả môi trường
 - [ ] **Tích hợp TikTok Shop / Lazada** — cần API credentials + spec mapping đơn hàng/sản phẩm/phí
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
@@ -129,6 +131,19 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 45
+
+**Đã làm:**
+- `HISTORY.md`: thêm việc chờ cho logic dữ liệu của layout `Chuyển khoản` / `Thẻ` / `Ví`, phụ thuộc trang cài đặt số tài khoản/phương thức thanh toán sau này.
+
+**Kết quả kiểm tra:**
+TypeScript ⏸️ không cần chạy | Tests ⏸️ không cần chạy | ESLint ⏸️ không cần chạy
+
+**Còn lại / Dang dở:**
+- Chờ user thiết kế trang cài đặt số tài khoản/phương thức thanh toán trước khi nối logic thật cho các ô thanh toán không dùng tiền mặt.
 
 ---
 
