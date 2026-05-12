@@ -11,9 +11,9 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Mở rộng vùng tab hóa đơn, giữ nút `+` luôn hiện và hiển thị số hóa đơn bị ẩn trên nút `+`
+- Last completed: Đổi thanh tab hóa đơn sang scroll ngang thật với thanh trượt bên dưới để kéo về các hóa đơn cũ
 - Next recommended: Tiếp tục mục `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`
-- Files touched: `components/pos/POSHeaderToolbar.tsx`, `HISTORY.md`
+- Files touched: `components/pos/POSHeaderToolbar.tsx`, `index.html`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
@@ -60,7 +60,7 @@
 - [x] ~~**POS: Thanh thêm hóa đơn mở rộng + ẩn tab tràn**~~ *(xong 2026-05-12)*
   - `POSHeaderToolbar.tsx`: vùng tab hóa đơn dùng phần không gian còn lại giữa ô tìm kiếm và cụm icon bên phải.
   - Nút `+` luôn hiển thị cố định sau vùng tab.
-  - Khi số hóa đơn vượt quá chỗ hiển thị, chỉ render các tab vừa đủ quanh tab active và badge trên nút `+` hiển thị số hóa đơn bị ẩn.
+  - Vùng tab render toàn bộ hóa đơn trong thanh scroll ngang có scrollbar mỏng bên dưới, giúp người dùng kéo trái/phải để quay lại hóa đơn cũ.
 - [x] ~~**POS: Logic tìm kiếm/sắp xếp sản phẩm**~~ *(xong 2026-05-12)*
   - `POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa, xóa icon scanner; bấm mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều cao → thấp.
   - `POSComputer.tsx`: kết quả tìm kiếm POS sort theo lựa chọn hiện tại; mặc định theo mã hàng cao → thấp.
@@ -143,6 +143,22 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 51
+
+**Đã làm:**
+- `components/pos/POSHeaderToolbar.tsx`: bỏ cơ chế ẩn tab theo số lượng; render toàn bộ hóa đơn trong vùng scroll ngang để người dùng kéo trái/phải quay lại mọi hóa đơn, gồm `Hóa đơn 1`.
+- `components/pos/POSHeaderToolbar.tsx`: giữ nút `+` cố định bên ngoài vùng scroll để luôn bấm thêm hóa đơn được.
+- `index.html`: thêm style scrollbar mỏng riêng cho `.pos-invoice-tab-scroll`.
+- `HISTORY.md`: cập nhật ghi chú cho thanh thêm hóa đơn.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`.
 
 ---
 

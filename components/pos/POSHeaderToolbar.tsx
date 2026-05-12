@@ -54,9 +54,6 @@ interface POSHeaderToolbarProps {
   onGoToManagement?: () => void;
 }
 
-const POS_TAB_MIN_WIDTH = 140;
-const POS_ADD_TAB_WIDTH = 64;
-
 const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   productSearchRef,
   searchResultRefs,
@@ -87,40 +84,10 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   onGoToManagement,
 }) => {
   const [showSortMenu, setShowSortMenu] = React.useState(false);
-  const tabStripRef = React.useRef<HTMLDivElement | null>(null);
-  const [visibleTabCount, setVisibleTabCount] = React.useState(tabs.length);
   const sortOptions = [
     { value: 'skuDesc' as const, label: 'Theo mã hàng', helper: 'Cao - thấp' },
     { value: 'priceDesc' as const, label: 'Theo giá tiền', helper: 'Cao - thấp' },
   ];
-
-  React.useEffect(() => {
-    const element = tabStripRef.current;
-    if (!element) return;
-
-    const updateVisibleTabCount = () => {
-      const availableWidth = Math.max(0, element.clientWidth - POS_ADD_TAB_WIDTH);
-      const nextCount = Math.max(1, Math.min(tabs.length, Math.floor(availableWidth / POS_TAB_MIN_WIDTH)));
-      setVisibleTabCount(prev => (prev === nextCount ? prev : nextCount));
-    };
-
-    updateVisibleTabCount();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateVisibleTabCount);
-      return () => window.removeEventListener('resize', updateVisibleTabCount);
-    }
-
-    const observer = new ResizeObserver(updateVisibleTabCount);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [tabs.length]);
-
-  const normalizedVisibleTabCount = Math.min(tabs.length, visibleTabCount);
-  const activeTabIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTabId));
-  const visibleTabStart = Math.max(0, Math.min(activeTabIndex - normalizedVisibleTabCount + 1, tabs.length - normalizedVisibleTabCount));
-  const visibleTabs = tabs.slice(visibleTabStart, visibleTabStart + normalizedVisibleTabCount);
-  const hiddenTabCount = Math.max(0, tabs.length - visibleTabs.length);
 
   return (
   <div className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200">
@@ -259,9 +226,10 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       )}
     </div>
 
-    <div ref={tabStripRef} className="flex items-center self-stretch ml-2 min-w-0 flex-1 overflow-hidden">
-      <div className="flex items-center self-stretch min-w-0 overflow-hidden">
-        {visibleTabs.map((tab) => (
+    <div className="flex items-center self-stretch ml-2 min-w-0 flex-1 overflow-hidden">
+      <div className="pos-invoice-tab-scroll flex items-center self-stretch min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+        <div className="flex items-center self-stretch min-w-max">
+        {tabs.map((tab) => (
           <div
             key={tab.id}
             onClick={() => setActiveTabId(tab.id)}
@@ -276,18 +244,14 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
             />
           </div>
         ))}
+        </div>
       </div>
       <div
         onClick={addNewTab}
         className="relative h-full w-16 shrink-0 flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer border-l border-slate-200 bg-slate-50 hover:bg-white transition-all"
-        title={hiddenTabCount > 0 ? `${hiddenTabCount} hóa đơn đang ẩn` : 'Thêm hóa đơn'}
+        title="Thêm hóa đơn"
       >
         <Plus className="h-5 w-5" />
-        {hiddenTabCount > 0 && (
-          <span className="absolute top-1.5 right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center border border-white">
-            {hiddenTabCount}
-          </span>
-        )}
       </div>
     </div>
 
