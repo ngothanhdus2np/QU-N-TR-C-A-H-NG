@@ -440,6 +440,139 @@ ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS previous_stock;
 ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS new_stock;
 
 -- =============================================================================
+-- SUPPLIERS / INVENTORY TRANSACTION LIST MODULE FIELDS (2026-05-12)
+-- Các trang Nhà cung cấp / Nhập hàng / Kiểm kho cần metadata này để filter,
+-- sort và reload cloud không mất trạng thái/tổng tiền/thống kê.
+-- =============================================================================
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS supplier_group TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS supplier_id TEXT;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS supplier_name TEXT;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_amount NUMERIC DEFAULT 0;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS status TEXT;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS balanced_date TEXT;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_actual_qty NUMERIC;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_diff NUMERIC;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS increase_count NUMERIC;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS decrease_count NUMERIC;
+
+CREATE OR REPLACE FUNCTION apply_inventory_transaction_with_stock(
+  p_transaction JSONB
+) RETURNS TABLE(id UUID, date TEXT, type TEXT) AS $$
+DECLARE
+  item JSONB;
+  tx_id UUID := (p_transaction->>'id')::UUID;
+  tx_type TEXT := p_transaction->>'type';
+BEGIN
+  INSERT INTO inventory_transactions (
+    id,
+    date,
+    type,
+    items,
+    note,
+    reference_id,
+    staff_id,
+    supplier_id,
+    supplier_name,
+    total_amount,
+    status,
+    balanced_date,
+    total_actual_qty,
+    total_diff,
+    increase_count,
+    decrease_count
+  )
+  VALUES (
+    tx_id,
+    p_transaction->>'date',
+    tx_type,
+    COALESCE(p_transaction->'items', '[]'::JSONB),
+    p_transaction->>'note',
+    p_transaction->>'reference_id',
+    p_transaction->>'staff_id',
+    p_transaction->>'supplier_id',
+    p_transaction->>'supplier_name',
+    COALESCE((p_transaction->>'total_amount')::NUMERIC, 0),
+    p_transaction->>'status',
+    p_transaction->>'balanced_date',
+    NULLIF(p_transaction->>'total_actual_qty', '')::NUMERIC,
+    NULLIF(p_transaction->>'total_diff', '')::NUMERIC,
+    NULLIF(p_transaction->>'increase_count', '')::NUMERIC,
+    NULLIF(p_transaction->>'decrease_count', '')::NUMERIC
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    date = EXCLUDED.date,
+    type = EXCLUDED.type,
+    items = EXCLUDED.items,
+    note = EXCLUDED.note,
+    reference_id = EXCLUDED.reference_id,
+    staff_id = EXCLUDED.staff_id,
+    supplier_id = EXCLUDED.supplier_id,
+    supplier_name = EXCLUDED.supplier_name,
+    total_amount = EXCLUDED.total_amount,
+    status = EXCLUDED.status,
+    balanced_date = EXCLUDED.balanced_date,
+    total_actual_qty = EXCLUDED.total_actual_qty,
+    total_diff = EXCLUDED.total_diff,
+    increase_count = EXCLUDED.increase_count,
+    decrease_count = EXCLUDED.decrease_count;
+
+  FOR item IN SELECT * FROM jsonb_array_elements(COALESCE(p_transaction->'items', '[]'::JSONB))
+  LOOP
+    IF tx_type = 'Import' THEN
+      UPDATE pos_products
+      SET stock = stock + COALESCE((item->>'quantity')::INT, 0)
+      WHERE pos_products.id = (item->>'productId')::UUID;
+    ELSIF tx_type = 'Check' THEN
+      UPDATE pos_products
+      SET stock = COALESCE((item->>'newStock')::INT, stock)
+      WHERE pos_products.id = (item->>'productId')::UUID;
+    END IF;
+  END LOOP;
+
+  RETURN QUERY SELECT tx_id, p_transaction->>'date', tx_type;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION delete_inventory_transaction_with_stock(
+  p_transaction_id UUID
+) RETURNS TABLE(id UUID) AS $$
+DECLARE
+  tx inventory_transactions%ROWTYPE;
+  item JSONB;
+BEGIN
+  SELECT * INTO tx FROM inventory_transactions WHERE inventory_transactions.id = p_transaction_id;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  IF COALESCE(tx.status, '') <> 'cancelled' THEN
+    FOR item IN SELECT * FROM jsonb_array_elements(COALESCE(tx.items, '[]'::JSONB))
+    LOOP
+      IF tx.type = 'Import' THEN
+        UPDATE pos_products
+        SET stock = GREATEST(0, stock - COALESCE((item->>'quantity')::INT, 0))
+        WHERE pos_products.id = (item->>'productId')::UUID;
+      ELSIF tx.type = 'Check' THEN
+        UPDATE pos_products
+        SET stock = COALESCE((item->>'previousStock')::INT, stock)
+        WHERE pos_products.id = (item->>'productId')::UUID;
+      END IF;
+    END LOOP;
+  END IF;
+
+  DELETE FROM inventory_transactions WHERE inventory_transactions.id = p_transaction_id;
+  RETURN QUERY SELECT p_transaction_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION apply_inventory_transaction_with_stock(JSONB) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION delete_inventory_transaction_with_stock(UUID) TO anon, authenticated;
+
+-- =============================================================================
 -- POS PRODUCTS VARIANT SUPPORT (2026-05-12)
 -- variant_attributes: JSON parse từ attributes_text (vd: {MÀU: "ĐỎ", SIZE: "38"})
 -- parent_id: ID sản phẩm cha logic; toàn bộ SKU thật trong cùng nhóm KiotViet đều là child

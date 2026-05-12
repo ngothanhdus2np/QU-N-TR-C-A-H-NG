@@ -100,7 +100,7 @@ const App: React.FC = () => {
           onThemeChange={setThemeId}
         />
       )}
-      <main className={`flex-1 overflow-y-auto no-scrollbar ${activeTab === 'pos' ? 'p-0' : 'pb-8 px-4 md:px-8'}`}>
+      <main className={`flex-1 overflow-y-auto no-scrollbar relative z-0 ${activeTab === 'pos' ? 'p-0' : 'pb-8 px-4 md:px-8'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

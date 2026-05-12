@@ -2,6 +2,7 @@ import React from 'react';
 import { POSProduct, InventoryTransaction } from '../../types';
 import { generateId } from '../../businessLogic';
 import { AuditItem } from './GoodsAuditForm';
+import { getCurrentStaffId } from '../shared/staff';
 
 type GoodsTab = 'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form';
 type InventoryTransactionItem = InventoryTransaction['items'][number];
@@ -44,7 +45,7 @@ export const useGoodsAudit = ({
     });
     onUpdateProducts(updatedProducts);
     if (onAddTransaction) {
-      onAddTransaction({ id: generateId(), date: new Date().toISOString(), type: 'Check', staffId: 'Admin', items: itemsForTransaction, note: 'Kiểm kho' });
+      onAddTransaction({ id: generateId(), date: new Date().toISOString(), type: 'Check', staffId: getCurrentStaffId(), items: itemsForTransaction, note: 'Kiểm kho' });
     }
     showToast(`Kiểm kho hoàn tất! Đã xác nhận ${itemsForTransaction.length} mặt hàng.`);
     setAuditItems([]);

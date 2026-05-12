@@ -14,7 +14,9 @@ import POSComputer from './pos/POSComputer';
 import GoodsInventory from './pos/GoodsInventory';
 import OrderHistory from './pos/OrderHistory';
 import CustomerPoints from './pos/CustomerPoints';
-import SupplierManager from './pos/SupplierManager';
+import SupplierContainer from './suppliers/SupplierContainer';
+import PurchaseOrdersContainer from './purchase/PurchaseOrdersContainer';
+import AuditContainer from './audit/AuditContainer';
 import { AppData, AppDataSurgicalUpdate, BrandProfile, ChatMessage, DashboardBreakEvenAnalysis, DiagnosisRange, ProductLine } from '../types';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
@@ -114,10 +116,9 @@ const MainContent: React.FC<MainContentProps> = ({
         );
       case 'suppliers':
         return (
-          <SupplierManager
-            suppliers={data.suppliers || []}
-            supplierDebts={data.supplierDebts || []}
-            onUpdateSuppliers={newList => updateData('suppliers', newList)}
+          <SupplierContainer
+            data={data}
+            onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
           />
         );
@@ -230,13 +231,31 @@ const MainContent: React.FC<MainContentProps> = ({
             isCFOReady={true}
           />
         );
+      case 'goods-purchase':
+        return (
+          <PurchaseOrdersContainer
+            data={data}
+            onUpdateData={updateData}
+            onUpdateSurgical={updateSurgical}
+            onPushBatch={pushBatch}
+          />
+        );
+      case 'goods-audit':
+        return (
+          <AuditContainer
+            data={data}
+            onUpdateData={updateData}
+            onUpdateSurgical={updateSurgical}
+            onPushBatch={pushBatch}
+          />
+        );
       default:
         return null;
     }
   };
 
   const isPosActive = activeTab === 'pos';
-  const isGoodsActive = activeTab === 'goods' || activeTab === 'goods-purchase';
+  const isGoodsActive = activeTab === 'goods';
   const isStaffActive = activeTab === 'staff' || activeTab.startsWith('staff-');
   const isPayrollActive = activeTab === 'payroll' || activeTab.startsWith('payroll-');
 
@@ -285,7 +304,7 @@ const MainContent: React.FC<MainContentProps> = ({
           </ErrorBoundary>
         </div>
       )}
-      {(isGoodsActive || visitedTabs.has('goods') || visitedTabs.has('goods-purchase')) && (
+      {(isGoodsActive || visitedTabs.has('goods')) && (
         <div
           style={{ display: isGoodsActive ? undefined : 'none' }}
           className="h-full min-h-0 pt-4 md:pt-8 flex flex-col"
@@ -298,13 +317,7 @@ const MainContent: React.FC<MainContentProps> = ({
               onUpdateSurgical={updateSurgical}
               onPushBatch={pushBatch}
               onAddTransaction={t => pushBatch('inventoryTransactions', [t])}
-              requestedTab={
-                activeTab === 'goods-purchase'
-                  ? 'purchase'
-                  : activeTab === 'goods'
-                    ? 'goods'
-                    : undefined
-              }
+              requestedTab={activeTab === 'goods' ? 'goods' : undefined}
             />
           </ErrorBoundary>
         </div>
@@ -385,7 +398,7 @@ const MainContent: React.FC<MainContentProps> = ({
           </div>
         ) : (
           <ErrorBoundary key={activeTab} moduleName={activeTab}>
-            <div className={activeTab === 'dashboard' ? '' : 'pt-4 md:pt-8'}>{renderContent()}</div>
+            <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>{renderContent()}</div>
           </ErrorBoundary>
         ))}
     </div>

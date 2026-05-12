@@ -5,11 +5,13 @@ import POSCheckout from './POSCheckout';
 import POSReceiptModal from './POSReceiptModal';
 import POSReturnModal from './POSReturnModal';
 import POSHeaderToolbar from './POSHeaderToolbar';
+import EndOfDayReport from './EndOfDayReport';
 import POSItemDiscountPopup, { ItemDiscountPopupState } from './POSItemDiscountPopup';
 import POSBillDiscountPopup from './POSBillDiscountPopup';
 import POSToasts from './POSToasts';
 import POSQuickCustomerModal, { QuickCustomerForm } from './POSQuickCustomerModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { getCurrentStaffId } from '../shared/staff';
 import { POSProduct, POSCustomer, POSOrder, POSOrderItem, BrandProfile } from '../../types';
 import { usePOSKeyboard } from './usePOSKeyboard';
 import { usePOSReturnFlow } from './usePOSReturnFlow';
@@ -156,6 +158,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   // Item-level discount popup
   const [itemDiscountPopup, setItemDiscountPopup] = useState<ItemDiscountPopupState | null>(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showEODReport, setShowEODReport] = useState(false);
   const [isAutoPrintEnabled, setIsAutoPrintEnabled] = useState(true);
   const [lastOrder, setLastOrder] = useState<POSOrder | null>(null);
   const [autoPromotion] = useState(0);
@@ -505,7 +508,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       discount: totalDiscount,
       finalAmount: netPayable,
       paymentMethod: paymentMethod,
-      staffId: 'Admin',
+      staffId: getCurrentStaffId(),
       pointsEarned: pointsEarned,
       notes: orderNote,
     };
@@ -780,6 +783,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         showGridMenu={showGridMenu}
         setShowGridMenu={setShowGridMenu}
         onGoToManagement={onGoToManagement}
+        onViewEODReport={() => setShowEODReport(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -820,6 +824,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           mode={mode}
           cart={cart}
           returnCart={returnCart}
+          products={products}
           totalBeforeDiscount={totalBeforeDiscount}
           totalDiscount={totalDiscount}
           netPayable={netPayable}
@@ -879,6 +884,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
           customers={customers}
           onClose={() => setShowReturnModal(false)}
           onReturnFast={handleReturnFast}
+        />
+      )}
+
+      {/* End of Day Report Modal */}
+      {showEODReport && (
+        <EndOfDayReport
+          orders={orders}
+          onClose={() => setShowEODReport(false)}
         />
       )}
 

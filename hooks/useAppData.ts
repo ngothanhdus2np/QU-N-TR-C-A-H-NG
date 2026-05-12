@@ -364,7 +364,27 @@ export function useAppData() {
     }
     
     try {
+      const inventoryUpdate = updates.find(u => u.key === 'inventoryTransactions');
+      const hasStockUpdates = updates.some(u => u.key === 'posProducts');
+      const shouldUseInventoryRpc = Boolean(inventoryUpdate && hasStockUpdates);
+
+      if (shouldUseInventoryRpc && inventoryUpdate) {
+        if (inventoryUpdate.isDelete) {
+          await apiService.deleteInventoryTransactionWithStock(inventoryUpdate.item.id);
+        } else {
+          await apiService.applyInventoryTransactionWithStock(
+            inventoryUpdate.item as AppData['inventoryTransactions'][number]
+          );
+        }
+      }
+
       for (const u of updates) {
+        if (
+          shouldUseInventoryRpc &&
+          (u.key === 'inventoryTransactions' || u.key === 'posProducts')
+        ) {
+          continue;
+        }
         if (u.isDelete) {
           await apiService.deleteItem(u.key, u.item.id);
         } else {

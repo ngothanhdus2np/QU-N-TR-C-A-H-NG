@@ -87,8 +87,11 @@ const TopNav: React.FC<TopNavProps> = ({
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpenSection(prev => (prev === title ? null : title));
   };
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  };
   const closeDropdown = () => {
-    closeTimer.current = setTimeout(() => setOpenSection(null), 80);
+    closeTimer.current = setTimeout(() => setOpenSection(null), 150);
   };
 
   const activeSection = useMemo(
@@ -307,7 +310,7 @@ const TopNav: React.FC<TopNavProps> = ({
       </header>
 
       {/* Row 2 — Hover dropdown nav + Bán hàng CTA */}
-      <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 z-30 shrink-0 shadow-sm overflow-visible">
+      <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 relative z-50 shrink-0 shadow-sm overflow-visible">
         <nav className="flex items-center gap-0.5 flex-1">
           {sections.map(section => {
             const isActive = section === activeSection;
@@ -336,6 +339,8 @@ const TopNav: React.FC<TopNavProps> = ({
                 </button>
 
                 <div
+                  onMouseEnter={cancelClose}
+                  onMouseLeave={closeDropdown}
                   className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
                 >
                   <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">

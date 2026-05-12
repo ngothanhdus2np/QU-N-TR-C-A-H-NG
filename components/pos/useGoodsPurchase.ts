@@ -1,6 +1,7 @@
 import React from 'react';
 import { POSProduct, InventoryTransaction } from '../../types';
 import { generateId } from '../../businessLogic';
+import { getCurrentStaffId } from '../shared/staff';
 
 type PurchaseItem = { productId: string; quantity: number; price: number; name: string; discount: number };
 type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?: number };
@@ -108,7 +109,7 @@ export const useGoodsPurchase = ({
         id: generateId(),
         date: new Date().toISOString(),
         type: 'Import',
-        staffId: 'Admin',
+        staffId: getCurrentStaffId(),
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
       });

@@ -1,8 +1,6 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { X, Printer, ZoomIn, ZoomOut, ChevronRight, ChevronDown, BrainCircuit, Loader2, RefreshCw } from 'lucide-react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import React, { useState, useMemo } from 'react';
+import { X, Printer, ZoomIn, ZoomOut, ChevronRight, ChevronDown } from 'lucide-react';
 import { POSOrder } from '../../types';
 
 interface EndOfDayReportProps {
@@ -19,31 +17,6 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
   const [paperSize, setPaperSize] = useState<'A4' | 'A5'>('A4');
   const [zoom, setZoom] = useState(90);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiStatus, setAiStatus] = useState<'idle' | 'loading' | 'generating' | 'done' | 'error'>('idle');
-
-  const fetchAiSummary = useCallback(async (date: string, forceGenerate = false) => {
-    setAiStatus('loading');
-    setAiSummary(null);
-    try {
-      if (!forceGenerate) {
-        const res = await fetch(`/api/eod-report?date=${date}`);
-        const data = await res.json();
-        if (data?.summary) { setAiSummary(data.summary); setAiStatus('done'); return; }
-      }
-      setAiStatus('generating');
-      const res = await fetch('/api/eod-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date }),
-      });
-      const data = await res.json();
-      if (data?.summary) { setAiSummary(data.summary); setAiStatus('done'); }
-      else { setAiStatus('error'); }
-    } catch { setAiStatus('error'); }
-  }, []);
-
-  useEffect(() => { fetchAiSummary(selectedDate); }, [selectedDate, fetchAiSummary]);
 
   const filteredOrders = useMemo(() =>
     orders.filter(o => new Date(o.date).toLocaleDateString('en-CA') === selectedDate),
@@ -202,7 +175,8 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
   const grpTdRStyle = "border border-slate-300 px-3 py-2 font-bold text-xs text-right";
 
   return (
-    <div className="fixed inset-0 bg-slate-300 z-[200] flex flex-col">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+      <div className="bg-slate-300 rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
 
       {/* Filter bar */}
       <div className="bg-white border-b border-slate-200 h-12 flex items-center px-4 gap-3 shrink-0 shadow-sm">
@@ -264,41 +238,6 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
           In báo cáo
         </button>
 
-      </div>
-
-      {/* AI Summary Bar */}
-      <div className="bg-indigo-950 shrink-0 px-5 py-3 flex items-start gap-3">
-        <BrainCircuit className="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          {(aiStatus === 'loading' || aiStatus === 'generating') && (
-            <div className="flex items-center gap-2 text-indigo-300">
-              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-              <span className="text-xs font-bold">
-                {aiStatus === 'generating' ? 'AI đang phân tích dữ liệu bán hàng...' : 'Đang tải tóm tắt AI...'}
-              </span>
-            </div>
-          )}
-          {aiStatus === 'done' && aiSummary && (
-            <div
-              className="text-xs text-indigo-100 leading-relaxed prose prose-invert prose-xs max-w-none [&_strong]:text-white [&_p]:m-0 [&_ul]:mt-1 [&_li]:my-0"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(aiSummary) as string) }}
-            />
-          )}
-          {aiStatus === 'error' && (
-            <span className="text-xs text-rose-300 font-bold">Không thể tạo tóm tắt AI. Thử lại bên dưới.</span>
-          )}
-          {aiStatus === 'idle' && (
-            <span className="text-xs text-indigo-400 italic">Chưa có tóm tắt AI cho ngày này.</span>
-          )}
-        </div>
-        <button
-          onClick={() => fetchAiSummary(selectedDate, true)}
-          disabled={aiStatus === 'loading' || aiStatus === 'generating'}
-          title="Tạo lại tóm tắt AI"
-          className="p-1.5 text-indigo-400 hover:text-indigo-200 hover:bg-indigo-900 rounded-lg transition-all disabled:opacity-40 shrink-0"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {/* Preview area */}
@@ -463,6 +402,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 };

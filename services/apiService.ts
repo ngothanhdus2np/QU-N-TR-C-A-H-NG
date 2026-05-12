@@ -1,5 +1,5 @@
 import { supabaseAdmin as supabase } from './supabase';
-import { AppData } from '../types';
+import { AppData, InventoryTransaction } from '../types';
 import { isUUID } from '../businessLogic';
 
 export const TABLE_MAP: Record<string, string> = {
@@ -121,6 +121,15 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       note: item.note,
       reference_id: item.referenceId,
       staff_id: item.staffId,
+      supplier_id: item.supplierId || null,
+      supplier_name: item.supplierName || null,
+      total_amount: n(item.totalAmount),
+      status: item.status || null,
+      balanced_date: item.balancedDate || null,
+      total_actual_qty: item.totalActualQty == null ? null : n(item.totalActualQty),
+      total_diff: item.totalDiff == null ? null : n(item.totalDiff),
+      increase_count: item.increaseCount == null ? null : n(item.increaseCount),
+      decrease_count: item.decreaseCount == null ? null : n(item.decreaseCount),
     };
   }
   if (key === 'salaryPolicies') {
@@ -348,8 +357,12 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
     return {
       id: item.id,
       name: item.name,
+      code: item.code || null,
       phone: item.phone || null,
+      email: item.email || null,
       address: item.address || null,
+      supplier_group: item.group || null,
+      status: item.status || 'active',
       notes: item.notes || null,
     };
   if (key === 'supplierDebts')
@@ -394,6 +407,9 @@ const AUDITED_TABLES = new Set([
   'advance_records',
   'shortage_records',
   'salary_policies',
+  'inventory_transactions',
+  'suppliers',
+  'pos_products',
 ]);
 
 async function auditLog(tableName: string, recordId: string, action: string, snapshot?: any) {
@@ -715,6 +731,36 @@ export const apiService = {
       return true;
     }
     return null;
+  },
+
+  async applyInventoryTransactionWithStock(transaction: InventoryTransaction) {
+    const payload = sanitizeItem('inventoryTransactions', transaction);
+    const { error } = await supabase.rpc('apply_inventory_transaction_with_stock', {
+      p_transaction: payload,
+    });
+    if (error) {
+      console.error('[InventoryRPC] Apply transaction failed:', error);
+      throw new Error(`Ghi giao dịch tồn kho thất bại: ${error.message}`);
+    }
+    await auditLog('inventory_transactions', transaction.id, 'applyWithStock', payload);
+    return true;
+  },
+
+  async deleteInventoryTransactionWithStock(transactionId: string) {
+    const { data: snapshot } = await supabase
+      .from('inventory_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+    const { error } = await supabase.rpc('delete_inventory_transaction_with_stock', {
+      p_transaction_id: transactionId,
+    });
+    if (error) {
+      console.error('[InventoryRPC] Delete transaction failed:', error);
+      throw new Error(`Xóa giao dịch tồn kho thất bại: ${error.message}`);
+    }
+    await auditLog('inventory_transactions', transactionId, 'deleteWithStock', snapshot);
+    return true;
   },
 
   async upsertConfig(key: string, value: any) {

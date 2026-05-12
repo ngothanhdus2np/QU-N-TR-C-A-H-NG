@@ -25,11 +25,14 @@ interface GoodsPurchaseFormProps {
   transactions: InventoryTransaction[];
   onClickFileInput: () => void;
   onOpenQuickAddProduct: () => void;
+  onOpenQuickAddSupplier?: () => void;
   onAddProductToPurchase: (p: POSProduct) => void;
   onUpdatePurchaseItem: (id: string, updates: Partial<{ quantity: number; price: number; discount: number }>) => void;
   onRemovePurchaseItem: (id: string) => void;
   onCompletePurchase: () => void;
+  onSaveDraft?: () => void;
   onDownloadTemplate: () => void;
+  staffLabel?: string;
 }
 
 export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
@@ -44,11 +47,14 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
   transactions,
   onClickFileInput,
   onOpenQuickAddProduct,
+  onOpenQuickAddSupplier,
   onAddProductToPurchase,
   onUpdatePurchaseItem,
   onRemovePurchaseItem,
   onCompletePurchase,
+  onSaveDraft,
   onDownloadTemplate,
+  staffLabel = 'unknown',
 }) => {
   const [searchFocused, setSearchFocused] = useState(false);
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
@@ -218,7 +224,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                   <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
                     <User className="h-5 w-5" />
                   </div>
-                  <span className="text-sm font-bold truncate max-w-[120px]">Ngô Thành Du</span>
+	                  <span className="text-sm font-bold truncate max-w-[120px]">{staffLabel}</span>
                   <ChevronRight className="h-4 w-4 text-slate-400 ml-auto" />
                 </div>
                 <div className="text-right">
@@ -239,9 +245,12 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                       onChange={e => setPurchaseSupplier(e.target.value)}
                     />
                   </div>
-                  <button className="p-2 border rounded-md hover:bg-slate-50 text-indigo-600 transition-all">
-                    <Plus className="h-5 w-5" />
-                  </button>
+	                  <button
+	                    onClick={onOpenQuickAddSupplier}
+	                    className="p-2 border rounded-md hover:bg-slate-50 text-indigo-600 transition-all"
+	                  >
+	                    <Plus className="h-5 w-5" />
+	                  </button>
                 </div>
               </div>
 
@@ -300,7 +309,8 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
 
             <div className="p-4 bg-white border-t mt-auto grid grid-cols-2 gap-3">
               <button
-                onClick={() => alert('Đã lưu bản nháp!')}
+	                onClick={onSaveDraft}
+	                disabled={!onSaveDraft}
                 className="py-3 border-2 border-indigo-600 text-indigo-600 rounded-lg font-black uppercase text-sm hover:bg-indigo-50 transition-all"
               >
                 Lưu tạm
@@ -340,7 +350,10 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     <td className="p-4 text-slate-500">{new Date(t.date).toLocaleString('vi-VN')}</td>
                     <td className="p-4 font-bold">{t.note?.split('từ ')[1] || '---'}</td>
                     <td className="p-4 text-right font-black text-emerald-600">
-                      {t.items.reduce((s, i) => s + (i.quantity * ((i as any).price || 0)), 0).toLocaleString()}đ
+	                      {(
+	                        t.totalAmount ||
+	                        t.items.reduce((s, i) => s + i.quantity * (i.price || 0), 0)
+	                      ).toLocaleString()}đ
                     </td>
                     <td className="p-4 text-slate-400 text-xs italic">{t.note}</td>
                   </tr>

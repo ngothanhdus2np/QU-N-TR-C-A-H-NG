@@ -484,6 +484,27 @@ export const dataMapper = {
           note: t.note,
           referenceId: t.reference_id || t.referenceId,
           staffId: t.staff_id || t.staffId,
+          supplierId: t.supplier_id || t.supplierId,
+          supplierName: t.supplier_name || t.supplierName,
+          totalAmount: Number(t.total_amount || t.totalAmount || 0),
+          status: t.status,
+          balancedDate: t.balanced_date || t.balancedDate,
+          totalActualQty:
+            t.total_actual_qty == null && t.totalActualQty == null
+              ? undefined
+              : Number(t.total_actual_qty ?? t.totalActualQty),
+          totalDiff:
+            t.total_diff == null && t.totalDiff == null
+              ? undefined
+              : Number(t.total_diff ?? t.totalDiff),
+          increaseCount:
+            t.increase_count == null && t.increaseCount == null
+              ? undefined
+              : Number(t.increase_count ?? t.increaseCount),
+          decreaseCount:
+            t.decrease_count == null && t.decreaseCount == null
+              ? undefined
+              : Number(t.decrease_count ?? t.decreaseCount),
         })),
         localData?.inventoryTransactions || []
       ),
@@ -491,8 +512,12 @@ export const dataMapper = {
         (results.suppliers || []).map((s: any) => ({
           id: s.id,
           name: s.name,
+          code: s.code,
           phone: s.phone,
+          email: s.email,
           address: s.address,
+          group: s.supplier_group || s.group,
+          status: s.status || 'active',
           notes: s.notes,
         })),
         localData?.suppliers || []

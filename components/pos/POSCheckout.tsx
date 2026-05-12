@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Plus, ChevronDown, ChevronRight, X, CheckCircle2, MoreVertical, UserCircle, ExternalLink } from 'lucide-react';
-import { POSCustomer, POSOrderItem } from '../../types';
+import { POSCustomer, POSOrderItem, POSProduct } from '../../types';
 import { InvoiceTab } from './POSComputer';
 
 const PaymentMethodRadio = ({ method, current, set, label }: { method: string; current: string; set: (m: string) => void; label: string }) => (
@@ -107,6 +107,7 @@ interface POSCheckoutProps {
   mode: 'sales' | 'return';
   cart: POSOrderItem[];
   returnCart: POSOrderItem[];
+  products: POSProduct[];
   // Computed totals
   totalBeforeDiscount: number;
   totalDiscount: number;
@@ -133,13 +134,24 @@ interface POSCheckoutProps {
 const POSCheckout: React.FC<POSCheckoutProps> = ({
   customerSearch, setCustomerSearch, customerSearchRef,
   selectedCustomer, filteredCustomers, onSelectCustomer, onClearCustomer, onOpenAddCustomer,
-  mode, cart, returnCart,
+  mode, cart, returnCart, products,
   totalBeforeDiscount, totalDiscount, netPayable, otherFees,
   totalReturnBeforeDiscount, finalReturnAmount, amountToPayCustomer,
   currentCashReceived, pointsEarned,
   paymentMethod, useSplitPayment, setUseSplitPayment, splitPayment, cashSuggestions,
   onUpdateTab, onBillDiscountClick, onCheckout, isCheckoutLocked = false,
-}) => (
+}) => {
+  // Kiểm tra xem có sản phẩm nào trong giỏ được thiết lập tích điểm không
+  const pointsEligibleProductIds = React.useMemo(
+    () => new Set(products.filter(product => product.allowPoints === true).map(product => product.id)),
+    [products]
+  );
+  const hasPointsEligibleProducts = cart.some(item => pointsEligibleProductIds.has(item.productId));
+
+  // Chỉ hiển thị điểm thưởng khi có khách hàng VÀ có sản phẩm tích điểm
+  const shouldShowPoints = selectedCustomer !== null && hasPointsEligibleProducts;
+
+  return (
   <div className="w-[480px] bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden relative z-20">
     {/* Active User Header */}
     <div className="px-4 h-10 flex items-center justify-between bg-white border-b border-slate-100">
@@ -464,11 +476,13 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
           <CheckCircle2 className="h-5 w-5 text-indigo-400 group-hover:scale-110 transition-transform" />
           <span className="text-lg tracking-widest uppercase">{isCheckoutLocked ? 'ĐANG XỬ LÝ' : 'THANH TOÁN (F9)'}</span>
         </div>
-        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">+ {pointsEarned.toLocaleString()} ĐIỂM THƯỞNG</span>
+        {shouldShowPoints && (
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">+ {pointsEarned.toLocaleString()} ĐIỂM THƯỞNG</span>
+        )}
       </button>
       <p className="text-center text-[7px] text-slate-300 mt-3 uppercase font-black tracking-[0.4em] opacity-40 italic">CFO Brain POS • v2.0 Terminal</p>
     </div>
   </div>
 );
-
+};
 export default POSCheckout;

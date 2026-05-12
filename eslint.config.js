@@ -64,6 +64,29 @@ export default [
     },
   },
 
+  // Legacy/dynamic data-boundary modules still use intentionally loose payloads.
+  // Keep the warning active for new modules while avoiding full-repo lint noise.
+  {
+    files: [
+      'components/ChatInterface.tsx',
+      'components/KnowledgeManager.tsx',
+      'components/ProductGroupManager.tsx',
+      'components/StaffManager.tsx',
+      'components/marketing/MarketingManager.tsx',
+      'components/pos/GoodsLegacyProductFormView.tsx',
+      'components/pos/GoodsProductTableBody.tsx',
+      'components/pos/OrderHistory.tsx',
+      'components/pos/SupplierManager.tsx',
+      'components/pos/useGoodsExcelImport.ts',
+      'hooks/useAppData.ts',
+      'services/apiService.ts',
+      'services/dataMapper.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+
   // Bỏ qua các thư mục không cần lint
   {
     ignores: [
