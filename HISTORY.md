@@ -10,22 +10,28 @@
 
 ## Current Active Task
 
-- Task: Không có task đang dở
-- Last completed: Hoàn thiện Goods selection toolbar + bulk actions theo ảnh mẫu
-- Next recommended: Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts` để giảm warning `any`
-- Files touched: `components/pos/GoodsToolbar.tsx`, `components/pos/GoodsProductsWorkspace.tsx`, `components/pos/GoodsInventory.tsx`, `components/pos/GoodsImportExport.tsx`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsBulkActions.tsx`
+- Task: Trang danh sách hàng hóa — các chỉnh sửa sau khi user test
+- Last completed: User đã liệt kê 6 việc cần sửa; đã đưa vào TODO ưu tiên cao theo thứ tự xử lý
+- Next recommended: Bắt đầu từ navigation dropdown-only cho thanh tiêu đề, sau đó xử lý layout block filter/list, rồi filter thuộc tính và sort
+- Files touched: `HISTORY.md`
 - Notes:
-  - Toolbar selected mode đã có search + `Đã chọn N` + bỏ chọn + `Xuất file` / `In tem mã` / `Nhập hàng` / `...`
-  - In tem mã hỏi số lượng tem mỗi sản phẩm trước khi mở cửa sổ in
-  - Nhập hàng từ selected products bỏ qua parent logic, prefill phiếu nhập và chuyển sang tab nhập hàng
-  - Floating `GoodsBulkActions` đã xóa để tránh trùng UI
+  - Các việc đều thuộc trang danh sách hàng hóa / navigation liên quan hàng hóa
+  - Không đổi schema DB, không đổi nghiệp vụ tài chính/lương
+  - Sau khi implement phải chạy `npx tsc --noEmit`, scoped ESLint file vừa sửa, `npm test`, `npm run lint`, rồi commit riêng
 
 ---
 
 ## 📋 TODO — Việc đang chờ làm
 
 ### 🔴 Ưu tiên cao
-- Không còn việc ưu tiên cao đang chờ.
+- [ ] **Trang danh sách hàng hóa — chỉnh sửa sau khi user test**
+  - [ ] **Navigation dropdown-only:** ở thanh tiêu đề `Tổng quan`, `Hàng hoá`, `Mua hàng`, … khi bấm chỉ mở dropdown, không điều hướng thẳng vào trang như hiện tại
+  - [ ] **Ẩn/hiện block bộ lọc:** thêm nút mũi tên sang trái ở block bộ lọc; bấm để ẩn block lọc và mở rộng block danh sách hàng hóa; khi đã ẩn thì nút quay hướng ngược lại để hiện lại block lọc
+  - [ ] **Xóa đường phân cách thừa:** xoá bỏ dòng giữa thanh tìm kiếm và thanh tiêu đề trong block danh sách hàng hóa
+  - [ ] **Filter thuộc tính theo từng tên thuộc tính:** trong block bộ lọc, mỗi tên thuộc tính có 1 ô riêng; bấm vào tên thuộc tính nào thì popup chỉ hiển thị các giá trị của tên thuộc tính đó để người dùng chọn
+  - [ ] **Mã hàng mặc định sắp xếp cao → thấp:** danh sách hàng hóa mặc định sort theo mã hàng từ cao xuống thấp
+  - [ ] **Sort theo cột số:** cột `Giá bán`, `Giá vốn`, `Tồn kho` có sắp xếp khi bấm header; lần 1 cao → thấp, lần 2 thấp → cao; cột được bấm là khóa sort chính và các cột khác đi theo thứ tự đó
+  - [ ] Chạy `npx tsc --noEmit`, scoped ESLint, `npm test`, `npm run lint`
 
 ### 🟠 Ưu tiên trung bình
 - [ ] **Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts`** để giảm phần lớn 110 warning `any` còn lại
