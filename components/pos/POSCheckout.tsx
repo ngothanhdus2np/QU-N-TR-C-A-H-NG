@@ -86,7 +86,8 @@ const parseCurrencyInput = (value: string): number => {
   return digitsOnly ? Number(digitsOnly) : 0;
 };
 
-const formatCurrencyInput = (value: number): string => (value > 0 ? value.toLocaleString('vi-VN') : '');
+const formatSplitCurrency = (value: number): string => value.toLocaleString('en-US');
+const formatCurrencyInput = (value: number): string => (value > 0 ? formatSplitCurrency(value) : '');
 
 type SplitPayment = { cash: number; bank: number; card: number; momo: number };
 
@@ -392,17 +393,19 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
 
                 <div className="space-y-2">
                   {SPLIT_PAYMENT_METHODS.map(({ key, label }) => (
-                    <div key={key} className="flex items-center gap-3 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
-                      <span className="text-[12px] font-black text-slate-700 w-24 shrink-0">{label}</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={formatCurrencyInput(splitPayment[key])}
-                        onChange={e => onUpdateTab({ splitPayment: { ...splitPayment, [key]: parseCurrencyInput(e.target.value) } })}
-                        className="flex-1 px-0 py-1 bg-transparent border-0 border-b border-slate-200 text-sm font-black text-slate-900 outline-none focus:border-indigo-400 transition-all text-right tabular-nums"
-                        placeholder="0"
-                      />
-                      <span className="text-[10px] font-bold text-slate-400">đ</span>
+                    <div key={key} className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="text-[13px] font-medium text-slate-600 uppercase tracking-wide shrink-0">{label}</span>
+                      <div className="w-44 h-10 rounded-xl border border-slate-200 bg-white px-3 flex items-center gap-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={formatCurrencyInput(splitPayment[key])}
+                          onChange={e => onUpdateTab({ splitPayment: { ...splitPayment, [key]: parseCurrencyInput(e.target.value) } })}
+                          className="min-w-0 flex-1 bg-transparent border-0 text-sm font-black text-slate-900 outline-none text-right tabular-nums"
+                          placeholder="0"
+                        />
+                        <span className="text-[11px] font-bold text-slate-400 shrink-0">đ</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -414,7 +417,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                       ? 'text-emerald-600'
                       : 'text-rose-500'
                   }`}>
-                    {getSplitPaymentTotal(splitPayment).toLocaleString()}đ
+                    {formatSplitCurrency(getSplitPaymentTotal(splitPayment))}đ
                   </span>
                 </div>
 
@@ -424,13 +427,13 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                   if (diff < 0) return (
                     <div className="flex items-center justify-between py-1.5 px-2 bg-rose-50 border border-rose-100 rounded-lg">
                       <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Còn thiếu</span>
-                      <span className="text-sm font-black text-rose-600 tabular-nums">{Math.abs(diff).toLocaleString()}đ</span>
+                      <span className="text-sm font-black text-rose-600 tabular-nums">{formatSplitCurrency(Math.abs(diff))}đ</span>
                     </div>
                   );
                   if (diff > 0) return (
                     <div className="flex items-center justify-between py-1.5 px-2 bg-emerald-50 border border-emerald-100 rounded-lg">
                       <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Tiền thừa</span>
-                      <span className="text-sm font-black text-emerald-600 tabular-nums">{diff.toLocaleString()}đ</span>
+                      <span className="text-sm font-black text-emerald-600 tabular-nums">{formatSplitCurrency(diff)}đ</span>
                     </div>
                   );
                   return null;

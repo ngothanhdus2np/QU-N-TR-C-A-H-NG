@@ -11,7 +11,7 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Thiết kế lại giao diện `Chia nhiều`, bỏ khung ngoài và format tiền nhập theo dấu phân cách hàng nghìn
+- Last completed: Tinh chỉnh giao diện `Chia nhiều`: label phương thức giống dòng tiền hàng/giảm giá/phí khác, tiền + đơn vị nằm trong khung bo góc, format dấu phẩy
 - Next recommended: Tiếp tục mục `Logic tìm kiếm/sắp xếp POS`
 - Files touched: `components/pos/POSCheckout.tsx`, `HISTORY.md`
 - Notes:
@@ -59,7 +59,8 @@
 ### ✅ Đã hoàn thành — lưu để tham chiếu
 - [x] ~~**POS: Giao diện Chia nhiều + format tiền**~~ *(xong 2026-05-12)*
   - Bỏ khung ngoài của block chia nhiều, chuyển sang các dòng phương thức thanh toán riêng.
-  - Input tiền trong `Tiền mặt` / `Chuyển khoản` / `Thẻ` / `Ví` hiển thị dấu phân cách hàng nghìn khi nhập nhưng vẫn lưu state dạng number.
+  - Label `Tiền mặt` / `Chuyển khoản` / `Thẻ` / `Ví` dùng kiểu chữ/kích thước giống các dòng `Tiền hàng` / `Giảm giá` / `Phí khác`.
+  - Input tiền và đơn vị `đ` nằm trong khung bo góc; số nhập hiển thị dấu phẩy hàng nghìn nhưng vẫn lưu state dạng number.
   - Tổng đã nhận, còn thiếu, tiền thừa giữ logic cũ.
 - [x] ~~**POS: Layout thanh toán Chuyển khoản / Thẻ / Ví**~~ *(xong 2026-05-12)*
   - `Tiền mặt` giữ layout gợi ý tiền nhanh.
@@ -135,6 +136,21 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 47
+
+**Đã làm:**
+- `components/pos/POSCheckout.tsx`: tinh chỉnh tiếp giao diện `Chia nhiều`; label phương thức thanh toán dùng kiểu chữ/kích thước giống `Tiền hàng` / `Giảm giá` / `Phí khác`, tiền và đơn vị `đ` nằm chung trong khung bo góc.
+- `components/pos/POSCheckout.tsx`: đổi format riêng khu vực `Chia nhiều` sang dấu phẩy hàng nghìn.
+- `HISTORY.md`: cập nhật ghi chú hoàn thành cho split payment.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Logic tìm kiếm/sắp xếp POS`.
 
 ---
 
