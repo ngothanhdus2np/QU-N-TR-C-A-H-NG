@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, ClipboardCheck, AlertCircle, History } from 'lucide-react';
+import { Search, X, ClipboardCheck, AlertCircle } from 'lucide-react';
 import { POSProduct, InventoryTransaction } from '../../types';
 
 export interface AuditItem {

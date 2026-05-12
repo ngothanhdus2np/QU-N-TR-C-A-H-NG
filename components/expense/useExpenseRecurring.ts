@@ -1,11 +1,11 @@
 import React from 'react';
-import { ExpenseRecord, RecurringExpense } from '../../types';
+import { AppDataSurgicalUpdate, ExpenseRecord, RecurringExpense } from '../../types';
 
 interface UseExpenseRecurringArgs {
   list: ExpenseRecord[];
   recurringExpenses: RecurringExpense[];
   onUpdate: (newList: ExpenseRecord[], idToRemove?: string) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onUpdateRecurringExpenses: (newList: RecurringExpense[]) => void;
 }
 

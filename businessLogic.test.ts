@@ -166,8 +166,8 @@ describe('isStaffActive', () => {
     expect(isStaffActive({ resignedDate: '2024-01-01' })).toBe(false);
   });
 
-  it('nhân viên đã nghỉ (dùng resigned_date) → không active', () => {
-    expect(isStaffActive({ resigned_date: '2024-01-01' })).toBe(false);
+  it('resignedDate chỉ có khoảng trắng → active', () => {
+    expect(isStaffActive({ resignedDate: '   ' })).toBe(true);
   });
 
   it('null/undefined → false', () => {
@@ -210,9 +210,30 @@ describe('determineCurrentPolicy', () => {
   } as unknown as Employee;
 
   const policies: SalaryPolicy[] = [
-    { ...dummyPolicy, id: 'p-new', name: 'Mới vào', startThreshold: 0, endThreshold: 30, baseSalary: 3000000 },
-    { ...dummyPolicy, id: 'p-mid', name: 'Thử việc qua', startThreshold: 30, endThreshold: 365, baseSalary: 5000000 },
-    { ...dummyPolicy, id: 'p-senior', name: 'Nhân viên chính thức', startThreshold: 365, endThreshold: 0, baseSalary: 7000000 },
+    {
+      ...dummyPolicy,
+      id: 'p-new',
+      name: 'Mới vào',
+      startThreshold: 0,
+      endThreshold: 30,
+      baseSalary: 3000000,
+    },
+    {
+      ...dummyPolicy,
+      id: 'p-mid',
+      name: 'Thử việc qua',
+      startThreshold: 30,
+      endThreshold: 365,
+      baseSalary: 5000000,
+    },
+    {
+      ...dummyPolicy,
+      id: 'p-senior',
+      name: 'Nhân viên chính thức',
+      startThreshold: 365,
+      endThreshold: 0,
+      baseSalary: 7000000,
+    },
   ];
 
   it('chọn policy phù hợp với thâm niên 10 ngày', () => {

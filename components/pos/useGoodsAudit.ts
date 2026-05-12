@@ -4,6 +4,7 @@ import { generateId } from '../../businessLogic';
 import { AuditItem } from './GoodsAuditForm';
 
 type GoodsTab = 'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form';
+type InventoryTransactionItem = InventoryTransaction['items'][number];
 
 interface UseGoodsAuditArgs {
   products: POSProduct[];
@@ -25,7 +26,7 @@ export const useGoodsAudit = ({
 
   const handleConfirmAudit = () => {
     const updatedProducts = [...products];
-    const itemsForTransaction: any[] = [];
+    const itemsForTransaction: InventoryTransactionItem[] = [];
     auditItems.forEach(audit => {
       const idx = updatedProducts.findIndex(product => product.id === audit.productId);
       if (idx !== -1) {

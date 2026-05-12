@@ -1,20 +1,18 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useDeferredValue, useTransition } from 'react';
 import { 
   Loader2, X, ChevronLeft, ChevronRight, Plus, Trash2,
-  Check, Target, Sparkles, UploadCloud, Clock, Copy, Users,
-  MessageSquare, Camera, Warehouse, 
+  Check, Sparkles, UploadCloud, Clock, Copy, Users,
+  Camera,
   Search, CloudCheck, CloudOff, Upload, CheckCircle2,
   RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ContentPlanItem, ContentStrategy, ProductLine, BrandProfile, StrategicAdvice } from '../../types';
 import { generateContentPlan, getMonthlyStrategicAdvice } from '../../services/marketingClaudeService';
-import { supabaseAdmin as supabase } from '../../services/supabase';
-import { STRATEGY_COLORS, DEFAULT_STRATEGIES, DEFAULT_FOCUS_PRODUCTS, DEFAULT_BRAND } from '../../constants/marketing';
+import { STRATEGY_COLORS, DEFAULT_STRATEGIES, DEFAULT_FOCUS_PRODUCTS } from '../../constants/marketing';
 import { useSyncStorage, useCalendar } from '../../hooks/useMarketing';
 import { StrategyBadge, FacebookPreview, SkeletonPost } from './MarketingUI';
 import { uploadImage } from '../../services/marketingStorageService';
-import { marked } from 'marked';
 
 interface MarketingManagerProps {
   brandProfile: BrandProfile;
@@ -22,8 +20,12 @@ interface MarketingManagerProps {
   suggestedFocusProducts?: ProductLine[];
 }
 
+type MarketingTab = 'calendar' | 'list' | 'settings' | 'facebook';
+
+const MARKETING_TABS: MarketingTab[] = ['calendar', 'list', 'settings', 'facebook'];
+
 const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpdateBrand, suggestedFocusProducts }) => {
-  const [session, setSession] = useState<any>(null);
+  const [session] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [schedule, setSchedule] = useState<ContentPlanItem[]>([]);
@@ -45,7 +47,8 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
 
   const [duration, setDuration] = useState<'week' | 'month'>('month');
   const [viewDate, setViewDate] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<'calendar' | 'list' | 'settings' | 'facebook'>('calendar');
+  const [activeTab, setActiveTab] = useState<MarketingTab>('calendar');
+  const [, startTabTransition] = useTransition();
   const [selectedPost, setSelectedPost] = useState<(ContentPlanItem & { isDraft?: boolean }) | null>(null);
   
   // Facebook State
@@ -154,7 +157,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
         body: JSON.stringify(fbAppConfig)
       });
       alert("Đã lưu cấu hình App Facebook!");
-    } catch (e) {
+    } catch {
       alert("Lỗi lưu cấu hình");
     } finally {
       setFbLoading(false);
@@ -170,7 +173,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
       } else {
         alert(data.error || "Lỗi lấy URL xác thực");
       }
-    } catch (e) {
+    } catch {
       alert("Lỗi kết nối");
     }
   };
@@ -201,7 +204,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
       } else {
         alert("Lỗi đăng bài: " + data.error);
       }
-    } catch (e) {
+    } catch {
       alert("Lỗi hệ thống khi đăng bài");
     } finally {
       setFbLoading(false);
@@ -209,10 +212,15 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
   };
   const [modalMode, setModalMode] = useState<'edit_caption' | 'resources'>('edit_caption');
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedStrategyFilter, setSelectedStrategyFilter] = useState<string>('all');
   
   const [uploadingForDate, setUploadingForDate] = useState<string | null>(null);
   const imageUploadRef = useRef<HTMLInputElement>(null);
+
+  const changeTab = (tab: MarketingTab) => {
+    startTabTransition(() => setActiveTab(tab));
+  };
 
   const { syncing, initialLoading, fetchData, saveData } = useSyncStorage(session, isCloudSyncEnabled);
   const calendarDays = useCalendar(viewDate);
@@ -309,7 +317,8 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height, max = 1200; 
+        let w = img.width, h = img.height;
+        const max = 1200;
         if (w > h) { if (w > max) { h *= max/w; w = max; } } else { if (h > max) { w *= max/h; h = max; } }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
@@ -338,8 +347,9 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
   };
 
   const groupedSchedule = useMemo(() => {
+    if (activeTab !== 'list') return {};
     const filtered = (schedule || []).filter(item => {
-      const q = searchQuery.toLowerCase();
+      const q = deferredSearchQuery.toLowerCase();
       const matchesSearch = (item.topic || "").toLowerCase().includes(q) || (item.caption || "").toLowerCase().includes(q) || (item.type || "").toLowerCase().includes(q);
       const matchesStrategy = selectedStrategyFilter === 'all' || item.type === selectedStrategyFilter;
       return matchesSearch && matchesStrategy;
@@ -352,7 +362,15 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
       groups[m].push(item);
     });
     return groups;
-  }, [schedule, searchQuery, selectedStrategyFilter]);
+  }, [activeTab, schedule, deferredSearchQuery, selectedStrategyFilter]);
+
+  const calendarPostByDate = useMemo(() => {
+    if (activeTab !== 'calendar') return new Map<string, ContentPlanItem & { isDraft?: boolean }>();
+    const byDate = new Map<string, ContentPlanItem & { isDraft?: boolean }>();
+    for (const post of schedule || []) byDate.set(post.date, post);
+    for (const draft of drafts || []) byDate.set(draft.date, { ...draft, isDraft: true });
+    return byDate;
+  }, [activeTab, drafts, schedule]);
 
   const handleQuickUpload = (date: string) => {
     setUploadingForDate(date);
@@ -373,8 +391,8 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-6">
           <nav className="flex gap-1 bg-slate-200 p-1 rounded-xl">
-            {['calendar', 'list', 'settings', 'facebook'].map((t: any) => (
-              <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === t ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-700'}`}>
+            {MARKETING_TABS.map((t) => (
+              <button key={t} onClick={() => changeTab(t)} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === t ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-700'}`}>
                 {t === 'calendar' ? 'Lịch Đăng' : t === 'list' ? 'Kho Bài' : t === 'settings' ? 'Chiến Lược' : 'Facebook API'}
               </button>
             ))}
@@ -448,8 +466,8 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
               </div>
               <div className="grid grid-cols-7 gap-[1px] bg-slate-100 flex-1">
                 {calendarDays.map((day, idx) => {
-                  const post = schedule.find(s => s.date === day.dateKey) || drafts.find(d => d.date === day.dateKey);
-                  const isDraft = drafts.some(d => d.date === day.dateKey);
+                  const post = calendarPostByDate.get(day.dateKey);
+                  const isDraft = post?.isDraft === true;
                   const isToday = day.dateKey === todayStr;
                   return (
                     <div key={idx} onClick={() => post && setSelectedPost({...post, isDraft})} className={`bg-white p-3 min-h-[160px] flex flex-col gap-2 relative group transition-all ${post ? 'cursor-pointer hover:bg-slate-50' : ''} ${day.dayNum === null ? 'bg-slate-50/30' : ''} ${isToday ? 'ring-2 ring-amber-400 ring-inset bg-amber-50/30' : ''}`}>
@@ -783,7 +801,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({ brandProfile, onUpd
                   <div className="p-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
                     {/* Multi-color progress bar */}
                     <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200">
-                      {strategies.map((s, idx) => (
+                      {strategies.map((s) => (
                         <div 
                           key={s.id} 
                           style={{ width: `${s.percentage}%`, backgroundColor: (STRATEGY_COLORS[s.color as keyof typeof STRATEGY_COLORS] || STRATEGY_COLORS['blue']).hex }}

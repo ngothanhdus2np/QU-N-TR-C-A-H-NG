@@ -1,4 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type {
+  Base64ImageSource,
+  ContentBlock,
+  ContentBlockParam,
+  MessageCreateParamsNonStreaming,
+  MessageParam,
+} from '@anthropic-ai/sdk/resources/messages';
 
 // Singleton — tái sử dụng connection, không tạo mới mỗi request
 let _client: Anthropic | null = null;
@@ -31,7 +38,7 @@ export async function callClaude(params: ClaudeCallParams): Promise<string> {
     messages: [{ role: 'user', content: params.userMessage }],
   });
 
-  const u = response.usage as any;
+  const u = response.usage;
   console.error(`[Claude] in=${u.input_tokens} out=${u.output_tokens}`);
 
   const content = response.content[0];
@@ -42,19 +49,19 @@ export async function callClaude(params: ClaudeCallParams): Promise<string> {
 export interface ClaudeChatParams {
   model?: 'claude-haiku-4-5' | 'claude-sonnet-4-6';
   system: string;
-  messages: Array<{ role: 'user' | 'assistant'; content: any }>;
-  tools?: any[];
+  messages: MessageParam[];
+  tools?: unknown[];
   temperature?: number;
   maxTokens?: number;
 }
 
-export async function callClaudeChat(params: ClaudeChatParams): Promise<any[]> {
+export async function callClaudeChat(params: ClaudeChatParams): Promise<ContentBlock[]> {
   const client = getClient();
 
   // Wrap system in array with cache_control — cached across tool-use loop iterations
-  const systemBlock = [{ type: 'text', text: params.system, cache_control: { type: 'ephemeral' } }];
+  const systemBlock = [{ type: 'text' as const, text: params.system, cache_control: { type: 'ephemeral' as const } }];
 
-  const createParams: any = {
+  const createParams: MessageCreateParamsNonStreaming = {
     model: params.model ?? 'claude-sonnet-4-6',
     max_tokens: params.maxTokens ?? 4096,
     temperature: params.temperature ?? 0.1,
@@ -64,18 +71,20 @@ export async function callClaudeChat(params: ClaudeChatParams): Promise<any[]> {
 
   if (params.tools && params.tools.length > 0) {
     // Mark last tool with cache_control so entire tools array is cached
-    const tools = params.tools.map((t, i) =>
-      i === params.tools!.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t
+    const tools = params.tools.map((tool, i) =>
+      i === params.tools!.length - 1
+        ? { ...(tool as Record<string, unknown>), cache_control: { type: 'ephemeral' as const } }
+        : tool
     );
-    createParams.tools = tools;
+    createParams.tools = tools as MessageCreateParamsNonStreaming['tools'];
   }
 
   const response = await client.messages.create(createParams);
 
-  const u = response.usage as any;
+  const u = response.usage;
   console.error(`[Claude/chat] in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0}`);
 
-  return response.content as any[];
+  return response.content;
 }
 
 export interface ClaudeFileCallParams {
@@ -109,12 +118,12 @@ export async function callClaudeWithFile(params: ClaudeFileCallParams): Promise<
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: base64 } },
+          { type: 'image', source: { type: 'base64', media_type: mimeType as Base64ImageSource['media_type'], data: base64 } },
           { type: 'text', text: params.textPrompt },
         ],
       }],
     });
-    const u = response.usage as any;
+    const u = response.usage;
     console.error(`[Claude/file] in=${u.input_tokens} out=${u.output_tokens}`);
     const block = response.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
@@ -126,13 +135,13 @@ export async function callClaudeWithFile(params: ClaudeFileCallParams): Promise<
       messages: [{
         role: 'user',
         content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } } as any,
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
           { type: 'text', text: params.textPrompt },
-        ] as any,
+        ] satisfies ContentBlockParam[],
       }],
       betas: ['pdfs-2024-09-25'],
     });
-    const u = response.usage as any;
+    const u = response.usage;
     console.error(`[Claude/file] in=${u.input_tokens} out=${u.output_tokens}`);
     const block = response.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type from Claude');

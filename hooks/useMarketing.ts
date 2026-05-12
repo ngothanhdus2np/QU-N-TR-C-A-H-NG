@@ -1,8 +1,16 @@
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { supabaseAdmin as supabase } from '../services/supabase';
 
-export function useSyncStorage(userSession: any, isEnabled: boolean = true) {
+type MarketingUserSession = {
+  user?: {
+    id?: string;
+  };
+} | null | undefined;
+
+type MarketingSyncState = Record<string, unknown>;
+
+export function useSyncStorage(userSession: MarketingUserSession, isEnabled: boolean = true) {
   const [syncing, setSyncing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -19,14 +27,14 @@ export function useSyncStorage(userSession: any, isEnabled: boolean = true) {
         .single();
       if (data && !error) return data;
     } catch (e) {
-      console.error("Cloud fetch error:", e);
+      console.error('Cloud fetch error:', e);
     } finally {
       setInitialLoading(false);
     }
     return null;
   };
 
-  const saveData = async (state: any) => {
+  const saveData = async (state: MarketingSyncState) => {
     const userId = userSession?.user?.id || 'phuc-sang-marketing';
     if (!isEnabled) return;
     
@@ -38,7 +46,7 @@ export function useSyncStorage(userSession: any, isEnabled: boolean = true) {
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
-      console.error("Cloud Sync Error:", e);
+      console.error('Cloud Sync Error:', e);
     } finally {
       setSyncing(false);
     }

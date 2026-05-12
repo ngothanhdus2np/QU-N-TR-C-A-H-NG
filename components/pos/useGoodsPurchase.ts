@@ -3,6 +3,7 @@ import { POSProduct, InventoryTransaction } from '../../types';
 import { generateId } from '../../businessLogic';
 
 type PurchaseItem = { productId: string; quantity: number; price: number; name: string; discount: number };
+type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?: number };
 
 interface UseGoodsPurchaseArgs {
   products: POSProduct[];
@@ -50,7 +51,7 @@ export const useGoodsPurchase = ({
   const handleCompletePurchase = () => {
     if (purchaseItems.length === 0) return;
     const updatedProducts = [...products];
-    const itemsForTransaction: any[] = [];
+    const itemsForTransaction: PurchaseTransactionItem[] = [];
 
     purchaseItems.forEach(item => {
       const idx = updatedProducts.findIndex(product => product.id === item.productId);

@@ -11,7 +11,7 @@ interface Props {
   formatNumber: (num: number) => string;
   handleUpdateShopeeCostConfig: (updates: Partial<ShopeeCostConfig>) => void;
   handleAddShopeeCostItem: (type: 'fixed' | 'variable') => void;
-  handleUpdateShopeeCostItem: (type: 'fixed' | 'variable', id: string, field: string, value: any) => void;
+  handleUpdateShopeeCostItem: (type: 'fixed' | 'variable', id: string, field: string, value: string | number | boolean) => void;
   handleRemoveShopeeCostItem: (type: 'fixed' | 'variable', id: string) => void;
 }
 

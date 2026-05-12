@@ -1,10 +1,17 @@
-import { AppData, InventoryTransaction, POSCustomer, POSOrder, POSOrderItem, POSProduct, RevenueRecord } from '../types';
-
-type SurgicalUpdate = { key: keyof AppData; item: any; isDelete?: boolean };
+import {
+  AppData,
+  InventoryTransaction,
+  POSCustomer,
+  POSOrder,
+  POSOrderItem,
+  POSProduct,
+  RevenueRecord,
+  AppDataSurgicalUpdate,
+} from '../types';
 
 type PosOrderCallbacks = {
-  pushBatch: (key: keyof AppData, items: any[]) => Promise<void>;
-  updateSurgical: (updates: SurgicalUpdate[]) => Promise<void>;
+  pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
+  updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 };
 
 type PlaceOrderArgs = PosOrderCallbacks & {
@@ -29,11 +36,15 @@ function findProduct(products: POSProduct[], productId: string) {
 function calculateOrderCogs(products: POSProduct[], items: POSOrderItem[]) {
   return items.reduce((sum, item) => {
     const product = findProduct(products, item.productId);
-    return sum + ((product?.importPrice || 0) * item.quantity);
+    return sum + (product?.importPrice || 0) * item.quantity;
   }, 0);
 }
 
-function buildSaleTransaction(order: POSOrder, currentProducts: POSProduct[], updatedProducts: POSProduct[]): InventoryTransaction {
+function buildSaleTransaction(
+  order: POSOrder,
+  currentProducts: POSProduct[],
+  updatedProducts: POSProduct[]
+): InventoryTransaction {
   return {
     id: crypto.randomUUID(),
     date: order.date,
@@ -48,7 +59,7 @@ function buildSaleTransaction(order: POSOrder, currentProducts: POSProduct[], up
         name: item.name,
         quantity: -item.quantity,
         previousStock: product?.stock || 0,
-        newStock: updatedProduct?.stock ?? ((product?.stock || 0) - item.quantity),
+        newStock: updatedProduct?.stock ?? (product?.stock || 0) - item.quantity,
       };
     }),
     note: `Bán hàng đơn ${order.orderCode}`,
@@ -60,7 +71,7 @@ function buildReturnTransaction(
   returnOrder: POSOrder,
   currentProducts: POSProduct[],
   updatedProducts: POSProduct[],
-  returnedItems: POSOrderItem[],
+  returnedItems: POSOrderItem[]
 ): InventoryTransaction {
   return {
     id: crypto.randomUUID(),
@@ -76,7 +87,7 @@ function buildReturnTransaction(
         name: item.name,
         quantity: item.quantity,
         previousStock: product?.stock || 0,
-        newStock: updatedProduct?.stock ?? ((product?.stock || 0) + item.quantity),
+        newStock: updatedProduct?.stock ?? (product?.stock || 0) + item.quantity,
       };
     }),
     note: `Trả hàng ${returnOrder.orderCode}`,
@@ -88,7 +99,7 @@ function buildExchangeTransaction(
   returnOrder: POSOrder,
   currentProducts: POSProduct[],
   updatedProducts: POSProduct[],
-  exchangeItems: POSOrderItem[],
+  exchangeItems: POSOrderItem[]
 ): InventoryTransaction {
   return {
     id: crypto.randomUUID(),
@@ -104,7 +115,7 @@ function buildExchangeTransaction(
         name: item.name,
         quantity: -item.quantity,
         previousStock: product?.stock || 0,
-        newStock: updatedProduct?.stock ?? ((product?.stock || 0) - item.quantity),
+        newStock: updatedProduct?.stock ?? (product?.stock || 0) - item.quantity,
       };
     }),
     note: `Đổi hàng ${returnOrder.orderCode}`,
@@ -112,7 +123,11 @@ function buildExchangeTransaction(
   };
 }
 
-function buildRevenueUpdate(existingRevenue: RevenueRecord | undefined, order: POSOrder, orderCogs: number): RevenueRecord {
+function buildRevenueUpdate(
+  existingRevenue: RevenueRecord | undefined,
+  order: POSOrder,
+  orderCogs: number
+): RevenueRecord {
   if (existingRevenue) {
     const updatedNetRevenue = (existingRevenue.netRevenue || 0) + order.finalAmount;
     const updatedTotalCogs = (existingRevenue.totalCogs || 0) + orderCogs;
@@ -139,37 +154,69 @@ function buildRevenueUpdate(existingRevenue: RevenueRecord | undefined, order: P
   };
 }
 
-export function processPlaceOrder({ data, order, updatedProducts, updatedCustomer, pushBatch, updateSurgical }: PlaceOrderArgs) {
+export async function processPlaceOrder({
+  data,
+  order,
+  updatedProducts,
+  updatedCustomer,
+  pushBatch,
+  updateSurgical,
+}: PlaceOrderArgs): Promise<void> {
   const currentProducts = data.posProducts || [];
+
+  // Guard: phát hiện tồn kho âm trước khi ghi — bảo vệ client-side tránh race condition
+  // (phía server dùng RPC decrement_product_stock để đảm bảo atomicity thực sự)
+  for (const item of order.items) {
+    const current = findProduct(currentProducts, item.productId);
+    if (current && current.stock < item.quantity) {
+      throw new Error(
+        `Không đủ tồn kho: ${item.name} (còn ${current.stock}, cần ${item.quantity})`
+      );
+    }
+  }
+
   const orderCogs = calculateOrderCogs(currentProducts, order.items);
   const today = new Date().toLocaleDateString('en-CA');
   const existingRevenue = (data.revenue || []).find(r => r.date === today);
   const revenueRecord = buildRevenueUpdate(existingRevenue, order, orderCogs);
 
-  pushBatch('posOrders', [order]);
+  await pushBatch('posOrders', [order]);
 
   const stockUpdates = order.items
-    .map(item => ({ key: 'posProducts' as const, item: findProduct(updatedProducts, item.productId) }))
+    .map(item => ({
+      key: 'posProducts' as const,
+      item: findProduct(updatedProducts, item.productId),
+    }))
     .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
-  updateSurgical(stockUpdates);
+  await updateSurgical(stockUpdates);
 
-  pushBatch('inventoryTransactions', [buildSaleTransaction(order, currentProducts, updatedProducts)]);
+  await pushBatch('inventoryTransactions', [
+    buildSaleTransaction(order, currentProducts, updatedProducts),
+  ]);
 
   if (updatedCustomer) {
-    updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+    await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
   }
 
   if (existingRevenue) {
-    updateSurgical([{ key: 'revenue', item: revenueRecord }]);
+    await updateSurgical([{ key: 'revenue', item: revenueRecord }]);
   } else {
-    pushBatch('revenue', [revenueRecord]);
+    await pushBatch('revenue', [revenueRecord]);
   }
 }
 
-export function processReturnOrder({ data, returnOrder, updatedProducts, returnedItems, exchangeItems, pushBatch, updateSurgical }: ReturnOrderArgs) {
+export async function processReturnOrder({
+  data,
+  returnOrder,
+  updatedProducts,
+  returnedItems,
+  exchangeItems,
+  pushBatch,
+  updateSurgical,
+}: ReturnOrderArgs): Promise<void> {
   const currentProducts = data.posProducts || [];
 
-  pushBatch('posOrders', [returnOrder]);
+  await pushBatch('posOrders', [returnOrder]);
 
   const allAffectedIds = new Set([
     ...returnedItems.map(i => i.productId),
@@ -178,13 +225,17 @@ export function processReturnOrder({ data, returnOrder, updatedProducts, returne
   const stockUpdates = [...allAffectedIds]
     .map(id => ({ key: 'posProducts' as const, item: findProduct(updatedProducts, id) }))
     .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
-  updateSurgical(stockUpdates);
+  await updateSurgical(stockUpdates);
 
   if (returnedItems.length > 0) {
-    pushBatch('inventoryTransactions', [buildReturnTransaction(returnOrder, currentProducts, updatedProducts, returnedItems)]);
+    await pushBatch('inventoryTransactions', [
+      buildReturnTransaction(returnOrder, currentProducts, updatedProducts, returnedItems),
+    ]);
   }
 
   if (exchangeItems.length > 0) {
-    pushBatch('inventoryTransactions', [buildExchangeTransaction(returnOrder, currentProducts, updatedProducts, exchangeItems)]);
+    await pushBatch('inventoryTransactions', [
+      buildExchangeTransaction(returnOrder, currentProducts, updatedProducts, exchangeItems),
+    ]);
   }
 }

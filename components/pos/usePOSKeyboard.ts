@@ -2,6 +2,7 @@ import { RefObject, useEffect, useRef } from 'react';
 import { POSProduct } from '../../types';
 
 type UsePOSKeyboardArgs = {
+  isActive?: boolean;
   products: POSProduct[];
   productSearchRef: RefObject<HTMLInputElement>;
   consultantSearchRef: RefObject<HTMLInputElement>;
@@ -17,6 +18,7 @@ type UsePOSKeyboardArgs = {
 };
 
 export function usePOSKeyboard({
+  isActive = true,
   products,
   productSearchRef,
   consultantSearchRef,
@@ -34,6 +36,7 @@ export function usePOSKeyboard({
   const barcodeLastTimeRef = useRef(0);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F3') {
         e.preventDefault();
@@ -58,9 +61,18 @@ export function usePOSKeyboard({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cartLengthRef, checkoutRef, consultantSearchRef, customerSearchRef, productSearchRef, setShowConsultant]);
+  }, [
+    isActive,
+    cartLengthRef,
+    checkoutRef,
+    consultantSearchRef,
+    customerSearchRef,
+    productSearchRef,
+    setShowConsultant,
+  ]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleGlobalScan = (e: KeyboardEvent) => {
       const currentTime = new Date().getTime();
       const timeDiff = currentTime - barcodeLastTimeRef.current;
@@ -72,7 +84,9 @@ export function usePOSKeyboard({
       if (e.key === 'Enter') {
         if (barcodeBufferRef.current.length >= 3) {
           const code = barcodeBufferRef.current;
-          const match = products.find(p => p.status === 'Active' && (p.barcode === code || p.sku === code));
+          const match = products.find(
+            p => p.status === 'Active' && !p.isParent && (p.barcode === code || p.sku === code)
+          );
 
           if (match) {
             e.preventDefault();
@@ -93,5 +107,13 @@ export function usePOSKeyboard({
 
     window.addEventListener('keydown', handleGlobalScan, { capture: true });
     return () => window.removeEventListener('keydown', handleGlobalScan, { capture: true });
-  }, [addToCart, products, setDebouncedSearchTerm, setSearchTerm, setShowProductResults, showScanFeedback]);
+  }, [
+    isActive,
+    addToCart,
+    products,
+    setDebouncedSearchTerm,
+    setSearchTerm,
+    setShowProductResults,
+    showScanFeedback,
+  ]);
 }

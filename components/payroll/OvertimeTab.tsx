@@ -14,7 +14,7 @@ interface Props {
 }
 
 const OvertimeTab: React.FC<Props> = ({
-  employees, daysArray, selectedMonth, isHoliday,
+  employees, daysArray, isHoliday,
   getOvertimeCellValue, handleOvertimeInputChange, calculateTotalOvertimeHours,
 }) => (
   <div className="animate-in fade-in duration-300 space-y-4">

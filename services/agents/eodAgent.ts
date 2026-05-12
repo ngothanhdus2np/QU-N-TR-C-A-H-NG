@@ -9,6 +9,20 @@ export interface EODReport {
 
 const EOD_STATE_KEY = 'eod-report';
 
+type EODOrderItem = {
+  sku?: string;
+  name?: string;
+  quantity?: number;
+  total?: number;
+};
+
+type EODOrder = {
+  is_return?: boolean;
+  final_amount?: number;
+  payment_method?: string;
+  items?: EODOrderItem[];
+};
+
 export async function generateEODReport(supabase: SupabaseClient, date: string): Promise<void> {
   // Lấy posOrders của ngày hôm nay
   const { data: orders, error } = await supabase
@@ -20,10 +34,11 @@ export async function generateEODReport(supabase: SupabaseClient, date: string):
 
   if (error) throw new Error(`Lỗi truy vấn POS orders: ${error.message}`);
 
-  const sales = (orders || []).filter((o: any) => !o.is_return);
-  const returns = (orders || []).filter((o: any) => o.is_return);
-  const totalRevenue = sales.reduce((s: number, o: any) => s + (o.final_amount || 0), 0);
-  const totalReturns = returns.reduce((s: number, o: any) => s + (o.final_amount || 0), 0);
+  const typedOrders = (orders || []) as EODOrder[];
+  const sales = typedOrders.filter(o => !o.is_return);
+  const returns = typedOrders.filter(o => o.is_return);
+  const totalRevenue = sales.reduce((s, o) => s + (o.final_amount || 0), 0);
+  const totalReturns = returns.reduce((s, o) => s + (o.final_amount || 0), 0);
 
   // Tổng hợp top sản phẩm
   const productMap = new Map<string, { name: string; qty: number; revenue: number }>();
@@ -44,8 +59,8 @@ export async function generateEODReport(supabase: SupabaseClient, date: string):
 - Tổng doanh thu: ${totalRevenue.toLocaleString('vi-VN')}đ
 - Tổng hóa đơn trả: ${returns.length} (${totalReturns.toLocaleString('vi-VN')}đ)
 - Doanh thu thuần: ${(totalRevenue - totalReturns).toLocaleString('vi-VN')}đ
-- Tiền mặt: ${sales.filter((o: any) => o.payment_method === 'Cash').length} hóa đơn
-- Chuyển khoản: ${sales.filter((o: any) => o.payment_method === 'Bank').length} hóa đơn
+- Tiền mặt: ${sales.filter(o => o.payment_method === 'Cash').length} hóa đơn
+- Chuyển khoản: ${sales.filter(o => o.payment_method === 'Bank').length} hóa đơn
 - Top sản phẩm: ${topProducts.map(p => `${p.name} (${p.qty} cái, ${p.revenue.toLocaleString('vi-VN')}đ)`).join('; ')}
 
 Tóm tắt ngắn gọn kết quả ngày hôm nay cho chủ cửa hàng, nhận xét sắc bén, đề xuất 1 việc cần làm ngày mai. Giọng văn thân thiện, chuyên nghiệp, dùng Markdown.`;

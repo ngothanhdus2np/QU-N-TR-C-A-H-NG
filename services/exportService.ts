@@ -1,8 +1,10 @@
 
 import * as XLSX from 'xlsx';
 
+type ExportRow = Record<string, unknown>;
+
 // Xuất dữ liệu ra file Excel (.xlsx)
-export function exportToExcel(rows: Record<string, any>[], fileName: string, sheetName = 'Sheet1'): void {
+export function exportToExcel(rows: ExportRow[], fileName: string, sheetName = 'Sheet1'): void {
   const ws = XLSX.utils.json_to_sheet(rows);
 
   // Tự động điều chỉnh độ rộng cột theo nội dung
@@ -22,7 +24,7 @@ export function exportToExcel(rows: Record<string, any>[], fileName: string, she
 
 // Xuất nhiều sheet trong cùng 1 file Excel
 export function exportToExcelMultiSheet(
-  sheets: { name: string; rows: Record<string, any>[] }[],
+  sheets: { name: string; rows: ExportRow[] }[],
   fileName: string
 ): void {
   const wb = XLSX.utils.book_new();

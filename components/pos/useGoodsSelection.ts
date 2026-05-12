@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { AppDataSurgicalUpdate, POSProduct } from '../../types';
 
 type OpenConfirm = (config: {
   title: string;
@@ -13,7 +13,7 @@ interface UseGoodsSelectionArgs {
   products: POSProduct[];
   filteredProducts: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   openConfirm: OpenConfirm;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
@@ -68,7 +68,7 @@ export const useGoodsSelection = ({
       onConfirm: async () => {
         try {
           if (onUpdateSurgical) {
-            const updates = selectedIds.map(id => ({ key: 'posProducts', item: { id }, isDelete: true }));
+            const updates: AppDataSurgicalUpdate[] = selectedIds.map(id => ({ key: 'posProducts', item: { id }, isDelete: true }));
             await onUpdateSurgical(updates);
           } else {
             const updated = products.filter(product => !selectedIds.includes(product.id));
@@ -76,8 +76,9 @@ export const useGoodsSelection = ({
           }
           setSelectedIds([]);
           showToast(`Đã xóa ${selectedIds.length} mặt hàng.`, 'success');
-        } catch (error: any) {
-          showToast(`Lỗi khi xóa: ${error.message}`, 'error');
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          showToast(`Lỗi khi xóa: ${message}`, 'error');
         }
       }
     });

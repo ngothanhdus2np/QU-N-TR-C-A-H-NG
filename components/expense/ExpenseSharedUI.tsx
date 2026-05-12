@@ -1,7 +1,25 @@
 import React from 'react';
+import type { LucideIcon } from 'lucide-react';
 
-export const ExpenseMetricCard = ({ title, value, icon: Icon, color, desc }: any) => {
-  const colorMap: any = {
+type ExpenseMetricColor = 'rose' | 'amber' | 'emerald' | 'indigo';
+
+interface ExpenseMetricCardProps {
+  title: string;
+  value: string;
+  icon: LucideIcon;
+  color: ExpenseMetricColor;
+  desc?: string;
+}
+
+interface ExpenseInputWrapperProps {
+  label: string;
+  icon: LucideIcon;
+  children: React.ReactNode;
+  color?: string;
+}
+
+export const ExpenseMetricCard = ({ title, value, icon: Icon, color, desc }: ExpenseMetricCardProps) => {
+  const colorMap: Record<ExpenseMetricColor, string> = {
     rose: 'bg-rose-50 text-rose-600',
     amber: 'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
@@ -20,7 +38,7 @@ export const ExpenseMetricCard = ({ title, value, icon: Icon, color, desc }: any
   );
 };
 
-export const ExpenseInputWrapper = ({ label, icon: Icon, children, color = 'text-slate-400' }: any) => (
+export const ExpenseInputWrapper = ({ label, icon: Icon, children, color = 'text-slate-400' }: ExpenseInputWrapperProps) => (
   <div className="space-y-1.5">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <div className="relative bg-slate-50 border border-slate-100 focus-within:bg-white focus-within:border-blue-500 rounded-xl transition-all shadow-inner overflow-hidden flex items-center">

@@ -1,10 +1,13 @@
-import { AppData, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
+import { AppData, AppDataItem, AppDataListKey, AppDataSurgicalUpdate, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
+
+export type AppListKey = AppDataListKey;
+export type AppListItem = AppDataItem<AppListKey>;
 
 export type AppAction =
   | { type: 'SET_DATA'; payload: Partial<AppData> }
-  | { type: 'UPDATE_ITEM'; payload: { key: keyof AppData; item: any } }
-  | { type: 'DELETE_ITEM'; payload: { key: keyof AppData; id: string } }
-  | { type: 'UPDATE_SURGICAL'; payload: { key: keyof AppData; item: any; isDelete?: boolean }[] }
+  | { type: 'UPDATE_ITEM'; payload: { key: AppListKey; item: AppListItem } }
+  | { type: 'DELETE_ITEM'; payload: { key: AppListKey; id: string } }
+  | { type: 'UPDATE_SURGICAL'; payload: AppDataSurgicalUpdate[] }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
   | { type: 'SET_BRAND_PROFILE'; payload: BrandProfile }
   | { type: 'SET_CHAT_MESSAGES'; payload: ChatMessage[] }

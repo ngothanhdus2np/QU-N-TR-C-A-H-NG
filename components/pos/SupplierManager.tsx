@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Truck, Plus, Pencil, Trash2, X, Save, CreditCard, TrendingDown, ChevronDown, FileDown } from 'lucide-react';
-import { Supplier, SupplierDebtRecord } from '../../types';
+import { AppDataSurgicalUpdate, Supplier, SupplierDebtRecord } from '../../types';
 import { generateId } from '../../businessLogic';
 import { exportToExcel } from '../../services/exportService';
 
@@ -9,7 +9,7 @@ interface Props {
   suppliers: Supplier[];
   supplierDebts: SupplierDebtRecord[];
   onUpdateSuppliers: (list: Supplier[]) => void;
-  onUpdateSurgical: (updates: { key: any; item: any; isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
 
 const today = () => new Date().toLocaleDateString('sv-SE');
@@ -240,7 +240,6 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
           {/* Summary for filtered supplier */}
           {filterSupplierId !== 'all' && (() => {
-            const s = suppliers.find(sup => sup.id === filterSupplierId);
             const debt = debtBySupplier[filterSupplierId] || 0;
             const totalPurchase = supplierDebts.filter(d => d.supplierId === filterSupplierId && d.type === 'purchase').reduce((s, d) => s + d.amount, 0);
             const totalPayment = supplierDebts.filter(d => d.supplierId === filterSupplierId && d.type === 'payment').reduce((s, d) => s + d.amount, 0);

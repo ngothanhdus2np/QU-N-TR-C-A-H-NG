@@ -1,11 +1,49 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
 import { callClaude, callClaudeWithFile, callClaudeChat } from '../services/agents/claudeClient';
 import { CFO_TOOLS, buildAgentSystem } from '../services/agents/cfoAgent';
+
+// In-memory rate limiter — đủ cho single-instance deployment
+const rateLimitWindows = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(req: Request, maxPerMinute: number): boolean {
+  const ip = (req.ip || req.socket.remoteAddress || 'unknown').replace(/^::ffff:/, '');
+  const key = `${ip}:${req.path}`;
+  const now = Date.now();
+  const window = rateLimitWindows.get(key);
+
+  if (!window || now > window.resetAt) {
+    rateLimitWindows.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (window.count >= maxPerMinute) return false;
+  window.count++;
+  return true;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return 'AI service error';
+};
+
+// Dọn map mỗi 5 phút để tránh memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of rateLimitWindows) {
+    if (now > val.resetAt) rateLimitWindows.delete(key);
+  }
+}, 5 * 60_000);
 
 export function createAiRouter(): Router {
   const router = Router();
 
+  // Rate limit mặc định: 10 req/phút cho các endpoint phân tích haiku
+  // Rate limit chặt hơn: 5 req/phút cho các endpoint dùng sonnet hoặc upload file
+  const RL_STANDARD = 10;
+  const RL_STRICT = 5;
+
   router.post('/api/ai/executive-briefing', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
@@ -21,106 +59,130 @@ export function createAiRouter(): Router {
         maxTokens: 1200,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /executive-briefing]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /executive-briefing]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/promotion-analysis', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
       const result = await callClaude({
         model: 'claude-haiku-4-5',
-        system: 'Bạn là Giám đốc Marketing & Tài chính (CMO/CFO) cho chuỗi bán lẻ giày dép Việt Nam. Phân tích hiệu quả khuyến mãi sắc bén, dẫn chứng bằng ROI cụ thể. Trả lời bằng Tiếng Việt, định dạng Markdown chuyên nghiệp.',
+        system:
+          'Bạn là Giám đốc Marketing & Tài chính (CMO/CFO) cho chuỗi bán lẻ giày dép Việt Nam. Phân tích hiệu quả khuyến mãi sắc bén, dẫn chứng bằng ROI cụ thể. Trả lời bằng Tiếng Việt, định dạng Markdown chuyên nghiệp.',
         userMessage: contextData,
         temperature: 0.2,
         maxTokens: 1200,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /promotion-analysis]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /promotion-analysis]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/product-group-analysis', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
       const result = await callClaude({
         model: 'claude-haiku-4-5',
-        system: 'Bạn là chuyên gia MIS & Chiến lược ngành hàng cho chuỗi bán lẻ giày dép Việt Nam. Phân tích dịch chuyển trọng tâm ngành hàng, đưa ra khuyến nghị nhập/clear hàng cụ thể. Trả lời bằng Tiếng Việt, định dạng Markdown.',
+        system:
+          'Bạn là chuyên gia MIS & Chiến lược ngành hàng cho chuỗi bán lẻ giày dép Việt Nam. Phân tích dịch chuyển trọng tâm ngành hàng, đưa ra khuyến nghị nhập/clear hàng cụ thể. Trả lời bằng Tiếng Việt, định dạng Markdown.',
         userMessage: contextData,
         temperature: 0.2,
         maxTokens: 1200,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /product-group-analysis]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /product-group-analysis]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/revenue-analysis', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
       const result = await callClaude({
         model: 'claude-haiku-4-5',
-        system: 'Bạn là CFO chiến lược & chuyên gia Data Science cho chuỗi bán lẻ giày dép Việt Nam. Chẩn đoán sức khoẻ tài chính, đưa ra Actionable Insights dựa trên số liệu thực tế. Trả lời bằng Tiếng Việt, Markdown chuyên nghiệp, tránh lý thuyết suông.',
+        system:
+          'Bạn là CFO chiến lược & chuyên gia Data Science cho chuỗi bán lẻ giày dép Việt Nam. Chẩn đoán sức khoẻ tài chính, đưa ra Actionable Insights dựa trên số liệu thực tế. Trả lời bằng Tiếng Việt, Markdown chuyên nghiệp, tránh lý thuyết suông.',
         userMessage: contextData,
         temperature: 0.2,
         maxTokens: 1200,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /revenue-analysis]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /revenue-analysis]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/expense-classify', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
       const result = await callClaude({
         model: 'claude-haiku-4-5',
-        system: 'Bạn là kế toán trưởng chuyên nghiệp. Phân tích và phân loại chi phí vào hệ thống MIS 3 cấp. QUAN TRỌNG: Chỉ trả về JSON hợp lệ, không có text hay markdown nào khác bên ngoài JSON. Format: {"level1Id":"...","level1Name":"...","level2Name":"...","level3Name":"..."}',
+        system:
+          'Bạn là kế toán trưởng chuyên nghiệp. Phân tích và phân loại chi phí vào hệ thống MIS 3 cấp. QUAN TRỌNG: Chỉ trả về JSON hợp lệ, không có text hay markdown nào khác bên ngoài JSON. Format: {"level1Id":"...","level1Name":"...","level2Name":"...","level3Name":"..."}',
         userMessage: contextData,
         temperature: 0.1,
         maxTokens: 512,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /expense-classify]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /expense-classify]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/expense-scan', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
       const result = await callClaude({
         model: 'claude-haiku-4-5',
-        system: 'Bạn là chuyên gia dọn dẹp dữ liệu kế toán. Tìm các hạng mục chi phí trùng lặp hoặc có tên tương tự. QUAN TRỌNG: Chỉ trả về JSON array hợp lệ, không có text hay markdown nào khác. Format: [{"originalId":"...","duplicateId":"...","originalName":"...","duplicateName":"..."}] hoặc [] nếu không có trùng lặp.',
+        system:
+          'Bạn là chuyên gia dọn dẹp dữ liệu kế toán. Tìm các hạng mục chi phí trùng lặp hoặc có tên tương tự. QUAN TRỌNG: Chỉ trả về JSON array hợp lệ, không có text hay markdown nào khác. Format: [{"originalId":"...","duplicateId":"...","originalName":"...","duplicateName":"..."}] hoặc [] nếu không có trùng lặp.',
         userMessage: contextData,
         temperature: 0.1,
         maxTokens: 1024,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /expense-scan]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /expense-scan]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/knowledge-ocr', async (req, res) => {
+    if (!checkRateLimit(req, 5))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { base64Data, mimeType } = req.body as { base64Data?: string; mimeType?: string };
-      if (!base64Data || !mimeType) return res.status(400).json({ error: 'base64Data và mimeType là bắt buộc' });
+      if (!base64Data || !mimeType)
+        return res.status(400).json({ error: 'base64Data và mimeType là bắt buộc' });
       const result = await callClaudeWithFile({
         model: 'claude-haiku-4-5',
         system: [
@@ -129,18 +191,22 @@ export function createAiRouter(): Router {
           'QUAN TRỌNG: Chỉ trả về JSON hợp lệ duy nhất, không có text hay markdown nào khác.',
           'Format bắt buộc: {"title":"Tiêu đề súc tích","category":"Nhân sự|Vận hành|Bán hàng|Tài chính|Khác","content":"Nội dung Markdown chi tiết"}',
         ].join(' '),
-        textPrompt: 'Đọc tài liệu này và trả về JSON theo format đã yêu cầu. Nội dung Markdown phải đầy đủ, chuyên nghiệp.',
+        textPrompt:
+          'Đọc tài liệu này và trả về JSON theo format đã yêu cầu. Nội dung Markdown phải đầy đủ, chuyên nghiệp.',
         file: { base64: base64Data, mimeType },
         maxTokens: 3000,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /knowledge-ocr]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /knowledge-ocr]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/marketing-monthly-advice', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
@@ -157,13 +223,16 @@ export function createAiRouter(): Router {
         maxTokens: 1024,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /marketing-monthly-advice]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /marketing-monthly-advice]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
   router.post('/api/ai/marketing-content-plan', async (req, res) => {
+    if (!checkRateLimit(req, RL_STRICT))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { contextData } = req.body as { contextData?: string };
       if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
@@ -180,13 +249,16 @@ export function createAiRouter(): Router {
         maxTokens: 4096,
       });
       res.json({ result });
-    } catch (err: any) {
-      console.error('[AI /marketing-content-plan]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /marketing-content-plan]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 
-  router.get('/api/ai/test-connection', async (_req, res) => {
+  router.get('/api/ai/test-connection', async (req, res) => {
+    if (!checkRateLimit(req, RL_STRICT))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const result = await callClaude({
         model: 'claude-haiku-4-5',
@@ -196,13 +268,16 @@ export function createAiRouter(): Router {
         maxTokens: 32,
       });
       res.json({ ok: true, message: result });
-    } catch (err: any) {
-      console.error('[AI /test-connection]', err.message);
-      res.status(500).json({ ok: false, error: err.message || 'Claude API không phản hồi' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /test-connection]', message);
+      res.status(500).json({ ok: false, error: message || 'Claude API không phản hồi' });
     }
   });
 
   router.post('/api/ai/classify', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { message } = req.body as { message?: string };
       if (!message) return res.status(400).json({ error: 'message là bắt buộc' });
@@ -225,13 +300,15 @@ export function createAiRouter(): Router {
       const jsonStr = result.match(/\{[^}]+\}/)?.[0] ?? result;
       const parsed = JSON.parse(jsonStr);
       res.json({ domain: parsed.domain || 'finance' });
-    } catch (err: any) {
-      console.error('[AI /classify]', err.message);
+    } catch (err: unknown) {
+      console.error('[AI /classify]', getErrorMessage(err));
       res.json({ domain: 'finance' });
     }
   });
 
   router.post('/api/ai/chat', async (req, res) => {
+    if (!checkRateLimit(req, 15))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
     try {
       const { messages, domain } = req.body;
       if (!messages) return res.status(400).json({ error: 'messages là bắt buộc' });
@@ -246,9 +323,10 @@ export function createAiRouter(): Router {
         maxTokens: 4096,
       });
       res.json({ content });
-    } catch (err: any) {
-      console.error('[AI /chat]', err.message);
-      res.status(500).json({ error: err.message || 'AI service error' });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /chat]', message);
+      res.status(500).json({ error: message || 'AI service error' });
     }
   });
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight, Bell, Calendar, ChevronDown, Download, FileSpreadsheet, FileText, Layers, Loader2, Plus, Sparkles, Trash2, Upload, Wallet } from 'lucide-react';
-import { ExpenseCategory, ExpenseRecord } from '../../types';
+import { AppDataSurgicalUpdate, ExpenseCategory, ExpenseRecord } from '../../types';
 import { exportToExcel as xlsxExport } from '../../services/exportService';
 import { ExpenseInputWrapper } from './ExpenseSharedUI';
 import { useExpenseAnalytics } from './useExpenseAnalytics';
@@ -41,7 +41,7 @@ interface ExpenseLedgerTabProps {
   processedList: ExpenseRecord[];
   sourceList: ExpenseRecord[];
   onUpdate: (newList: ExpenseRecord[], idToRemove?: string) => void;
-  onUpdateSurgical?: (updates: { key: any; item: any; isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   formatNumber: (num: number) => string;
 }
 

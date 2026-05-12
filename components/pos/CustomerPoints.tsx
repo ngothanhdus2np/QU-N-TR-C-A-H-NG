@@ -4,14 +4,14 @@ import {
   Users, Search, Plus, Star, Phone, X, Eye, Edit2, Trash2,
   ShoppingBag, MapPin, Mail, FileText, TrendingUp, AlertCircle, FileDown
 } from 'lucide-react';
-import { POSCustomer, POSOrder } from '../../types';
+import { AppDataSurgicalUpdate, POSCustomer, POSOrder } from '../../types';
 import { exportToExcel } from '../../services/exportService';
 
 interface CustomerPointsProps {
   customers: POSCustomer[];
   orders?: POSOrder[];
   onUpdateCustomers: (customers: POSCustomer[]) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
 
 const TIERS = ['Tất cả', 'Standard', 'Silver', 'Gold', 'Diamond'] as const;

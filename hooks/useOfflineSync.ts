@@ -1,13 +1,3 @@
-/**
- * useOfflineSync — React hook quản lý Offline Queue cho POS
- *
- * Chức năng:
- * 1. Khởi tạo IndexedDB queue khi mount
- * 2. Expose `enqueueOp` để các action có thể enqueue khi gặp lỗi mạng
- * 3. Tự động drain queue khi window.online fired
- * 4. Expose `offlinePendingCount` để hiển thị badge trên UI
- */
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { posOfflineQueue, PendingOp } from '../services/posOfflineQueue';
 import { apiService } from '../services/apiService';
@@ -20,21 +10,28 @@ interface UseOfflineSyncReturn {
   isDraining: boolean;
 }
 
+async function isServerReachable(): Promise<boolean> {
+  try {
+    const res = await fetch('/health', { method: 'HEAD', cache: 'no-store' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function useOfflineSync(): UseOfflineSyncReturn {
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [isDraining, setIsDraining] = useState(false);
   const isDrainingRef = useRef(false);
 
-  // Khởi tạo và đọc count từ IndexedDB khi mount
   useEffect(() => {
     posOfflineQueue.init().then(() => {
       posOfflineQueue.count().then(c => setOfflinePendingCount(c));
     }).catch(err => {
-      console.warn('[OfflineSync] IndexedDB không khởi tạo được:', err);
+      console.error('[OfflineSync] IndexedDB không khởi tạo được:', err);
     });
   }, []);
 
-  /** Drain toàn bộ queue — gọi thao tác lên server theo thứ tự */
   const drainQueue = useCallback(async (): Promise<{ synced: number; failed: number }> => {
     if (isDrainingRef.current) return { synced: 0, failed: 0 };
     isDrainingRef.current = true;
@@ -47,12 +44,8 @@ export function useOfflineSync(): UseOfflineSyncReturn {
       const ops = await posOfflineQueue.getAll();
       if (ops.length === 0) return { synced: 0, failed: 0 };
 
-      console.log(`[OfflineSync] Bắt đầu drain ${ops.length} thao tác đang chờ...`);
-
       for (const op of ops) {
-        // Bỏ qua nếu đã retry quá nhiều lần (tránh vòng lặp vô tận)
         if (op.retries >= 5) {
-          console.warn(`[OfflineSync] Bỏ qua op ${op.id} (retry ${op.retries} >= 5)`);
           await posOfflineQueue.remove(op.id);
           failed++;
           continue;
@@ -67,15 +60,15 @@ export function useOfflineSync(): UseOfflineSyncReturn {
           } else if (op.opType === 'upsertItem') {
             await apiService.upsertItem(key, op.payload);
           } else if (op.opType === 'deleteItem') {
-            await apiService.deleteItem(key, op.payload.id);
+            const payload = op.payload as { id: string };
+            await apiService.deleteItem(key, payload.id);
           }
 
-          // Thành công → xóa khỏi queue
           await posOfflineQueue.remove(op.id);
           synced++;
-          console.log(`[OfflineSync] ✅ Synced ${op.opType} [${op.dataKey}] id=${op.id}`);
-        } catch (err: any) {
-          console.error(`[OfflineSync] ❌ Lỗi sync op ${op.id}:`, err?.message);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[OfflineSync] Lỗi sync op ${op.id}:`, message);
           await posOfflineQueue.incrementRetry(op.id);
           failed++;
         }
@@ -87,32 +80,26 @@ export function useOfflineSync(): UseOfflineSyncReturn {
       setIsDraining(false);
     }
 
-    console.log(`[OfflineSync] Drain xong: synced=${synced}, failed=${failed}`);
     return { synced, failed };
   }, []);
 
-  /** Enqueue một thao tác vào IndexedDB queue */
   const enqueueOp = useCallback(async (op: Omit<PendingOp, 'id' | 'timestamp' | 'retries'>) => {
     try {
       await posOfflineQueue.enqueue(op);
       const count = await posOfflineQueue.count();
       setOfflinePendingCount(count);
-      console.log(`[OfflineSync] Đã enqueue ${op.opType} [${op.dataKey}]. Queue: ${count}`);
     } catch (err) {
       console.error('[OfflineSync] Không thể enqueue vào IndexedDB:', err);
     }
   }, []);
 
-  // Lắng nghe sự kiện "online" → tự drain queue
   useEffect(() => {
     const handleOnline = async () => {
-      console.log('[OfflineSync] Kết nối trở lại! Bắt đầu drain queue...');
-      // Đợi một chút để đảm bảo kết nối thực sự ổn định
+      // Kiểm tra server thực sự reachable, không chỉ dựa vào navigator.onLine
       await new Promise(resolve => setTimeout(resolve, 1500));
-      const result = await drainQueue();
-      if (result.synced > 0) {
-        console.log(`[OfflineSync] Đã đồng bộ ${result.synced} thao tác sau khi có mạng.`);
-      }
+      const reachable = await isServerReachable();
+      if (!reachable) return;
+      await drainQueue();
     };
 
     window.addEventListener('online', handleOnline);

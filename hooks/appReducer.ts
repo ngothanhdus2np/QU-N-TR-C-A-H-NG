@@ -1,5 +1,8 @@
-import { AppState, AppAction } from './stateTypes';
-import { AppData } from '../types';
+import { AppListKey, AppState, AppAction } from './stateTypes';
+
+type IdentifiedItem = { id: string };
+const getList = (data: AppState['data'], key: AppListKey): IdentifiedItem[] =>
+  ([...(data[key] || [])] as IdentifiedItem[]);
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -10,8 +13,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case 'UPDATE_ITEM': {
       const { key, item } = action.payload;
-      const newList = [...((state.data as any)[key] || [])];
-      const idx = newList.findIndex((i: any) => i.id === item.id);
+      const newList = getList(state.data, key);
+      const idx = newList.findIndex(i => i.id === item.id);
       if (idx > -1) {
         newList[idx] = { ...newList[idx], ...item };
       } else {
@@ -24,7 +27,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'DELETE_ITEM': {
       const { key, id } = action.payload;
-      const newList = [...((state.data as any)[key] || [])].filter((i: any) => i.id !== id);
+      const newList = getList(state.data, key).filter(i => i.id !== id);
       return {
         ...state,
         data: { ...state.data, [key]: newList }
@@ -33,9 +36,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'UPDATE_SURGICAL': {
       let nextData = { ...state.data };
       for (const u of action.payload) {
-        const key = u.key as keyof AppData;
-        const newList = [...((nextData as any)[key] || [])];
-        const idx = newList.findIndex((i: any) => i.id === u.item.id);
+        const key = u.key;
+        const newList = getList(nextData, key);
+        const idx = newList.findIndex(i => i.id === u.item.id);
         if (u.isDelete) {
           if (idx > -1) newList.splice(idx, 1);
         } else {

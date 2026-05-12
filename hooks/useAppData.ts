@@ -1,7 +1,7 @@
 
 import { useEffect, useMemo, useCallback, useReducer, useState } from 'react';
-import { AppData, ChatMessage, BrandProfile } from '../types';
-import { INITIAL_APP_DATA, DEFAULT_POLICIES, DEFAULT_EXPENSE_CATEGORIES } from '../constants/defaultData';
+import { AppData, AppDataSurgicalUpdate, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
+import { INITIAL_APP_DATA } from '../constants/defaultData';
 import { DEFAULT_BRAND } from '../constants/marketing';
 import { apiService, TABLE_MAP } from '../services/apiService';
 import { calculateStrategicSuggestions } from '../businessLogic';
@@ -14,10 +14,31 @@ import { useOfflineSync } from './useOfflineSync';
 
 const localTodayStr = new Date().toLocaleDateString('sv-SE');
 
-const isNetworkSyncError = (err: any) => (
+// localStorage có thể ném QuotaExceededError khi data quá lớn (~6MB posProducts).
+// Fallback: lưu không có posProducts để giữ data tài chính/HR an toàn.
+function safeLocalStorageSet(key: string, data: Partial<AppData> | AppData) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e: unknown) {
+    const storageError = e as { name?: string; code?: number };
+    if (storageError.name === 'QuotaExceededError' || storageError.code === 22) {
+      console.error('[Storage] Quota exceeded — lưu fallback không có posProducts');
+      try {
+        const { posProducts: _dropped, ...rest } = data;
+        localStorage.setItem(key, JSON.stringify(rest));
+      } catch {
+        // Nếu vẫn không được, bỏ qua — data an toàn trên cloud
+      }
+    } else {
+      console.error('[Storage] Lỗi lưu localStorage:', e);
+    }
+  }
+}
+
+const isNetworkSyncError = (err: unknown) => (
   typeof navigator !== 'undefined' && !navigator.onLine
-) || String(err?.message || '').toLowerCase().includes('fetch')
-  || String(err?.message || '').toLowerCase().includes('network');
+) || String(err instanceof Error ? err.message : err).toLowerCase().includes('fetch')
+  || String(err instanceof Error ? err.message : err).toLowerCase().includes('network');
 
 const loadBundledPosProducts = async () => {
   if (typeof window === 'undefined') return [];
@@ -72,11 +93,11 @@ export function useAppData() {
     lastSyncTime
   } = state;
 
-  const setActiveTab = useCallback((tab: any) => dispatch({ type: 'SET_ACTIVE_TAB', payload: tab }), []);
+  const setActiveTab = useCallback((tab: string) => dispatch({ type: 'SET_ACTIVE_TAB', payload: tab }), []);
   const setBrandProfile = useCallback((profile: BrandProfile) => dispatch({ type: 'SET_BRAND_PROFILE', payload: profile }), []);
   const setChatMessages = useCallback((messages: ChatMessage[]) => dispatch({ type: 'SET_CHAT_MESSAGES', payload: messages }), []);
   const setShowResigned = useCallback((show: boolean) => dispatch({ type: 'SET_SHOW_RESIGNED', payload: show }), []);
-  const setDiagnosisRange = useCallback((range: any) => dispatch({ type: 'SET_DIAGNOSIS_RANGE', payload: range }), []);
+  const setDiagnosisRange = useCallback((range: DiagnosisRange) => dispatch({ type: 'SET_DIAGNOSIS_RANGE', payload: range }), []);
   const setDiagStartDate = useCallback((date: string) => dispatch({ type: 'SET_DIAG_START_DATE', payload: date }), []);
   const setDiagEndDate = useCallback((date: string) => dispatch({ type: 'SET_DIAG_END_DATE', payload: date }), []);
 
@@ -157,12 +178,8 @@ export function useAppData() {
             bySku.set(key, { ...(bySku.get(key) || {}), ...product });
           });
           localData = { ...(localData || {}), posProducts: Array.from(bySku.values()) };
-          try {
-            localStorage.setItem('cfo_brain_local_data', JSON.stringify(localData));
-            localStorage.setItem(POS_PRODUCTS_SEED_KEY, POS_PRODUCTS_SEED_VERSION);
-          } catch (storageErr) {
-            console.error('Không thể lưu danh sách hàng hóa vào localStorage:', storageErr);
-          }
+          safeLocalStorageSet('cfo_brain_local_data', localData);
+          localStorage.setItem(POS_PRODUCTS_SEED_KEY, POS_PRODUCTS_SEED_VERSION);
         }
       }
 
@@ -239,7 +256,7 @@ export function useAppData() {
       }
       
       dispatch({ type: 'SET_DATA', payload: newState });
-      localStorage.setItem('cfo_brain_local_data', JSON.stringify(newState));
+      safeLocalStorageSet('cfo_brain_local_data', newState);
       clearPending();
       setPendingCount(0);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
@@ -281,7 +298,7 @@ export function useAppData() {
     // Get current data from localStorage to avoid dependency on 'data' state
     const localDataStr = localStorage.getItem('cfo_brain_local_data');
     const currentLocalData = localDataStr ? JSON.parse(localDataStr) : {};
-    localStorage.setItem('cfo_brain_local_data', JSON.stringify({ ...currentLocalData, [key]: uniqueList }));
+    safeLocalStorageSet('cfo_brain_local_data', { ...currentLocalData, [key]: uniqueList });
     
     dispatch({ type: 'SET_SYNCING', payload: true });
     try {
@@ -320,14 +337,14 @@ export function useAppData() {
     } finally { dispatch({ type: 'SET_SYNCING', payload: false }); }
   }, []);
 
-  const updateSurgical = useCallback(async (updates: { key: keyof AppData, item: any, isDelete?: boolean }[]) => {
+  const updateSurgical = useCallback(async (updates: AppDataSurgicalUpdate[]) => {
     dispatch({ type: 'SET_SYNCING', payload: true });
     dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
     
     // Durable Save: Update localStorage immediately before Cloud push
     try {
       const localDataStr = localStorage.getItem('cfo_brain_local_data');
-      let currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
+      const currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
       
       for (const u of updates) {
         const key = u.key as keyof AppData;
@@ -341,7 +358,7 @@ export function useAppData() {
         }
         currentLocalData[key] = newList;
       }
-      localStorage.setItem('cfo_brain_local_data', JSON.stringify(currentLocalData));
+      safeLocalStorageSet('cfo_brain_local_data', currentLocalData);
     } catch (e) {
       console.error("Local storage sync error:", e);
     }
@@ -382,7 +399,7 @@ export function useAppData() {
     
     // Update Local State & Storage first (luôn thành công dù offline)
     const localDataStr = localStorage.getItem('cfo_brain_local_data');
-    let currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
+    const currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
     const existingList = [...(currentLocalData[key] || [])];
     
     // Merge new items into existing list (by ID)
@@ -391,7 +408,7 @@ export function useAppData() {
     const newList = Array.from(itemMap.values());
     
     dispatch({ type: 'SET_DATA', payload: { [key]: newList } });
-    localStorage.setItem('cfo_brain_local_data', JSON.stringify({ ...currentLocalData, [key]: newList }));
+    safeLocalStorageSet('cfo_brain_local_data', { ...currentLocalData, [key]: newList });
 
     try {
       if (TABLE_MAP[key as string]) {

@@ -1,7 +1,7 @@
 
 import { ContentPlanItem, ContentStrategy, ProductLine, BrandProfile, StrategicAdvice } from "../types";
 
-const extractJSONArray = (text: string): any[] => {
+const extractJSONArray = (text: string): ContentPlanItem[] => {
   try {
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
@@ -9,7 +9,7 @@ const extractJSONArray = (text: string): any[] => {
       return JSON.parse(text.substring(start, end + 1));
     }
     return JSON.parse(text);
-  } catch (e) {
+  } catch {
     console.error("Lỗi parse JSON:", text);
     throw new Error("Dữ liệu AI không hợp lệ.");
   }

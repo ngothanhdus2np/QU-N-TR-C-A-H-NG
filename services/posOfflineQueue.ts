@@ -20,7 +20,7 @@ export interface PendingOp {
   /** key tương ứng với AppData key (posOrders, posProducts, ...) */
   dataKey: string;
   /** Payload gốc (chưa sanitize) */
-  payload: any;
+  payload: unknown;
   retries: number;
 }
 

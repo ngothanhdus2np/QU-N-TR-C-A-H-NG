@@ -14,7 +14,22 @@ CREATE TABLE IF NOT EXISTS shopee_revenue_records (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Shopee Product Group Revenue
+-- 2. Product Group Revenue (offline / non-Shopee)
+CREATE TABLE IF NOT EXISTS product_group_revenue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  date TEXT NOT NULL,
+  group_id UUID,
+  group_name TEXT,
+  amount NUMERIC DEFAULT 0,
+  quantity NUMERIC DEFAULT 0,
+  returns_quantity NUMERIC DEFAULT 0,
+  returns_value NUMERIC DEFAULT 0,
+  net_revenue NUMERIC DEFAULT 0,
+  cogs NUMERIC DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Shopee Product Group Revenue
 CREATE TABLE IF NOT EXISTS shopee_product_group_revenue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   date TEXT NOT NULL,
@@ -218,6 +233,71 @@ ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS customer_orders INTEGER DEFAUL
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS direct_sale BOOLEAN DEFAULT true;
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'Hàng hóa';
 
+-- Knowledge Base original files (2026-05-12)
+-- Chạy block này trước khi upload tài liệu gốc từ KnowledgeManager.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'knowledge-files',
+  'knowledge-files',
+  true,
+  20971520,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files public read'
+  ) THEN
+    CREATE POLICY "knowledge-files public read"
+    ON storage.objects FOR SELECT
+    TO public
+    USING (bucket_id = 'knowledge-files');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon upload'
+  ) THEN
+    CREATE POLICY "knowledge-files anon upload"
+    ON storage.objects FOR INSERT
+    TO anon
+    WITH CHECK (bucket_id = 'knowledge-files');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon update'
+  ) THEN
+    CREATE POLICY "knowledge-files anon update"
+    ON storage.objects FOR UPDATE
+    TO anon
+    USING (bucket_id = 'knowledge-files')
+    WITH CHECK (bucket_id = 'knowledge-files');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon delete'
+  ) THEN
+    CREATE POLICY "knowledge-files anon delete"
+    ON storage.objects FOR DELETE
+    TO anon
+    USING (bucket_id = 'knowledge-files');
+  END IF;
+END $$;
+
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_file_name TEXT;
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_file_path TEXT;
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_file_url TEXT;
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_file_type TEXT;
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_file_size BIGINT;
+
 -- POS products sync/import permissions.
 -- The current app uses the Supabase anon client, so RLS needs explicit policies.
 ALTER TABLE pos_products ENABLE ROW LEVEL SECURITY;
@@ -274,3 +354,98 @@ BEGIN
       USING (true);
   END IF;
 END $$;
+
+-- ============================================================
+-- Migration 2026-05-11: Chuẩn bị multi-branch / multi-tenant
+-- Chạy thủ công trên Supabase Dashboard > SQL Editor
+-- ============================================================
+
+-- 1. Thêm branch_id cho các bảng nghiệp vụ chính
+--    DEFAULT 'main' → tương thích ngược với dữ liệu cũ
+ALTER TABLE pos_products        ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE pos_customers       ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE revenue_records     ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE expense_records     ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE payroll_records     ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE employees           ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE supplier_debts      ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+
+-- 2. Thêm tenant_id khi chuẩn bị SaaS (mặc định 'phuc-sang')
+ALTER TABLE pos_products        ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';
+ALTER TABLE revenue_records     ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';
+ALTER TABLE expense_records     ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';
+
+-- 3. Index cho branch_id để query multi-branch hiệu quả
+CREATE INDEX IF NOT EXISTS idx_pos_products_branch        ON pos_products(branch_id);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_branch          ON pos_orders(branch_id);
+CREATE INDEX IF NOT EXISTS idx_revenue_records_branch     ON revenue_records(branch_id);
+CREATE INDEX IF NOT EXISTS idx_expense_records_branch     ON expense_records(branch_id);
+
+-- 4. Bảng lưu FB token và Zalo token với expiry tracking
+--    (app_state đã có sẵn, chỉ cần ghi chú các user_id đã dùng)
+--    'phuc-sang-fb-token'   → { token, expiresAt } — TTL 90 ngày
+--    'phuc-sang-zalo-token' → { token, expiresAt } — TTL 90 ngày
+--    Khi expiresAt - NOW() < 7 ngày → server log cảnh báo
+
+-- =============================================================================
+-- ATOMIC STOCK OPERATIONS (chạy thủ công trên Supabase SQL Editor)
+-- Giải quyết race condition: 2 POS bán cùng sản phẩm đồng thời
+-- không thể dẫn đến tồn kho âm.
+-- =============================================================================
+
+-- Decrement stock — chỉ trừ nếu còn đủ hàng (trả về row nếu thành công, empty nếu hết hàng)
+CREATE OR REPLACE FUNCTION decrement_product_stock(
+  p_product_id UUID,
+  p_quantity    INT
+) RETURNS TABLE(id UUID, stock INT) AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE pos_products
+  SET stock = stock - p_quantity
+  WHERE pos_products.id = p_product_id
+    AND stock >= p_quantity
+  RETURNING pos_products.id, pos_products.stock;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Increment stock — dùng cho trả hàng / nhập kho
+CREATE OR REPLACE FUNCTION increment_product_stock(
+  p_product_id UUID,
+  p_quantity    INT
+) RETURNS TABLE(id UUID, stock INT) AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE pos_products
+  SET stock = stock + p_quantity
+  WHERE pos_products.id = p_product_id
+  RETURNING pos_products.id, pos_products.stock;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute cho anon/authenticated roles (điều chỉnh theo cấu hình RLS của bạn)
+GRANT EXECUTE ON FUNCTION decrement_product_stock(UUID, INT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION increment_product_stock(UUID, INT) TO anon, authenticated;
+
+-- =============================================================================
+-- INVENTORY TRANSACTIONS LEGACY COLUMN CLEANUP (2026-05-12)
+-- Code hiện dùng JSONB `items` + `date/reference_id/staff_id`.
+-- Các cột snapshot cũ bên dưới không còn được đọc/ghi bởi app.
+-- =============================================================================
+ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS product_id;
+ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS quantity;
+ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS previous_stock;
+ALTER TABLE inventory_transactions DROP COLUMN IF EXISTS new_stock;
+
+-- =============================================================================
+-- POS PRODUCTS VARIANT SUPPORT (2026-05-12)
+-- variant_attributes: JSON parse từ attributes_text (vd: {MÀU: "ĐỎ", SIZE: "38"})
+-- parent_id: ID sản phẩm cha logic; toàn bộ SKU thật trong cùng nhóm KiotViet đều là child
+-- is_parent: true cho record cha logic, không phải một SKU thật được nâng lên làm cha
+-- =============================================================================
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS variant_attributes JSONB DEFAULT '{}';
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS parent_id TEXT;
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS is_parent BOOLEAN DEFAULT false;
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS variant_count INTEGER DEFAULT 0;

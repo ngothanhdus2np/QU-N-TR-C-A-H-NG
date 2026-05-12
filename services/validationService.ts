@@ -4,7 +4,7 @@ import { AppData, Employee, RevenueRecord, ExpenseRecord, PayrollRecord } from '
 export interface ValidationError {
   field: string;
   message: string;
-  value?: any;
+  value?: unknown;
 }
 
 export const validationService = {
@@ -62,7 +62,7 @@ export const validationService = {
   },
 
   // Central entry point for all data validation
-  validate(key: keyof AppData, item: any): ValidationError[] {
+  validate(key: keyof AppData, item: Partial<Employee | RevenueRecord | ExpenseRecord | PayrollRecord>): ValidationError[] {
     switch (key) {
       case 'employees': return this.validateEmployee(item);
       case 'revenue': 

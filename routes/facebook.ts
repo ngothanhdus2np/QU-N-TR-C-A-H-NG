@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { Router, RequestHandler } from 'express';
+import { Router, Request, RequestHandler } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { Session } from 'express-session';
 
 type AutoPostLog = {
   id: string;
@@ -25,6 +26,32 @@ type FacebookRouterOptions = {
   configDir: string;
 };
 
+type FacebookSessionRequest = Request & {
+  session: Session & {
+    fbAccessToken?: string;
+  };
+};
+
+type HttpClientError = Error & {
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return 'Unknown error';
+};
+
+const getHttpErrorMessage = (error: unknown): string => {
+  const httpError = error as HttpClientError;
+  return httpError.response?.data?.error?.message || getErrorMessage(error);
+};
+
 const defaultAutoPostConfig: AutoPostConfig = {
   enabled: false,
   selectedPageId: '',
@@ -34,11 +61,16 @@ const defaultAutoPostConfig: AutoPostConfig = {
 };
 
 let globalFbAccessToken = '';
+let fbTokenExpiresAt = 0; // unix ms — 0 = unknown
 let autoPostConfig: AutoPostConfig = { ...defaultAutoPostConfig };
 let fbConfig = {
   appId: '',
   appSecret: '',
 };
+
+// Facebook user token có TTL 90 ngày — cảnh báo khi còn < 7 ngày
+const FB_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const FB_TOKEN_WARN_DAYS = 7;
 
 export function createFacebookRouter({ supabase, requireAuth, configDir }: FacebookRouterOptions) {
   const router = Router();
@@ -55,9 +87,71 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
 
   if (fs.existsSync(autoPostConfigFile)) {
     try {
-      autoPostConfig = { ...defaultAutoPostConfig, ...JSON.parse(fs.readFileSync(autoPostConfigFile, 'utf-8')) };
+      autoPostConfig = {
+        ...defaultAutoPostConfig,
+        ...JSON.parse(fs.readFileSync(autoPostConfigFile, 'utf-8')),
+      };
     } catch (e) {
       console.error('Lỗi đọc file cấu hình tự động:', e);
+    }
+  }
+
+  async function persistFbToken(token: string) {
+    globalFbAccessToken = token;
+    fbTokenExpiresAt = Date.now() + FB_TOKEN_TTL_MS;
+    try {
+      await supabase.from('app_state').upsert({
+        user_id: 'phuc-sang-fb-token',
+        schedule: { token, expiresAt: fbTokenExpiresAt },
+        updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error('[FB] Lỗi lưu token vào Supabase:', e);
+    }
+  }
+
+  async function loadFbToken() {
+    try {
+      const { data } = await supabase
+        .from('app_state')
+        .select('schedule')
+        .eq('user_id', 'phuc-sang-fb-token')
+        .single();
+      if (data?.schedule?.token) {
+        globalFbAccessToken = data.schedule.token;
+        fbTokenExpiresAt = data.schedule.expiresAt || 0;
+        const daysLeft = Math.floor((fbTokenExpiresAt - Date.now()) / (24 * 60 * 60 * 1000));
+        if (daysLeft <= 0) {
+          console.error('[FB] Token đã hết hạn — cần kết nối lại Facebook.');
+          globalFbAccessToken = '';
+        } else if (daysLeft <= FB_TOKEN_WARN_DAYS) {
+          console.error(`[FB] Cảnh báo: token Facebook còn ${daysLeft} ngày — cần gia hạn sớm.`);
+        }
+      }
+    } catch {
+      // Không có token đã lưu — bình thường khi lần đầu chạy
+    }
+  }
+
+  // Scheduler lock: chỉ 1 process chạy tại 1 thời điểm (chống duplicate khi PM2 cluster)
+  async function acquireSchedulerLock(lockKey: string, ttlSeconds = 90): Promise<boolean> {
+    const now = Date.now();
+    const lockExpiresAt = now + ttlSeconds * 1000;
+    try {
+      const { data: existing } = await supabase
+        .from('app_state')
+        .select('schedule')
+        .eq('user_id', lockKey)
+        .single();
+      if (existing?.schedule?.expiresAt > now) return false; // lock đang được giữ
+      await supabase.from('app_state').upsert({
+        user_id: lockKey,
+        schedule: { expiresAt: lockExpiresAt, pid: process.pid },
+        updated_at: new Date().toISOString(),
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -86,6 +180,7 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
   }
 
   async function loadAutoPostConfig() {
+    await loadFbToken();
     try {
       const { data: savedConfig } = await supabase
         .from('app_state')
@@ -94,23 +189,26 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
         .single();
       if (savedConfig?.schedule) {
         autoPostConfig = { ...autoPostConfig, ...savedConfig.schedule };
-        console.log('[Scheduler] Đã load autoPostConfig từ Supabase.');
       }
-    } catch (e) {
-      console.log('[Scheduler] Không tìm thấy autoPostConfig trong Supabase, dùng default.');
+    } catch {
+      // Không có config đã lưu — dùng default
     }
   }
 
   async function runAutoPostScheduler() {
-    if (!autoPostConfig.enabled || !autoPostConfig.selectedPageId || !autoPostConfig.selectedPageAccessToken) {
+    if (
+      !autoPostConfig.enabled ||
+      !autoPostConfig.selectedPageId ||
+      !autoPostConfig.selectedPageAccessToken
+    ) {
       return;
     }
+    const locked = await acquireSchedulerLock('scheduler-fb-lock', 90);
+    if (!locked) return;
 
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const currentTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-    console.log(`[Scheduler] Đang kiểm tra bài viết cho ${todayStr} ${currentTimeStr}...`);
 
     try {
       const { data, error } = await supabase
@@ -127,14 +225,20 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
       for (const item of schedule) {
         const itemTime = item.scheduledTime || '08:00';
 
-        if (item.date === todayStr && itemTime <= currentTimeStr && !item.isPosted && item.status !== 'posted') {
-          console.log(`[Scheduler] Phát hiện bài viết cần đăng: ${item.topic}`);
-
+        if (
+          item.date === todayStr &&
+          itemTime <= currentTimeStr &&
+          !item.isPosted &&
+          item.status !== 'posted'
+        ) {
           try {
-            const fbResponse = await axios.post(`https://graph.facebook.com/v21.0/${autoPostConfig.selectedPageId}/feed`, {
-              message: `${item.topic}\n\n${item.caption}`,
-              access_token: autoPostConfig.selectedPageAccessToken,
-            });
+            const fbResponse = await axios.post(
+              `https://graph.facebook.com/v21.0/${autoPostConfig.selectedPageId}/feed`,
+              {
+                message: `${item.topic}\n\n${item.caption}`,
+                access_token: autoPostConfig.selectedPageAccessToken,
+              }
+            );
 
             if (fbResponse.data.id) {
               item.isPosted = true;
@@ -143,8 +247,8 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
               updated = true;
               addAutoPostLog(`Tự động đăng thành công: ${item.topic}`, 'success');
             }
-          } catch (fbError: any) {
-            const errMsg = fbError.response?.data?.error?.message || fbError.message;
+          } catch (fbError: unknown) {
+            const errMsg = getHttpErrorMessage(fbError);
             console.error(`[Scheduler] Lỗi đăng bài: ${errMsg}`);
             item.status = 'error';
             item.errorLog = errMsg;
@@ -193,7 +297,8 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     const params = new URLSearchParams({
       client_id: fbConfig.appId,
       redirect_uri: redirectUri,
-      scope: 'pages_manage_posts,pages_read_engagement,pages_show_list,public_profile,business_management',
+      scope:
+        'pages_manage_posts,pages_read_engagement,pages_show_list,public_profile,business_management',
       response_type: 'code',
     });
     const authUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
@@ -202,9 +307,6 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
 
   router.get('/auth/facebook/callback', async (req, res) => {
     const { code } = req.query;
-    console.log('--- BẮT ĐẦU XÁC THỰC FACEBOOK ---');
-    console.log('App ID đang dùng:', fbConfig.appId ? `${fbConfig.appId.substring(0, 5)}...` : 'TRỐNG');
-    console.log('Độ dài App Secret:', fbConfig.appSecret ? fbConfig.appSecret.length : 0);
 
     if (!code) return res.status(400).send('Thiếu mã xác thực từ Facebook');
     if (!fbConfig.appId || !fbConfig.appSecret) {
@@ -215,9 +317,6 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     const redirectUri = `${baseUrl.replace(/\/$/, '')}/auth/facebook/callback`;
 
     try {
-      console.log('Đang đổi code lấy access token...');
-      console.log('Redirect URI dùng để đổi token:', redirectUri);
-
       const tokenResponse = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
         params: {
           client_id: fbConfig.appId.trim(),
@@ -228,10 +327,10 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
       });
 
       const { access_token } = tokenResponse.data;
-      (req.session as any).fbAccessToken = access_token;
-      globalFbAccessToken = access_token;
+      (req as FacebookSessionRequest).session.fbAccessToken = access_token;
+      await persistFbToken(access_token);
 
-      req.session.save((err) => {
+      req.session.save(err => {
         if (err) {
           console.error('Lỗi lưu session:', err);
           return res.status(500).send(`Lỗi lưu phiên làm việc: ${err.message}`);
@@ -281,9 +380,9 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
           </html>
         `);
       });
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error?.message || error.message;
-      console.error('Lỗi đổi token chi tiết:', error.response?.data || error.message);
+    } catch (error: unknown) {
+      const errorMsg = getHttpErrorMessage(error);
+      console.error('Lỗi đổi token chi tiết:', errorMsg);
       res.status(500).send(`
         <html>
           <body style="font-family: sans-serif; padding: 20px;">
@@ -298,26 +397,26 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
   });
 
   router.get('/api/fb/pages', async (req, res) => {
-    const accessToken = (req.session as any).fbAccessToken || globalFbAccessToken;
-    console.log('Yêu cầu lấy Fanpage, Token tồn tại:', !!accessToken, 'Nguồn:', (req.session as any).fbAccessToken ? 'Session' : 'Global Cache');
+    const accessToken = (req as FacebookSessionRequest).session.fbAccessToken || globalFbAccessToken;
 
     if (!accessToken) {
-      return res.status(401).json({ error: 'Chưa kết nối Facebook hoặc phiên làm việc hết hạn. Vui lòng thử kết nối lại.' });
+      return res
+        .status(401)
+        .json({
+          error: 'Chưa kết nối Facebook hoặc phiên làm việc hết hạn. Vui lòng thử kết nối lại.',
+        });
     }
 
     try {
-      console.log('Đang gọi Graph API lấy danh sách Fanpage (v21.0)...');
       const response = await axios.get('https://graph.facebook.com/v21.0/me/accounts', {
         params: {
           access_token: accessToken,
           fields: 'name,access_token,id,category,picture,tasks',
         },
       });
-      console.log('Dữ liệu thô từ FB:', JSON.stringify(response.data.data));
-      console.log('Kết quả từ Facebook:', response.data.data?.length || 0, 'Fanpage tìm thấy');
       res.json(response.data.data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getHttpErrorMessage(error) });
     }
   });
 
@@ -333,8 +432,8 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
         access_token: pageAccessToken,
       });
       res.json({ success: true, postId: response.data.id });
-    } catch (error: any) {
-      res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getHttpErrorMessage(error) });
     }
   });
 
@@ -348,9 +447,12 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     if (enabled !== undefined) autoPostConfig.enabled = enabled;
     if (selectedPageId !== undefined) autoPostConfig.selectedPageId = selectedPageId;
     if (selectedPageName !== undefined) autoPostConfig.selectedPageName = selectedPageName;
-    if (selectedPageAccessToken !== undefined) autoPostConfig.selectedPageAccessToken = selectedPageAccessToken;
+    if (selectedPageAccessToken !== undefined)
+      autoPostConfig.selectedPageAccessToken = selectedPageAccessToken;
 
-    addAutoPostLog(`Đã cập nhật cấu hình tự động: ${autoPostConfig.enabled ? 'BẬT' : 'TẮT'} cho trang ${autoPostConfig.selectedPageName || 'chưa chọn'}`);
+    addAutoPostLog(
+      `Đã cập nhật cấu hình tự động: ${autoPostConfig.enabled ? 'BẬT' : 'TẮT'} cho trang ${autoPostConfig.selectedPageName || 'chưa chọn'}`
+    );
 
     res.json({ success: true, config: autoPostConfig });
   });

@@ -4,44 +4,97 @@ import * as XLSX from 'xlsx';
 import { createHash } from 'crypto';
 import { generateId, cleanVNNumber, parseVNDate } from '../businessLogic';
 
-const productIdFromSku = (sku: string) => {
-  const hash = createHash('sha1').update(`pos-product:${sku}`).digest('hex').slice(0, 32).split('');
+type KiotVietRevenueInput = {
+  date?: string;
+  revenue?: string | number;
+};
+
+type ParsedRevenueRecord = {
+  date: string;
+  amount: number;
+};
+
+type ExistingRevenueRecord = {
+  id: string;
+  date: string;
+};
+
+type ExistingProductRecord = {
+  id: string;
+  sku: string | null;
+};
+
+type ImportedProductRecord = Record<
+  string,
+  string | number | boolean | string[] | Record<string, string> | null
+>;
+
+type SpreadsheetCell = string | number | boolean | Date | null;
+type SpreadsheetRow = SpreadsheetCell[];
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return 'Unknown error';
+};
+
+const parseVariantAttrText = (text: string): Record<string, string> => {
+  const result: Record<string, string> = {};
+  if (!text) return result;
+  text.split('|').forEach(part => {
+    const idx = part.indexOf(':');
+    if (idx > 0) result[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+  });
+  return result;
+};
+
+const stableUuidFromKey = (key: string) => {
+  const hash = createHash('sha1').update(key).digest('hex').slice(0, 32).split('');
   hash[12] = '5';
   hash[16] = ((parseInt(hash[16], 16) & 0x3) | 0x8).toString(16);
   const id = hash.join('');
   return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 };
 
+const productIdFromSku = (sku: string) => stableUuidFromKey(`pos-product:${sku}`);
+const parentIdFromRelatedSku = (sku: string) => stableUuidFromKey(`pos-product-parent:${sku}`);
+const parentSkuFromRelatedSku = (sku: string) => `__PARENT__${sku}`;
+
 export function createImportRouter(supabase: SupabaseClient, requireAuth: RequestHandler): Router {
   const router = Router();
 
   router.all('/api/sync-kiotviet*all', requireAuth, async (req, res) => {
-    console.log('>>> NHẬN YÊU CẦU ĐỒNG BỘ KIOTVIET (ALL)');
     const { data } = req.body;
     if (!data || !Array.isArray(data)) {
       return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
     }
 
     try {
-      const parsedData = data.map((item: any) => {
-        const date = parseVNDate(item.date);
-        const amount = cleanVNNumber(item.revenue);
-        return { date, amount };
-      }).filter((item: any) => item.date && item.amount > 0);
+      const parsedData = data
+        .map((item: KiotVietRevenueInput) => {
+          const date = parseVNDate(item.date);
+          const amount = cleanVNNumber(item.revenue);
+          return { date, amount };
+        })
+        .filter(
+          (item: { date: string | null; amount: number }): item is ParsedRevenueRecord =>
+            !!item.date && item.amount > 0
+        );
 
       if (parsedData.length === 0) {
         return res.status(400).json({ error: 'Không có dữ liệu hợp lệ' });
       }
 
-      const dates = parsedData.map((d: any) => d.date);
+      const dates = parsedData.map(d => d.date);
       const { data: existingRecords } = await supabase
         .from('revenue_records')
         .select('id, date')
         .in('date', dates);
 
-      const existingMap = new Map(existingRecords?.map((r: any) => [r.date, r.id]) || []);
+      const existingMap = new Map(
+        (existingRecords as ExistingRevenueRecord[] | null)?.map(r => [r.date, r.id]) || []
+      );
 
-      const recordsToUpsert = parsedData.map((item: any) => {
+      const recordsToUpsert = parsedData.map(item => {
         const existingId = existingMap.get(item.date!);
         return {
           id: existingId || generateId(),
@@ -56,13 +109,13 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const { error } = await supabase.from('revenue_records').upsert(recordsToUpsert);
       if (error) throw error;
       res.json({ success: true, count: recordsToUpsert.length });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('KiotViet Sync Error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
-  router.post('/api/import/kiotviet-products', async (req, res) => {
+  router.post('/api/import/kiotviet-products', requireAuth, async (req, res) => {
     try {
       const { fileBase64 } = req.body as { fileBase64?: string };
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
@@ -70,24 +123,30 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const buf = Buffer.from(fileBase64, 'base64');
       const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
-      if (rows.length < 2) return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
+      if (rows.length < 2)
+        return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
 
       const headers = rows[0];
       if (String(headers[2] || '').trim() !== 'Mã hàng') {
-        return res.status(400).json({ error: 'File không đúng định dạng KiotViet. Cột thứ 3 phải là "Mã hàng".' });
+        return res
+          .status(400)
+          .json({ error: 'File không đúng định dạng KiotViet. Cột thứ 3 phải là "Mã hàng".' });
       }
 
       const { data: existing } = await supabase
         .from('pos_products')
         .select('id, sku')
         .limit(50000);
-      const skuToId = new Map<string, string>((existing || []).map((p: any) => [p.sku, p.id]));
+      const existingProducts = (existing || []) as ExistingProductRecord[];
+      const skuToId = new Map<string, string>(
+        existingProducts.filter(p => p.sku).map(p => [p.sku!, p.id])
+      );
 
-      const dataRows = rows.slice(1).filter((r: any[]) => r[2] && String(r[2]).trim() !== '');
+      const dataRows = rows.slice(1).filter(r => r[2] && String(r[2]).trim() !== '');
 
-      const records = dataRows.map((r: any[]) => {
+      const records = dataRows.map(r => {
         const sku = String(r[2] || '').trim();
         const maxStockRaw = Number(r[11] || 999999);
         const catRaw = String(r[1] || '').trim();
@@ -98,7 +157,12 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         const description = [attrStr, descStr].filter(Boolean).join(' | ') || null;
 
         const imgRaw = r[17] ? String(r[17]).trim() : '';
-        const images = imgRaw ? imgRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+        const images = imgRaw
+          ? imgRaw
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : [];
 
         let createdAt: string | null = null;
         if (r[28]) {
@@ -106,7 +170,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           if (!isNaN(d.getTime())) createdAt = d.toISOString();
         }
 
-        const record: Record<string, any> = {
+        const record: ImportedProductRecord = {
           id: skuToId.get(sku) || productIdFromSku(sku),
           sku,
           name: String(r[3] || '').trim(),
@@ -123,6 +187,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           base_unit_code: r[13] ? String(r[13]).trim() : null,
           conversion_value: Number(r[14] || 1),
           attributes_text: attrStr || null,
+          variant_attributes: parseVariantAttrText(attrStr),
           description,
           images,
           note_template: r[23] ? String(r[23]).trim() : null,
@@ -145,24 +210,100 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         return record;
       });
 
+      // Build parent-child từ related_sku (cột 16 KiotViet).
+      // KiotViet dùng 1 SKU thật làm "mã liên quan", nhưng trong CFO Brain parent phải là
+      // record logic riêng; toàn bộ SKU thật trong group, kể cả related_sku gốc, đều là child.
+      const skuToRecord = new Map<string, ImportedProductRecord>(
+        records.map(r => [String(r.sku), r])
+      );
+      const groupedByRelatedSku = new Map<string, ImportedProductRecord[]>();
+
+      for (const r of records) {
+        const relSku = r.related_sku ? String(r.related_sku) : '';
+        if (!relSku) continue;
+        if (!groupedByRelatedSku.has(relSku)) groupedByRelatedSku.set(relSku, []);
+        groupedByRelatedSku.get(relSku)!.push(r);
+      }
+
+      const parentRecords: ImportedProductRecord[] = [];
+      for (const [relSku, relatedRecords] of groupedByRelatedSku.entries()) {
+        const baseRecord = skuToRecord.get(relSku);
+        if (!baseRecord) continue;
+
+        const childRecords = [baseRecord, ...relatedRecords.filter(r => r !== baseRecord)];
+        const parentId = parentIdFromRelatedSku(relSku);
+
+        for (const child of childRecords) {
+          child.parent_id = parentId;
+          child.is_parent = false;
+          child.variant_count = 0;
+        }
+
+        const totalStock = childRecords.reduce((sum, child) => sum + Number(child.stock || 0), 0);
+        const totalCustomerOrders = childRecords.reduce(
+          (sum, child) => sum + Number(child.customer_orders || 0),
+          0
+        );
+        const firstImageRecord = childRecords.find(child =>
+          Array.isArray(child.images) ? child.images.length > 0 : false
+        );
+
+        parentRecords.push({
+          ...baseRecord,
+          id: parentId,
+          sku: parentSkuFromRelatedSku(relSku),
+          parent_id: null,
+          is_parent: true,
+          variant_count: childRecords.length,
+          variant_attributes: {},
+          attributes_text: null,
+          stock: totalStock,
+          customer_orders: totalCustomerOrders,
+          direct_sale: false,
+          images: firstImageRecord?.images || baseRecord.images || [],
+        });
+      }
+
+      for (const r of records) {
+        if (!r.parent_id) {
+          r.is_parent = false;
+          r.variant_count = 0;
+        }
+        // related_sku chỉ dùng để build parent_id, không có cột này trong DB
+        delete r.related_sku;
+      }
+      const recordsToUpsert = [...parentRecords, ...records];
+
       const BATCH = 300;
       let importedCount = 0;
       let errorCount = 0;
-      for (let i = 0; i < records.length; i += BATCH) {
-        const batch = records.slice(i, i + BATCH);
-        const { error: upsertErr } = await supabase.from('pos_products').upsert(batch, { onConflict: 'id' });
+      let firstError: string | null = null;
+      for (let i = 0; i < recordsToUpsert.length; i += BATCH) {
+        const batch = recordsToUpsert.slice(i, i + BATCH);
+        const { error: upsertErr } = await supabase
+          .from('pos_products')
+          .upsert(batch, { onConflict: 'id' });
         if (upsertErr) {
           console.error(`[Import] Batch ${i / BATCH + 1} lỗi:`, upsertErr.message);
+          if (!firstError) firstError = upsertErr.message;
           errorCount += batch.length;
         } else {
           importedCount += batch.length;
         }
       }
 
-      res.json({ total: records.length, imported: importedCount, errors: errorCount });
-    } catch (err: any) {
-      console.error('[Import /kiotviet-products]', err.message);
-      res.status(500).json({ error: err.message || 'Lỗi xử lý file Excel' });
+      res.json({
+        total: records.length,
+        logicalParents: parentRecords.length,
+        upserted: recordsToUpsert.length,
+        imported: importedCount,
+        errors: errorCount,
+        firstError,
+      });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[Import /kiotviet-products]', message);
+      res.status(500).json({ error: message || 'Lỗi xử lý file Excel' });
     }
   });
 

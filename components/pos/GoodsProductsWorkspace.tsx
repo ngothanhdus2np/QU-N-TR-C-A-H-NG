@@ -24,7 +24,9 @@ interface GoodsProductsWorkspaceProps {
   showColumnPopup: boolean;
   setShowColumnPopup: React.Dispatch<React.SetStateAction<boolean>>;
   columnPopupPos: { top: number; left: number; width: number };
-  setColumnPopupPos: React.Dispatch<React.SetStateAction<{ top: number; left: number; width: number }>>;
+  setColumnPopupPos: React.Dispatch<
+    React.SetStateAction<{ top: number; left: number; width: number }>
+  >;
   columnTriggerRef: React.RefObject<HTMLButtonElement>;
   filterCategories: string[];
   setFilterCategories: React.Dispatch<React.SetStateAction<string[]>>;
@@ -40,7 +42,7 @@ interface GoodsProductsWorkspaceProps {
   setFilterSupplier: React.Dispatch<React.SetStateAction<string>>;
   uniqueCategories: string[];
   categoryCounts: Record<string, number>;
-  uniqueAttrTypes: string[];
+  attrValuesByName: Record<string, { values: string[]; counts: Record<string, number> }>;
   uniqueLocations: string[];
   uniqueBrands: string[];
   lowStockCount: number;
@@ -80,12 +82,12 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   setFilterSupplier,
   uniqueCategories,
   categoryCounts,
-  uniqueAttrTypes,
+  attrValuesByName,
   uniqueLocations,
   uniqueBrands,
   lowStockCount,
   selectedCount,
-  onResetPage
+  onResetPage,
 }) => (
   <div className="flex flex-1 min-h-0 gap-4">
     <GoodsFilterSidebar
@@ -113,7 +115,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
       onResetPage={onResetPage}
       uniqueCategories={uniqueCategories}
       categoryCounts={categoryCounts}
-      uniqueAttrTypes={uniqueAttrTypes}
+      attrValuesByName={attrValuesByName}
       uniqueLocations={uniqueLocations}
       uniqueBrands={uniqueBrands}
       lowStockCount={lowStockCount}
@@ -124,7 +126,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         searchTerm={searchTerm}
         onSearchChange={onSearchChange}
         onOpenCreate={onOpenCreate}
-        rightControls={(
+        rightControls={
           <>
             <GoodsImportExport
               products={filteredProducts}
@@ -145,7 +147,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
               triggerRef={columnTriggerRef}
             />
           </>
-        )}
+        }
         filteredCount={filteredProducts.length}
         totalCount={products.length}
         filterCategories={filterCategories}

@@ -81,10 +81,11 @@ export const useExpenseAnalytics = ({
   }, [filteredExpenses]);
 
   const groupedAnalysis = React.useMemo(() => {
-    const fixedMap: Record<string, any> = {};
-    const variableMap: Record<string, any> = {};
-    const depreciationMap: Record<string, any> = {};
-    const interestMap: Record<string, any> = {};
+    type GroupedExpense = { name: string; amount: number; ratio: number };
+    const fixedMap: Record<string, GroupedExpense> = {};
+    const variableMap: Record<string, GroupedExpense> = {};
+    const depreciationMap: Record<string, GroupedExpense> = {};
+    const interestMap: Record<string, GroupedExpense> = {};
 
     efficiencyData.analysis.forEach(item => {
       const type = getCategoryType(item.name, categories);

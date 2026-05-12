@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ExpenseRecord, ExpenseCategory, RevenueRecord, PayrollRecord, RecurringExpense, ProductGroupRevenue, DiagnosisRange } from '../types';
+import { ExpenseRecord, ExpenseCategory, RevenueRecord, PayrollRecord, RecurringExpense, ProductGroupRevenue, DiagnosisRange, AppDataSurgicalUpdate } from '../types';
 import { ArrowRight, Sparkles, X } from 'lucide-react';
 import TimeFilter from './TimeFilter';
 import { ExpenseTabs } from './expense/ExpenseTabs';
@@ -19,7 +19,7 @@ interface Props {
   payrolls: PayrollRecord[];
   recurringExpenses: RecurringExpense[];
   onUpdate: (newList: ExpenseRecord[], idToRemove?: string) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onUpdateCategories: (newCats: ExpenseCategory[]) => void;
   onUpdateRecurringExpenses: (newList: RecurringExpense[]) => void;
   diagnosisRange: DiagnosisRange;
@@ -167,7 +167,7 @@ const ExpenseManager: React.FC<Props> = ({
   const applyAISuggestion = () => {
     if (!aiSuggestion) return;
     
-    let newCategories = [...categories];
+    const newCategories = [...categories];
     let level2Id = '';
     let level3Id = '';
 

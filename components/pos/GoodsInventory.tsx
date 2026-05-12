@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { POSProduct, InventoryTransaction } from '../../types';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { AppData, AppDataSurgicalUpdate, POSProduct, InventoryTransaction } from '../../types';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
 import { GoodsPurchaseForm } from './GoodsPurchaseForm';
 import { ImportStatus } from './GoodsImportExport';
@@ -9,10 +9,10 @@ import { GoodsBulkActions } from './GoodsBulkActions';
 import { GoodsProductTableHeader } from './GoodsProductTableHeader';
 import { GoodsProductTableBody } from './GoodsProductTableBody';
 import { GoodsLegacyProductFormView } from './GoodsLegacyProductFormView';
-import { DEFAULT_VISIBLE_COLS } from './GoodsInventoryColumns';
+import { DEFAULT_VISIBLE_COLS, COLUMN_PREFS_KEY } from './GoodsInventoryColumns';
 import { GoodsInventoryFeedback } from './GoodsInventoryFeedback';
 import { GoodsInventoryModals } from './GoodsInventoryModals';
-import { GoodsInventorySecondaryToolbar, GoodsInventoryTabBar } from './GoodsInventoryNavigation';
+import { GoodsInventorySecondaryToolbar } from './GoodsInventoryNavigation';
 import { GoodsProductsWorkspace } from './GoodsProductsWorkspace';
 import { useGoodsExcelImport } from './useGoodsExcelImport';
 import { useGoodsPurchase } from './useGoodsPurchase';
@@ -25,12 +25,25 @@ interface GoodsInventoryProps {
   products: POSProduct[];
   transactions: InventoryTransaction[];
   onUpdateProducts: (products: POSProduct[]) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
-  onPushBatch?: (key: any, items: any[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
   onAddTransaction?: (transaction: InventoryTransaction) => void;
+  requestedTab?: 'goods' | 'purchase' | 'kho';
 }
 
-const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions, onUpdateProducts, onUpdateSurgical, onPushBatch, onAddTransaction }) => {
+const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
+const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
+const DEFAULT_PAGE_SIZE = 15;
+
+const GoodsInventory: React.FC<GoodsInventoryProps> = ({
+  products,
+  transactions,
+  onUpdateProducts,
+  onUpdateSurgical,
+  onPushBatch,
+  onAddTransaction,
+  requestedTab,
+}) => {
   // === Toast & Modal State ===
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -38,17 +51,24 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setTimeout(() => setToast(null), 2500);
   };
   const [inputModal, setInputModal] = useState<{
-    isOpen: boolean; title: string; label: string; placeholder?: string;
-    type?: 'text' | 'number'; defaultValue?: string | number;
+    isOpen: boolean;
+    title: string;
+    label: string;
+    placeholder?: string;
+    type?: 'text' | 'number';
+    defaultValue?: string | number;
     onConfirm: (val: string) => void;
   }>({ isOpen: false, title: '', label: '', onConfirm: () => {} });
   const openInputModal = (config: Omit<typeof inputModal, 'isOpen'>) =>
     setInputModal({ ...config, isOpen: true });
   const closeInputModal = () => setInputModal(prev => ({ ...prev, isOpen: false }));
   const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean; title: string; message: string;
+    isOpen: boolean;
+    title: string;
+    message: string;
     variant?: 'danger' | 'warning' | 'info' | 'success';
-    confirmLabel?: string; onConfirm: () => void;
+    confirmLabel?: string;
+    onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const openConfirm = (config: Omit<typeof confirmDialog, 'isOpen'>) =>
     setConfirmDialog({ ...config, isOpen: true });
@@ -67,7 +87,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setCurrentPage(1);
   };
   const [viewingProduct, setViewingProduct] = useState<POSProduct | null>(null);
-  const [activeTab, setActiveTab] = useState<'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form'>('goods');
+  const [activeTab, setActiveTab] = useState<
+    'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form'
+  >('goods');
+
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
   const {
     showPurchaseForm,
     setShowPurchaseForm,
@@ -79,7 +105,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     handleAddProductToPurchase,
     updatePurchaseItem,
     removePurchaseItem,
-    handleCompletePurchase
+    handleCompletePurchase,
   } = useGoodsPurchase({ products, onUpdateProducts, onAddTransaction, showToast });
   const {
     auditSearchTerm,
@@ -87,24 +113,36 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     auditItems,
     setAuditItems,
     handleConfirmAudit,
-    cancelAudit
+    cancelAudit,
   } = useGoodsAudit({ products, onUpdateProducts, onAddTransaction, showToast, setActiveTab });
-  
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(PAGE_SIZE_STORAGE_KEY));
+      return PAGE_SIZE_OPTIONS.includes(saved) ? saved : DEFAULT_PAGE_SIZE;
+    } catch {
+      return DEFAULT_PAGE_SIZE;
+    }
+  });
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterBrand, setFilterBrand] = useState('');
-  const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock' | 'low_stock'>('all');
+  const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock' | 'low_stock'>(
+    'all'
+  );
   const [filterLocation, setFilterLocation] = useState('');
   const [filterAttrs, setFilterAttrs] = useState<string[]>([]);
   const [filterSupplier, setFilterSupplier] = useState('');
 
-
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    try { const s = localStorage.getItem('goods_visible_columns'); return s ? JSON.parse(s) : DEFAULT_VISIBLE_COLS; }
-    catch { return DEFAULT_VISIBLE_COLS; }
+    try {
+      const s = localStorage.getItem(COLUMN_PREFS_KEY);
+      return s ? JSON.parse(s) : DEFAULT_VISIBLE_COLS;
+    } catch {
+      return DEFAULT_VISIBLE_COLS;
+    }
   });
   const [showColumnPopup, setShowColumnPopup] = useState(false);
   const [columnPopupPos, setColumnPopupPos] = useState({ top: 0, left: 0, width: 340 });
@@ -129,14 +167,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     openAddMoreVariants,
     closeAddMoreVariantsModal,
     closeAddAttributeInViewModal,
-    handleSaveMoreVariants
+    handleSaveMoreVariants,
   } = useGoodsVariantWorkflow({
     products,
     onUpdateProducts,
     onUpdateSurgical,
     viewingProduct,
     setViewingProduct,
-    showToast
+    showToast,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -146,9 +184,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     onUpdateProducts,
     onPushBatch,
     setImportStatus,
-    fileInputRef
+    fileInputRef,
   });
-  
+
   const {
     editingProduct,
     setEditingProduct,
@@ -158,7 +196,6 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setShowCreateModal,
     showProductModal,
     setShowProductModal,
-    isQuickAddMode,
     setIsQuickAddMode,
     activeFormTab,
     setActiveFormTab,
@@ -184,7 +221,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     handleOpenQuickAddProduct,
     addBaseUnit,
     handleSaveBaseUnit,
-    addConversionUnit
+    addConversionUnit,
   } = useGoodsProductEditor({
     products,
     onUpdateProducts,
@@ -194,11 +231,11 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     handleAddProductToPurchase,
     showToast,
     openInputModal,
-    closeInputModal
+    closeInputModal,
   });
 
   React.useEffect(() => {
-    localStorage.setItem('goods_visible_columns', JSON.stringify(visibleColumns));
+    localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(visibleColumns));
   }, [visibleColumns]);
 
   React.useEffect(() => {
@@ -206,7 +243,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     const handler = (e: MouseEvent) => {
       const popup = document.getElementById('column-visibility-popup');
       const trigger = columnTriggerRef.current;
-      if (popup && !popup.contains(e.target as Node) && trigger && !trigger.contains(e.target as Node)) {
+      if (
+        popup &&
+        !popup.contains(e.target as Node) &&
+        trigger &&
+        !trigger.contains(e.target as Node)
+      ) {
         setShowColumnPopup(false);
       }
     };
@@ -219,11 +261,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     uniqueCategories,
     uniqueBrands,
     uniqueLocations,
-    uniqueAttrTypes,
+    attrValuesByName,
     categoryCounts,
     filteredProducts,
+    sellableSkuCount,
     totalPages,
     currentProducts,
+    variantsByParentId,
   } = useGoodsFilters({
     products,
     debouncedSearchTerm,
@@ -236,6 +280,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     itemsPerPage,
   });
 
+  React.useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   // 5 fixed cols (checkbox + star + sku + name + actions) + N visible cols
   const colCount = 5 + visibleColumns.length;
   const {
@@ -247,31 +297,79 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     toggleSelectOne,
     toggleFavorite,
     toggleExpandedParent,
-    handleBulkDelete
+    handleBulkDelete,
   } = useGoodsSelection({
     products,
     filteredProducts,
     onUpdateProducts,
     onUpdateSurgical,
     openConfirm,
-    showToast
+    showToast,
   });
+
+  const handleToggleView = useCallback(
+    (prod: POSProduct) => {
+      if (viewingProduct?.id === prod.id) {
+        setViewingProduct(null);
+      } else {
+        setViewingProduct(prod);
+        setActiveFormTab('info');
+      }
+    },
+    [viewingProduct?.id]
+  );
+
+  const handleChangeDetailTab = useCallback((tab: string) => {
+    setActiveFormTab(tab as any);
+  }, []);
+
+  const handleDeleteViewed = useCallback(
+    (id: string) => {
+      onUpdateProducts(products.filter(prod => prod.id !== id));
+      setViewingProduct(null);
+    },
+    [onUpdateProducts, products]
+  );
+
+  const handleEditViewed = useCallback(
+    (prod: POSProduct) => {
+      openProductEditor(prod);
+      setViewingProduct(null);
+    },
+    [openProductEditor]
+  );
+
+  const handleAddUnitInView = useCallback(() => setShowAddUnitInView(true), []);
+
+  const handleAddAttributeInView = useCallback(() => setShowAddAttributeInView(true), []);
+
+  const handleItemsPerPageChange = useCallback((nextItemsPerPage: number) => {
+    setItemsPerPage(nextItemsPerPage);
+    setCurrentPage(1);
+    try {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(nextItemsPerPage));
+    } catch {
+      // Page size is a device preference; ignore storage failures.
+    }
+  }, []);
 
   const renderMainContent = () => {
     switch (activeTab) {
       case 'goods':
         return (
-          <div className="flex-1 overflow-auto">
-            <div className="overflow-x-auto no-scrollbar">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-auto overscroll-contain no-scrollbar">
               <table className="w-full text-sm">
                 <GoodsProductTableHeader
                   visibleColumns={visibleColumns}
-                  isAllSelected={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                  isAllSelected={
+                    selectedIds.length === filteredProducts.length && filteredProducts.length > 0
+                  }
                   onToggleSelectAll={toggleSelectAll}
                 />
                 <GoodsProductTableBody
                   currentProducts={currentProducts}
-                  products={products}
+                  variantsByParentId={variantsByParentId}
                   colCount={colCount}
                   selectedIds={selectedIds}
                   favoriteIds={favoriteIds}
@@ -282,27 +380,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
                   onSelect={toggleSelectOne}
                   onToggleFavorite={toggleFavorite}
                   onOpenEditor={openProductEditor}
-                  onToggleView={(prod) => {
-                    if (viewingProduct?.id === prod.id) {
-                      setViewingProduct(null);
-                    } else {
-                      setViewingProduct(prod);
-                      setActiveFormTab('info');
-                    }
-                  }}
+                  onToggleView={handleToggleView}
                   onToggleExpanded={toggleExpandedParent}
-                  onChangeDetailTab={(tab) => setActiveFormTab(tab as any)}
-                  onDeleteViewed={(id) => {
-                    onUpdateProducts(products.filter(prod => prod.id !== id));
-                    setViewingProduct(null);
-                  }}
-                  onEditViewed={(prod) => {
-                    openProductEditor(prod);
-                    setViewingProduct(null);
-                  }}
+                  onChangeDetailTab={handleChangeDetailTab}
+                  onDeleteViewed={handleDeleteViewed}
+                  onEditViewed={handleEditViewed}
                   onAddMoreVariants={openAddMoreVariants}
-                  onAddUnitInView={() => setShowAddUnitInView(true)}
-                  onAddAttributeInView={() => setShowAddAttributeInView(true)}
+                  onAddUnitInView={handleAddUnitInView}
+                  onAddAttributeInView={handleAddAttributeInView}
                 />
               </table>
             </div>
@@ -311,9 +396,11 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
               totalPages={totalPages}
               itemsPerPage={itemsPerPage}
               totalItems={filteredProducts.length}
+              totalSkuItems={sellableSkuCount}
               setCurrentPage={setCurrentPage}
+              onItemsPerPageChange={handleItemsPerPageChange}
             />
-            
+
             <GoodsBulkActions
               selectedCount={selectedIds.length}
               onClearSelection={() => setSelectedIds([])}
@@ -370,7 +457,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
             onAddConversionUnit={addConversionUnit}
           />
         );
-      default: return null;
+      default:
+        return null;
     }
   };
 
@@ -383,14 +471,6 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
         onCloseInput={closeInputModal}
         onCloseConfirm={closeConfirm}
       />
-
-      {activeTab !== 'audit_form' && (
-        <GoodsInventoryTabBar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          setShowPurchaseForm={setShowPurchaseForm}
-        />
-      )}
 
       {activeTab === 'goods' ? (
         <GoodsProductsWorkspace
@@ -424,7 +504,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
           setFilterSupplier={setFilterSupplier}
           uniqueCategories={uniqueCategories}
           categoryCounts={categoryCounts}
-          uniqueAttrTypes={uniqueAttrTypes}
+          attrValuesByName={attrValuesByName}
           uniqueLocations={uniqueLocations}
           uniqueBrands={uniqueBrands}
           lowStockCount={lowStockProducts.length}
@@ -453,7 +533,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
         showProductModal={showProductModal}
         formData={formData}
         setFormData={setFormData}
-        onCloseProductModal={() => { setShowProductModal(false); setIsQuickAddMode(false); }}
+        onCloseProductModal={() => {
+          setShowProductModal(false);
+          setIsQuickAddMode(false);
+        }}
         onSaveProductModal={() => handleSaveProduct(false)}
         showAddUnitModal={showAddUnitModal}
         newUnitName={newUnitName}
@@ -495,7 +578,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
             images: [],
             status: 'Active',
             units: [],
-            attributes: []
+            attributes: [],
           });
         }}
         onSaveCreateModal={() => {

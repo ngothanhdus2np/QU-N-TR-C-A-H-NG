@@ -1,5 +1,71 @@
+export type DiagnosisRange =
+  | 'today'
+  | 'yesterday'
+  | 'last7'
+  | 'thisMonth'
+  | 'lastMonth'
+  | 'thisYear'
+  | 'custom'
+  | 'all';
 
-export type DiagnosisRange = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'custom' | 'all';
+export interface DashboardFinancialInsights {
+  periodRev: number;
+  periodExp: number;
+  periodProfit: number;
+  periodGross: number;
+  payrollTotal: number;
+  nonPayrollExp: number;
+  activeStaffCount: number;
+  netProfitMargin: number;
+  opExRatio: number;
+  laborCostRatio: number;
+  fixedCosts: number;
+  variableCosts: number;
+  depreciationCosts: number;
+  interestCosts: number;
+  totalCogs: number;
+  ledgerCogs: number;
+}
+
+export interface DashboardPreviousInsights {
+  rev: number;
+  profit: number;
+  gross: number;
+  exp: number;
+}
+
+export interface DashboardBreakEvenAnalysis {
+  dailyFixedCost: number;
+  avgGrossMargin: number;
+}
+
+export interface DashboardTrendPoint {
+  month?: string;
+  date?: string;
+  revenue: number;
+  grossProfit: number;
+  netProfit: number;
+}
+
+export interface DashboardWaterfallItem {
+  name: string;
+  value: [number, number];
+  fill: string;
+  label: string;
+}
+
+export interface DashboardExpenseSlice {
+  name: string;
+  value: number;
+}
+
+export interface DashboardDetailedExpense {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+}
 
 export interface KnowledgeBaseArticle {
   id: string;
@@ -8,8 +74,11 @@ export interface KnowledgeBaseArticle {
   content: string; // Hỗ trợ Markdown
   updatedAt: string;
   sourceFileName?: string;
-  sourceFileData?: string; // Base64 data of original file
+  sourceFileData?: string; // Legacy base64 data of original file
+  sourceFilePath?: string;
+  sourceFileUrl?: string;
   sourceFileType?: string;
+  sourceFileSize?: number;
 }
 
 export interface SalaryPolicy {
@@ -63,14 +132,14 @@ export interface TetCampaign {
   carAllowance: number;
   beforeTetExtraDays: string[];
   beforeTetExtraBonus: number;
-  
+
   // Cấu hình đặc thù 28, 29, 30
   date28Tet?: string;
   date29Tet?: string;
   date30Tet?: string;
   bonus29Tet?: number;
   bonus30Tet?: number;
-  
+
   // Giai đoạn Sau Tết
   afterTetDate: string;
   lixiBonus: number;
@@ -84,8 +153,6 @@ export interface Employee {
   position: string;
   joinDate: string;
   resignedDate?: string; // Ngày nghỉ việc (nếu có)
-  // Fix: Add raw snake_case property for database/KiotViet sync robustness as used in Staff and Payroll managers
-  resigned_date?: string;
   assignedPolicyId?: string; // Trường mới: ID nhóm lương được gán cố định
   dob?: string;
   phone?: string;
@@ -225,6 +292,35 @@ export interface PayrollRecord {
   calculationNote?: string;
 }
 
+export type PayrollSubTab =
+  | 'attendance'
+  | 'overtime'
+  | 'sales'
+  | 'penalties'
+  | 'summary'
+  | 'ledger';
+
+export type RevenueSubTab =
+  | 'diagnosis'
+  | 'matrix'
+  | 'ledger'
+  | 'source'
+  | 'costs'
+  | 'inventory_in'
+  | 'inventory_out'
+  | 'report';
+
+export type RevenueAuditColumnKey = 'totalGrossRevenue' | 'discount' | 'returnsValue' | 'totalCogs';
+
+export interface RevenueAuditConflict {
+  date: string;
+  columnKey: RevenueAuditColumnKey;
+  columnLabel: string;
+  currentValue: number;
+  newValue: number;
+  resolution: 'keep' | 'update';
+}
+
 export interface StaffPerformanceRecord {
   id: string;
   employeeId: string;
@@ -313,6 +409,23 @@ export interface AppData {
   supplierDebts: SupplierDebtRecord[];
 }
 
+export type AppDataListKey = {
+  [K in keyof AppData]: NonNullable<AppData[K]> extends { id: string }[] ? K : never;
+}[keyof AppData];
+
+export type AppDataItem<K extends keyof AppData> =
+  NonNullable<AppData[K]> extends Array<infer Item> ? Item : NonNullable<AppData[K]>;
+
+export type AppDataSurgicalUpdate = {
+  [K in AppDataListKey]: { key: K; item: AppDataItem<K> | { id: string }; isDelete?: boolean };
+}[AppDataListKey];
+
+export type UpdateAppData = <K extends keyof AppData>(
+  key: K,
+  newList: AppData[K],
+  idToRemove?: string
+) => void;
+
 export interface POSProductUnit {
   id: string;
   name: string;
@@ -366,8 +479,8 @@ export interface POSProduct {
   variantAttributes?: Record<string, string>; // { "Màu sắc": "Đỏ", "Size": "M" }
   variantCount?: number; // Số lượng biến thể (chỉ cho sản phẩm cha)
   // KiotViet extended fields
-  customerOrders?: number;  // KH đặt — số lượng khách đặt trước
-  directSale?: boolean;     // Được bán trực tiếp
+  customerOrders?: number; // KH đặt — số lượng khách đặt trước
+  directSale?: boolean; // Được bán trực tiếp
   productType?: 'Hàng hóa' | 'Dịch vụ'; // Loại hàng
 }
 
@@ -517,7 +630,6 @@ export interface ShopeeInventoryOutRecord {
   dailyOrderIndex?: number;
 }
 
-
 export interface ContentStrategy {
   id: string;
   name: string;
@@ -550,10 +662,10 @@ export interface BrandProfile {
 export interface ContentPlanItem {
   date: string;
   topic: string;
-  type: string; 
+  type: string;
   imageInstruction: string;
   caption: string;
-  image?: string; 
+  image?: string;
   isPosted?: boolean;
   scheduledTime?: string;
   status?: 'draft' | 'scheduled' | 'posted' | 'error';
@@ -565,7 +677,7 @@ export interface ContentPlanItem {
 export interface StrategicAdvice {
   holidays: string[];
   marketInsight: string;
-  suggestedDistribution: { strategyId: string, percentage: number }[];
+  suggestedDistribution: { strategyId: string; percentage: number }[];
 }
 
 export interface GenerationRequest {
@@ -589,7 +701,7 @@ export interface AppAlert {
 }
 
 export interface AlertConfig {
-  defaultMinStock: number;   // Ngưỡng tồn kho tối thiểu mặc định (khi SP không set minStock)
-  debtOverdueDays: number;   // Số ngày nợ NCC chưa thanh toán bị cảnh báo
-  revenueDropPct: number;    // % doanh thu giảm so với trung bình 6 ngày (0-100)
+  defaultMinStock: number; // Ngưỡng tồn kho tối thiểu mặc định (khi SP không set minStock)
+  debtOverdueDays: number; // Số ngày nợ NCC chưa thanh toán bị cảnh báo
+  revenueDropPct: number; // % doanh thu giảm so với trung bình 6 ngày (0-100)
 }

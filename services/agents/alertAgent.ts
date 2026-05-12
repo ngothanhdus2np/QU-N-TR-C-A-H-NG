@@ -121,13 +121,14 @@ async function checkRevenueDrop(supabase: SupabaseClient, config: AlertConfig): 
 
   if (error || !data || data.length < 2) return [];
 
-  const yesterdayRecord = data.find((r: any) => r.date === yesterday);
+  const revenueRows = data as { date: string; net_revenue?: number }[];
+  const yesterdayRecord = revenueRows.find(r => r.date === yesterday);
   if (!yesterdayRecord) return [];
 
-  const prior6Days = data.filter((r: any) => r.date >= sevenDaysAgo && r.date < yesterday);
+  const prior6Days = revenueRows.filter(r => r.date >= sevenDaysAgo && r.date < yesterday);
   if (prior6Days.length === 0) return [];
 
-  const avg = prior6Days.reduce((s: number, r: any) => s + (r.net_revenue || 0), 0) / prior6Days.length;
+  const avg = prior6Days.reduce((s, r) => s + (r.net_revenue || 0), 0) / prior6Days.length;
   const yesterdayRevenue = yesterdayRecord.net_revenue || 0;
   const threshold = config.revenueDropPct / 100;
 

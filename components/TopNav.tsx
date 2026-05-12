@@ -1,15 +1,37 @@
-
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BrainCircuit, Cloud, CloudOff, RefreshCw, Bell, Settings, UserCircle, CheckCircle2, PackageX, AlertTriangle, TrendingDown, WifiOff, Upload } from 'lucide-react';
+import {
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Bell,
+  Settings,
+  UserCircle,
+  CheckCircle2,
+  PackageX,
+  AlertTriangle,
+  TrendingDown,
+  WifiOff,
+  Upload,
+  ShoppingCart,
+  ChevronDown,
+} from 'lucide-react';
 import ApiKeySettings from './ApiKeySettings';
 import ThemeSwitcher from './ui/ThemeSwitcher';
 import type { AppThemeId } from '../constants/themes';
 import type { AppAlert } from '../types';
 
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  badge?: string;
+}
+
 interface NavSection {
   title: string;
-  items: { id: string; label: string; icon: React.ElementType }[];
+  items: NavItem[];
+  groups?: { header: string; itemIds: string[] }[];
 }
 
 interface TopNavProps {
@@ -37,12 +59,33 @@ const ALERT_ICONS: Record<string, React.ElementType> = {
 };
 
 const TopNav: React.FC<TopNavProps> = ({
-  sections, activeId, onSelect,
-  isCloudConnected, isSyncing, syncErrors, lastSyncTime, onRefresh, brandLogo, alerts = [], pendingCount = 0,
-  offlinePendingCount = 0, onDrainOfflineQueue, activeThemeId, onThemeChange
+  sections,
+  activeId,
+  onSelect,
+  isCloudConnected,
+  isSyncing,
+  syncErrors,
+  lastSyncTime,
+  onRefresh,
+  alerts = [],
+  pendingCount = 0,
+  offlinePendingCount = 0,
+  onDrainOfflineQueue,
+  activeThemeId,
+  onThemeChange,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openDropdown = (title: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpenSection(title);
+  };
+  const closeDropdown = () => {
+    closeTimer.current = setTimeout(() => setOpenSection(null), 80);
+  };
 
   const activeSection = useMemo(
     () => sections.find(s => s.items.some(i => i.id === activeId)) ?? sections[0],
@@ -54,74 +97,53 @@ const TopNav: React.FC<TopNavProps> = ({
 
   const categorizedErrors = useMemo(() => {
     if (!syncErrors) return {};
-    const cats: Record<string, string[]> = { 'Cơ sở dữ liệu': [], 'Dữ liệu Shopee': [], 'Hệ thống': [] };
+    const cats: Record<string, string[]> = {
+      'Cơ sở dữ liệu': [],
+      'Dữ liệu Shopee': [],
+      'Hệ thống': [],
+    };
     syncErrors.forEach(err => {
       if (err.toLowerCase().includes('shopee')) cats['Dữ liệu Shopee'].push(err);
-      else if (err.toLowerCase().includes('table') || err.toLowerCase().includes('supabase')) cats['Cơ sở dữ liệu'].push(err);
+      else if (err.toLowerCase().includes('table') || err.toLowerCase().includes('supabase'))
+        cats['Cơ sở dữ liệu'].push(err);
       else cats['Hệ thống'].push(err);
     });
     return Object.fromEntries(Object.entries(cats).filter(([, v]) => v.length > 0));
   }, [syncErrors]);
 
-  const handleSectionClick = (section: NavSection) => {
-    const target = section.items.find(i => i.id !== 'pos') ?? section.items[0];
-    onSelect(target.id);
-  };
-
   return (
     <>
-      {/* Row 1 — Main nav */}
+      {/* Row 1 — Logo + Utility */}
       <header className="h-14 bg-white border-b border-slate-100 flex items-center px-4 md:px-6 gap-2 z-40 shrink-0 shadow-sm">
         {/* Logo */}
-        <div className="flex items-center gap-3 mr-4 shrink-0">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center overflow-hidden shadow-md shadow-indigo-200 shrink-0">
-            {brandLogo
-              ? <img src={brandLogo} className="w-full h-full object-cover" alt="logo" />
-              : <BrainCircuit className="w-5 h-5 text-white" />
-            }
-          </div>
-          <div className="hidden sm:block leading-none">
-            <div className="text-sm font-black text-slate-900 uppercase tracking-tight">CFO Brain</div>
-            <div className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em]">Intelligence</div>
-          </div>
+        <div className="shrink-0 mr-2">
+          <img src="/logo.png" className="h-10 w-auto object-contain" alt="logo" />
         </div>
 
-        {/* Section tabs */}
-        <nav className="flex items-center gap-0.5 flex-1 overflow-x-auto no-scrollbar">
-          {sections.map(section => {
-            const isActive = section === activeSection;
-            return (
-              <button
-                key={section.title}
-                onClick={() => handleSectionClick(section)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                {section.title}
-              </button>
-            );
-          })}
-        </nav>
+        <div className="flex-1" />
 
         {/* Right area */}
-        <div className="flex items-center gap-1 ml-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Sync status */}
           <div className="hidden lg:flex items-center gap-2.5 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 mr-2">
-            {isSyncing
-              ? <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-              : isCloudConnected
-                ? <Cloud className="w-3.5 h-3.5 text-emerald-500" />
-                : <CloudOff className="w-3.5 h-3.5 text-rose-500" />
-            }
-            <span className={`text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}>
+            {isSyncing ? (
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+            ) : isCloudConnected ? (
+              <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+            ) : (
+              <CloudOff className="w-3.5 h-3.5 text-rose-500" />
+            )}
+            <span
+              className={`text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
+            >
               {isSyncing ? 'Syncing' : isCloudConnected ? 'Online' : 'Offline'}
             </span>
             {lastSyncTime && !isSyncing && (
               <span className="text-[9px] text-slate-400 font-bold border-l border-slate-200 pl-2.5">
-                {new Date(lastSyncTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                {new Date(lastSyncTime).toLocaleTimeString('vi-VN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </span>
             )}
             {pendingCount > 0 && !isSyncing && (
@@ -131,7 +153,7 @@ const TopNav: React.FC<TopNavProps> = ({
             )}
           </div>
 
-          {/* Offline Queue Badge + Sync Button */}
+          {/* Offline queue badge */}
           {offlinePendingCount > 0 && (
             <button
               onClick={() => onDrainOfflineQueue?.()}
@@ -146,14 +168,18 @@ const TopNav: React.FC<TopNavProps> = ({
           )}
 
           {/* Refresh */}
-          <button onClick={onRefresh}
-            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all">
+          <button
+            onClick={onRefresh}
+            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all"
+          >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} />
           </button>
 
           {/* Settings */}
-          <button onClick={() => setIsSettingsOpen(true)}
-            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all"
+          >
             <Settings className="w-4 h-4" />
           </button>
 
@@ -161,8 +187,10 @@ const TopNav: React.FC<TopNavProps> = ({
 
           {/* Notifications */}
           <div className="relative">
-            <button onClick={() => setIsNotificationsOpen(v => !v)}
-              className={`p-2.5 rounded-xl transition-all relative ${isNotificationsOpen ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700'}`}>
+            <button
+              onClick={() => setIsNotificationsOpen(v => !v)}
+              className={`p-2.5 rounded-xl transition-all relative ${isNotificationsOpen ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700'}`}
+            >
               <Bell className="w-4 h-4" />
               {totalBadge > 0 && (
                 <span className="absolute top-2 right-2 w-3.5 h-3.5 bg-rose-500 text-white text-[8px] font-black flex items-center justify-center rounded-full border border-white">
@@ -181,8 +209,14 @@ const TopNav: React.FC<TopNavProps> = ({
                   className="absolute right-0 mt-2 w-96 bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-slate-100 overflow-hidden z-50"
                 >
                   <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <h3 className="font-black text-slate-800 uppercase text-[10px] tracking-widest">Thông báo hệ thống</h3>
-                    {totalBadge > 0 && <span className="text-[9px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-black uppercase">{totalBadge} cảnh báo</span>}
+                    <h3 className="font-black text-slate-800 uppercase text-[10px] tracking-widest">
+                      Thông báo hệ thống
+                    </h3>
+                    {totalBadge > 0 && (
+                      <span className="text-[9px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-black uppercase">
+                        {totalBadge} cảnh báo
+                      </span>
+                    )}
                   </div>
                   <div className="max-h-96 overflow-y-auto p-4 space-y-3">
                     {totalBadge === 0 ? (
@@ -197,33 +231,52 @@ const TopNav: React.FC<TopNavProps> = ({
                       <>
                         {alerts.length > 0 && (
                           <div className="space-y-2">
-                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Cảnh báo AI</h4>
+                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
+                              Cảnh báo AI
+                            </h4>
                             {alerts.map(alert => {
                               const Icon = ALERT_ICONS[alert.type] ?? AlertTriangle;
                               const isCritical = alert.severity === 'critical';
                               return (
-                                <div key={alert.id} className={`p-4 rounded-2xl flex items-start gap-3 border ${isCritical ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'}`}>
-                                  <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${isCritical ? 'text-rose-500' : 'text-amber-500'}`} />
+                                <div
+                                  key={alert.id}
+                                  className={`p-4 rounded-2xl flex items-start gap-3 border ${isCritical ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'}`}
+                                >
+                                  <Icon
+                                    className={`w-4 h-4 mt-0.5 shrink-0 ${isCritical ? 'text-rose-500' : 'text-amber-500'}`}
+                                  />
                                   <div>
-                                    <p className="text-xs font-black text-slate-800">{alert.title}</p>
-                                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{alert.message}</p>
+                                    <p className="text-xs font-black text-slate-800">
+                                      {alert.title}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                                      {alert.message}
+                                    </p>
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
                         )}
-                        {errorCount > 0 && Object.entries(categorizedErrors).map(([cat, errs]) => (
-                          <div key={cat} className="space-y-2">
-                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">{cat}</h4>
-                            {(errs as string[]).map((err, i) => (
-                              <div key={i} className="p-4 bg-white border border-slate-100 rounded-2xl flex items-start gap-3">
-                                <div className="mt-1.5 w-2 h-2 bg-rose-500 rounded-full shrink-0 animate-pulse" />
-                                <p className="text-xs text-slate-600 font-bold leading-relaxed">{err}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
+                        {errorCount > 0 &&
+                          Object.entries(categorizedErrors).map(([cat, errs]) => (
+                            <div key={cat} className="space-y-2">
+                              <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                {cat}
+                              </h4>
+                              {(errs as string[]).map((err, i) => (
+                                <div
+                                  key={i}
+                                  className="p-4 bg-white border border-slate-100 rounded-2xl flex items-start gap-3"
+                                >
+                                  <div className="mt-1.5 w-2 h-2 bg-rose-500 rounded-full shrink-0 animate-pulse" />
+                                  <p className="text-xs text-slate-600 font-bold leading-relaxed">
+                                    {err}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
                       </>
                     )}
                   </div>
@@ -235,8 +288,12 @@ const TopNav: React.FC<TopNavProps> = ({
           {/* User */}
           <div className="flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-100">
             <div className="hidden xl:block text-right">
-              <p className="text-xs font-black text-slate-900 tracking-tight leading-none">Ngô Thành Du</p>
-              <p className="text-[9px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">Admin CFO</p>
+              <p className="text-xs font-black text-slate-900 tracking-tight leading-none">
+                Ngô Thành Du
+              </p>
+              <p className="text-[9px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">
+                Admin CFO
+              </p>
             </div>
             <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden">
               <UserCircle className="w-full h-full text-slate-300" />
@@ -245,26 +302,135 @@ const TopNav: React.FC<TopNavProps> = ({
         </div>
       </header>
 
-      {/* Row 2 — Sub-nav */}
-      <div className="h-11 bg-slate-50 border-b border-slate-100 flex items-end px-4 md:px-6 gap-0.5 z-30 shrink-0 overflow-x-auto no-scrollbar">
-        {activeSection.items.map(item => {
-          const Icon = item.icon;
-          const isActive = item.id === activeId;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onSelect(item.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-black uppercase tracking-wider whitespace-nowrap rounded-t-lg border-b-2 transition-all ${
-                isActive
-                  ? 'text-indigo-600 border-indigo-600 bg-white shadow-sm'
-                  : 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-white/60'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
-              {item.label}
-            </button>
-          );
-        })}
+      {/* Row 2 — Hover dropdown nav + Bán hàng CTA */}
+      <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 z-30 shrink-0 shadow-sm overflow-visible">
+        <nav className="flex items-center gap-0.5 flex-1">
+          {sections.map(section => {
+            const isActive = section === activeSection;
+            const hasMultiple = section.items.length > 1;
+
+            if (!hasMultiple) {
+              return (
+                <button
+                  key={section.title}
+                  onClick={() => onSelect(section.items[0].id)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-indigo-800 text-white'
+                      : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {section.title}
+                </button>
+              );
+            }
+
+            const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
+
+            const isOpen = openSection === section.title;
+            return (
+              <div
+                key={section.title}
+                className="relative"
+                onMouseEnter={() => openDropdown(section.title)}
+                onMouseLeave={closeDropdown}
+              >
+                <button
+                  onClick={() => onSelect(section.items[0].id)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-indigo-800 text-white'
+                      : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {section.title}
+                  <ChevronDown
+                    className={`w-3 h-3 opacity-70 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                <div
+                  className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
+                >
+                  <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
+                    {section.groups ? (
+                      /* 2-column layout with group headers */
+                      <div className="grid grid-cols-2 divide-x divide-slate-100">
+                        {section.groups.map(group => (
+                          <div key={group.header} className="py-2">
+                            <div className="px-4 pb-1 pt-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              {group.header}
+                            </div>
+                            {group.itemIds.map(itemId => {
+                              const item = itemMap[itemId];
+                              if (!item) return null;
+                              const Icon = item.icon;
+                              const isItemActive = item.id === activeId;
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => onSelect(item.id)}
+                                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
+                                    isItemActive
+                                      ? 'bg-indigo-50 text-indigo-600'
+                                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                                  }`}
+                                >
+                                  <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                  <span className="flex-1">{item.label}</span>
+                                  {item.badge && (
+                                    <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-black leading-none">
+                                      {item.badge}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Single-column layout */
+                      <div className="py-1">
+                        {section.items.map(item => {
+                          const Icon = item.icon;
+                          const isItemActive = item.id === activeId;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => onSelect(item.id)}
+                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
+                                isItemActive
+                                  ? 'bg-indigo-50 text-indigo-600'
+                                  : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                              }`}
+                            >
+                              <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                              <span className="flex-1">{item.label}</span>
+                              {item.badge && (
+                                <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-black leading-none">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+
+        <button
+          onClick={() => onSelect('pos')}
+          className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-600 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all hover:bg-indigo-50 shadow-sm shrink-0 ml-2"
+        >
+          <ShoppingCart className="w-3.5 h-3.5" />
+          Bán hàng
+        </button>
       </div>
 
       <ApiKeySettings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

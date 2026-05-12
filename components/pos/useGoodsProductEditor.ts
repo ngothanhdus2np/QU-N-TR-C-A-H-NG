@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { AppDataSurgicalUpdate, POSProduct } from '../../types';
 import { generateId, generateProductVariants, getNextSKUNumber } from '../../businessLogic';
 
 type GoodsTab = 'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form';
@@ -41,7 +41,7 @@ const emptyProductForm = (sku = ''): Partial<POSProduct> => ({
 interface UseGoodsProductEditorArgs {
   products: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   activeTab: GoodsTab;
   setActiveTab: React.Dispatch<React.SetStateAction<GoodsTab>>;
   handleAddProductToPurchase: (product: POSProduct) => void;

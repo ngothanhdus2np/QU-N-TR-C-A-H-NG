@@ -23,8 +23,6 @@ export async function sendEodEmail(date: string, summary: string): Promise<void>
     auth: { user: config.user, pass: config.pass },
   });
 
-  // Convert markdown bullet points to simple text for email subject preview
-  const firstLine = summary.split('\n').find(l => l.trim()) ?? `Báo cáo cuối ngày ${date}`;
   const subject = `[CFO Brain] Báo cáo cuối ngày ${date}`;
 
   // Inline CSS email body — works in Gmail, Outlook, Apple Mail

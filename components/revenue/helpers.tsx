@@ -1,8 +1,26 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import type { LucideIcon } from 'lucide-react';
 
-export const MetricCard = ({ title, value, icon: Icon, color, desc }: any) => {
-  const colorMap: any = { indigo: 'bg-indigo-50 text-indigo-600', rose: 'bg-rose-50 text-rose-600', emerald: 'bg-emerald-50 text-emerald-600', amber: 'bg-amber-50 text-amber-600', sky: 'bg-sky-50 text-sky-600' };
+type MetricColor = 'indigo' | 'rose' | 'emerald' | 'amber' | 'sky';
+
+interface MetricCardProps {
+  title: string;
+  value: React.ReactNode;
+  icon: LucideIcon;
+  color: MetricColor;
+  desc: React.ReactNode;
+}
+
+interface InputWrapperProps {
+  label: string;
+  icon: LucideIcon;
+  children: React.ReactNode;
+  color?: string;
+}
+
+export const MetricCard = ({ title, value, icon: Icon, color, desc }: MetricCardProps) => {
+  const colorMap: Record<MetricColor, string> = { indigo: 'bg-indigo-50 text-indigo-600', rose: 'bg-rose-50 text-rose-600', emerald: 'bg-emerald-50 text-emerald-600', amber: 'bg-amber-50 text-amber-600', sky: 'bg-sky-50 text-sky-600' };
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
@@ -20,7 +38,7 @@ export const MetricCard = ({ title, value, icon: Icon, color, desc }: any) => {
   );
 };
 
-export const InputWrapper = ({ label, icon: Icon, children, color = "text-slate-400" }: any) => (
+export const InputWrapper = ({ label, icon: Icon, children, color = "text-slate-400" }: InputWrapperProps) => (
   <div className="space-y-1.5">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <div className="relative bg-slate-50 border border-slate-100 focus-within:bg-white focus-within:border-blue-500 rounded-xl transition-all shadow-inner overflow-hidden flex items-center">

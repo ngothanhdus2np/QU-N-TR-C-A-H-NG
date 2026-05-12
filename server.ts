@@ -1,4 +1,13 @@
-console.log('--- SERVER PROCESS STARTING ---');
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Validate critical env vars at startup — fail loudly rather than silently degrade
+if (IS_PROD && !process.env.SESSION_SECRET) {
+  console.error('[STARTUP] FATAL: SESSION_SECRET không được set trong môi trường production. Dừng server.');
+  process.exit(1);
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('[STARTUP] WARNING: SUPABASE_SERVICE_ROLE_KEY chưa set — fallback về ANON KEY. Row Level Security sẽ được áp dụng đầy đủ nhưng một số admin operation có thể thất bại.');
+}
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
@@ -8,7 +17,7 @@ process.on('uncaughtException', (err, origin) => {
   console.error(`Uncaught Exception: ${err}\n` + `Exception origin: ${origin}`);
 });
 
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import path from 'path';
@@ -33,7 +42,7 @@ const supabase = createClient(supabaseAdminUrl, supabaseAdminKey);
 
 // Start listening immediately to satisfy the platform's health check.
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server is listening on port ${PORT}`);
+  if (!IS_PROD) console.error(`[STARTUP] Server is listening on port ${PORT}`);
 });
 
 app.get('/health', (_req, res) => res.send('OK'));
@@ -61,15 +70,12 @@ app.get('/', (req, res, next) => {
   next();
 });
 
-server.on('error', (err: any) => {
+server.on('error', (err: Error) => {
   console.error('SERVER LISTEN ERROR:', err);
 });
 
 async function startServer() {
   try {
-    console.log('--- STARTING SERVER INITIALIZATION ---');
-    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-
     app.set('trust proxy', 1);
     const allowedOrigins = [
       `http://localhost:${PORT}`,
@@ -89,13 +95,15 @@ async function startServer() {
     app.use(express.json({ limit: '15mb' }));
     app.use(cookieParser());
 
-    app.use((req, _res, next) => {
-      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-      next();
-    });
+    if (!IS_PROD) {
+      app.use((req, _res, next) => {
+        console.error(`[DEV Request] ${new Date().toISOString()} ${req.method} ${req.url}`);
+        next();
+      });
+    }
 
     app.use(session({
-      secret: process.env.SESSION_SECRET || 'fb-app-secret-key',
+      secret: process.env.SESSION_SECRET || (IS_PROD ? (() => { throw new Error('SESSION_SECRET required') })() : 'dev-only-insecure-secret'),
       resave: true,
       saveUninitialized: true,
       proxy: true,
@@ -112,29 +120,34 @@ async function startServer() {
       res.send('OK');
     });
 
-    app.use('/api', (req, _res, next) => {
-      console.log(`[API Request] ${req.method} ${req.url}`);
-      next();
-    });
+    if (!IS_PROD) {
+      app.use('/api', (req, _res, next) => {
+        console.error(`[DEV API Request] ${req.method} ${req.url}`);
+        next();
+      });
+    }
 
-    const requireAuth = (req: any, res: any, next: any) => {
+    const requireAuth = (req: Request, res: Response, next: NextFunction) => {
       const apiKey = req.headers['x-api-key'] as string;
       const internalKey = process.env.INTERNAL_API_KEY;
-      const isLocalRequest = req.hostname === 'localhost' || req.hostname === '127.0.0.1';
-      const hasValidKey = internalKey && apiKey === internalKey;
+      const hasValidKey = !!(internalKey && apiKey === internalKey);
 
-      if (isLocalRequest || hasValidKey) return next();
+      // Dùng địa chỉ TCP thực (không thể spoof qua HTTP header như req.hostname).
+      // Chỉ các process thực sự chạy trên cùng máy (cron nội bộ) mới qua được.
+      const remoteAddr = req.socket?.remoteAddress || '';
+      const isTrueLocalhost = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+
+      if (isTrueLocalhost || hasValidKey) return next();
       return res.status(401).json({ error: 'Unauthorized' });
     };
 
     const facebookRoutes = createFacebookRouter({ supabase, requireAuth, configDir: __dirname });
     app.use(facebookRoutes.router);
     app.use(createAiRouter());
-    app.use(createNotificationsRouter(supabase));
+    app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Initializing Vite dev server...');
+    if (!IS_PROD) {
       try {
         const { createServer: createViteServer } = await import('vite');
         const vite = await createViteServer({
@@ -143,7 +156,6 @@ async function startServer() {
         });
         app.use(vite.middlewares);
         viteReady = true;
-        console.log('Vite dev server initialized successfully.');
       } catch (viteError) {
         console.error('FAILED TO INITIALIZE VITE DEV SERVER:', viteError);
       }
@@ -165,8 +177,6 @@ async function startServer() {
         console.error('[Notification Scheduler] Unhandled error:', e);
       });
     }, 60000);
-
-    console.log('--- SERVER INITIALIZATION COMPLETE ---');
   } catch (error) {
     console.error('CRITICAL ERROR DURING SERVER STARTUP:', error);
     process.exit(1);

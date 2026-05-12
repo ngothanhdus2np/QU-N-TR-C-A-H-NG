@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { generateId } from '../../businessLogic';
-import EndOfDayReport from './EndOfDayReport';
 import POSCart from './POSCart';
 import POSCheckout from './POSCheckout';
 import POSReceiptModal from './POSReceiptModal';
@@ -20,14 +19,24 @@ interface POSComputerProps {
   products: POSProduct[];
   customers: POSCustomer[];
   orders: POSOrder[];
-  onPlaceOrder: (order: POSOrder, updatedProducts: POSProduct[], updatedCustomer?: POSCustomer) => void;
-  onReturnOrder: (order: POSOrder, updatedProducts: POSProduct[], returnedItems: POSOrderItem[], exchangeItems: POSOrderItem[]) => void;
+  onPlaceOrder: (
+    order: POSOrder,
+    updatedProducts: POSProduct[],
+    updatedCustomer?: POSCustomer
+  ) => void;
+  onReturnOrder: (
+    order: POSOrder,
+    updatedProducts: POSProduct[],
+    returnedItems: POSOrderItem[],
+    exchangeItems: POSOrderItem[]
+  ) => void;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
   brandProfile?: BrandProfile;
   currentStaffName?: string;
   offlinePendingCount?: number;
   isDraining?: boolean;
+  isActive?: boolean;
 }
 
 export interface InvoiceTab {
@@ -56,25 +65,23 @@ export interface InvoiceTab {
   };
 }
 
-const POSComputer: React.FC<POSComputerProps> = ({ 
-  products, 
-  customers, 
-  orders, 
+const POSComputer: React.FC<POSComputerProps> = ({
+  products,
+  customers,
+  orders,
   onPlaceOrder,
-  onReturnOrder, 
   onAddCustomer,
   onGoToManagement,
-  brandProfile,
-  currentStaffName,
   offlinePendingCount = 0,
-  isDraining = false
+  isDraining = false,
+  isActive = true,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
   const [showConsultant, setShowConsultant] = useState(false);
-  
+
   // Multi-tab state
   const [tabs, setTabs] = useState<InvoiceTab[]>([
     {
@@ -93,13 +100,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
       returnDiscount: 0,
       returnFee: 0,
       returnOtherRefund: 0,
-      splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 }
-    }
+      splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
+    },
   ]);
   const [activeTabId, setActiveTabId] = useState('default');
-  
+
   // Active Tab Data Accessor
-  const activeTab = useMemo(() => tabs.find(t => t.id === activeTabId) || tabs[0], [tabs, activeTabId]);
+  const activeTab = useMemo(
+    () => tabs.find(t => t.id === activeTabId) || tabs[0],
+    [tabs, activeTabId]
+  );
 
   // Derived active tab states
   const cart = activeTab.cart;
@@ -119,16 +129,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showGridMenu, setShowGridMenu] = useState(false);
-  const [newCustomerForm, setNewCustomerForm] = useState<QuickCustomerForm>({ 
-    name: '', 
-    phone: '', 
+  const [newCustomerForm, setNewCustomerForm] = useState<QuickCustomerForm>({
+    name: '',
+    phone: '',
     group: 'Khách lẻ',
     address: '',
     taxCode: '',
-    email: ''
+    email: '',
   });
   const [useSplitPayment, setUseSplitPayment] = useState(false);
-  
+
   // UI states
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [billDiscountRect, setBillDiscountRect] = useState<DOMRect | null>(null);
@@ -140,13 +150,13 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [isAutoPrintEnabled, setIsAutoPrintEnabled] = useState(true);
   const [lastOrder, setLastOrder] = useState<POSOrder | null>(null);
-  const [autoPromotion] = useState(0); 
-  
+  const [autoPromotion] = useState(0);
+
   // Return Modal states
   // Search state enhancements
   const [showProductResults, setShowProductResults] = useState(false);
   const [selectedResultIndex, setSelectedResultIndex] = useState(-1);
-  
+
   const productSearchRef = useRef<HTMLInputElement>(null);
   const consultantSearchRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
@@ -177,11 +187,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   };
   const closeConfirm = () => setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
-  const {
-    updateActiveTab,
-    addNewTab,
-    closeTab,
-  } = usePOSTabs({
+  const { updateActiveTab, addNewTab, closeTab } = usePOSTabs({
     tabs,
     activeTabId,
     setTabs,
@@ -218,7 +224,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       searchResultRefs.current[selectedResultIndex]?.scrollIntoView({
         behavior: 'smooth',
         block: 'nearest',
-        inline: 'nearest'
+        inline: 'nearest',
       });
     }
   }, [selectedResultIndex]);
@@ -226,12 +232,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const searchFilteredProducts = useMemo(() => {
     if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) return [];
     const search = debouncedSearchTerm.toLowerCase();
-    return products.filter(p => 
-      p.status === 'Active' && 
-      ((p.name?.toLowerCase() || '').includes(search) || 
-       (p.sku?.toLowerCase() || '').includes(search) ||
-       (p.barcode && p.barcode.includes(search)))
-    ).slice(0, 10);
+    return products
+      .filter(
+        p =>
+          p.status === 'Active' &&
+          !p.isParent &&
+          ((p.name?.toLowerCase() || '').includes(search) ||
+            (p.sku?.toLowerCase() || '').includes(search) ||
+            (p.barcode && p.barcode.includes(search)))
+      )
+      .slice(0, 10);
   }, [products, debouncedSearchTerm]);
 
   useEffect(() => {
@@ -246,49 +256,65 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const filteredCustomers = useMemo(() => {
     if (!debouncedCustomerSearch) return [];
     const search = debouncedCustomerSearch.toLowerCase();
-    return customers.filter(c => 
-      c.phone.includes(debouncedCustomerSearch) || 
-      c.name.toLowerCase().includes(search)
-    ).slice(0, 10);
+    return customers
+      .filter(
+        c => c.phone.includes(debouncedCustomerSearch) || c.name.toLowerCase().includes(search)
+      )
+      .slice(0, 10);
   }, [customers, debouncedCustomerSearch]);
 
-  const addToCart = React.useCallback((product: POSProduct) => {
-    // Check stock outside setTabs to avoid side effects inside state updater
-    const currentCart = activeTab.cart;
-    const existingItem = currentCart.find(item => item.productId === product.id);
-    const qtyInCart = existingItem?.quantity ?? 0;
-    if (product.stock <= 0 || qtyInCart >= product.stock) {
-      showStockWarning(`${product.name} — không đủ hàng (tồn: ${product.stock})`);
-      return;
-    }
+  const addToCart = React.useCallback(
+    (product: POSProduct) => {
+      if (product.isParent) return;
 
-    setTabs(prevTabs => prevTabs.map(t => {
-      if (t.id !== activeTabId) return t;
-      const prevCart = t.cart;
-      const existing = prevCart.find(item => item.productId === product.id);
-      let newCart;
-      if (existing) {
-        newCart = prevCart.map(item =>
-          item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * (item.price - item.discount) }
-            : item
-        );
-      } else {
-        newCart = [...prevCart, {
-          productId: product.id,
-          sku: product.sku,
-          name: product.name,
-          quantity: 1,
-          price: product.salePrice,
-          discount: 0,
-          total: product.salePrice
-        }];
+      // Check stock outside setTabs to avoid side effects inside state updater
+      const currentCart = activeTab.cart;
+      const existingItem = currentCart.find(item => item.productId === product.id);
+      const qtyInCart = existingItem?.quantity ?? 0;
+      if (product.stock <= 0 || qtyInCart >= product.stock) {
+        showStockWarning(`${product.name} — không đủ hàng (tồn: ${product.stock})`);
+        return;
       }
-      return { ...t, cart: newCart };
-    }));
-  }, [activeTabId, activeTab.cart]);
+
+      setTabs(prevTabs =>
+        prevTabs.map(t => {
+          if (t.id !== activeTabId) return t;
+          const prevCart = t.cart;
+          const existing = prevCart.find(item => item.productId === product.id);
+          let newCart;
+          if (existing) {
+            newCart = prevCart.map(item =>
+              item.productId === product.id
+                ? {
+                    ...item,
+                    quantity: item.quantity + 1,
+                    total: (item.quantity + 1) * (item.price - item.discount),
+                  }
+                : item
+            );
+          } else {
+            newCart = [
+              ...prevCart,
+              {
+                productId: product.id,
+                sku: product.sku,
+                name: product.name,
+                quantity: 1,
+                price: product.salePrice,
+                discount: 0,
+                total: product.salePrice,
+              },
+            ];
+          }
+          return { ...t, cart: newCart };
+        })
+      );
+    },
+    [activeTabId, activeTab.cart]
+  );
 
   usePOSKeyboard({
+    isActive,
     products,
     productSearchRef,
     consultantSearchRef,
@@ -303,48 +329,67 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setShowProductResults,
   });
 
-  const updateQuantity = React.useCallback((productId: string, delta: number) => {
-    setTabs(prevTabs => prevTabs.map(t => {
-      if (t.id !== activeTabId) return t;
-      const newCart = t.cart.map(item => {
-        if (item.productId === productId) {
-          const product = products.find(p => p.id === productId);
-          const maxQty = product?.stock ?? Infinity;
-          const newQty = Math.min(maxQty, Math.max(1, item.quantity + delta));
-          return { ...item, quantity: newQty, total: newQty * (item.price - item.discount) };
-        }
-        return item;
-      });
-      return { ...t, cart: newCart };
-    }));
-  }, [activeTabId, products]);
-
-  const removeFromCart = React.useCallback((productId: string) => {
-    setTabs(prevTabs => prevTabs.map(t => {
-      if (t.id !== activeTabId) return t;
-      const newCart = t.cart.filter(item => item.productId !== productId);
-      // Reset cashReceived to 0 if cart is empty
-      const newCashReceived = newCart.length === 0 ? 0 : t.cashReceived;
-      return { ...t, cart: newCart, cashReceived: newCashReceived };
-    }));
-  }, [activeTabId]);
-
-  const updateItemDiscount = React.useCallback((productId: string, discountAmount: number) => {
-    setTabs(prev => prev.map(t => {
-      if (t.id !== activeTabId) return t;
-      return {
-        ...t,
-        cart: t.cart.map(item => item.productId !== productId ? item : {
-          ...item,
-          discount: discountAmount,
-          total: item.quantity * (item.price - discountAmount)
+  const updateQuantity = React.useCallback(
+    (productId: string, delta: number) => {
+      setTabs(prevTabs =>
+        prevTabs.map(t => {
+          if (t.id !== activeTabId) return t;
+          const newCart = t.cart.map(item => {
+            if (item.productId === productId) {
+              const product = products.find(p => p.id === productId);
+              const maxQty = product?.stock ?? Infinity;
+              const newQty = Math.min(maxQty, Math.max(1, item.quantity + delta));
+              return { ...item, quantity: newQty, total: newQty * (item.price - item.discount) };
+            }
+            return item;
+          });
+          return { ...t, cart: newCart };
         })
-      };
-    }));
-  }, [activeTabId]);
+      );
+    },
+    [activeTabId, products]
+  );
+
+  const removeFromCart = React.useCallback(
+    (productId: string) => {
+      setTabs(prevTabs =>
+        prevTabs.map(t => {
+          if (t.id !== activeTabId) return t;
+          const newCart = t.cart.filter(item => item.productId !== productId);
+          // Reset cashReceived to 0 if cart is empty
+          const newCashReceived = newCart.length === 0 ? 0 : t.cashReceived;
+          return { ...t, cart: newCart, cashReceived: newCashReceived };
+        })
+      );
+    },
+    [activeTabId]
+  );
+
+  const updateItemDiscount = React.useCallback(
+    (productId: string, discountAmount: number) => {
+      setTabs(prev =>
+        prev.map(t => {
+          if (t.id !== activeTabId) return t;
+          return {
+            ...t,
+            cart: t.cart.map(item =>
+              item.productId !== productId
+                ? item
+                : {
+                    ...item,
+                    discount: discountAmount,
+                    total: item.quantity * (item.price - discountAmount),
+                  }
+            ),
+          };
+        })
+      );
+    },
+    [activeTabId]
+  );
 
   const totalBeforeDiscount = cart.reduce((acc, item) => acc + item.total, 0);
-  
+
   const manualDiscountAmount = useMemo(() => {
     if (discountType === 'percent') {
       return (totalBeforeDiscount * discountValue) / 100;
@@ -357,13 +402,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const pointsEarned = Math.floor(netPayable / 10000);
 
   const {
-    addToReturnCart,
     updateReturnQuantity,
     removeFromReturnCart,
     totalReturnBeforeDiscount,
     finalReturnAmount,
     amountToPayCustomer,
-    customerPaysDifference,
     handleReturnFast,
   } = usePOSReturnFlow({
     activeTabId,
@@ -377,19 +420,19 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setActiveTabId,
     setShowReturnModal,
   });
-  
+
   // Dynamic Cash Suggestions based on Vietnamese Currency
   const cashSuggestions = useMemo(() => {
     if (netPayable <= 0) return [0, 0, 0, 0, 0, 0];
-    
+
     const suggestions = new Set<number>();
-    
+
     // 1. Exact amount
     suggestions.add(netPayable);
-    
+
     // 2. Common VN denominations round-ups
     const denoms = [10000, 20000, 50000, 100000, 200000, 500000];
-    
+
     denoms.forEach(d => {
       const rounded = Math.ceil(netPayable / d) * d;
       if (rounded >= netPayable) {
@@ -400,7 +443,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     // Strategy to pick 6 meaningful values
     const sorted = Array.from(suggestions).sort((a, b) => a - b);
     const result = sorted.filter(s => s >= netPayable).slice(0, 6);
-    
+
     // Fill if fewer than 6
     while (result.length < 6) {
       const last = result[result.length - 1] || netPayable;
@@ -412,13 +455,12 @@ const POSComputer: React.FC<POSComputerProps> = ({
       }
       result.sort((a, b) => a - b);
     }
-    
+
     return result.slice(0, 6);
   }, [netPayable]);
 
   // Return Invoices filtering
   const currentCashReceived = cashReceived || netPayable;
-  const changeDue = currentCashReceived > netPayable ? currentCashReceived - netPayable : 0;
 
   const handleCheckout = () => {
     if (cart.length === 0 || isCheckoutLocked) return;
@@ -430,14 +472,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
     if (insufficientItem) {
       const product = products.find(p => p.id === insufficientItem.productId);
-      showStockWarning(`${insufficientItem.name} — không đủ hàng để thanh toán (tồn: ${product?.stock ?? 0}, cần: ${insufficientItem.quantity})`);
+      showStockWarning(
+        `${insufficientItem.name} — không đủ hàng để thanh toán (tồn: ${product?.stock ?? 0}, cần: ${insufficientItem.quantity})`
+      );
       return;
     }
 
     setIsCheckoutLocked(true);
     const orderId = generateId();
     const orderCode = `HD-${Date.now().toString().slice(-6)}`;
-    
+
     const newOrder: POSOrder = {
       id: orderId,
       orderCode,
@@ -451,7 +495,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       paymentMethod: paymentMethod,
       staffId: 'Admin',
       pointsEarned: pointsEarned,
-      notes: orderNote
+      notes: orderNote,
     };
 
     const updatedProducts = products.map(p => {
@@ -468,7 +512,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         ...selectedCustomer,
         points: selectedCustomer.points + pointsEarned,
         totalSpent: selectedCustomer.totalSpent + netPayable,
-        lastVisit: new Date().toISOString()
+        lastVisit: new Date().toISOString(),
       };
     }
 
@@ -508,24 +552,26 @@ const POSComputer: React.FC<POSComputerProps> = ({
       setTabs(remainingTabs);
       setActiveTabId(remainingTabs[0].id);
     } else {
-      setTabs([{
-        id: 'default',
-        name: 'Hóa đơn 1',
-        mode: 'sales',
-        cart: [],
-        returnCart: [],
-        selectedCustomer: null,
-        discountValue: 0,
-        discountType: 'percent',
-        paymentMethod: 'Cash',
-        orderNote: '',
-        otherFees: 0,
-        cashReceived: 0,
-        returnDiscount: 0,
-        returnFee: 0,
-        returnOtherRefund: 0,
-        splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 }
-      }]);
+      setTabs([
+        {
+          id: 'default',
+          name: 'Hóa đơn 1',
+          mode: 'sales',
+          cart: [],
+          returnCart: [],
+          selectedCustomer: null,
+          discountValue: 0,
+          discountType: 'percent',
+          paymentMethod: 'Cash',
+          orderNote: '',
+          otherFees: 0,
+          cashReceived: 0,
+          returnDiscount: 0,
+          returnFee: 0,
+          returnOtherRefund: 0,
+          splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
+        },
+      ]);
       setActiveTabId('default');
     }
   };
@@ -600,7 +646,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
                 </tr>
               </thead>
               <tbody>
-                ${lastOrder.items.map(item => `
+                ${lastOrder.items
+                  .map(
+                    item => `
                   <tr>
                     <td>
                       <div class="bold uppercase">${item.name}</div>
@@ -609,7 +657,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
                     <td style="text-align: center;">${item.quantity}</td>
                     <td style="text-align: right;" class="bold">${item.total.toLocaleString()}đ</td>
                   </tr>
-                `).join('')}
+                `
+                  )
+                  .join('')}
               </tbody>
             </table>
             
@@ -661,18 +711,18 @@ const POSComputer: React.FC<POSComputerProps> = ({
       phone: newCustomerForm.phone,
       points: 0,
       totalSpent: 0,
-      tier: 'Standard'
+      tier: 'Standard',
     };
     onAddCustomer(newCustomer);
     updateActiveTab({ selectedCustomer: newCustomer });
     setShowAddCustomerModal(false);
-    setNewCustomerForm({ 
-      name: '', 
-      phone: '', 
+    setNewCustomerForm({
+      name: '',
+      phone: '',
       group: 'Khách lẻ',
       address: '',
       taxCode: '',
-      email: ''
+      email: '',
     });
   };
 
@@ -724,7 +774,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           onDiscountClick={(productId, price, discount, rect) => {
             setItemDiscountPopup({ productId, price, discount, rect });
           }}
-          onOrderNoteChange={(note) => updateActiveTab({ orderNote: note })}
+          onOrderNoteChange={note => updateActiveTab({ orderNote: note })}
         />
 
         {/* Right Sidebar (Checkout) */}
@@ -734,7 +784,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
           customerSearchRef={customerSearchRef}
           selectedCustomer={selectedCustomer}
           filteredCustomers={filteredCustomers}
-          onSelectCustomer={(c) => { updateActiveTab({ selectedCustomer: c }); setCustomerSearch(''); }}
+          onSelectCustomer={c => {
+            updateActiveTab({ selectedCustomer: c });
+            setCustomerSearch('');
+          }}
           onClearCustomer={() => updateActiveTab({ selectedCustomer: null })}
           onOpenAddCustomer={() => setShowAddCustomerModal(true)}
           mode={mode}
@@ -755,7 +808,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
           splitPayment={splitPayment}
           cashSuggestions={cashSuggestions}
           onUpdateTab={updateActiveTab}
-          onBillDiscountClick={(rect) => { setBillDiscountRect(rect); setShowDiscountModal(true); }}
+          onBillDiscountClick={rect => {
+            setBillDiscountRect(rect);
+            setShowDiscountModal(true);
+          }}
           onCheckout={handleCheckout}
           isCheckoutLocked={isCheckoutLocked}
         />

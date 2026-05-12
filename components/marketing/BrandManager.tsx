@@ -1,9 +1,9 @@
 
 import React, { useRef, useState } from 'react';
 import { 
-  UploadCloud, Phone, MapPin, Hash, MessageSquare, Users, Warehouse, Plus, Trash2, Loader2, Sparkles
+  UploadCloud, MessageSquare, Users, Loader2, Sparkles
 } from 'lucide-react';
-import { BrandProfile, ProductLine } from '../../types';
+import { BrandProfile } from '../../types';
 import { uploadImage } from '../../services/marketingStorageService';
 
 interface BrandManagerProps {
@@ -22,7 +22,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height, max = 800; // Reduced from 1200 to 800 for optimization
+        let w = img.width, h = img.height;
+        const max = 800; // Reduced from 1200 to 800 for optimization
         if (w > h) { if (w > max) { h *= max/w; w = max; } } else { if (h > max) { w *= max/h; h = max; } }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);

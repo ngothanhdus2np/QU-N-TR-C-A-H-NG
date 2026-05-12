@@ -2,8 +2,7 @@
 import React from 'react';
 import { 
   Camera, 
-  Globe,
-  Loader2
+  Globe
 } from 'lucide-react';
 import { STRATEGY_COLORS } from '../../constants/marketing';
 import { ContentPlanItem, ContentStrategy } from '../../types';

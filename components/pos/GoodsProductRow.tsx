@@ -2,10 +2,12 @@ import React from 'react';
 import { Star, Edit2, Image as ImageIcon } from 'lucide-react';
 import { POSProduct } from '../../types';
 
-export const VariantRow = React.memo(({ variant, isSelected, onSelect, onEdit, onView, visibleColumns }: {
+export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, visibleColumns }: {
   variant: POSProduct;
   isSelected: boolean;
+  isFavorite: boolean;
   onSelect: (id: string) => void;
+  onToggleFavorite: (id: string) => void;
   onEdit: (p: POSProduct) => void;
   onView: (p: POSProduct) => void;
   visibleColumns: string[];
@@ -14,7 +16,11 @@ export const VariantRow = React.memo(({ variant, isSelected, onSelect, onEdit, o
     <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isSelected} onChange={() => onSelect(variant.id)} />
     </td>
-    <td className="px-2 py-3 w-8"></td>
+    <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => onToggleFavorite(variant.id)} className="text-slate-300 hover:text-amber-400 transition-colors">
+        <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+      </button>
+    </td>
     {visibleColumns.includes('image') && (
       <td className="px-2 py-3 w-20">
         <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
@@ -23,14 +29,14 @@ export const VariantRow = React.memo(({ variant, isSelected, onSelect, onEdit, o
       </td>
     )}
     <td className="px-4 py-3">
-      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono font-black text-[10px] border border-slate-200 tracking-tight whitespace-nowrap">{variant.sku}</span>
+      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-[10px] border border-slate-200 tracking-tight whitespace-nowrap">{variant.sku}</span>
     </td>
     <td className="px-4 py-3 text-slate-700 text-sm min-w-[200px]">
-      <div className="flex items-center gap-2 pl-8"><span className="font-semibold">{variant.name}</span></div>
+      <div className="flex items-center gap-2 pl-8"><span>{variant.name}</span></div>
     </td>
     {visibleColumns.includes('category') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('productType') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.productType || 'Hàng hóa'}</td>}
-    {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right font-black text-slate-700 text-sm tabular-nums whitespace-nowrap">{variant.salePrice.toLocaleString()}đ</td>}
+    {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-700 text-sm tabular-nums whitespace-nowrap">{variant.salePrice.toLocaleString()}đ</td>}
     {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right font-bold text-slate-400 text-xs tabular-nums whitespace-nowrap">{variant.importPrice.toLocaleString()}đ</td>}
     {visibleColumns.includes('brand') && <td className="px-4 py-3 text-xs text-slate-500 font-bold whitespace-nowrap">{variant.brand || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('location') && (
@@ -40,7 +46,7 @@ export const VariantRow = React.memo(({ variant, isSelected, onSelect, onEdit, o
     )}
     {visibleColumns.includes('stock') && (
       <td className="px-4 py-3 text-right whitespace-nowrap">
-        <span className={`font-black text-sm tabular-nums ${variant.stock === 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
+        <span className={`text-sm tabular-nums ${variant.stock === 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
         {variant.stock === 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-black">Hết</span>}
         {variant.stock > 0 && variant.stock <= (variant.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-black">Sắp hết</span>}
       </td>
@@ -66,7 +72,7 @@ export const VariantRow = React.memo(({ variant, isSelected, onSelect, onEdit, o
   </tr>
 ));
 
-export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, isExpanded, onToggleExpand, allProducts, visibleColumns }: {
+export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, onToggleExpand, visibleColumns }: {
   product: POSProduct;
   isSelected: boolean;
   isFavorite: boolean;
@@ -76,7 +82,6 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   onView: (p: POSProduct) => void;
   isExpanded?: boolean;
   onToggleExpand?: (id: string) => void;
-  allProducts?: POSProduct[];
   visibleColumns: string[];
 }) => {
   const isParent = product.isParent && product.variantCount && product.variantCount > 0;
@@ -101,7 +106,7 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
         </td>
       )}
       <td className="px-4 py-3">
-        {product.sku ? <span className="text-sm text-slate-600 whitespace-nowrap">{product.sku}</span> : <span className="text-slate-300 text-sm">—</span>}
+        {!isParent && product.sku ? <span className="text-sm text-slate-600 whitespace-nowrap">{product.sku}</span> : <span className="text-slate-300 text-sm">—</span>}
       </td>
       <td className="px-4 py-3 text-slate-900 text-sm min-w-[200px]">
         <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { AppDataSurgicalUpdate, POSProduct } from '../../types';
 import { cartesianProduct, generateId, getNextSKUNumber } from '../../businessLogic';
 
 type ViewModeUnit = { name: string; price: number; directSale: boolean };
@@ -16,7 +16,7 @@ type PreviewVariant = {
 interface UseGoodsVariantWorkflowArgs {
   products: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
-  onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   viewingProduct: POSProduct | null;
   setViewingProduct: React.Dispatch<React.SetStateAction<POSProduct | null>>;
   showToast: (message: string, type?: 'success' | 'error') => void;
@@ -232,7 +232,7 @@ export const useGoodsVariantWorkflow = ({
     if (onUpdateSurgical) {
       onUpdateSurgical([
         { key: 'posProducts', item: updatedParent },
-        ...newVariants.map(variant => ({ key: 'posProducts', item: variant }))
+        ...newVariants.map((variant): AppDataSurgicalUpdate => ({ key: 'posProducts', item: variant }))
       ]);
     } else {
       onUpdateProducts([

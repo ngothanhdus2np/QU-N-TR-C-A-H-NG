@@ -1,24 +1,23 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useTransition } from 'react';
 import DOMPurify from 'dompurify';
 import { ProductGroup, ProductGroupRevenue, RevenueRecord } from '../types';
 import { 
   Plus, Trash2, Calendar, DollarSign, Layers, Sparkles, 
-  Loader2, Upload, Activity, Search, 
-  ChevronRight, ChevronDown, LayoutGrid, ListTree,
-  ShoppingCart, Hash, Circle, Info, TrendingUp,
-  DatabaseZap, X, Settings, Target, BarChart3, TrendingDown,
-  Box, FileText, Filter, FileSpreadsheet, Download, Save,
-  ArrowRightLeft, HandCoins, Zap, PieChart as PieChartIcon, ShieldAlert, Star, CheckCircle2, AlertTriangle,
+  Loader2, Upload, Activity,
+  ChevronRight, ChevronDown,
+  ShoppingCart, Hash, Info, TrendingUp,
+  DatabaseZap, X, Target,
+  FileText, Filter, FileSpreadsheet,
+  Zap, ShieldAlert, Star,
   History, ArrowUpDown, Boxes, Award, ArrowUp, Briefcase, Percent
 } from 'lucide-react';
-import { calculateStrategicSuggestions, calculateSeasonalityAnalysis, cleanVNNumber, parseVNDate, parseHierarchyGroups, normalizeHeader, generateId, processExcelRawData, isUUID } from '../businessLogic';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
+import { calculateStrategicSuggestions, calculateSeasonalityAnalysis, cleanVNNumber, parseVNDate, parseHierarchyGroups, generateId, processExcelRawData, isUUID, type ParsedExcelRow } from '../businessLogic';
 import { marked } from "marked";
-import * as XLSX from 'xlsx';
 
 type AnalysisMode = 'range' | 'seasonality';
 type ViewMode = 'revenue' | 'quantity';
+type ProductGroupSubTab = 'seasonality' | 'matrix' | 'ledger';
 
 interface SeasonalRow {
   month: string;
@@ -46,9 +45,23 @@ interface Props {
   onUpdateRevenue: (newList: RevenueRecord[]) => void;
 }
 
-const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, list, onUpdateGroups, onUpdateGroupRevenue, onUpdateRevenue }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'seasonality' | 'matrix' | 'ledger'>('seasonality');
-  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('seasonality');
+type PendingGroup = { name: string; level: number; fullPath: string; selected: boolean };
+type PendingGroupRevenue = {
+  date: string;
+  fullPath: string;
+  amount: number;
+  quantity: number;
+  returnsQuantity: number;
+  returnsValue: number;
+  netRevenue: number;
+  cogs: number;
+};
+type ImportedGroupRow = ParsedExcelRow & { _smartGroup: string; _amount: number };
+
+const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, onUpdateGroups, onUpdateGroupRevenue }) => {
+  const [activeSubTab, setActiveSubTab] = useState<ProductGroupSubTab>('seasonality');
+  const [, startSubTabTransition] = useTransition();
+  const [analysisMode] = useState<AnalysisMode>('seasonality');
   const [viewMode, setViewMode] = useState<ViewMode>('quantity'); 
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(new Date().getMonth() + 1);
   
@@ -63,14 +76,18 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
 
   const [isAuditMode, setIsAuditMode] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
-  const [pendingGroups, setPendingGroups] = useState<{ name: string; level: number; fullPath: string; selected: boolean }[]>([]);
-  const [pendingGroupRevenue, setPendingGroupRevenue] = useState<any[]>([]);
+  const [pendingGroups, setPendingGroups] = useState<PendingGroup[]>([]);
+  const [pendingGroupRevenue, setPendingGroupRevenue] = useState<PendingGroupRevenue[]>([]);
   const [groupConflicts, setGroupConflicts] = useState<{ date: string; groupName: string; currentAmount: number; newAmount: number }[]>([]);
   const [conflictResolution, setConflictResolution] = useState<'overwrite' | 'skip' | 'add'>('overwrite');
   const [syncAccountingMonth, setSyncAccountingMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formatNumber = (num: number) => Math.round(num || 0).toLocaleString('vi-VN');
+
+  const changeSubTab = (tab: ProductGroupSubTab) => {
+    startSubTabTransition(() => setActiveSubTab(tab));
+  };
   
   const [groupFormData, setGroupFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -93,6 +110,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
   }, [productGroups, groupRevenue]);
 
   const filteredGroupRevenue = useMemo(() => {
+    if (activeSubTab !== 'seasonality') return [];
     if (analysisMode === 'seasonality') {
       return groupRevenue.filter(r => {
         const month = parseInt(r.date.split('-')[1]);
@@ -100,7 +118,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       });
     }
     return groupRevenue;
-  }, [groupRevenue, analysisMode, selectedMonthNum]);
+  }, [activeSubTab, groupRevenue, analysisMode, selectedMonthNum]);
 
   const seasonalityStats = useMemo(() => calculateSeasonalityAnalysis(filteredGroupRevenue, effectiveGroups), [filteredGroupRevenue, effectiveGroups]);
 
@@ -122,6 +140,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
   }, [groupRevenue]);
 
   const thisMonthTactical = useMemo(() => {
+    if (activeSubTab !== 'seasonality') return [];
     const data = groupRevenue.filter(r => parseInt(r.date.split('-')[1]) === selectedMonthNum);
     const totalRev = data.reduce((s, r) => s + (r.netRevenue || (r.amount - (r.returnsValue || 0))), 0);
     const totalQty = data.reduce((s, r) => s + (r.quantity || 0), 0);
@@ -142,31 +161,45 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
           ? (totalRev > 0 ? (g.rev / totalRev) * 100 : 0)
           : (totalQty > 0 ? (g.qty / totalQty) * 100 : 0)
       }));
-  }, [groupRevenue, selectedMonthNum, viewMode]);
+  }, [activeSubTab, groupRevenue, selectedMonthNum, viewMode]);
 
   const nextMonthTactical = useMemo(() => {
+    if (activeSubTab !== 'seasonality') return [];
     return calculateStrategicSuggestions(groupRevenue, nextMonthNum, viewMode);
-  }, [groupRevenue, nextMonthNum, viewMode]);
+  }, [activeSubTab, groupRevenue, nextMonthNum, viewMode]);
 
   const matrixData = useMemo(() => {
+    if (activeSubTab !== 'matrix') return [];
     const sortedGroups = [...effectiveGroups];
-    const getMetricForCell = (fullPath: string, year: string) => {
-      const records = groupRevenue.filter(r => {
-        const rYear = r.date.split('-')[0];
-        const rMonth = parseInt(r.date.split('-')[1]);
-        return rYear === year && rMonth === selectedMonthNum && (r.groupName === fullPath || r.groupName.startsWith(fullPath + ' >> '));
+    const parentPaths = new Set<string>();
+    const metricByPathYear = new Map<string, number>();
+
+    for (const record of groupRevenue) {
+      const rYear = record.date.split('-')[0];
+      const rMonth = parseInt(record.date.split('-')[1]);
+      if (rMonth !== selectedMonthNum) continue;
+
+      const metric =
+        viewMode === 'revenue'
+          ? record.netRevenue || record.amount - (record.returnsValue || 0)
+          : record.quantity || 0;
+      const parts = record.groupName.split(' >> ');
+      let currentPath = '';
+
+      parts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath} >> ${part}` : part;
+        const key = `${currentPath}__${rYear}`;
+        metricByPathYear.set(key, (metricByPathYear.get(key) || 0) + metric);
+        if (index < parts.length - 1) parentPaths.add(currentPath);
       });
-      return viewMode === 'revenue' 
-        ? records.reduce((sum, r) => sum + (r.netRevenue || (r.amount - (r.returnsValue || 0))), 0)
-        : records.reduce((sum, r) => sum + (r.quantity || 0), 0);
-    };
+    }
 
     return sortedGroups.map(g => {
       const parts = g.name.split(' >> ');
       const yearValues: Record<string, number> = {};
       let totalAllYearsMetric = 0;
       years.forEach(y => {
-        const val = getMetricForCell(g.name, y);
+        const val = metricByPathYear.get(`${g.name}__${y}`) || 0;
         yearValues[y] = val;
         totalAllYearsMetric += val;
       });
@@ -174,12 +207,12 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
         ...g, 
         displayName: parts[parts.length - 1], 
         level: parts.length, 
-        isParent: effectiveGroups.some(s => s.name.startsWith(g.name + ' >> ')),
+        isParent: parentPaths.has(g.name),
         yearValues,
         totalAllYearsMetric
       };
     }).filter(row => row.totalAllYearsMetric > 0).sort((a, b) => b.totalAllYearsMetric - a.totalAllYearsMetric);
-  }, [effectiveGroups, groupRevenue, years, selectedMonthNum, viewMode]);
+  }, [activeSubTab, effectiveGroups, groupRevenue, years, selectedMonthNum, viewMode]);
 
   const maxMatrixValue = useMemo(() => {
     let max = 0;
@@ -209,16 +242,16 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
         const fileContent = event.target?.result;
         if (!fileContent) return;
         const results = processExcelRawData(fileContent, isExcel);
-        const mappedResults = results.map(r => {
+        const mappedResults: ImportedGroupRow[] = results.map(r => {
            const gKey = Object.keys(r).find(k => ['nhomhang', 'nhomhanghoa', 'group'].includes(k));
            const amount = cleanVNNumber(r[Object.keys(r).find(k => ['doanhthu', 'tienhang', 'revenue'].includes(k))!]);
-           let rawGroupName = (gKey && r[gKey]) ? String(r[gKey]).trim() : (amount > 0 ? 'Chưa phân loại' : '');
+           const rawGroupName = (gKey && r[gKey]) ? String(r[gKey]).trim() : (amount > 0 ? 'Chưa phân loại' : '');
            return { ...r, _smartGroup: rawGroupName, _amount: amount };
         }).filter(r => r._smartGroup !== '');
         const rawGroupNames = Array.from(new Set(mappedResults.map(r => r._smartGroup)));
-        const hierarchyFound: any[] = [];
+        const hierarchyFound: PendingGroup[] = [];
         const existingPaths = effectiveGroups.map(g => g.name);
-        rawGroupNames.forEach((raw: any) => {
+        rawGroupNames.forEach(raw => {
           parseHierarchyGroups(raw).forEach(node => {
             if (!existingPaths.includes(node.fullPath) && !hierarchyFound.some(h => h.fullPath === node.fullPath)) {
               hierarchyFound.push({ ...node, selected: true });
@@ -237,7 +270,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
         }));
 
         // Detect conflicts
-        const conflicts: any[] = [];
+        const conflicts: { date: string; groupName: string; currentAmount: number; newAmount: number }[] = [];
         const [year, month] = syncAccountingMonth.split('-').map(Number);
         const lastDay = new Date(year, month, 0).getDate();
         const resolvedDate = `${syncAccountingMonth}-${lastDay.toString().padStart(2, '0')}`;
@@ -259,7 +292,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
         setPendingGroups(hierarchyFound.sort((a, b) => a.fullPath.localeCompare(b.fullPath)));
         setPendingGroupRevenue(mappedGroupRev);
         setIsAuditMode(true);
-      } catch (err) { alert("Lỗi hệ thống khi xử lý file Excel."); }
+      } catch { alert("Lỗi hệ thống khi xử lý file Excel."); }
     };
     if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
   };
@@ -277,7 +310,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
 
       const recordsToCommit: ProductGroupRevenue[] = pendingGroupRevenue.map(p => {
         const matchingGroup = allGroupsMerged.find(g => g.name === p.fullPath);
-        let finalGroupId = matchingGroup?.id || allGroupsMerged.find(g => p.fullPath.startsWith(g.name + ' >> '))?.id;
+        const finalGroupId = matchingGroup?.id || allGroupsMerged.find(g => p.fullPath.startsWith(g.name + ' >> '))?.id;
         return {
           id: generateId(), 
           date: p.date === 'AUTO_MONTH' ? resolvedDate : p.date,
@@ -313,7 +346,10 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       setIsAuditMode(false);
       setGroupConflicts([]);
       alert("Đồng bộ dữ liệu Nhóm hàng thành công!");
-    } catch (err: any) { alert(`Lỗi khi lưu dữ liệu: ${err.message}`); } finally { setIsCommitting(false); }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Lỗi khi lưu dữ liệu: ${message}`);
+    } finally { setIsCommitting(false); }
   };
 
   const runStrategicDiagnosis = async () => {
@@ -339,7 +375,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'AI service error');
       setDiagnosisResult(data.result || 'Lỗi AI.');
-    } catch (err) { setDiagnosisResult("Lỗi kết nối AI Advisor. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local."); }
+    } catch { setDiagnosisResult("Lỗi kết nối AI Advisor. Vui lòng kiểm tra ANTHROPIC_API_KEY trong .env.local."); }
     finally { setIsDiagnosing(false); }
   };
 
@@ -391,6 +427,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
   };
 
   const visibleLedgerRows = useMemo(() => {
+    if (activeSubTab !== 'ledger') return [];
     let filteredRevenue = [...groupRevenue];
     if (filterStartDate) filteredRevenue = filteredRevenue.filter(r => r.date >= filterStartDate);
     if (filterEndDate) filteredRevenue = filteredRevenue.filter(r => r.date <= filterEndDate);
@@ -434,7 +471,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       }
       return true;
     });
-  }, [groupRevenue, expandedLedgerRows, filterStartDate, filterEndDate]);
+  }, [activeSubTab, groupRevenue, expandedLedgerRows, filterStartDate, filterEndDate]);
 
   return (
     <div className="space-y-8 pb-20 max-w-full animate-in fade-in duration-500">
@@ -471,13 +508,13 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       </div>
 
       <div className="flex bg-slate-100 p-1.5 rounded-[2rem] w-fit mx-auto shadow-sm border border-slate-200">
-        <button onClick={() => setActiveSubTab('seasonality')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'seasonality' ? 'bg-white text-emerald-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
+        <button onClick={() => changeSubTab('seasonality')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'seasonality' ? 'bg-white text-emerald-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
           <Sparkles className="w-4 h-4" /> Dự Báo Chiến Lược
         </button>
-        <button onClick={() => setActiveSubTab('matrix')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'matrix' ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
+        <button onClick={() => changeSubTab('matrix')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'matrix' ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
           <Filter className="w-4 h-4" /> Ma Trận Phân Tích Năm
         </button>
-        <button onClick={() => setActiveSubTab('ledger')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'ledger' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
+        <button onClick={() => changeSubTab('ledger')} className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'ledger' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
           <FileSpreadsheet className="w-4 h-4" /> Sổ Cái Nhóm Hàng
         </button>
       </div>

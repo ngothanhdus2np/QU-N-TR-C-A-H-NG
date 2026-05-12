@@ -42,12 +42,12 @@ const baseOrder: POSOrder = {
 };
 
 describe('posOrderService', () => {
-  it('records POS revenue with COGS and gross profit', () => {
-    const pushBatch = vi.fn();
-    const updateSurgical = vi.fn();
+  it('records POS revenue with COGS and gross profit', async () => {
+    const pushBatch = vi.fn().mockResolvedValue(undefined);
+    const updateSurgical = vi.fn().mockResolvedValue(undefined);
     const updatedProducts = [{ ...baseProduct, stock: 8 }];
 
-    processPlaceOrder({
+    await processPlaceOrder({
       data: baseData,
       order: baseOrder,
       updatedProducts,
@@ -74,13 +74,13 @@ describe('posOrderService', () => {
     ]);
   });
 
-  it('uses updatedProducts for return and exchange stock snapshots', () => {
-    const pushBatch = vi.fn();
-    const updateSurgical = vi.fn();
+  it('uses updatedProducts for return and exchange stock snapshots', async () => {
+    const pushBatch = vi.fn().mockResolvedValue(undefined);
+    const updateSurgical = vi.fn().mockResolvedValue(undefined);
     const updatedProducts = [{ ...baseProduct, stock: 11 }];
     const returnedItems = [baseOrder.items[0]];
 
-    processReturnOrder({
+    await processReturnOrder({
       data: baseData,
       returnOrder: { ...baseOrder, id: 'return-1', orderCode: 'TH-000001', isReturn: true },
       updatedProducts,
