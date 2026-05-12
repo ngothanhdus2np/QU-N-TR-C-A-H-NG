@@ -47,6 +47,11 @@ interface GoodsProductsWorkspaceProps {
   uniqueBrands: string[];
   lowStockCount: number;
   selectedCount: number;
+  onClearSelection: () => void;
+  onExportSelected: () => void;
+  onPrintSelectedLabels: () => void;
+  onPurchaseSelected: () => void;
+  onBulkDelete: () => void;
   onResetPage: () => void;
 }
 
@@ -87,6 +92,11 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   uniqueBrands,
   lowStockCount,
   selectedCount,
+  onClearSelection,
+  onExportSelected,
+  onPrintSelectedLabels,
+  onPurchaseSelected,
+  onBulkDelete,
   onResetPage,
 }) => (
   <div className="flex flex-1 min-h-0 gap-4">
@@ -161,6 +171,11 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         filterStock={filterStock}
         setFilterStock={setFilterStock}
         selectedCount={selectedCount}
+        onClearSelection={onClearSelection}
+        onExportSelected={onExportSelected}
+        onPrintSelectedLabels={onPrintSelectedLabels}
+        onPurchaseSelected={onPurchaseSelected}
+        onBulkDelete={onBulkDelete}
         onResetPage={onResetPage}
       />
 

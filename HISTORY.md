@@ -10,28 +10,22 @@
 
 ## Current Active Task
 
-- Task: Goods selection toolbar + bulk actions theo ảnh mẫu
-- Last completed: Đã chốt plan; chưa implement
-- Next recommended: Cập nhật `GoodsToolbar`, `GoodsProductsWorkspace`, `GoodsInventory`, `useGoodsPurchase`, và helper in/export nếu cần
-- Files touched: Chưa sửa file
+- Task: Không có task đang dở
+- Last completed: Hoàn thiện Goods selection toolbar + bulk actions theo ảnh mẫu
+- Next recommended: Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts` để giảm warning `any`
+- Files touched: `components/pos/GoodsToolbar.tsx`, `components/pos/GoodsProductsWorkspace.tsx`, `components/pos/GoodsInventory.tsx`, `components/pos/GoodsImportExport.tsx`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsBulkActions.tsx`
 - Notes:
-  - Khi chọn sản phẩm, toolbar đổi sang trạng thái: search + `Đã chọn N` + nút bỏ chọn + `Xuất file` / `In tem mã` / `Nhập hàng` / `...`
-  - User chọn scope “Đủ chức năng”
-  - In tem mã phải hỏi số lượng tem mỗi sản phẩm trước khi in
-  - Worktree đang dirty sẵn, phải đọc diff/file trước khi sửa, không revert thay đổi không phải của mình
+  - Toolbar selected mode đã có search + `Đã chọn N` + bỏ chọn + `Xuất file` / `In tem mã` / `Nhập hàng` / `...`
+  - In tem mã hỏi số lượng tem mỗi sản phẩm trước khi mở cửa sổ in
+  - Nhập hàng từ selected products bỏ qua parent logic, prefill phiếu nhập và chuyển sang tab nhập hàng
+  - Floating `GoodsBulkActions` đã xóa để tránh trùng UI
 
 ---
 
 ## 📋 TODO — Việc đang chờ làm
 
 ### 🔴 Ưu tiên cao
-- [ ] **Goods selection toolbar + bulk actions theo ảnh mẫu**
-  - [ ] Implement toolbar selected mode theo ảnh: search + `Đã chọn N` + nút bỏ chọn + `Xuất file` / `In tem mã` / `Nhập hàng` / `...`
-  - [ ] Xuất file chỉ sản phẩm đã chọn
-  - [ ] In tem mã hàng loạt, hỏi số lượng tem mỗi sản phẩm trước khi in
-  - [ ] Nhập hàng từ sản phẩm đã chọn, prefill phiếu nhập
-  - [ ] Bỏ/ẩn `GoodsBulkActions` floating bar để tránh trùng UI
-  - [ ] Chạy `npx tsc --noEmit`, `npm test`, scoped ESLint, `npm run lint`
+- Không còn việc ưu tiên cao đang chờ.
 
 ### 🟠 Ưu tiên trung bình
 - [ ] **Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts`** để giảm phần lớn 110 warning `any` còn lại
@@ -49,6 +43,9 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**Goods selection toolbar + bulk actions theo ảnh mẫu**~~ *(xong 2026-05-12)*
+  - Toolbar selected mode nằm trực tiếp trên `GoodsToolbar`, không còn floating bulk bar.
+  - Export selected dùng chung helper Excel, in tem mã hỏi số lượng tem, nhập hàng prefill phiếu nhập.
 - [x] ~~**Re-import file KiotViet** sau khi fix `related_sku` — cần chạy để 12739 sản phẩm có đủ `parent_id`/`is_parent`/`variant_count` → danh sách hiển thị cha-con mới đúng~~ *(xong 2026-05-12)*
 - [x] ~~**Chạy SQL Knowledge Storage trên Supabase Dashboard**~~ *(xong 2026-05-12)*
   - Block "Knowledge Base original files (2026-05-12)" trong `supabase_setup.sql`
@@ -102,6 +99,24 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 40
+
+**Đã làm:**
+- `components/pos/GoodsToolbar.tsx`: thêm selected mode vào toolbar chính với search + `Đã chọn N` + bỏ chọn + `Xuất file` / `In tem mã` / `Nhập hàng` / `...`.
+- `components/pos/GoodsInventory.tsx`: thêm handler export selected, in tem mã hàng loạt có hỏi số lượng tem mỗi sản phẩm, và nhập hàng từ selected products.
+- `components/pos/GoodsImportExport.tsx`: tách helper `toGoodsExportRows()` để export toàn bộ hoặc chỉ sản phẩm đã chọn dùng chung format.
+- `components/pos/useGoodsPurchase.ts`: thêm `handleAddProductsToPurchase()` để prefill phiếu nhập từ nhiều sản phẩm, bỏ qua parent logic.
+- `components/pos/GoodsProductsWorkspace.tsx`: truyền bulk action handlers xuống toolbar.
+- `components/pos/GoodsBulkActions.tsx`: xóa floating bulk bar để tránh trùng UI với selected toolbar.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- Hoàn thành — không có việc dang dở
 
 ---
 

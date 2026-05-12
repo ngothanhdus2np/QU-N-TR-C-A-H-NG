@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { FileDown, MoreHorizontal, PackagePlus, Plus, Printer, Search, X } from 'lucide-react';
 
 interface GoodsToolbarProps {
   searchTerm: string;
@@ -19,6 +19,11 @@ interface GoodsToolbarProps {
   filterStock: 'all' | 'in_stock' | 'out_of_stock' | 'low_stock';
   setFilterStock: React.Dispatch<React.SetStateAction<'all' | 'in_stock' | 'out_of_stock' | 'low_stock'>>;
   selectedCount: number;
+  onClearSelection: () => void;
+  onExportSelected: () => void;
+  onPrintSelectedLabels: () => void;
+  onPurchaseSelected: () => void;
+  onBulkDelete: () => void;
   onResetPage: () => void;
 }
 
@@ -40,6 +45,11 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   filterStock,
   setFilterStock,
   selectedCount,
+  onClearSelection,
+  onExportSelected,
+  onPrintSelectedLabels,
+  onPurchaseSelected,
+  onBulkDelete,
   onResetPage,
 }) => (
   <>
@@ -55,13 +65,57 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
         />
       </div>
       <div className="flex items-center gap-2 ml-auto">
-        <button
-          onClick={onOpenCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
-        >
-          <Plus className="h-3.5 w-3.5" /> Tạo mới
-        </button>
-        {rightControls}
+        {selectedCount > 0 ? (
+          <>
+            <div className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2">
+              <span className="text-[10px] font-black uppercase tracking-wide text-indigo-700">
+                Đã chọn {selectedCount}
+              </span>
+              <button
+                onClick={onClearSelection}
+                className="h-5 w-5 flex items-center justify-center rounded-full text-indigo-500 hover:bg-white hover:text-rose-500 transition-colors"
+                title="Bỏ chọn"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <button
+              onClick={onExportSelected}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-wide hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm"
+            >
+              <FileDown className="h-3.5 w-3.5" /> Xuất file
+            </button>
+            <button
+              onClick={onPrintSelectedLabels}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-wide hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <Printer className="h-3.5 w-3.5" /> In tem mã
+            </button>
+            <button
+              onClick={onPurchaseSelected}
+              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
+            >
+              <PackagePlus className="h-3.5 w-3.5" /> Nhập hàng
+            </button>
+            <button
+              onClick={onBulkDelete}
+              className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm"
+              title="Thao tác khác: xóa hàng đã chọn"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={onOpenCreate}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
+            >
+              <Plus className="h-3.5 w-3.5" /> Tạo mới
+            </button>
+            {rightControls}
+          </>
+        )}
       </div>
     </div>
 
@@ -98,9 +152,6 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
           {filterStock === 'low_stock' ? 'Sắp hết hàng' : filterStock === 'out_of_stock' ? 'Hết hàng' : 'Còn hàng'}
           <button onClick={() => { setFilterStock('all'); onResetPage(); }}><X className="h-2.5 w-2.5" /></button>
         </span>
-      )}
-      {selectedCount > 0 && (
-        <span className="ml-auto text-[10px] font-black text-slate-700">Đã chọn {selectedCount}</span>
       )}
     </div>
   </>

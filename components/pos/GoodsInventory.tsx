@@ -1,11 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AppData, AppDataSurgicalUpdate, POSProduct, InventoryTransaction } from '../../types';
+import { exportToExcel } from '../../services/exportService';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
 import { GoodsPurchaseForm } from './GoodsPurchaseForm';
-import { ImportStatus } from './GoodsImportExport';
+import { ImportStatus, toGoodsExportRows } from './GoodsImportExport';
 import { useGoodsFilters } from './useGoodsFilters';
 import { GoodsPagination } from './GoodsPagination';
-import { GoodsBulkActions } from './GoodsBulkActions';
 import { GoodsProductTableHeader } from './GoodsProductTableHeader';
 import { GoodsProductTableBody } from './GoodsProductTableBody';
 import { GoodsLegacyProductFormView } from './GoodsLegacyProductFormView';
@@ -34,6 +34,91 @@ interface GoodsInventoryProps {
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
 const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
 const DEFAULT_PAGE_SIZE = 15;
+type ProductFormTab = 'info' | 'desc' | 'warranty' | 'units' | 'related' | 'channels';
+
+const escapeLabelText = (value: string | number | undefined) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: number) => {
+  const labels = selectedProducts.flatMap(product =>
+    Array.from({ length: labelsPerProduct }, () => product)
+  );
+  const win = window.open('', '_blank');
+  if (!win) return false;
+
+  const labelHtml = labels
+    .map(product => {
+      const code = product.barcode || product.sku || product.id;
+      return `
+        <section class="label">
+          <div class="name">${escapeLabelText(product.name)}</div>
+          <div class="code">${escapeLabelText(code)}</div>
+          <div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))}đ</div>
+        </section>`;
+    })
+    .join('');
+
+  win.document.write(`<!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>In tem mã hàng</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 10mm; font-family: Arial, sans-serif; color: #0f172a; }
+          .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+          .label {
+            height: 30mm;
+            border: 1px solid #cbd5e1;
+            border-radius: 3mm;
+            padding: 3mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            break-inside: avoid;
+          }
+          .name {
+            width: 100%;
+            font-size: 9px;
+            line-height: 1.2;
+            font-weight: 700;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .code {
+            width: 100%;
+            margin-top: 3mm;
+            padding: 2mm 1mm;
+            border: 1px solid #0f172a;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .price { margin-top: 2mm; font-size: 11px; font-weight: 700; }
+          @page { size: A4; margin: 8mm; }
+        </style>
+      </head>
+      <body><main class="sheet">${labelHtml}</main></body>
+    </html>`);
+  win.document.close();
+  win.onload = () => {
+    win.print();
+    setTimeout(() => win.close(), 500);
+  };
+  return true;
+};
 
 const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   products,
@@ -103,6 +188,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     purchaseNote,
     setPurchaseNote,
     handleAddProductToPurchase,
+    handleAddProductsToPurchase,
     updatePurchaseItem,
     removePurchaseItem,
     handleCompletePurchase,
@@ -307,6 +393,57 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     showToast,
   });
 
+  const selectedProducts = React.useMemo(
+    () => products.filter(product => selectedIds.includes(product.id)),
+    [products, selectedIds]
+  );
+
+  const selectedSellableProducts = React.useMemo(
+    () => selectedProducts.filter(product => !product.isParent),
+    [selectedProducts]
+  );
+
+  const handleExportSelected = useCallback(() => {
+    if (selectedProducts.length === 0) return;
+    exportToExcel(toGoodsExportRows(selectedProducts), 'HangHoaDaChon');
+  }, [selectedProducts]);
+
+  const handlePrintSelectedLabels = useCallback(() => {
+    if (selectedSellableProducts.length === 0) {
+      showToast('Không có hàng hóa bán thật để in tem mã.', 'error');
+      return;
+    }
+    openInputModal({
+      title: 'In tem mã hàng loạt',
+      label: 'Số lượng tem mỗi sản phẩm',
+      placeholder: 'VD: 1',
+      type: 'number',
+      defaultValue: 1,
+      onConfirm: value => {
+        const labelsPerProduct = Math.floor(Number(value));
+        if (!Number.isFinite(labelsPerProduct) || labelsPerProduct <= 0) {
+          showToast('Số lượng tem phải lớn hơn 0.', 'error');
+          return;
+        }
+        const printed = printProductLabels(selectedSellableProducts, labelsPerProduct);
+        if (printed) {
+          showToast(`Đã mở cửa sổ in ${selectedSellableProducts.length * labelsPerProduct} tem mã.`);
+          closeInputModal();
+        } else {
+          showToast('Trình duyệt đã chặn cửa sổ in tem mã.', 'error');
+        }
+      },
+    });
+  }, [selectedSellableProducts, showToast]);
+
+  const handlePurchaseSelected = useCallback(() => {
+    handleAddProductsToPurchase(selectedProducts);
+    if (selectedSellableProducts.length > 0) {
+      setActiveTab('purchase');
+      setSelectedIds([]);
+    }
+  }, [handleAddProductsToPurchase, selectedProducts, selectedSellableProducts.length, setSelectedIds]);
+
   const handleToggleView = useCallback(
     (prod: POSProduct) => {
       if (viewingProduct?.id === prod.id) {
@@ -319,8 +456,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     [viewingProduct?.id]
   );
 
-  const handleChangeDetailTab = useCallback((tab: string) => {
-    setActiveFormTab(tab as any);
+  const handleChangeDetailTab = useCallback((tab: ProductFormTab) => {
+    setActiveFormTab(tab);
   }, []);
 
   const handleDeleteViewed = useCallback(
@@ -401,11 +538,6 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
               onItemsPerPageChange={handleItemsPerPageChange}
             />
 
-            <GoodsBulkActions
-              selectedCount={selectedIds.length}
-              onClearSelection={() => setSelectedIds([])}
-              onBulkDelete={handleBulkDelete}
-            />
           </div>
         );
       case 'purchase':
@@ -509,6 +641,11 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           uniqueBrands={uniqueBrands}
           lowStockCount={lowStockProducts.length}
           selectedCount={selectedIds.length}
+          onClearSelection={() => setSelectedIds([])}
+          onExportSelected={handleExportSelected}
+          onPrintSelectedLabels={handlePrintSelectedLabels}
+          onPurchaseSelected={handlePurchaseSelected}
+          onBulkDelete={handleBulkDelete}
           onResetPage={() => setCurrentPage(1)}
         >
           {renderMainContent()}

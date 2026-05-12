@@ -40,6 +40,38 @@ export const useGoodsPurchase = ({
     }
   };
 
+  const handleAddProductsToPurchase = (selectedProducts: POSProduct[]) => {
+    const purchaseableProducts = selectedProducts.filter(product => !product.isParent);
+    if (purchaseableProducts.length === 0) {
+      showToast('Không có hàng hóa bán thật để nhập hàng.', 'error');
+      return;
+    }
+
+    setPurchaseItems(prev => {
+      const next = [...prev];
+      purchaseableProducts.forEach(product => {
+        const existingIndex = next.findIndex(item => item.productId === product.id);
+        if (existingIndex >= 0) {
+          next[existingIndex] = {
+            ...next[existingIndex],
+            quantity: next[existingIndex].quantity + 1,
+          };
+        } else {
+          next.push({
+            productId: product.id,
+            quantity: 1,
+            price: product.importPrice,
+            name: product.name,
+            discount: 0,
+          });
+        }
+      });
+      return next;
+    });
+    setShowPurchaseForm(true);
+    showToast(`Đã thêm ${purchaseableProducts.length} mặt hàng vào phiếu nhập.`);
+  };
+
   const updatePurchaseItem = (id: string, updates: Partial<{ quantity: number; price: number; discount: number }>) => {
     setPurchaseItems(prev => prev.map(item => item.productId === id ? { ...item, ...updates } : item));
   };
@@ -97,6 +129,7 @@ export const useGoodsPurchase = ({
     purchaseNote,
     setPurchaseNote,
     handleAddProductToPurchase,
+    handleAddProductsToPurchase,
     updatePurchaseItem,
     removePurchaseItem,
     handleCompletePurchase
