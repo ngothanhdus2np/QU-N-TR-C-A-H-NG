@@ -78,6 +78,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [productSearchSort, setProductSearchSort] = useState<'skuDesc' | 'priceDesc'>('skuDesc');
   const [customerSearch, setCustomerSearch] = useState('');
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
   const [showConsultant, setShowConsultant] = useState(false);
@@ -248,8 +249,12 @@ const POSComputer: React.FC<POSComputerProps> = ({
             (p.sku?.toLowerCase() || '').includes(search) ||
             (p.barcode && p.barcode.includes(search)))
       )
+      .sort((a, b) => {
+        if (productSearchSort === 'priceDesc') return b.salePrice - a.salePrice;
+        return (b.sku || '').localeCompare(a.sku || '', 'vi', { numeric: true, sensitivity: 'base' });
+      })
       .slice(0, 10);
-  }, [products, debouncedSearchTerm]);
+  }, [products, debouncedSearchTerm, productSearchSort]);
 
   useEffect(() => {
     if (debouncedSearchTerm && searchFilteredProducts.length > 0) {
@@ -753,6 +758,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         setDebouncedSearchTerm={setDebouncedSearchTerm}
+        productSearchSort={productSearchSort}
+        setProductSearchSort={setProductSearchSort}
         searchFilteredProducts={searchFilteredProducts}
         showProductResults={showProductResults}
         setShowProductResults={setShowProductResults}

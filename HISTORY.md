@@ -11,9 +11,9 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Tinh chỉnh giao diện `Chia nhiều`: label phương thức giống dòng tiền hàng/giảm giá/phí khác, tiền + đơn vị nằm trong khung bo góc, format dấu phẩy
-- Next recommended: Tiếp tục mục `Logic tìm kiếm/sắp xếp POS`
-- Files touched: `components/pos/POSCheckout.tsx`, `HISTORY.md`
+- Last completed: Thêm icon sắp xếp trong ô tìm kiếm POS; dropdown chọn sắp xếp theo mã hàng hoặc giá tiền cao → thấp
+- Next recommended: Tiếp tục mục `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`
+- Files touched: `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSComputer.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
@@ -31,7 +31,7 @@
   - [x] ~~**Layout trả hàng giống KiotViet**~~ *(xong 2026-05-12)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
   - [x] ~~**Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet**~~ *(xong 2026-05-12)*: tiền mặt giữ layout gợi ý tiền; Chuyển khoản / Thẻ / Ví dùng cùng layout QR/tài khoản ban đầu theo ảnh mẫu và vẫn giữ màu app hiện tại
   - [x] ~~**Giao diện Chia nhiều**~~ *(xong 2026-05-12)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
-  - [ ] **Logic tìm kiếm/sắp xếp POS:** thêm lựa chọn sort kết quả tìm sản phẩm theo mã hàng hoặc theo giá tiền cao → thấp
+  - [x] ~~**Logic tìm kiếm/sắp xếp POS**~~ *(xong 2026-05-12)*: thêm icon trong ô tìm kiếm, dropdown chọn sort kết quả theo mã hàng hoặc giá tiền cao → thấp
   - [ ] **Header POS:** loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid
   - [x] ~~**Chia nhiều — format tiền**~~ *(xong 2026-05-12)*: số tiền khách nhập hiển thị theo dấu phân cách hàng nghìn để dễ đọc
   - [ ] **Điểm thưởng trong nút thanh toán:** chỉ hiển thị khi có khách hàng và trong giỏ có sản phẩm được thiết lập tích điểm; nếu không thì ẩn dòng điểm thưởng
@@ -57,6 +57,9 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Logic tìm kiếm/sắp xếp sản phẩm**~~ *(xong 2026-05-12)*
+  - `POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa; bấm mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều cao → thấp.
+  - `POSComputer.tsx`: kết quả tìm kiếm POS sort theo lựa chọn hiện tại; mặc định theo mã hàng cao → thấp.
 - [x] ~~**POS: Giao diện Chia nhiều + format tiền**~~ *(xong 2026-05-12)*
   - Bỏ khung ngoài của block chia nhiều, chuyển sang các dòng phương thức thanh toán riêng.
   - Label `Tiền mặt` / `Chuyển khoản` / `Thẻ` / `Ví` dùng kiểu chữ/kích thước giống các dòng `Tiền hàng` / `Giảm giá` / `Phí khác`.
@@ -136,6 +139,21 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 48
+
+**Đã làm:**
+- `components/pos/POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa POS; bấm icon mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều sắp xếp cao → thấp.
+- `components/pos/POSComputer.tsx`: thêm state sort kết quả tìm kiếm POS; mặc định sort theo mã hàng cao → thấp, option giá tiền sort theo `salePrice` cao → thấp.
+- `HISTORY.md`: đánh dấu xong mục `Logic tìm kiếm/sắp xếp POS`, cập nhật bước tiếp theo.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`.
 
 ---
 

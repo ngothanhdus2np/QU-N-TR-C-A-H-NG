@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Activity,
+  Check,
   ChevronDown,
   Eye,
   FileInput,
@@ -16,6 +17,7 @@ import {
   Scan,
   Search,
   ShoppingBag,
+  SlidersHorizontal,
   StickyNote,
   Undo2,
   X,
@@ -29,6 +31,8 @@ interface POSHeaderToolbarProps {
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   setDebouncedSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  productSearchSort: 'skuDesc' | 'priceDesc';
+  setProductSearchSort: React.Dispatch<React.SetStateAction<'skuDesc' | 'priceDesc'>>;
   searchFilteredProducts: POSProduct[];
   showProductResults: boolean;
   setShowProductResults: React.Dispatch<React.SetStateAction<boolean>>;
@@ -57,6 +61,8 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   searchTerm,
   setSearchTerm,
   setDebouncedSearchTerm,
+  productSearchSort,
+  setProductSearchSort,
   searchFilteredProducts,
   showProductResults,
   setShowProductResults,
@@ -77,7 +83,14 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   showGridMenu,
   setShowGridMenu,
   onGoToManagement,
-}) => (
+}) => {
+  const [showSortMenu, setShowSortMenu] = React.useState(false);
+  const sortOptions = [
+    { value: 'skuDesc' as const, label: 'Theo mã hàng', helper: 'Cao - thấp' },
+    { value: 'priceDesc' as const, label: 'Theo giá tiền', helper: 'Cao - thấp' },
+  ];
+
+  return (
   <div className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200">
     <div className="relative w-[300px]">
       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center text-slate-400">
@@ -88,7 +101,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         type="text"
         placeholder={mode === 'return' ? 'Dùng ô tìm hàng trả / hàng đổi bên dưới' : 'Tìm hàng hóa (F3)'}
         disabled={mode === 'return'}
-        className={`w-full pl-10 pr-10 py-2 border rounded-lg text-sm outline-none font-bold transition-all placeholder:font-medium ${
+        className={`w-full pl-10 pr-20 py-2 border rounded-lg text-sm outline-none font-bold transition-all placeholder:font-medium ${
           mode === 'return'
             ? 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed placeholder:text-slate-500'
             : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 placeholder:text-slate-400'
@@ -130,6 +143,24 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       />
       <button
         disabled={mode === 'return'}
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => {
+          if (mode === 'return') return;
+          setShowSortMenu(prev => !prev);
+        }}
+        className={`absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
+          mode === 'return'
+            ? 'text-slate-400 cursor-not-allowed'
+            : showSortMenu
+              ? 'text-indigo-600 bg-indigo-50'
+              : 'text-slate-500 hover:text-indigo-500 hover:bg-slate-50'
+        }`}
+        title="Sắp xếp kết quả tìm kiếm"
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+      </button>
+      <button
+        disabled={mode === 'return'}
         className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
           mode === 'return'
             ? 'text-slate-400 cursor-not-allowed'
@@ -138,6 +169,31 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       >
         <Scan className="h-4 w-4" />
       </button>
+
+      {mode !== 'return' && showSortMenu && (
+        <div className="absolute top-full right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] overflow-hidden z-[70] p-1">
+          {sortOptions.map(option => (
+            <button
+              key={option.value}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => {
+                setProductSearchSort(option.value);
+                setShowSortMenu(false);
+                if (searchFilteredProducts.length > 0) setShowProductResults(true);
+              }}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                productSearchSort === option.value ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span>
+                <span className="block text-xs font-black">{option.label}</span>
+                <span className="block text-[10px] font-bold text-slate-400">{option.helper}</span>
+              </span>
+              {productSearchSort === option.value && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
 
       {mode !== 'return' && showProductResults && searchFilteredProducts.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[60] max-h-[400px] overflow-y-auto no-scrollbar">
@@ -266,7 +322,8 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const GridMenuItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) => (
   <button
