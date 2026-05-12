@@ -759,6 +759,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         selectedResultIndex={selectedResultIndex}
         setSelectedResultIndex={setSelectedResultIndex}
         addToCart={addToCart}
+        mode={mode}
         tabs={tabs}
         activeTabId={activeTabId}
         setActiveTabId={setActiveTabId}

@@ -90,7 +90,7 @@ const POSCart: React.FC<POSCartProps> = ({
               <input
                 type="text"
                 placeholder="Tìm hàng trả (F3)"
-                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-slate-50 border border-slate-100 rounded-lg outline-none focus:bg-white focus:border-indigo-400 transition-all"
+                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
               />
             </div>
             <Scan className="h-5 w-5 text-indigo-500" />
@@ -119,16 +119,16 @@ const POSCart: React.FC<POSCartProps> = ({
           </div>
 
           {/* Search Bar for Exchange items */}
-          <div className="bg-indigo-600 p-2 flex items-center gap-3">
+          <div className="bg-white border-y border-slate-200 p-2 flex items-center gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Tìm hàng đổi (F7)"
-                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-white/10 text-white placeholder:text-white/40 border border-white/10 rounded-lg outline-none focus:bg-white focus:text-slate-900 transition-all"
+                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
               />
             </div>
-            <Scan className="h-5 w-5 text-white" />
+            <Scan className="h-5 w-5 text-indigo-500" />
           </div>
 
           {/* Exchange Items List */}
@@ -181,12 +181,12 @@ const POSCart: React.FC<POSCartProps> = ({
     </div>
 
     {/* Order Note */}
-    <div className="px-8 pb-8">
-      <div className="bg-white border border-slate-200 rounded-[1.5rem] px-5 py-3 flex items-center gap-4 focus-within:border-indigo-400 focus-within:shadow-lg focus-within:shadow-indigo-500/5 transition-all group shadow-sm">
+    <div className="px-4 pb-4">
+      <div className="bg-white border border-slate-200 rounded-xl px-5 py-3 flex items-center gap-4 focus-within:border-indigo-400 focus-within:shadow-lg focus-within:shadow-indigo-500/5 transition-all group shadow-sm">
         <FileText className="h-4.5 w-4.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
         <input
           type="text"
-          placeholder="Ghi chú đơn hàng cho bộ phận kho hoặc nhân viên giao hàng..."
+          placeholder="Ghi chú đơn hàng"
           className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-300 placeholder:font-medium"
           value={orderNote}
           onChange={e => onOrderNoteChange(e.target.value)}

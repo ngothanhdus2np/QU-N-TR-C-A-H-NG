@@ -11,11 +11,12 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Thiết kế lại popup `Thêm khách hàng mới` theo layout mẫu KiotViet user gửi
-- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Layout trả hàng`, sau đó implement phần trả hàng
-- Files touched: `components/pos/POSQuickCustomerModal.tsx`, `components/pos/POSComputer.tsx`, `HISTORY.md`
+- Last completed: Chỉnh layout trả hàng theo ảnh mẫu nhưng giữ màu app hiện tại và workflow popup chọn hóa đơn
+- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Layout thanh toán Chuyển tiền / Thẻ / Ví`, sau đó implement phần thanh toán
+- Files touched: `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSComputer.tsx`, `components/pos/POSCart.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
+  - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
   - Các mục không cần layout mẫu có thể làm xen kẽ nếu không chặn UI mẫu
   - Không đổi schema DB, không đổi nghiệp vụ tài chính/lương
 
@@ -26,7 +27,7 @@
 ### 🔴 Ưu tiên cao
 - [ ] **POS/Máy tính tiền — chỉnh sửa sau khi user test**
   - [x] ~~**Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*: thiết kế lại layout popup/modal thêm khách hàng mới
-  - [ ] **Layout trả hàng giống KiotViet** *(cần user gửi layout mẫu)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
+  - [x] ~~**Layout trả hàng giống KiotViet**~~ *(xong 2026-05-12)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
   - [ ] **Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout khi chọn các phương thức này
   - [ ] **Giao diện Chia nhiều** *(cần user gửi layout mẫu nếu muốn giống KiotViet)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
   - [ ] **Logic tìm kiếm/sắp xếp POS:** thêm lựa chọn sort kết quả tìm sản phẩm theo mã hàng hoặc theo giá tiền cao → thấp
@@ -54,6 +55,10 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Layout trả hàng theo ảnh mẫu**~~ *(xong 2026-05-12)*
+  - Giữ workflow cũ: icon trả hàng mở popup chọn hóa đơn, bấm `Trả nhanh` mới vào layout trả hàng.
+  - `POSCart.tsx`: thanh `Tìm hàng đổi (F7)` dùng cùng style với `Tìm hàng trả (F3)`, input trắng nổi bật, không dùng màu KiotViet.
+  - `POSHeaderToolbar.tsx`: khóa ô tìm hàng hóa chính khi `mode === 'return'`, tránh nhập nhầm khi đang trả/đổi hàng.
 - [x] ~~**POS: Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*
   - Popup thêm khách hàng đổi sang layout rộng kiểu KiotViet: header trắng, tab `Thông tin chung`, avatar + nút chọn ảnh, form 2 cột underline, radio giới tính, footer `Bỏ qua`/`Lưu`.
   - `POSComputer.tsx` mở rộng form state và lưu được email/địa chỉ/ghi chú vào `POSCustomer` hiện có.
@@ -120,6 +125,22 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 43
+
+**Đã làm:**
+- `components/pos/POSHeaderToolbar.tsx`: thêm prop `mode`, khóa ô tìm hàng hóa chính khi đang ở chế độ trả hàng; ẩn dropdown kết quả và scanner button cũng chuyển sang trạng thái disabled.
+- `components/pos/POSComputer.tsx`: truyền `mode` xuống `POSHeaderToolbar`.
+- `components/pos/POSCart.tsx`: đổi thanh `Tìm hàng đổi (F7)` sang cùng style với thanh `Tìm hàng trả (F3)`, input nền trắng, icon màu app hiện tại; rút gọn ô ghi chú đơn hàng sát layout mẫu hơn.
+- `HISTORY.md`: đánh dấu xong mục POS layout trả hàng, ghi rõ workflow trả hàng vẫn giữ nguyên.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; phần cần hỏi mẫu kế tiếp là `Layout thanh toán Chuyển tiền / Thẻ / Ví`.
 
 ---
 

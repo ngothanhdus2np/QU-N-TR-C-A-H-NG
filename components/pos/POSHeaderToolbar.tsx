@@ -35,6 +35,7 @@ interface POSHeaderToolbarProps {
   selectedResultIndex: number;
   setSelectedResultIndex: React.Dispatch<React.SetStateAction<number>>;
   addToCart: (product: POSProduct) => void;
+  mode: 'sales' | 'return';
   tabs: InvoiceTab[];
   activeTabId: string;
   setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
@@ -62,6 +63,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   selectedResultIndex,
   setSelectedResultIndex,
   addToCart,
+  mode,
   tabs,
   activeTabId,
   setActiveTabId,
@@ -84,19 +86,27 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       <input
         ref={productSearchRef}
         type="text"
-        placeholder="Tìm hàng hóa (F3)"
-        className="w-full pl-10 pr-10 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm outline-none font-bold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 placeholder:font-medium"
+        placeholder={mode === 'return' ? 'Dùng ô tìm hàng trả / hàng đổi bên dưới' : 'Tìm hàng hóa (F3)'}
+        disabled={mode === 'return'}
+        className={`w-full pl-10 pr-10 py-2 border rounded-lg text-sm outline-none font-bold transition-all placeholder:font-medium ${
+          mode === 'return'
+            ? 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed placeholder:text-slate-500'
+            : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 placeholder:text-slate-400'
+        }`}
         value={searchTerm}
         onBlur={() => {
           setTimeout(() => setShowProductResults(false), 200);
         }}
         onFocus={() => {
+          if (mode === 'return') return;
           if (searchFilteredProducts.length > 0) setShowProductResults(true);
         }}
         onChange={(e) => {
+          if (mode === 'return') return;
           setSearchTerm(e.target.value);
         }}
         onKeyDown={(e) => {
+          if (mode === 'return') return;
           if (showProductResults && searchFilteredProducts.length > 0) {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
@@ -118,11 +128,18 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
           }
         }}
       />
-      <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400 p-1 rounded-lg transition-colors">
+      <button
+        disabled={mode === 'return'}
+        className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
+          mode === 'return'
+            ? 'text-slate-400 cursor-not-allowed'
+            : 'text-slate-500 hover:text-indigo-400'
+        }`}
+      >
         <Scan className="h-4 w-4" />
       </button>
 
-      {showProductResults && searchFilteredProducts.length > 0 && (
+      {mode !== 'return' && showProductResults && searchFilteredProducts.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[60] max-h-[400px] overflow-y-auto no-scrollbar">
           {searchFilteredProducts.map((p, idx) => (
             <button
