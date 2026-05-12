@@ -10,15 +10,13 @@
 
 ## Current Active Task
 
-- Task: Không có task đang dở
-- Last completed: Hoàn thiện trang danh sách hàng hóa theo 6 mục user test
-- Next recommended: Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts` để giảm warning `any`
-- Files touched: `components/TopNav.tsx`, `components/pos/GoodsProductsWorkspace.tsx`, `components/pos/GoodsFilterSidebar.tsx`, `components/pos/GoodsToolbar.tsx`, `components/pos/useGoodsFilters.ts`, `components/pos/GoodsProductTableHeader.tsx`, `components/pos/GoodsInventory.tsx`, `HISTORY.md`
+- Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
+- Last completed: User đã liệt kê 11 việc cần sửa; đã đưa vào TODO ưu tiên cao theo nhóm cần layout mẫu và nhóm có thể tự làm
+- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Thêm khách hàng mới`, sau đó làm từng phần theo thứ tự TODO
+- Files touched: `HISTORY.md`
 - Notes:
-  - Navigation title chỉ mở dropdown, không điều hướng thẳng
-  - Filter sidebar có nút ẩn/hiện để mở rộng danh sách hàng hóa
-  - Thuộc tính filter tách theo từng tên thuộc tính, mỗi tên mở popup riêng
-  - Danh sách mặc định sort mã hàng cao xuống thấp; `Giá bán` / `Giá vốn` / `Tồn kho` click header để đảo chiều
+  - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
+  - Các mục không cần layout mẫu có thể làm xen kẽ nếu không chặn UI mẫu
   - Không đổi schema DB, không đổi nghiệp vụ tài chính/lương
 
 ---
@@ -26,7 +24,19 @@
 ## 📋 TODO — Việc đang chờ làm
 
 ### 🔴 Ưu tiên cao
-- Không còn việc ưu tiên cao đang chờ.
+- [ ] **POS/Máy tính tiền — chỉnh sửa sau khi user test**
+  - [ ] **Thêm khách hàng mới giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout popup/modal thêm khách hàng mới
+  - [ ] **Layout trả hàng giống KiotViet** *(cần user gửi layout mẫu)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
+  - [ ] **Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout khi chọn các phương thức này
+  - [ ] **Giao diện Chia nhiều** *(cần user gửi layout mẫu nếu muốn giống KiotViet)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
+  - [ ] **Logic tìm kiếm/sắp xếp POS:** thêm lựa chọn sort kết quả tìm sản phẩm theo mã hàng hoặc theo giá tiền cao → thấp
+  - [ ] **Header POS:** loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid
+  - [ ] **Chia nhiều — format tiền:** số tiền khách nhập hiển thị theo dấu phân cách hàng nghìn để dễ đọc
+  - [ ] **Điểm thưởng trong nút thanh toán:** chỉ hiển thị khi có khách hàng và trong giỏ có sản phẩm được thiết lập tích điểm; nếu không thì ẩn dòng điểm thưởng
+  - [ ] **Popup chọn hóa đơn trả hàng:** đồng bộ màu khi đang dùng theme Codex
+  - [ ] **Nút Xem báo cáo cuối ngày:** sửa lỗi bấm không phản hồi, mở đúng trang/report đã có
+  - [ ] **Thanh thêm hóa đơn:** mở rộng tab hóa đơn đến hết khu vực giỏ hàng; khi quá chỗ vẫn giữ nút `+`, hiển thị số hóa đơn bị ẩn trên nút `+`
+  - [ ] Chạy `npx tsc --noEmit`, scoped ESLint, `npm test`, `npm run lint`
 
 ### 🟠 Ưu tiên trung bình
 - [ ] **Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts`** để giảm phần lớn 110 warning `any` còn lại
