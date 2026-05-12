@@ -1,6 +1,9 @@
 import React from 'react';
 import { POSProduct } from '../../types';
 
+export type GoodsSortKey = 'sku' | 'salePrice' | 'importPrice' | 'stock';
+export type GoodsSortDirection = 'desc' | 'asc';
+
 interface UseGoodsFiltersParams {
   products: POSProduct[];
   debouncedSearchTerm: string;
@@ -9,9 +12,43 @@ interface UseGoodsFiltersParams {
   filterStock: 'all' | 'in_stock' | 'out_of_stock' | 'low_stock';
   filterLocation: string;
   filterAttrs: string[];
+  sortKey: GoodsSortKey;
+  sortDirection: GoodsSortDirection;
   currentPage: number;
   itemsPerPage: number;
 }
+
+const getSkuNumber = (sku: string) => {
+  const matches = sku.match(/\d+/g);
+  if (!matches) return 0;
+  return Number(matches.join('')) || 0;
+};
+
+const getSortValue = (
+  product: POSProduct,
+  sortKey: GoodsSortKey,
+  parentSkuFallback: Map<string, number>
+) => {
+  if (sortKey === 'sku') {
+    return product.sku ? getSkuNumber(product.sku) : (parentSkuFallback.get(product.id) ?? 0);
+  }
+  return Number(product[sortKey] ?? 0);
+};
+
+const sortProducts = (
+  source: POSProduct[],
+  sortKey: GoodsSortKey,
+  sortDirection: GoodsSortDirection,
+  parentSkuFallback: Map<string, number>
+) => {
+  const direction = sortDirection === 'desc' ? -1 : 1;
+  return [...source].sort((a, b) => {
+    const valueA = getSortValue(a, sortKey, parentSkuFallback);
+    const valueB = getSortValue(b, sortKey, parentSkuFallback);
+    if (valueA !== valueB) return (valueA - valueB) * direction;
+    return (a.name || '').localeCompare(b.name || '', 'vi');
+  });
+};
 
 export const useGoodsFilters = ({
   products,
@@ -21,6 +58,8 @@ export const useGoodsFilters = ({
   filterStock,
   filterLocation,
   filterAttrs,
+  sortKey,
+  sortDirection,
   currentPage,
   itemsPerPage,
 }: UseGoodsFiltersParams) => {
@@ -122,8 +161,21 @@ export const useGoodsFilters = ({
   ]);
 
   const filteredProducts = React.useMemo(
-    () => filteredProductCandidates.filter(p => !p.parentId),
-    [filteredProductCandidates]
+    () => {
+      const parentSkuFallback = new Map<string, number>();
+      products.forEach(product => {
+        if (!product.parentId || !product.sku) return;
+        const current = parentSkuFallback.get(product.parentId) ?? 0;
+        parentSkuFallback.set(product.parentId, Math.max(current, getSkuNumber(product.sku)));
+      });
+      return sortProducts(
+        filteredProductCandidates.filter(p => !p.parentId),
+        sortKey,
+        sortDirection,
+        parentSkuFallback
+      );
+    },
+    [filteredProductCandidates, products, sortKey, sortDirection]
   );
 
   const sellableSkuCount = React.useMemo(
@@ -138,15 +190,23 @@ export const useGoodsFilters = ({
 
   const variantsByParentId = React.useMemo(() => {
     const map = new Map<string, POSProduct[]>();
+    const parentSkuFallback = new Map<string, number>();
     for (const p of products) {
       if (p.parentId) {
         const arr = map.get(p.parentId);
         if (arr) arr.push(p);
         else map.set(p.parentId, [p]);
+        if (p.sku) {
+          const current = parentSkuFallback.get(p.parentId) ?? 0;
+          parentSkuFallback.set(p.parentId, Math.max(current, getSkuNumber(p.sku)));
+        }
       }
     }
+    map.forEach((items, parentId) => {
+      map.set(parentId, sortProducts(items, sortKey, sortDirection, parentSkuFallback));
+    });
     return map;
-  }, [products]);
+  }, [products, sortKey, sortDirection]);
 
   return {
     lowStockProducts,

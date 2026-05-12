@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, ChevronRight } from 'lucide-react';
+import { Search, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface GoodsFilterSidebarProps {
   filterCategories: string[];
@@ -14,6 +14,7 @@ interface GoodsFilterSidebarProps {
   setFilterAttrs: (v: string[]) => void;
   filterSupplier: string;
   setFilterSupplier: (v: string) => void;
+  onCollapse: () => void;
   onClearAllFilters: () => void;
   onResetPage: () => void;
   uniqueCategories: string[];
@@ -37,6 +38,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
   setFilterAttrs,
   filterSupplier,
   setFilterSupplier,
+  onCollapse,
   onClearAllFilters,
   onResetPage,
   uniqueCategories,
@@ -55,6 +57,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
 
   // Attr popup
   const [showAttrPopup, setShowAttrPopup] = useState(false);
+  const [activeAttrName, setActiveAttrName] = useState('');
   const [attrPopupSearch, setAttrPopupSearch] = useState('');
   const [pendingAttrs, setPendingAttrs] = useState<string[]>([]);
   const [attrPopupPos, setAttrPopupPos] = useState({ top: 0, left: 0, width: 0 });
@@ -215,17 +218,15 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
       {/* === Attr Filter Popup === */}
       {showAttrPopup &&
         (() => {
-          const attrGroups = Object.entries(attrValuesByName)
-            .map(([name, { values, counts }]) => ({
-              name,
-              values: values.filter(v => v.toLowerCase().includes(attrPopupSearch.toLowerCase())),
-              counts,
-            }))
-            .filter(
-              g =>
-                g.values.length > 0 || g.name.toLowerCase().includes(attrPopupSearch.toLowerCase())
-            );
-          const allValues = Object.values(attrValuesByName).flatMap(g => g.values);
+          const activeAttr = attrValuesByName[activeAttrName];
+          const values = activeAttr
+            ? activeAttr.values.filter(v =>
+                v.toLowerCase().includes(attrPopupSearch.toLowerCase())
+              )
+            : [];
+          const groupSelectedCount = activeAttr
+            ? activeAttr.values.filter(v => pendingAttrs.includes(v)).length
+            : 0;
           return (
             <div
               id="attr-filter-popup"
@@ -239,7 +240,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
               className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                <span className="text-sm font-bold text-slate-800">Thuộc tính</span>
+                <span className="text-sm font-bold text-slate-800">{activeAttrName}</span>
               </div>
               <div className="px-3 py-2 border-b border-slate-100">
                 <div className="relative">
@@ -247,7 +248,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                   <input
                     autoFocus
                     type="text"
-                    placeholder="Tìm giá trị thuộc tính..."
+                    placeholder={`Tìm giá trị ${activeAttrName.toLowerCase()}...`}
                     value={attrPopupSearch}
                     onChange={e => setAttrPopupSearch(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 text-sm border border-indigo-400 rounded-lg outline-none bg-white"
@@ -255,50 +256,49 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                 </div>
               </div>
               <div className="overflow-y-auto max-h-72">
-                {attrGroups.map(group => (
-                  <div key={group.name}>
-                    <div className="px-4 pt-3 pb-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        {group.name}
+                {values.map(val => (
+                  <label
+                    key={val}
+                    className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={pendingAttrs.includes(val)}
+                      onChange={() =>
+                        setPendingAttrs(prev =>
+                          prev.includes(val) ? prev.filter(a => a !== val) : [...prev, val]
+                        )
+                      }
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                    />
+                    <span className="flex-1 text-sm text-slate-700">{val}</span>
+                    {activeAttr && (activeAttr.counts[val] ?? 0) > 0 && (
+                      <span className="text-xs text-slate-400 tabular-nums">
+                        ({activeAttr.counts[val]})
                       </span>
-                    </div>
-                    {group.values.map(val => (
-                      <label
-                        key={val}
-                        className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={pendingAttrs.includes(val)}
-                          onChange={() =>
-                            setPendingAttrs(prev =>
-                              prev.includes(val) ? prev.filter(a => a !== val) : [...prev, val]
-                            )
-                          }
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                        />
-                        <span className="flex-1 text-sm text-slate-700">{val}</span>
-                        {(group.counts[val] ?? 0) > 0 && (
-                          <span className="text-xs text-slate-400 tabular-nums">
-                            ({group.counts[val]})
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
+                    )}
+                  </label>
                 ))}
-                {attrGroups.length === 0 && (
+                {values.length === 0 && (
                   <p className="px-4 py-6 text-sm text-slate-400 text-center">Không tìm thấy</p>
                 )}
               </div>
               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/60">
                 <button
-                  onClick={() =>
-                    setPendingAttrs(pendingAttrs.length === allValues.length ? [] : [...allValues])
-                  }
+                  onClick={() => {
+                    if (!activeAttr) return;
+                    const groupValues = activeAttr.values;
+                    setPendingAttrs(prev =>
+                      groupSelectedCount === groupValues.length
+                        ? prev.filter(v => !groupValues.includes(v))
+                        : Array.from(new Set([...prev, ...groupValues]))
+                    );
+                  }}
                   className="text-sm text-indigo-600 font-semibold hover:underline"
                 >
-                  {pendingAttrs.length === allValues.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                  {activeAttr && groupSelectedCount === activeAttr.values.length
+                    ? 'Bỏ chọn tất cả'
+                    : 'Chọn tất cả'}
                 </button>
                 <button
                   onClick={() => {
@@ -368,14 +368,23 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
       <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
         <div className="px-4 min-h-[52px] border-b border-slate-100 shrink-0 flex items-center justify-between">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Hàng hoá</h2>
-          {hasActiveFilters && (
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
             <button
               onClick={onClearAllFilters}
               className="text-[10px] text-indigo-600 font-bold hover:underline"
             >
               Xóa lọc
             </button>
-          )}
+            )}
+            <button
+              onClick={onCollapse}
+              className="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 flex items-center justify-center transition-colors"
+              title="Ẩn bộ lọc"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
@@ -454,31 +463,45 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           {/* 4. Thuộc tính */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Thuộc tính</span>
-            <div
-              ref={attrTriggerRef}
-              onClick={() => {
-                if (showAttrPopup) {
-                  setShowAttrPopup(false);
-                  return;
-                }
-                if (attrTriggerRef.current) {
-                  const rect = attrTriggerRef.current.getBoundingClientRect();
-                  setAttrPopupPos({ top: rect.top, left: rect.right + 8, width: 320 });
-                }
-                setPendingAttrs([...filterAttrs]);
-                setAttrPopupSearch('');
-                setShowAttrPopup(true);
-              }}
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all text-slate-400 flex items-center justify-between"
-            >
-              <span className={filterAttrs.length > 0 ? 'text-slate-700 font-semibold' : ''}>
-                {filterAttrs.length === 0
-                  ? 'Chọn giá trị'
-                  : filterAttrs.length === 1
-                    ? filterAttrs[0]
-                    : `${filterAttrs.length} giá trị đã chọn`}
-              </span>
-              <ChevronRight className="h-3.5 w-3.5 rotate-90 text-slate-400" />
+            <div className="space-y-2">
+              {Object.entries(attrValuesByName).map(([attrName, attrData]) => {
+                const selectedCount = attrData.values.filter(v => filterAttrs.includes(v)).length;
+                return (
+                  <div
+                    key={attrName}
+                    ref={activeAttrName === attrName ? attrTriggerRef : undefined}
+                    onClick={e => {
+                      if (showAttrPopup && activeAttrName === attrName) {
+                        setShowAttrPopup(false);
+                        return;
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      attrTriggerRef.current = e.currentTarget;
+                      setAttrPopupPos({ top: rect.top, left: rect.right + 8, width: 320 });
+                      setActiveAttrName(attrName);
+                      setPendingAttrs([...filterAttrs]);
+                      setAttrPopupSearch('');
+                      setShowAttrPopup(true);
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-slate-700">{attrName}</span>
+                      {selectedCount > 0 && (
+                        <span className="block text-[10px] font-bold text-indigo-600">
+                          {selectedCount} giá trị đã chọn
+                        </span>
+                      )}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  </div>
+                );
+              })}
+              {Object.keys(attrValuesByName).length === 0 && (
+                <div className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-100 rounded-lg text-slate-400">
+                  Chưa có thuộc tính
+                </div>
+              )}
             </div>
           </div>
 

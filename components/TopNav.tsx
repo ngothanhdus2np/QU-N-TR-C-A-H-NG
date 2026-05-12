@@ -83,6 +83,10 @@ const TopNav: React.FC<TopNavProps> = ({
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpenSection(title);
   };
+  const toggleDropdown = (title: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpenSection(prev => (prev === title ? null : title));
+  };
   const closeDropdown = () => {
     closeTimer.current = setTimeout(() => setOpenSection(null), 80);
   };
@@ -307,24 +311,6 @@ const TopNav: React.FC<TopNavProps> = ({
         <nav className="flex items-center gap-0.5 flex-1">
           {sections.map(section => {
             const isActive = section === activeSection;
-            const hasMultiple = section.items.length > 1;
-
-            if (!hasMultiple) {
-              return (
-                <button
-                  key={section.title}
-                  onClick={() => onSelect(section.items[0].id)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-indigo-800 text-white'
-                      : 'text-indigo-200 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {section.title}
-                </button>
-              );
-            }
-
             const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
 
             const isOpen = openSection === section.title;
@@ -336,7 +322,7 @@ const TopNav: React.FC<TopNavProps> = ({
                 onMouseLeave={closeDropdown}
               >
                 <button
-                  onClick={() => onSelect(section.items[0].id)}
+                  onClick={() => toggleDropdown(section.title)}
                   className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-indigo-800 text-white'
@@ -369,7 +355,10 @@ const TopNav: React.FC<TopNavProps> = ({
                               return (
                                 <button
                                   key={item.id}
-                                  onClick={() => onSelect(item.id)}
+                                  onClick={() => {
+                                    onSelect(item.id);
+                                    setOpenSection(null);
+                                  }}
                                   className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
                                     isItemActive
                                       ? 'bg-indigo-50 text-indigo-600'
@@ -398,7 +387,10 @@ const TopNav: React.FC<TopNavProps> = ({
                           return (
                             <button
                               key={item.id}
-                              onClick={() => onSelect(item.id)}
+                              onClick={() => {
+                                onSelect(item.id);
+                                setOpenSection(null);
+                              }}
                               className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
                                 isItemActive
                                   ? 'bg-indigo-50 text-indigo-600'

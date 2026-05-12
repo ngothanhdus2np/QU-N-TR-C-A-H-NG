@@ -1,16 +1,41 @@
 import React from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
+import { GoodsSortDirection, GoodsSortKey } from './useGoodsFilters';
 
 interface GoodsProductTableHeaderProps {
   visibleColumns: string[];
   isAllSelected: boolean;
   onToggleSelectAll: () => void;
+  sortKey: GoodsSortKey;
+  sortDirection: GoodsSortDirection;
+  onSort: (key: GoodsSortKey) => void;
 }
 
 export const GoodsProductTableHeader: React.FC<GoodsProductTableHeaderProps> = ({
   visibleColumns,
   isAllSelected,
   onToggleSelectAll,
-}) => (
+  sortKey,
+  sortDirection,
+  onSort,
+}) => {
+  const renderSortHeader = (key: GoodsSortKey, label: string) => {
+    const isActive = sortKey === key;
+    const Icon = sortDirection === 'desc' ? ArrowDown : ArrowUp;
+    return (
+      <button
+        onClick={() => onSort(key)}
+        className={`ml-auto inline-flex items-center justify-end gap-1 rounded-md px-1.5 py-1 transition-colors ${
+          isActive ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:bg-slate-100'
+        }`}
+      >
+        <span>{label}</span>
+        {isActive && <Icon className="h-3 w-3" />}
+      </button>
+    );
+  };
+
+  return (
   <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
     <tr>
       <th className="px-4 py-3 w-10">
@@ -22,11 +47,11 @@ export const GoodsProductTableHeader: React.FC<GoodsProductTableHeaderProps> = (
       <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">Tên hàng</th>
       {visibleColumns.includes('category') && <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">Nhóm hàng</th>}
       {visibleColumns.includes('productType') && <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">Loại hàng</th>}
-      {visibleColumns.includes('salePrice') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">Giá bán</th>}
-      {visibleColumns.includes('importPrice') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">Giá vốn</th>}
+      {visibleColumns.includes('salePrice') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest whitespace-nowrap">{renderSortHeader('salePrice', 'Giá bán')}</th>}
+      {visibleColumns.includes('importPrice') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest whitespace-nowrap">{renderSortHeader('importPrice', 'Giá vốn')}</th>}
       {visibleColumns.includes('brand') && <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap w-[100px]">Thương hiệu</th>}
       {visibleColumns.includes('location') && <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap w-[80px]">Vị trí</th>}
-      {visibleColumns.includes('stock') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">Tồn kho</th>}
+      {visibleColumns.includes('stock') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest whitespace-nowrap">{renderSortHeader('stock', 'Tồn kho')}</th>}
       {visibleColumns.includes('customerOrders') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">KH đặt</th>}
       {visibleColumns.includes('minStock') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">ĐM ít nhất</th>}
       {visibleColumns.includes('maxStock') && <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">ĐM nhiều nhất</th>}
@@ -39,4 +64,5 @@ export const GoodsProductTableHeader: React.FC<GoodsProductTableHeaderProps> = (
       <th className="px-4 py-3 w-10"></th>
     </tr>
   </thead>
-);
+  );
+};

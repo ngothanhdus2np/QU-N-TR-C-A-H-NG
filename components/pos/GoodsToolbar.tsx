@@ -53,7 +53,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   onResetPage,
 }) => (
   <>
-    <div className="px-4 min-h-[52px] border-b border-slate-100 flex items-center gap-3 shrink-0">
+    <div className="px-4 min-h-[52px] flex items-center gap-3 shrink-0">
       <div className="flex-1 relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <input

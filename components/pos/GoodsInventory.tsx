@@ -4,7 +4,7 @@ import { exportToExcel } from '../../services/exportService';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
 import { GoodsPurchaseForm } from './GoodsPurchaseForm';
 import { ImportStatus, toGoodsExportRows } from './GoodsImportExport';
-import { useGoodsFilters } from './useGoodsFilters';
+import { GoodsSortKey, useGoodsFilters } from './useGoodsFilters';
 import { GoodsPagination } from './GoodsPagination';
 import { GoodsProductTableHeader } from './GoodsProductTableHeader';
 import { GoodsProductTableBody } from './GoodsProductTableBody';
@@ -220,6 +220,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const [filterLocation, setFilterLocation] = useState('');
   const [filterAttrs, setFilterAttrs] = useState<string[]>([]);
   const [filterSupplier, setFilterSupplier] = useState('');
+  const [sortKey, setSortKey] = useState<GoodsSortKey>('sku');
+  const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
 
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
@@ -362,6 +364,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     filterStock,
     filterLocation,
     filterAttrs,
+    sortKey,
+    sortDirection,
     currentPage,
     itemsPerPage,
   });
@@ -490,6 +494,18 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     }
   }, []);
 
+  const handleSort = useCallback((key: GoodsSortKey) => {
+    setSortKey(prevKey => {
+      if (prevKey === key) {
+        setSortDirection(prevDirection => (prevDirection === 'desc' ? 'asc' : 'desc'));
+        return prevKey;
+      }
+      setSortDirection('desc');
+      return key;
+    });
+    setCurrentPage(1);
+  }, []);
+
   const renderMainContent = () => {
     switch (activeTab) {
       case 'goods':
@@ -503,6 +519,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                     selectedIds.length === filteredProducts.length && filteredProducts.length > 0
                   }
                   onToggleSelectAll={toggleSelectAll}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
                 />
                 <GoodsProductTableBody
                   currentProducts={currentProducts}

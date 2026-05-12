@@ -10,28 +10,23 @@
 
 ## Current Active Task
 
-- Task: Trang danh sách hàng hóa — các chỉnh sửa sau khi user test
-- Last completed: User đã liệt kê 6 việc cần sửa; đã đưa vào TODO ưu tiên cao theo thứ tự xử lý
-- Next recommended: Bắt đầu từ navigation dropdown-only cho thanh tiêu đề, sau đó xử lý layout block filter/list, rồi filter thuộc tính và sort
-- Files touched: `HISTORY.md`
+- Task: Không có task đang dở
+- Last completed: Hoàn thiện trang danh sách hàng hóa theo 6 mục user test
+- Next recommended: Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts` để giảm warning `any`
+- Files touched: `components/TopNav.tsx`, `components/pos/GoodsProductsWorkspace.tsx`, `components/pos/GoodsFilterSidebar.tsx`, `components/pos/GoodsToolbar.tsx`, `components/pos/useGoodsFilters.ts`, `components/pos/GoodsProductTableHeader.tsx`, `components/pos/GoodsInventory.tsx`, `HISTORY.md`
 - Notes:
-  - Các việc đều thuộc trang danh sách hàng hóa / navigation liên quan hàng hóa
+  - Navigation title chỉ mở dropdown, không điều hướng thẳng
+  - Filter sidebar có nút ẩn/hiện để mở rộng danh sách hàng hóa
+  - Thuộc tính filter tách theo từng tên thuộc tính, mỗi tên mở popup riêng
+  - Danh sách mặc định sort mã hàng cao xuống thấp; `Giá bán` / `Giá vốn` / `Tồn kho` click header để đảo chiều
   - Không đổi schema DB, không đổi nghiệp vụ tài chính/lương
-  - Sau khi implement phải chạy `npx tsc --noEmit`, scoped ESLint file vừa sửa, `npm test`, `npm run lint`, rồi commit riêng
 
 ---
 
 ## 📋 TODO — Việc đang chờ làm
 
 ### 🔴 Ưu tiên cao
-- [ ] **Trang danh sách hàng hóa — chỉnh sửa sau khi user test**
-  - [ ] **Navigation dropdown-only:** ở thanh tiêu đề `Tổng quan`, `Hàng hoá`, `Mua hàng`, … khi bấm chỉ mở dropdown, không điều hướng thẳng vào trang như hiện tại
-  - [ ] **Ẩn/hiện block bộ lọc:** thêm nút mũi tên sang trái ở block bộ lọc; bấm để ẩn block lọc và mở rộng block danh sách hàng hóa; khi đã ẩn thì nút quay hướng ngược lại để hiện lại block lọc
-  - [ ] **Xóa đường phân cách thừa:** xoá bỏ dòng giữa thanh tìm kiếm và thanh tiêu đề trong block danh sách hàng hóa
-  - [ ] **Filter thuộc tính theo từng tên thuộc tính:** trong block bộ lọc, mỗi tên thuộc tính có 1 ô riêng; bấm vào tên thuộc tính nào thì popup chỉ hiển thị các giá trị của tên thuộc tính đó để người dùng chọn
-  - [ ] **Mã hàng mặc định sắp xếp cao → thấp:** danh sách hàng hóa mặc định sort theo mã hàng từ cao xuống thấp
-  - [ ] **Sort theo cột số:** cột `Giá bán`, `Giá vốn`, `Tồn kho` có sắp xếp khi bấm header; lần 1 cao → thấp, lần 2 thấp → cao; cột được bấm là khóa sort chính và các cột khác đi theo thứ tự đó
-  - [ ] Chạy `npx tsc --noEmit`, scoped ESLint, `npm test`, `npm run lint`
+- Không còn việc ưu tiên cao đang chờ.
 
 ### 🟠 Ưu tiên trung bình
 - [ ] **Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts`** để giảm phần lớn 110 warning `any` còn lại
@@ -49,6 +44,13 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**Trang danh sách hàng hóa — chỉnh sửa sau khi user test**~~ *(xong 2026-05-12)*
+  - [x] Navigation dropdown-only: bấm tiêu đề chỉ mở dropdown, chọn item mới điều hướng
+  - [x] Ẩn/hiện block bộ lọc bằng nút mũi tên, giúp block danh sách hàng hóa mở rộng
+  - [x] Xóa đường phân cách thừa giữa thanh tìm kiếm và thanh tiêu đề trong block danh sách
+  - [x] Filter thuộc tính theo từng tên thuộc tính, mỗi tên mở popup giá trị riêng
+  - [x] Mã hàng mặc định sắp xếp cao → thấp
+  - [x] Sort `Giá bán`, `Giá vốn`, `Tồn kho` theo click header: lần 1 cao → thấp, lần 2 thấp → cao
 - [x] ~~**Goods selection toolbar + bulk actions theo ảnh mẫu**~~ *(xong 2026-05-12)*
   - Toolbar selected mode nằm trực tiếp trên `GoodsToolbar`, không còn floating bulk bar.
   - Export selected dùng chung helper Excel, in tem mã hỏi số lượng tem, nhập hàng prefill phiếu nhập.
@@ -105,6 +107,26 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 41
+
+**Đã làm:**
+- `components/TopNav.tsx`: đổi hành vi bấm tiêu đề section thành chỉ mở/đóng dropdown; điều hướng chỉ xảy ra khi người dùng chọn item trong dropdown.
+- `components/pos/GoodsProductsWorkspace.tsx`: thêm state ẩn/hiện filter sidebar và nút mở lại khi sidebar đã ẩn.
+- `components/pos/GoodsFilterSidebar.tsx`: thêm nút thu gọn sidebar; đổi filter thuộc tính thành nhiều ô theo từng tên thuộc tính, mỗi ô mở popup giá trị riêng.
+- `components/pos/GoodsToolbar.tsx`: bỏ border dưới của hàng search để xóa đường phân cách thừa trong block danh sách hàng hóa.
+- `components/pos/useGoodsFilters.ts`: thêm sort mặc định theo mã hàng cao → thấp và sort theo `salePrice`, `importPrice`, `stock`.
+- `components/pos/GoodsProductTableHeader.tsx`: thêm nút sort ở header `Giá bán`, `Giá vốn`, `Tồn kho`, click lần 1 cao → thấp, lần 2 thấp → cao.
+- `components/pos/GoodsInventory.tsx`: giữ state sort, reset về trang 1 khi đổi sort và truyền sort xuống hook/header.
+- `HISTORY.md`: cập nhật TODO và phiên làm việc.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- Hoàn thành — không có việc dang dở
 
 ---
 
