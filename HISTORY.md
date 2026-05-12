@@ -11,9 +11,9 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: User đã liệt kê 11 việc cần sửa; đã đưa vào TODO ưu tiên cao theo nhóm cần layout mẫu và nhóm có thể tự làm
-- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Thêm khách hàng mới`, sau đó làm từng phần theo thứ tự TODO
-- Files touched: `HISTORY.md`
+- Last completed: Thiết kế lại popup `Thêm khách hàng mới` theo layout mẫu KiotViet user gửi
+- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Layout trả hàng`, sau đó implement phần trả hàng
+- Files touched: `components/pos/POSQuickCustomerModal.tsx`, `components/pos/POSComputer.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Các mục không cần layout mẫu có thể làm xen kẽ nếu không chặn UI mẫu
@@ -25,7 +25,7 @@
 
 ### 🔴 Ưu tiên cao
 - [ ] **POS/Máy tính tiền — chỉnh sửa sau khi user test**
-  - [ ] **Thêm khách hàng mới giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout popup/modal thêm khách hàng mới
+  - [x] ~~**Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*: thiết kế lại layout popup/modal thêm khách hàng mới
   - [ ] **Layout trả hàng giống KiotViet** *(cần user gửi layout mẫu)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
   - [ ] **Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout khi chọn các phương thức này
   - [ ] **Giao diện Chia nhiều** *(cần user gửi layout mẫu nếu muốn giống KiotViet)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
@@ -54,6 +54,9 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*
+  - Popup thêm khách hàng đổi sang layout rộng kiểu KiotViet: header trắng, tab `Thông tin chung`, avatar + nút chọn ảnh, form 2 cột underline, radio giới tính, footer `Bỏ qua`/`Lưu`.
+  - `POSComputer.tsx` mở rộng form state và lưu được email/địa chỉ/ghi chú vào `POSCustomer` hiện có.
 - [x] ~~**Trang danh sách hàng hóa — chỉnh sửa sau khi user test**~~ *(xong 2026-05-12)*
   - [x] Navigation dropdown-only: bấm tiêu đề chỉ mở dropdown, chọn item mới điều hướng
   - [x] Ẩn/hiện block bộ lọc bằng nút mũi tên, giúp block danh sách hàng hóa mở rộng
@@ -117,6 +120,21 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 42
+
+**Đã làm:**
+- `components/pos/POSQuickCustomerModal.tsx`: thiết kế lại modal thêm khách hàng theo ảnh mẫu KiotViet user gửi: header trắng, tab, avatar, form 2 cột underline, radio giới tính, nút `Bỏ qua`/`Lưu`.
+- `components/pos/POSComputer.tsx`: mở rộng `QuickCustomerForm` state cho các field mới trong layout; khi lưu, map email/địa chỉ/ghi chú vào `POSCustomer`.
+- `HISTORY.md`: đánh dấu xong mục POS `Thêm khách hàng mới giống KiotViet`, cập nhật bước tiếp theo là hỏi mẫu layout trả hàng.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; phần cần hỏi mẫu kế tiếp là `Layout trả hàng giống KiotViet`.
 
 ---
 

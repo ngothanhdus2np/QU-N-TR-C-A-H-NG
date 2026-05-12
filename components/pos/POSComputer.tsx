@@ -130,12 +130,19 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showGridMenu, setShowGridMenu] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState<QuickCustomerForm>({
+    code: '',
     name: '',
     phone: '',
     group: 'Khách lẻ',
+    birthday: '',
+    gender: '',
     address: '',
+    area: '',
+    ward: '',
     taxCode: '',
     email: '',
+    facebook: '',
+    notes: '',
   });
   const [useSplitPayment, setUseSplitPayment] = useState(false);
 
@@ -709,6 +716,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
       id: crypto.randomUUID(),
       name: newCustomerForm.name,
       phone: newCustomerForm.phone,
+      email: newCustomerForm.email || undefined,
+      address: [newCustomerForm.address, newCustomerForm.ward, newCustomerForm.area]
+        .filter(Boolean)
+        .join(', ') || undefined,
+      notes: newCustomerForm.notes || undefined,
       points: 0,
       totalSpent: 0,
       tier: 'Standard',
@@ -717,12 +729,19 @@ const POSComputer: React.FC<POSComputerProps> = ({
     updateActiveTab({ selectedCustomer: newCustomer });
     setShowAddCustomerModal(false);
     setNewCustomerForm({
+      code: '',
       name: '',
       phone: '',
       group: 'Khách lẻ',
+      birthday: '',
+      gender: '',
       address: '',
+      area: '',
+      ward: '',
       taxCode: '',
       email: '',
+      facebook: '',
+      notes: '',
     });
   };
 
