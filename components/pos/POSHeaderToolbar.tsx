@@ -14,7 +14,6 @@ import {
   Printer,
   RefreshCw,
   RotateCcw,
-  Scan,
   Search,
   ShoppingBag,
   SlidersHorizontal,
@@ -101,7 +100,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         type="text"
         placeholder={mode === 'return' ? 'Dùng ô tìm hàng trả / hàng đổi bên dưới' : 'Tìm hàng hóa (F3)'}
         disabled={mode === 'return'}
-        className={`w-full pl-10 pr-20 py-2 border rounded-lg text-sm outline-none font-bold transition-all placeholder:font-medium ${
+        className={`w-full pl-10 pr-11 py-2 border rounded-lg text-sm outline-none font-bold transition-all placeholder:font-medium ${
           mode === 'return'
             ? 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed placeholder:text-slate-500'
             : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 placeholder:text-slate-400'
@@ -148,7 +147,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
           if (mode === 'return') return;
           setShowSortMenu(prev => !prev);
         }}
-        className={`absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
+        className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
           mode === 'return'
             ? 'text-slate-400 cursor-not-allowed'
             : showSortMenu
@@ -158,16 +157,6 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         title="Sắp xếp kết quả tìm kiếm"
       >
         <SlidersHorizontal className="h-4 w-4" />
-      </button>
-      <button
-        disabled={mode === 'return'}
-        className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
-          mode === 'return'
-            ? 'text-slate-400 cursor-not-allowed'
-            : 'text-slate-500 hover:text-indigo-400'
-        }`}
-      >
-        <Scan className="h-4 w-4" />
       </button>
 
       {mode !== 'return' && showSortMenu && (

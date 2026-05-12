@@ -11,9 +11,9 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Thêm icon sắp xếp trong ô tìm kiếm POS; dropdown chọn sắp xếp theo mã hàng hoặc giá tiền cao → thấp
+- Last completed: Xóa icon scanner khỏi ô tìm kiếm POS, chỉ giữ icon sắp xếp trong ô
 - Next recommended: Tiếp tục mục `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`
-- Files touched: `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSComputer.tsx`, `HISTORY.md`
+- Files touched: `components/pos/POSHeaderToolbar.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
@@ -58,7 +58,7 @@
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
 - [x] ~~**POS: Logic tìm kiếm/sắp xếp sản phẩm**~~ *(xong 2026-05-12)*
-  - `POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa; bấm mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều cao → thấp.
+  - `POSHeaderToolbar.tsx`: thêm icon sliders trong ô tìm kiếm hàng hóa, xóa icon scanner; bấm mở dropdown 2 lựa chọn `Theo mã hàng` và `Theo giá tiền`, đều cao → thấp.
   - `POSComputer.tsx`: kết quả tìm kiếm POS sort theo lựa chọn hiện tại; mặc định theo mã hàng cao → thấp.
 - [x] ~~**POS: Giao diện Chia nhiều + format tiền**~~ *(xong 2026-05-12)*
   - Bỏ khung ngoài của block chia nhiều, chuyển sang các dòng phương thức thanh toán riêng.
@@ -139,6 +139,20 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 49
+
+**Đã làm:**
+- `components/pos/POSHeaderToolbar.tsx`: xóa icon scanner khỏi ô tìm kiếm hàng hóa POS, đưa icon sắp xếp về mép phải trong ô và giảm padding phải tương ứng.
+- `HISTORY.md`: cập nhật ghi chú cho phần tìm kiếm/sắp xếp POS.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Header POS: loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid`.
 
 ---
 
