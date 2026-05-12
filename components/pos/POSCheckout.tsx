@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Plus, ChevronDown, ChevronRight, X, CheckCircle2, MoreVertical, UserCircle } from 'lucide-react';
+import { Search, Plus, ChevronDown, ChevronRight, X, CheckCircle2, MoreVertical, UserCircle, ExternalLink } from 'lucide-react';
 import { POSCustomer, POSOrderItem } from '../../types';
 import { InvoiceTab } from './POSComputer';
 
@@ -23,6 +23,56 @@ const QuickCashButton: React.FC<{ amount: number; onClick: () => void }> = ({ am
     {amount.toLocaleString()}
   </button>
 );
+
+const NON_CASH_CONFIG: Record<string, { account: string; action: string; helper: string }> = {
+  Bank: {
+    account: 'VietinBank - 1058844239173 - Hoà Phúc Sang',
+    action: 'Hiện mã QR',
+    helper: 'Nhận thông báo tiền về?',
+  },
+  Other: {
+    account: 'Máy POS - Quầy trung tâm',
+    action: 'Hiện thông tin thẻ',
+    helper: 'Đối soát giao dịch thẻ?',
+  },
+  Momo: {
+    account: 'Ví điện tử - Quầy trung tâm',
+    action: 'Hiện mã thanh toán',
+    helper: 'Kiểm tra trạng thái ví?',
+  },
+};
+
+const NonCashPaymentPanel: React.FC<{ paymentMethod: string }> = ({ paymentMethod }) => {
+  const config = NON_CASH_CONFIG[paymentMethod] ?? NON_CASH_CONFIG.Bank;
+
+  return (
+    <div className="rounded-2xl bg-slate-100 border border-slate-200 p-3 flex gap-3">
+      <div className="h-24 w-24 bg-white rounded-xl border border-slate-200 p-2 shrink-0 grid grid-cols-5 gap-1">
+        {Array.from({ length: 25 }).map((_, index) => (
+          <span
+            key={index}
+            className={`rounded-[2px] ${[0, 1, 2, 5, 10, 11, 12, 14, 17, 18, 20, 22, 23, 24].includes(index) ? 'bg-slate-950' : 'bg-white'}`}
+          />
+        ))}
+      </div>
+      <div className="flex-1 min-w-0 space-y-2">
+        <button className="w-full h-11 bg-white rounded-xl border border-slate-100 px-4 flex items-center justify-between gap-3 text-left hover:border-indigo-200 transition-colors">
+          <span className="text-sm font-black text-slate-900 truncate">{config.account}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+        </button>
+        <div className="flex items-center justify-between gap-3">
+          <button className="h-9 px-3 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:border-indigo-200 hover:text-indigo-600 transition-colors flex items-center gap-2">
+            <ExternalLink className="h-4 w-4" />
+            {config.action}
+          </button>
+          <button className="text-sm font-bold text-indigo-600 hover:text-indigo-700 whitespace-nowrap">
+            {config.helper}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface POSCheckoutProps {
   // Customer
@@ -277,10 +327,12 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
             <span className="text-xl font-black text-indigo-600 tracking-tighter italic">{netPayable.toLocaleString()}</span>
           </div>
 
+          {paymentMethod === 'Cash' && (
           <div className="flex justify-between items-center pt-2 px-1">
             <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">Khách đưa</span>
             <span className="text-lg font-black text-slate-900 tabular-nums">{currentCashReceived.toLocaleString()}</span>
           </div>
+          )}
 
           <div className="pt-1 space-y-3">
             {/* Toggle Split Payment */}
@@ -303,11 +355,15 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                   <PaymentMethodRadio method="Momo" current={paymentMethod} set={m => onUpdateTab({ paymentMethod: m as InvoiceTab['paymentMethod'] })} label="Ví" />
                   <button className="text-slate-400 hover:text-slate-600 px-1"><MoreVertical className="h-4 w-4" /></button>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
-                  {cashSuggestions.map((amount, idx) => (
-                    <QuickCashButton key={idx} amount={amount} onClick={() => onUpdateTab({ cashReceived: amount })} />
-                  ))}
-                </div>
+                {paymentMethod === 'Cash' ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
+                    {cashSuggestions.map((amount, idx) => (
+                      <QuickCashButton key={idx} amount={amount} onClick={() => onUpdateTab({ cashReceived: amount })} />
+                    ))}
+                  </div>
+                ) : (
+                  <NonCashPaymentPanel paymentMethod={paymentMethod} />
+                )}
               </>
             ) : (
               <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">

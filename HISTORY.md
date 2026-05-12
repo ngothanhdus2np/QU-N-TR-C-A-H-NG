@@ -11,9 +11,9 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Chỉnh layout trả hàng theo ảnh mẫu nhưng giữ màu app hiện tại và workflow popup chọn hóa đơn
-- Next recommended: Hỏi user gửi layout mẫu KiotViet cho `Layout thanh toán Chuyển tiền / Thẻ / Ví`, sau đó implement phần thanh toán
-- Files touched: `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSComputer.tsx`, `components/pos/POSCart.tsx`, `HISTORY.md`
+- Last completed: Tách layout thanh toán tiền mặt và layout không dùng tiền mặt; Chuyển khoản / Thẻ / Ví dùng cùng layout QR/tài khoản theo ảnh mẫu ban đầu
+- Next recommended: Tiếp tục mục `Giao diện Chia nhiều` hoặc các mục POS không cần layout mẫu
+- Files touched: `components/pos/POSCheckout.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
   - Workflow trả hàng giữ nguyên: bấm icon trả hàng → popup chọn hóa đơn → Trả nhanh → vào layout trả hàng
@@ -28,7 +28,7 @@
 - [ ] **POS/Máy tính tiền — chỉnh sửa sau khi user test**
   - [x] ~~**Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*: thiết kế lại layout popup/modal thêm khách hàng mới
   - [x] ~~**Layout trả hàng giống KiotViet**~~ *(xong 2026-05-12)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
-  - [ ] **Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet** *(cần user gửi layout mẫu)*: thiết kế lại layout khi chọn các phương thức này
+  - [x] ~~**Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet**~~ *(xong 2026-05-12)*: tiền mặt giữ layout gợi ý tiền; Chuyển khoản / Thẻ / Ví dùng cùng layout QR/tài khoản ban đầu theo ảnh mẫu và vẫn giữ màu app hiện tại
   - [ ] **Giao diện Chia nhiều** *(cần user gửi layout mẫu nếu muốn giống KiotViet)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
   - [ ] **Logic tìm kiếm/sắp xếp POS:** thêm lựa chọn sort kết quả tìm sản phẩm theo mã hàng hoặc theo giá tiền cao → thấp
   - [ ] **Header POS:** loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid
@@ -55,6 +55,10 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Layout thanh toán Chuyển khoản / Thẻ / Ví**~~ *(xong 2026-05-12)*
+  - `Tiền mặt` giữ layout gợi ý tiền nhanh.
+  - `Chuyển khoản`, `Thẻ`, `Ví` dùng cùng layout ban đầu theo ảnh mẫu: QR/tài khoản, nút hiển thị mã/thông tin thanh toán, link hỗ trợ bên phải.
+  - Màu sắc giữ theo app hiện tại, không copy màu KiotViet.
 - [x] ~~**POS: Layout trả hàng theo ảnh mẫu**~~ *(xong 2026-05-12)*
   - Giữ workflow cũ: icon trả hàng mở popup chọn hóa đơn, bấm `Trả nhanh` mới vào layout trả hàng.
   - `POSCart.tsx`: thanh `Tìm hàng đổi (F7)` dùng cùng style với `Tìm hàng trả (F3)`, input trắng nổi bật, không dùng màu KiotViet.
@@ -125,6 +129,20 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 44
+
+**Đã làm:**
+- `components/pos/POSCheckout.tsx`: tách layout thanh toán theo phương thức; `Tiền mặt` chỉ còn layout gợi ý tiền nhanh, còn `Chuyển khoản` / `Thẻ` / `Ví` dùng chung panel QR/tài khoản theo ảnh mẫu ban đầu và giữ màu hệ thống hiện tại.
+- `HISTORY.md`: đánh dấu xong mục layout thanh toán không dùng tiền mặt, cập nhật bước tiếp theo của backlog POS.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục cần làm kế tiếp theo thứ tự là `Giao diện Chia nhiều` hoặc các mục không cần layout mẫu như `Logic tìm kiếm/sắp xếp POS`.
 
 ---
 
