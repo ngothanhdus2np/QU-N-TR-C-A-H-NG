@@ -11,8 +11,8 @@
 ## Current Active Task
 
 - Task: POS/Máy tính tiền — backlog chỉnh sửa sau khi user test
-- Last completed: Tách layout thanh toán tiền mặt và layout không dùng tiền mặt; Chuyển khoản / Thẻ / Ví dùng cùng layout QR/tài khoản theo ảnh mẫu ban đầu
-- Next recommended: Tiếp tục mục `Giao diện Chia nhiều` hoặc các mục POS không cần layout mẫu
+- Last completed: Thiết kế lại giao diện `Chia nhiều`, bỏ khung ngoài và format tiền nhập theo dấu phân cách hàng nghìn
+- Next recommended: Tiếp tục mục `Logic tìm kiếm/sắp xếp POS`
 - Files touched: `components/pos/POSCheckout.tsx`, `HISTORY.md`
 - Notes:
   - Các mục cần giống KiotViet sẽ hỏi user từng phần để nhận ảnh/layout mẫu trước khi implement
@@ -30,10 +30,10 @@
   - [x] ~~**Thêm khách hàng mới giống KiotViet**~~ *(xong 2026-05-12)*: thiết kế lại layout popup/modal thêm khách hàng mới
   - [x] ~~**Layout trả hàng giống KiotViet**~~ *(xong 2026-05-12)*: tô màu thanh tìm hàng đổi giống thanh tìm hàng trả; ô tìm kiếm màu trắng nổi bật; khóa/không cho tìm trong ô tìm hàng hóa ở thanh hóa đơn khi đang trả hàng
   - [x] ~~**Layout thanh toán Chuyển tiền / Thẻ / Ví giống KiotViet**~~ *(xong 2026-05-12)*: tiền mặt giữ layout gợi ý tiền; Chuyển khoản / Thẻ / Ví dùng cùng layout QR/tài khoản ban đầu theo ảnh mẫu và vẫn giữ màu app hiện tại
-  - [ ] **Giao diện Chia nhiều** *(cần user gửi layout mẫu nếu muốn giống KiotViet)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
+  - [x] ~~**Giao diện Chia nhiều**~~ *(xong 2026-05-12)*: xóa bỏ khung ngoài và thiết kế lại UI split payment
   - [ ] **Logic tìm kiếm/sắp xếp POS:** thêm lựa chọn sort kết quả tìm sản phẩm theo mã hàng hoặc theo giá tiền cao → thấp
   - [ ] **Header POS:** loại bỏ icon cạnh chữ Admin, chỉ giữ icon grid
-  - [ ] **Chia nhiều — format tiền:** số tiền khách nhập hiển thị theo dấu phân cách hàng nghìn để dễ đọc
+  - [x] ~~**Chia nhiều — format tiền**~~ *(xong 2026-05-12)*: số tiền khách nhập hiển thị theo dấu phân cách hàng nghìn để dễ đọc
   - [ ] **Điểm thưởng trong nút thanh toán:** chỉ hiển thị khi có khách hàng và trong giỏ có sản phẩm được thiết lập tích điểm; nếu không thì ẩn dòng điểm thưởng
   - [ ] **Popup chọn hóa đơn trả hàng:** đồng bộ màu khi đang dùng theme Codex
   - [ ] **Nút Xem báo cáo cuối ngày:** sửa lỗi bấm không phản hồi, mở đúng trang/report đã có
@@ -57,6 +57,10 @@
 - [ ] **Tích hợp GHN / GHTK** — cần API token + quy trình vận đơn rõ ràng
 
 ### ✅ Đã hoàn thành — lưu để tham chiếu
+- [x] ~~**POS: Giao diện Chia nhiều + format tiền**~~ *(xong 2026-05-12)*
+  - Bỏ khung ngoài của block chia nhiều, chuyển sang các dòng phương thức thanh toán riêng.
+  - Input tiền trong `Tiền mặt` / `Chuyển khoản` / `Thẻ` / `Ví` hiển thị dấu phân cách hàng nghìn khi nhập nhưng vẫn lưu state dạng number.
+  - Tổng đã nhận, còn thiếu, tiền thừa giữ logic cũ.
 - [x] ~~**POS: Layout thanh toán Chuyển khoản / Thẻ / Ví**~~ *(xong 2026-05-12)*
   - `Tiền mặt` giữ layout gợi ý tiền nhanh.
   - `Chuyển khoản`, `Thẻ`, `Ví` dùng cùng layout ban đầu theo ảnh mẫu: QR/tài khoản, nút hiển thị mã/thông tin thanh toán, link hỗ trợ bên phải.
@@ -131,6 +135,20 @@
 ---
 
 ## 📅 Lịch sử phiên làm việc
+
+---
+
+### 2026-05-12 — ChatGPT (Codex) — Phiên 46
+
+**Đã làm:**
+- `components/pos/POSCheckout.tsx`: thiết kế lại giao diện `Chia nhiều`, bỏ khung ngoài xám/border cũ; mỗi phương thức thanh toán thành một dòng riêng, input tiền hiển thị dấu phân cách hàng nghìn khi nhập.
+- `HISTORY.md`: đánh dấu xong `Giao diện Chia nhiều` và `Chia nhiều — format tiền`, cập nhật bước tiếp theo là `Logic tìm kiếm/sắp xếp POS`.
+
+**Kết quả kiểm tra:**
+TypeScript ✅ clean | Tests ✅ 45/45 pass | ESLint ✅ pass (0 errors, 109 warnings `any` tồn đọng)
+
+**Còn lại / Dang dở:**
+- POS backlog còn các mục tiếp theo; mục kế tiếp theo thứ tự là `Logic tìm kiếm/sắp xếp POS`.
 
 ---
 

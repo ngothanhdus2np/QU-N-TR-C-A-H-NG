@@ -74,6 +74,24 @@ const NonCashPaymentPanel: React.FC<{ paymentMethod: string }> = ({ paymentMetho
   );
 };
 
+const SPLIT_PAYMENT_METHODS = [
+  { key: 'cash' as const, label: 'Tiền mặt' },
+  { key: 'bank' as const, label: 'Chuyển khoản' },
+  { key: 'card' as const, label: 'Thẻ' },
+  { key: 'momo' as const, label: 'Ví' },
+];
+
+const parseCurrencyInput = (value: string): number => {
+  const digitsOnly = value.replace(/\D/g, '');
+  return digitsOnly ? Number(digitsOnly) : 0;
+};
+
+const formatCurrencyInput = (value: number): string => (value > 0 ? value.toLocaleString('vi-VN') : '');
+
+type SplitPayment = { cash: number; bank: number; card: number; momo: number };
+
+const getSplitPaymentTotal = (splitPayment: SplitPayment): number => splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo;
+
 interface POSCheckoutProps {
   // Customer
   customerSearch: string;
@@ -102,7 +120,7 @@ interface POSCheckoutProps {
   paymentMethod: string;
   useSplitPayment: boolean;
   setUseSplitPayment: (v: boolean) => void;
-  splitPayment: { cash: number; bank: number; card: number; momo: number };
+  splitPayment: SplitPayment;
   cashSuggestions: number[];
   // Actions
   onUpdateTab: (updates: Partial<InvoiceTab>) => void;
@@ -366,39 +384,42 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                 )}
               </>
             ) : (
-              <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                {[
-                  { key: 'cash' as const, label: 'Tiền mặt' },
-                  { key: 'bank' as const, label: 'Chuyển khoản' },
-                  { key: 'card' as const, label: 'Quẹt thẻ' },
-                  { key: 'momo' as const, label: 'Ví điện tử' },
-                ].map(({ key, label }) => (
-                  <div key={key} className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-600 w-24 shrink-0">{label}</span>
-                    <input
-                      type="number"
-                      value={splitPayment[key] || ''}
-                      onChange={e => onUpdateTab({ splitPayment: { ...splitPayment, [key]: Number(e.target.value) || 0 } })}
-                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      placeholder="0"
-                    />
-                    <span className="text-[10px] font-bold text-slate-400">đ</span>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">Chia thanh toán</span>
+                  <span className="text-[11px] font-bold text-slate-400">Nhập số tiền theo từng phương thức</span>
+                </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200 mt-2">
+                <div className="space-y-2">
+                  {SPLIT_PAYMENT_METHODS.map(({ key, label }) => (
+                    <div key={key} className="flex items-center gap-3 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
+                      <span className="text-[12px] font-black text-slate-700 w-24 shrink-0">{label}</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formatCurrencyInput(splitPayment[key])}
+                        onChange={e => onUpdateTab({ splitPayment: { ...splitPayment, [key]: parseCurrencyInput(e.target.value) } })}
+                        className="flex-1 px-0 py-1 bg-transparent border-0 border-b border-slate-200 text-sm font-black text-slate-900 outline-none focus:border-indigo-400 transition-all text-right tabular-nums"
+                        placeholder="0"
+                      />
+                      <span className="text-[10px] font-bold text-slate-400">đ</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                   <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Tổng đã nhận</span>
                   <span className={`text-base font-black tabular-nums ${
-                    (splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo) >= netPayable
+                    getSplitPaymentTotal(splitPayment) >= netPayable
                       ? 'text-emerald-600'
                       : 'text-rose-500'
                   }`}>
-                    {(splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo).toLocaleString()}đ
+                    {getSplitPaymentTotal(splitPayment).toLocaleString()}đ
                   </span>
                 </div>
 
                 {(() => {
-                  const totalReceived = splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo;
+                  const totalReceived = getSplitPaymentTotal(splitPayment);
                   const diff = totalReceived - netPayable;
                   if (diff < 0) return (
                     <div className="flex items-center justify-between py-1.5 px-2 bg-rose-50 border border-rose-100 rounded-lg">
