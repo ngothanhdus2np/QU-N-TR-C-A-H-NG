@@ -1,5 +1,4 @@
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
 import { POSProduct } from '../../types';
 import { GoodsColumnSettings } from './GoodsColumnSettings';
 import { GoodsFilterSidebar } from './GoodsFilterSidebar';
@@ -99,54 +98,41 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   onPurchaseSelected,
   onBulkDelete,
   onResetPage,
-}) => {
-  const [isFilterCollapsed, setIsFilterCollapsed] = React.useState(false);
+}) => (
+  <div className="flex flex-1 min-h-0 gap-4">
+    <GoodsFilterSidebar
+      filterCategories={filterCategories}
+      setFilterCategories={setFilterCategories}
+      filterBrand={filterBrand}
+      setFilterBrand={setFilterBrand}
+      filterStock={filterStock}
+      setFilterStock={setFilterStock}
+      filterLocation={filterLocation}
+      setFilterLocation={setFilterLocation}
+      filterAttrs={filterAttrs}
+      setFilterAttrs={setFilterAttrs}
+      filterSupplier={filterSupplier}
+      setFilterSupplier={setFilterSupplier}
+      onCollapse={() => {}}
+      onClearAllFilters={() => {
+        setFilterCategories([]);
+        setFilterBrand('');
+        setFilterStock('all');
+        setFilterLocation('');
+        setFilterAttrs([]);
+        setFilterSupplier('');
+        onResetPage();
+      }}
+      onResetPage={onResetPage}
+      uniqueCategories={uniqueCategories}
+      categoryCounts={categoryCounts}
+      attrValuesByName={attrValuesByName}
+      uniqueLocations={uniqueLocations}
+      uniqueBrands={uniqueBrands}
+      lowStockCount={lowStockCount}
+    />
 
-  return (
-    <div className="flex flex-1 min-h-0 gap-4">
-      {isFilterCollapsed ? (
-        <button
-          onClick={() => setIsFilterCollapsed(false)}
-          className="h-full w-10 shrink-0 rounded-2xl border border-slate-100 bg-white text-slate-400 shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-colors flex items-start justify-center pt-4"
-          title="Hiện bộ lọc"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      ) : (
-        <GoodsFilterSidebar
-          filterCategories={filterCategories}
-          setFilterCategories={setFilterCategories}
-          filterBrand={filterBrand}
-          setFilterBrand={setFilterBrand}
-          filterStock={filterStock}
-          setFilterStock={setFilterStock}
-          filterLocation={filterLocation}
-          setFilterLocation={setFilterLocation}
-          filterAttrs={filterAttrs}
-          setFilterAttrs={setFilterAttrs}
-          filterSupplier={filterSupplier}
-          setFilterSupplier={setFilterSupplier}
-          onCollapse={() => setIsFilterCollapsed(true)}
-          onClearAllFilters={() => {
-            setFilterCategories([]);
-            setFilterBrand('');
-            setFilterStock('all');
-            setFilterLocation('');
-            setFilterAttrs([]);
-            setFilterSupplier('');
-            onResetPage();
-          }}
-          onResetPage={onResetPage}
-          uniqueCategories={uniqueCategories}
-          categoryCounts={categoryCounts}
-          attrValuesByName={attrValuesByName}
-          uniqueLocations={uniqueLocations}
-          uniqueBrands={uniqueBrands}
-          lowStockCount={lowStockCount}
-        />
-      )}
-
-      <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <GoodsToolbar
         searchTerm={searchTerm}
         onSearchChange={onSearchChange}
@@ -197,5 +183,4 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
       {children}
     </div>
   </div>
-  );
-};
+);

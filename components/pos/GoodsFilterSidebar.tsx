@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Search, Plus, ChevronRight } from 'lucide-react';
 
 interface GoodsFilterSidebarProps {
   filterCategories: string[];
@@ -220,9 +220,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
         (() => {
           const activeAttr = attrValuesByName[activeAttrName];
           const values = activeAttr
-            ? activeAttr.values.filter(v =>
-                v.toLowerCase().includes(attrPopupSearch.toLowerCase())
-              )
+            ? activeAttr.values.filter(v => v.toLowerCase().includes(attrPopupSearch.toLowerCase()))
             : [];
           const groupSelectedCount = activeAttr
             ? activeAttr.values.filter(v => pendingAttrs.includes(v)).length
@@ -370,20 +368,13 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Hàng hoá</h2>
           <div className="flex items-center gap-2">
             {hasActiveFilters && (
-            <button
-              onClick={onClearAllFilters}
-              className="text-[10px] text-indigo-600 font-bold hover:underline"
-            >
-              Xóa lọc
-            </button>
+              <button
+                onClick={onClearAllFilters}
+                className="text-[10px] text-indigo-600 font-bold hover:underline"
+              >
+                Xóa lọc
+              </button>
             )}
-            <button
-              onClick={onCollapse}
-              className="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 flex items-center justify-center transition-colors"
-              title="Ẩn bộ lọc"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
           </div>
         </div>
 
@@ -486,7 +477,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                     className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-slate-700">{attrName}</span>
+                      <span className="block truncate font-semibold text-slate-700">
+                        {attrName}
+                      </span>
                       {selectedCount > 0 && (
                         <span className="block text-[10px] font-bold text-indigo-600">
                           {selectedCount} giá trị đã chọn

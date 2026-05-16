@@ -1,5 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { AppData, AppDataSurgicalUpdate, POSProduct, InventoryTransaction } from '../../types';
+import {
+  AppData,
+  AppDataSurgicalUpdate,
+  POSProduct,
+  InventoryTransaction,
+  ProductGroup,
+} from '../../types';
 import { exportToExcel } from '../../services/exportService';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
 import { GoodsPurchaseForm } from './GoodsPurchaseForm';
@@ -24,11 +30,12 @@ import { useGoodsProductEditor } from './useGoodsProductEditor';
 interface GoodsInventoryProps {
   products: POSProduct[];
   transactions: InventoryTransaction[];
+  productGroups: ProductGroup[];
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
   onAddTransaction?: (transaction: InventoryTransaction) => void;
-  requestedTab?: 'goods' | 'purchase' | 'kho';
+  requestedTab?: 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty';
 }
 
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
@@ -123,6 +130,7 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
 const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   products,
   transactions,
+  productGroups,
   onUpdateProducts,
   onUpdateSurgical,
   onPushBatch,
@@ -173,7 +181,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   };
   const [viewingProduct, setViewingProduct] = useState<POSProduct | null>(null);
   const [activeTab, setActiveTab] = useState<
-    'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form'
+    'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty' | 'audit_form' | 'product_form'
   >('goods');
 
   useEffect(() => {
@@ -192,6 +200,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     updatePurchaseItem,
     removePurchaseItem,
     handleCompletePurchase,
+    purchaseDiscountValue,
+    purchaseDiscountType,
+    setPurchaseDiscountValue,
+    setPurchaseDiscountType,
   } = useGoodsPurchase({ products, onUpdateProducts, onAddTransaction, showToast });
   const {
     auditSearchTerm,
@@ -402,6 +414,60 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     [products, selectedIds]
   );
 
+  const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
+  const favoriteIdSet = React.useMemo(() => new Set(favoriteIds), [favoriteIds]);
+
+  const handleStartAudit = useCallback(
+    (_mode: 'actual' | 'damaged') => {
+      setAuditItems([]);
+      setActiveTab('audit_form');
+    },
+    [setAuditItems]
+  );
+
+  const handlePrintLabel = useCallback((product: POSProduct) => {
+    printProductLabels([product], 1);
+  }, []);
+
+  const handleAddSameType = useCallback(
+    (product: POSProduct) => {
+      setFormData({
+        categoryId: product.categoryId,
+        unit: product.unit,
+      });
+      setEditingProduct(null);
+      setShowCreateModal(true);
+    },
+    [setFormData, setEditingProduct, setShowCreateModal]
+  );
+
+  const handlePurchaseProduct = useCallback(
+    (product: POSProduct) => {
+      handleAddProductToPurchase(product);
+      setActiveTab('purchase');
+    },
+    [handleAddProductToPurchase]
+  );
+
+  const handleStopBusiness = useCallback(
+    (product: POSProduct) => {
+      openConfirm({
+        title: 'Ngừng kinh doanh',
+        message: `Xác nhận ngừng kinh doanh "${product.name}"?`,
+        variant: 'warning',
+        confirmLabel: 'Ngừng KD',
+        onConfirm: () => {
+          onUpdateProducts(
+            products.map(p => (p.id === product.id ? { ...p, status: 'Inactive' } : p))
+          );
+          showToast(`Đã ngừng kinh doanh "${product.name}".`);
+          closeConfirm();
+        },
+      });
+    },
+    [products, onUpdateProducts, openConfirm, closeConfirm, showToast]
+  );
+
   const selectedSellableProducts = React.useMemo(
     () => selectedProducts.filter(product => !product.isParent),
     [selectedProducts]
@@ -431,7 +497,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         }
         const printed = printProductLabels(selectedSellableProducts, labelsPerProduct);
         if (printed) {
-          showToast(`Đã mở cửa sổ in ${selectedSellableProducts.length * labelsPerProduct} tem mã.`);
+          showToast(
+            `Đã mở cửa sổ in ${selectedSellableProducts.length * labelsPerProduct} tem mã.`
+          );
           closeInputModal();
         } else {
           showToast('Trình duyệt đã chặn cửa sổ in tem mã.', 'error');
@@ -446,7 +514,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       setActiveTab('purchase');
       setSelectedIds([]);
     }
-  }, [handleAddProductsToPurchase, selectedProducts, selectedSellableProducts.length, setSelectedIds]);
+  }, [
+    handleAddProductsToPurchase,
+    selectedProducts,
+    selectedSellableProducts.length,
+    setSelectedIds,
+  ]);
 
   const handleToggleView = useCallback(
     (prod: POSProduct) => {
@@ -527,8 +600,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   currentProducts={currentProducts}
                   variantsByParentId={variantsByParentId}
                   colCount={colCount}
-                  selectedIds={selectedIds}
-                  favoriteIds={favoriteIds}
+                  selectedIdSet={selectedIdSet}
+                  favoriteIdSet={favoriteIdSet}
                   expandedParents={expandedParents}
                   viewingProduct={viewingProduct}
                   activeFormTab={activeFormTab}
@@ -544,6 +617,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   onAddMoreVariants={openAddMoreVariants}
                   onAddUnitInView={handleAddUnitInView}
                   onAddAttributeInView={handleAddAttributeInView}
+                  onPrintLabel={handlePrintLabel}
+                  onAddSameType={handleAddSameType}
+                  onPurchaseProduct={handlePurchaseProduct}
+                  onStopBusiness={handleStopBusiness}
                 />
               </table>
             </div>
@@ -556,7 +633,6 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
               setCurrentPage={setCurrentPage}
               onItemsPerPageChange={handleItemsPerPageChange}
             />
-
           </div>
         );
       case 'purchase':
@@ -574,6 +650,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             onClickFileInput={() => fileInputRef.current?.click()}
             onOpenQuickAddProduct={handleOpenQuickAddProduct}
             onAddProductToPurchase={handleAddProductToPurchase}
+            purchaseDiscountValue={purchaseDiscountValue}
+            purchaseDiscountType={purchaseDiscountType}
+            setPurchaseDiscountValue={setPurchaseDiscountValue}
+            setPurchaseDiscountType={setPurchaseDiscountType}
             onUpdatePurchaseItem={updatePurchaseItem}
             onRemovePurchaseItem={removePurchaseItem}
             onCompletePurchase={handleCompletePurchase}
@@ -586,6 +666,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         return (
           <GoodsAuditForm
             products={products}
+            transactions={transactions}
+            productGroups={productGroups}
             lowStockProducts={lowStockProducts}
             auditItems={auditItems}
             setAuditItems={setAuditItems}
@@ -601,6 +683,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             formData={formData}
             setFormData={setFormData}
             editingProduct={editingProduct}
+            productGroups={productGroups}
             activeFormTab={activeFormTab}
             setActiveFormTab={setActiveFormTab}
             onBack={() => setActiveTab('goods')}
@@ -677,7 +760,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
               showPurchaseForm={showPurchaseForm}
               searchTerm={searchTerm}
               onSearchChange={handleSearchChange}
-              setActiveTab={setActiveTab}
+              onStartAudit={handleStartAudit}
               setShowPurchaseForm={setShowPurchaseForm}
             />
           )}
@@ -686,6 +769,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       )}
 
       <GoodsInventoryModals
+        products={products}
+        productGroups={productGroups}
         showProductModal={showProductModal}
         formData={formData}
         setFormData={setFormData}
