@@ -57,6 +57,8 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
   
   const [expandedNodesStrategic, setExpandedNodesStrategic] = useState<Set<string>>(new Set());
   const [expandedLedgerRows, setExpandedLedgerRows] = useState<Set<string>>(new Set());
+  const [ledgerViewMode, setLedgerViewMode] = useState<'byMonth' | 'byCategory'>('byMonth');
+  const [expandedCatNodes, setExpandedCatNodes] = useState<Set<string>>(new Set());
   
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnosisResult, setDiagnosisResult] = useState<string | null>(null);
@@ -387,6 +389,13 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
     setExpandedLedgerRows(newExpanded);
   };
 
+  const toggleCatNode = (fullPath: string) => {
+    const newExpanded = new Set(expandedCatNodes);
+    if (newExpanded.has(fullPath)) newExpanded.delete(fullPath);
+    else newExpanded.add(fullPath);
+    setExpandedCatNodes(newExpanded);
+  };
+
   const visibleLedgerRows = useMemo(() => {
     let filteredRevenue = [...groupRevenue];
     if (filterStartDate) filteredRevenue = filteredRevenue.filter(r => r.date >= filterStartDate);
@@ -432,6 +441,68 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
       return true;
     });
   }, [groupRevenue, expandedLedgerRows, filterStartDate, filterEndDate]);
+
+  const categoryTreeRows = useMemo(() => {
+    let filtered = [...groupRevenue];
+    if (filterStartDate) filtered = filtered.filter(r => r.date >= filterStartDate);
+    if (filterEndDate) filtered = filtered.filter(r => r.date <= filterEndDate);
+
+    const aggMap: Record<string, { quantity: number; net: number; cogs: number }> = {};
+    filtered.forEach(rev => {
+      const path = rev.groupName;
+      if (!aggMap[path]) aggMap[path] = { quantity: 0, net: 0, cogs: 0 };
+      aggMap[path].quantity += (rev.quantity || 0);
+      aggMap[path].net += (rev.netRevenue || (rev.amount || 0) - (rev.returnsValue || 0));
+      aggMap[path].cogs += (rev.cogs || 0);
+    });
+
+    const allPaths = new Set<string>();
+    Object.keys(aggMap).forEach(path => {
+      const parts = path.split(' >> ');
+      let current = '';
+      parts.forEach(p => {
+        current = current ? `${current} >> ${p}` : p;
+        allPaths.add(current);
+      });
+    });
+
+    const rows = Array.from(allPaths).map(path => {
+      const parts = path.split(' >> ');
+      let q = 0, n = 0, c = 0;
+      Object.keys(aggMap).forEach(dk => {
+        if (dk === path || dk.startsWith(path + ' >> ')) {
+          q += aggMap[dk].quantity;
+          n += aggMap[dk].net;
+          c += aggMap[dk].cogs;
+        }
+      });
+      const hasChildren = Array.from(allPaths).some(p => p.startsWith(path + ' >> '));
+      return {
+        fullPath: path,
+        displayName: parts[parts.length - 1],
+        level: parts.length,
+        quantity: q,
+        net: n,
+        cogs: c,
+        profit: n - c,
+        margin: n > 0 ? ((n - c) / n) * 100 : 0,
+        hasChildren,
+      };
+    });
+
+    rows.sort((a, b) => a.fullPath.localeCompare(b.fullPath));
+
+    return rows.filter(row => {
+      if (row.level === 1) return true;
+      const parts = row.fullPath.split(' >> ');
+      let currentPath = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath} >> ${parts[i]}` : parts[i];
+        if (!expandedCatNodes.has(currentPath)) return false;
+      }
+      return true;
+    });
+  }, [groupRevenue, expandedCatNodes, filterStartDate, filterEndDate]);
 
   return (
     <div className="space-y-8 pb-20 max-w-full animate-in fade-in duration-500">
@@ -700,7 +771,15 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
                    <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg"><FileSpreadsheet className="w-5 h-5" /></div>
                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Sổ Cái Nhóm Hàng Chi Tiết</h3>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                   <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                      <button onClick={() => setLedgerViewMode('byMonth')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${ledgerViewMode === 'byMonth' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
+                        <Calendar className="w-3 h-3" /> Theo Tháng
+                      </button>
+                      <button onClick={() => setLedgerViewMode('byCategory')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${ledgerViewMode === 'byCategory' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
+                        <ListTree className="w-3 h-3" /> Theo Nhóm
+                      </button>
+                   </div>
                    <div className="flex items-center gap-2 bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm">
                       <input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="bg-transparent text-[10px] font-bold text-slate-600 outline-none" />
                       <input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="bg-transparent text-[10px] font-bold text-slate-600 outline-none ml-2" />
@@ -711,20 +790,55 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white border-b border-slate-100">
-                      <th className="px-8 py-6 w-[220px]">Thời gian / Nhóm</th>
+                      <th className="px-8 py-6 w-[220px]">{ledgerViewMode === 'byCategory' ? 'Nhóm hàng' : 'Thời gian / Nhóm'}</th>
                       <th className="px-4 py-6 text-right">SL bán</th>
                       <th className="px-4 py-6 text-right text-blue-600">Doanh thu thuần</th>
                       <th className="px-4 py-6 text-right text-rose-600">Giá vốn</th>
                       <th className="px-4 py-6 text-right font-black bg-emerald-50 text-emerald-800">Lợi nhuận gộp</th>
                       <th className="px-4 py-6 text-center text-indigo-600 font-black w-[100px]">Tỉ suất LN</th>
-                      <th className="px-4 py-6 text-center w-[60px]">Xóa</th>
+                      {ledgerViewMode === 'byMonth' && <th className="px-4 py-6 text-center w-[60px]">Xóa</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 tabular-nums text-[10px] font-bold">
-                    {visibleLedgerRows.map((row) => {
+                    {ledgerViewMode === 'byCategory' ? (
+                      categoryTreeRows.map((row) => {
+                        const isExp = expandedCatNodes.has(row.fullPath);
+                        const marginColor = row.margin > 30 ? 'text-emerald-600 bg-emerald-50' : row.margin >= 15 ? 'text-indigo-600 bg-indigo-50' : 'text-rose-600 bg-rose-50';
+                        const isLeaf = !row.hasChildren;
+                        return (
+                          <tr key={row.fullPath} className={`group hover:bg-slate-50 transition-all ${row.level === 1 ? 'bg-slate-50/60' : ''}`}>
+                            <td className="px-8 py-4" style={{ paddingLeft: `${(row.level - 1) * 24 + 32}px` }}>
+                              <div className="flex items-center gap-2">
+                                {row.hasChildren ? (
+                                  <button onClick={() => toggleCatNode(row.fullPath)} className={`p-1 rounded transition-colors ${row.level === 1 ? 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                    {isExp ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                  </button>
+                                ) : (
+                                  <span className="w-5 h-5 flex items-center justify-center"><Circle className="w-1.5 h-1.5 text-slate-300 fill-slate-300" /></span>
+                                )}
+                                <p className={`uppercase truncate max-w-[240px] ${row.level === 1 ? 'text-slate-900 font-black' : isLeaf ? 'text-slate-400 font-medium' : 'text-slate-700 font-bold'}`}>
+                                  {String(row.displayName)}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-right">{formatNumber(row.quantity)}</td>
+                            <td className="px-4 py-4 text-right text-blue-900 bg-blue-50/20">{formatNumber(row.net)}</td>
+                            <td className="px-4 py-4 text-right text-rose-500">{formatNumber(Math.abs(row.cogs))}</td>
+                            <td className="px-4 py-4 text-right font-black text-emerald-700 bg-emerald-50/20">{formatNumber(row.profit)}</td>
+                            <td className="px-4 py-4 text-center">
+                              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-black text-[10px] ${marginColor}`}>
+                                <Percent className="w-3 h-3" />
+                                {row.margin.toFixed(1)}%
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      visibleLedgerRows.map((row) => {
                         const isExp = expandedLedgerRows.has(`${row.month}_${row.fullPath}`);
                         const marginColor = row.margin > 30 ? 'text-emerald-600 bg-emerald-50' : row.margin >= 15 ? 'text-indigo-600 bg-indigo-50' : 'text-rose-600 bg-rose-50';
-                        
+
                         return (
                           <tr key={`${row.month}_${row.fullPath}`} className="group hover:bg-slate-50 transition-all">
                             <td className="px-8 py-4" style={{ paddingLeft: `${row.level * 20}px` }}>
@@ -756,7 +870,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
                           </tr>
                         );
                       })
-                    }
+                    )}
                   </tbody>
                 </table>
              </div>

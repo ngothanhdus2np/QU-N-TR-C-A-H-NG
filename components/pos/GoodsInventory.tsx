@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { 
-  Package, Plus, Search, ArrowDownCircle, ClipboardCheck, X, Edit2, History, 
-  Upload, FileDown, Star, Image as ImageIcon, Minus, FileText, 
-  ChevronRight, ChevronLeft, ArrowLeft, Printer, Eye, Info, AlertCircle, ScanBarcode, Maximize2, 
-  Grid3X3, User, Calendar, Trash2
+import {
+  Package, Plus, Search, ArrowDownCircle, ClipboardCheck, X, Edit2, History,
+  Upload, FileDown, Star, Image as ImageIcon, Minus, FileText,
+  ChevronRight, ChevronLeft, ArrowLeft, Printer, Eye, Info, AlertCircle, ScanBarcode, Maximize2,
+  Grid3X3, User, Calendar, Trash2, Layers, ChevronDown, Circle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { POSProduct, InventoryTransaction } from '../../types';
@@ -40,7 +40,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setCurrentPage(1);
   };
   const [editingProduct, setEditingProduct] = useState<POSProduct | null>(null);
-  const [activeTab, setActiveTab] = useState<'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form'>('goods');
+  const [activeTab, setActiveTab] = useState<'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form' | 'category_tree'>('goods');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [auditSearchTerm, setAuditSearchTerm] = useState('');
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
@@ -100,6 +102,72 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
   const currentProducts = React.useMemo(() => {
     return filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   }, [filteredProducts, currentPage]);
+
+  // Category tree: build hierarchy from categoryId (supports "A >> B >> C" paths)
+  interface CatNode {
+    fullPath: string;
+    name: string;
+    level: number;
+    hasChildren: boolean;
+    products: POSProduct[];
+  }
+  const categoryTreeNodes = React.useMemo((): CatNode[] => {
+    const pathMap: Record<string, POSProduct[]> = {};
+    products.forEach(p => {
+      const cat = (p.categoryId || 'Chưa phân loại').trim();
+      if (!pathMap[cat]) pathMap[cat] = [];
+      pathMap[cat].push(p);
+    });
+
+    const allPaths = new Set<string>();
+    Object.keys(pathMap).forEach(cat => {
+      const parts = cat.split(' >> ');
+      let current = '';
+      parts.forEach(part => {
+        current = current ? `${current} >> ${part}` : part;
+        allPaths.add(current);
+      });
+    });
+
+    const nodes: CatNode[] = Array.from(allPaths).map(path => {
+      const parts = path.split(' >> ');
+      const directProducts = pathMap[path] || [];
+      const allDescendantProducts = products.filter(p => {
+        const cat = (p.categoryId || 'Chưa phân loại').trim();
+        return cat === path || cat.startsWith(path + ' >> ');
+      });
+      const hasChildren = Array.from(allPaths).some(p => p.startsWith(path + ' >> '));
+      return {
+        fullPath: path,
+        name: parts[parts.length - 1],
+        level: parts.length,
+        hasChildren,
+        products: hasChildren ? allDescendantProducts : directProducts,
+      };
+    });
+
+    nodes.sort((a, b) => a.fullPath.localeCompare(b.fullPath));
+
+    return nodes.filter(node => {
+      if (node.level === 1) return true;
+      const parts = node.fullPath.split(' >> ');
+      let cur = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur = cur ? `${cur} >> ${parts[i]}` : parts[i];
+        if (!expandedCategories.has(cur)) return false;
+      }
+      return true;
+    });
+  }, [products, expandedCategories]);
+
+  const toggleCategory = (fullPath: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(fullPath)) next.delete(fullPath);
+      else next.add(fullPath);
+      return next;
+    });
+  };
 
   const handleSaveProduct = (stayOnPage: boolean = false) => {
     if (!formData.name || !formData.sku) {
@@ -995,6 +1063,104 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
             </div>
           </div>
         );
+      case 'category_tree':
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg"><Layers className="w-5 h-5" /></div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Cây Nhóm Hàng</h3>
+                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-0.5">Bấm vào nhóm để xem sản phẩm bên trong</p>
+                  </div>
+                </div>
+                <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase">
+                  {products.length} SKU / {new Set(products.map(p => (p.categoryId || 'Chưa phân loại').split(' >> ')[0])).size} nhóm cha
+                </div>
+              </div>
+
+              <div className="divide-y divide-slate-50">
+                {categoryTreeNodes.map(node => {
+                  const isExpanded = expandedCategories.has(node.fullPath);
+                  const isSelected = selectedCategory === node.fullPath;
+                  const isLeaf = !node.hasChildren;
+                  return (
+                    <div key={node.fullPath}>
+                      <button
+                        onClick={() => {
+                          if (node.hasChildren) toggleCategory(node.fullPath);
+                          setSelectedCategory(isSelected ? null : node.fullPath);
+                        }}
+                        className={`w-full flex items-center gap-3 px-8 py-4 text-left transition-all hover:bg-slate-50 ${isSelected ? 'bg-indigo-50' : ''}`}
+                        style={{ paddingLeft: `${(node.level - 1) * 24 + 32}px` }}
+                      >
+                        {node.hasChildren ? (
+                          <span className={`flex-shrink-0 p-1 rounded transition-colors ${node.level === 1 ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                          </span>
+                        ) : (
+                          <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                            <Circle className="w-1.5 h-1.5 text-slate-300 fill-slate-300" />
+                          </span>
+                        )}
+                        <span className={`flex-1 text-[11px] uppercase tracking-widest truncate ${node.level === 1 ? 'font-black text-slate-900' : isLeaf ? 'font-medium text-slate-500' : 'font-bold text-slate-700'}`}>
+                          {node.name}
+                        </span>
+                        <span className={`flex-shrink-0 text-[10px] font-black px-2.5 py-1 rounded-full ${node.level === 1 ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {node.products.length} SP
+                        </span>
+                      </button>
+
+                      {isSelected && !node.hasChildren && (
+                        <div className="border-t border-slate-100 bg-slate-50/50">
+                          {node.products.length === 0 ? (
+                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-6">Không có sản phẩm</p>
+                          ) : (
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                  <th className="px-8 py-3 text-left">Mã hàng</th>
+                                  <th className="px-4 py-3 text-left">Tên hàng hóa</th>
+                                  <th className="px-4 py-3 text-right">Giá bán</th>
+                                  <th className="px-4 py-3 text-right">Tồn kho</th>
+                                  <th className="px-4 py-3 text-center">Sửa</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                {node.products.map(p => (
+                                  <tr key={p.id} className="hover:bg-white transition-colors">
+                                    <td className="px-8 py-3"><span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded font-mono text-[10px] font-black">{p.sku}</span></td>
+                                    <td className="px-4 py-3 text-xs font-bold text-slate-800">{p.name}</td>
+                                    <td className="px-4 py-3 text-right text-xs font-black text-slate-900">{p.salePrice.toLocaleString()}đ</td>
+                                    <td className="px-4 py-3 text-right">
+                                      <span className={`text-sm font-black ${p.stock <= (p.minStock || 5) ? 'text-rose-600' : 'text-slate-800'}`}>{p.stock}</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <button onClick={() => { setEditingProduct(p); setFormData(p); setActiveTab('product_form'); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {categoryTreeNodes.length === 0 && (
+                  <div className="py-20 text-center">
+                    <Layers className="w-12 h-12 mx-auto mb-4 text-slate-200" />
+                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Chưa có dữ liệu nhóm hàng</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
       default: return null;
     }
   };
@@ -1004,6 +1170,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
       {activeTab !== 'audit_form' && (
         <div className="flex bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 w-fit mb-8 gap-1">
           <button onClick={() => setActiveTab('goods')} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'goods' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Danh mục hàng</button>
+          <button onClick={() => setActiveTab('category_tree')} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'category_tree' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Nhóm Hàng</button>
           <button onClick={() => { setActiveTab('purchase'); setShowPurchaseForm(false); }} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'purchase' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Nhập hàng (F2)</button>
           <button onClick={() => setActiveTab('kho')} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'kho' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Số dư tồn kho</button>
         </div>
