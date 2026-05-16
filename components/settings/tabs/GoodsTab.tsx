@@ -139,41 +139,80 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
 
-  const goodsOverview = useMemo(() => {
+  // Fast O(n) single-pass counts — no sorting, used for count labels only
+  const goodsCounts = useMemo(() => {
+    const units = new Set<string>();
+    const categories = new Set<string>();
+    const brands = new Set<string>();
+    const locations = new Set<string>();
+    const attributeNames = new Set<string>();
+
+    for (const p of deferredProducts) {
+      const u = p.unit?.trim();
+      if (u) units.add(u);
+      (p.units || []).forEach(pu => {
+        const n = pu.name?.trim();
+        if (n) units.add(n);
+      });
+      const cat = String(p.categoryPath || p.categoryId || '').trim();
+      if (cat) categories.add(cat);
+      const br = p.brand?.trim();
+      if (br) brands.add(br);
+      const loc = p.location?.trim();
+      if (loc) locations.add(loc);
+      (p.attributes || []).forEach(a => {
+        const n = String(a.name || '').trim();
+        if (n) attributeNames.add(n);
+      });
+      Object.keys(p.variantAttributes || {}).forEach(k => {
+        const n = k.trim();
+        if (n) attributeNames.add(n);
+      });
+    }
+
+    return {
+      units: units.size,
+      categories: categories.size,
+      brands: brands.size,
+      locations: locations.size,
+      attributes: attributeNames.size,
+    };
+  }, [deferredProducts]);
+
+  // Full sorted detail — only computed when user opens a detail view
+  const goodsDetail = useMemo(() => {
+    if (!goodsDetailView) return null;
+
     const collect = (values: Array<string | undefined | null>) =>
-      Array.from(new Set(values.map(value => String(value || '').trim()).filter(Boolean))).sort(
-        (a, b) => a.localeCompare(b, 'vi', { numeric: true })
+      Array.from(new Set(values.map(v => String(v || '').trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b, 'vi', { numeric: true })
       );
 
     const units = collect([
-      ...deferredProducts.map(product => product.unit),
-      ...deferredProducts.flatMap(product => (product.units || []).map(unit => unit.name)),
+      ...products.map(p => p.unit),
+      ...products.flatMap(p => (p.units || []).map(u => u.name)),
     ]);
-
-    const categoryValues = collect(
-      deferredProducts.map(product => product.categoryPath || product.categoryId)
-    );
-    const brands = collect(deferredProducts.map(product => product.brand));
-    const locations = collect(deferredProducts.map(product => product.location));
+    const categoryValues = collect(products.map(p => p.categoryPath || p.categoryId));
+    const brands = collect(products.map(p => p.brand));
+    const locations = collect(products.map(p => p.location));
 
     const attributeMap = new Map<string, Set<string>>();
-    deferredProducts.forEach(product => {
-      (product.attributes || []).forEach(attribute => {
-        const name = String(attribute.name || '').trim();
+    products.forEach(p => {
+      (p.attributes || []).forEach(a => {
+        const name = String(a.name || '').trim();
         if (!name) return;
         if (!attributeMap.has(name)) attributeMap.set(name, new Set());
-        attribute.values?.forEach(value => {
-          const cleanValue = String(value || '').trim();
-          if (cleanValue) attributeMap.get(name)!.add(cleanValue);
+        a.values?.forEach(v => {
+          const cv = String(v || '').trim();
+          if (cv) attributeMap.get(name)!.add(cv);
         });
       });
-
-      Object.entries(product.variantAttributes || {}).forEach(([name, value]) => {
-        const cleanName = String(name || '').trim();
-        const cleanValue = String(value || '').trim();
-        if (!cleanName || !cleanValue) return;
-        if (!attributeMap.has(cleanName)) attributeMap.set(cleanName, new Set());
-        attributeMap.get(cleanName)!.add(cleanValue);
+      Object.entries(p.variantAttributes || {}).forEach(([name, value]) => {
+        const n = String(name || '').trim();
+        const v = String(value || '').trim();
+        if (!n || !v) return;
+        if (!attributeMap.has(n)) attributeMap.set(n, new Set());
+        attributeMap.get(n)!.add(v);
       });
     });
 
@@ -185,7 +224,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }));
 
     return { units, categoryValues, brands, locations, attributes };
-  }, [deferredProducts]);
+  }, [goodsDetailView, products]);
 
   const toggleAllowSellOutOfStock = async () => {
     const nextSettings = {
@@ -219,13 +258,13 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
 
     const simpleItems =
       goodsDetailView === 'units'
-        ? goodsOverview.units
+        ? goodsDetail?.units
         : goodsDetailView === 'categories'
-          ? goodsOverview.categoryValues
+          ? goodsDetail?.categoryValues
           : goodsDetailView === 'brands'
-            ? goodsOverview.brands
+            ? goodsDetail?.brands
             : goodsDetailView === 'locations'
-              ? goodsOverview.locations
+              ? goodsDetail?.locations
               : null;
 
     return (
@@ -239,11 +278,11 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         </button>
         <Section title={detailTitles[goodsDetailView]} icon={Package}>
           {goodsDetailView === 'attributes' ? (
-            goodsOverview.attributes.length === 0 ? (
+            !goodsDetail || goodsDetail.attributes.length === 0 ? (
               <DetailEmptyState />
             ) : (
               <div className="space-y-5">
-                {goodsOverview.attributes.map(attr => (
+                {goodsDetail.attributes.map(attr => (
                   <div key={attr.name}>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {attr.name}
@@ -325,35 +364,31 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         <GoodsOverviewLine
           title="Đơn vị tính"
           description="Tất cả đơn vị đang dùng trong hàng hóa và quy đổi."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.units.length} đơn vị tính`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.units} đơn vị tính`}
           onOpen={() => setGoodsDetailView('units')}
         />
         <GoodsOverviewLine
           title="Thuộc tính"
           description="Các nhóm thuộc tính biến thể đang có trong danh mục."
-          countLabel={
-            isStale ? 'Đang tính...' : `Có ${goodsOverview.attributes.length} nhóm thuộc tính`
-          }
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.attributes} nhóm thuộc tính`}
           onOpen={() => setGoodsDetailView('attributes')}
         />
         <GoodsOverviewLine
           title="Nhóm hàng"
           description="Các nhóm hàng đang được gán cho sản phẩm."
-          countLabel={
-            isStale ? 'Đang tính...' : `Có ${goodsOverview.categoryValues.length} nhóm hàng`
-          }
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.categories} nhóm hàng`}
           onOpen={() => setGoodsDetailView('categories')}
         />
         <GoodsOverviewLine
           title="Thương hiệu"
           description="Các thương hiệu đang xuất hiện trong danh sách hàng hóa."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.brands.length} thương hiệu`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.brands} thương hiệu`}
           onOpen={() => setGoodsDetailView('brands')}
         />
         <GoodsOverviewLine
           title="Vị trí"
           description="Các vị trí bán hàng hoặc lưu trữ đang được dùng."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.locations.length} vị trí`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.locations} vị trí`}
           onOpen={() => setGoodsDetailView('locations')}
         />
       </Section>

@@ -465,12 +465,21 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     });
   }, [inventorySettings]);
 
-  // Preload all heavy component tabs in background when settings opens
+  // Preload heavy tabs after modal is open — printTemplates loads on-click only
   useEffect(() => {
     if (!isOpen) return;
-    startTransition(() => {
-      setVisitedTabs(new Set(['store', 'goods', 'payments', 'printTemplates', 'appearance']));
-    });
+    const t = setTimeout(() => {
+      startTransition(() => {
+        setVisitedTabs(prev => {
+          const next = new Set(prev);
+          next.add('goods');
+          next.add('payments');
+          next.add('appearance');
+          return next;
+        });
+      });
+    }, 300);
+    return () => clearTimeout(t);
   }, [isOpen]);
 
   useEffect(() => {
