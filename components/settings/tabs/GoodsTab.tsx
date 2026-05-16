@@ -195,24 +195,95 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     onNavigate(id);
   };
 
-  // Nếu đang xem detail view, hiển thị placeholder (logic detail sẽ được implement sau)
   if (goodsDetailView) {
+    const DETAIL_META: Record<GoodsDetailView, { title: string; description: string }> = {
+      units: {
+        title: 'Đơn vị tính',
+        description: `${goodsOverview.units.length} đơn vị đang dùng trong hàng hóa và quy đổi.`,
+      },
+      attributes: {
+        title: 'Thuộc tính',
+        description: `${goodsOverview.attributes.length} nhóm thuộc tính biến thể đang có trong danh mục.`,
+      },
+      categories: {
+        title: 'Nhóm hàng',
+        description: `${goodsOverview.categoryValues.length} nhóm hàng đang được gán cho sản phẩm.`,
+      },
+      brands: {
+        title: 'Thương hiệu',
+        description: `${goodsOverview.brands.length} thương hiệu đang xuất hiện trong danh sách hàng hóa.`,
+      },
+      locations: {
+        title: 'Vị trí',
+        description: `${goodsOverview.locations.length} vị trí bán hàng hoặc lưu trữ đang được dùng.`,
+      },
+    };
+
+    const Chip: React.FC<{ label: string }> = ({ label }) => (
+      <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+        {label}
+      </span>
+    );
+
+    const EmptyState = () => (
+      <p className="py-6 text-center text-sm text-slate-400">Chưa có dữ liệu.</p>
+    );
+
+    const renderContent = () => {
+      if (goodsDetailView === 'attributes') {
+        if (goodsOverview.attributes.length === 0) return <EmptyState />;
+        return (
+          <div className="space-y-5">
+            {goodsOverview.attributes.map(attr => (
+              <div key={attr.name}>
+                <p className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {attr.name}
+                  <span className="ml-1.5 font-normal normal-case text-slate-400">
+                    ({attr.values.length} giá trị)
+                  </span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {attr.values.map(v => (
+                    <Chip key={v} label={v} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      const items =
+        goodsDetailView === 'units'
+          ? goodsOverview.units
+          : goodsDetailView === 'categories'
+            ? goodsOverview.categoryValues
+            : goodsDetailView === 'brands'
+              ? goodsOverview.brands
+              : goodsOverview.locations;
+
+      if (items.length === 0) return <EmptyState />;
+      return (
+        <div className="flex flex-wrap gap-2">
+          {items.map(item => (
+            <Chip key={item} label={item} />
+          ))}
+        </div>
+      );
+    };
+
+    const meta = DETAIL_META[goodsDetailView];
     return (
       <div className="space-y-4">
-        <Section
-          title={`Chi tiết ${goodsDetailView}`}
-          description="Detail view sẽ được implement trong phase tiếp theo"
-          icon={Package}
+        <button
+          type="button"
+          onClick={() => setGoodsDetailView(null)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
         >
-          <div className="text-center py-8">
-            <button
-              type="button"
-              onClick={() => setGoodsDetailView(null)}
-              className="text-blue-600 hover:text-blue-700"
-            >
-              ← Quay lại tổng quan
-            </button>
-          </div>
+          ← Quay lại tổng quan
+        </button>
+        <Section title={meta.title} description={meta.description} icon={Package}>
+          {renderContent()}
         </Section>
       </div>
     );
