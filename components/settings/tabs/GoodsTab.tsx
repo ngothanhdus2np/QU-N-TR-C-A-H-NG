@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Database, Package, ServerCog } from 'lucide-react';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../../src/lib';
 import type { AlertConfig, POSInventorySettings, POSProduct } from '../../../types';
@@ -115,9 +115,6 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   onNavigate,
   onSetActiveTab,
 }) => {
-  const deferredProducts = useDeferredValue(products);
-  const isStale = deferredProducts !== products;
-
   const [goodsDetailView, setGoodsDetailView] = useState<GoodsDetailView | null>(null);
   const [goodsBarcodeManualMode, setGoodsBarcodeManualMode] = useState(() => {
     try {
@@ -139,45 +136,62 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
 
-  // Fast O(n) single-pass counts — no sorting, used for count labels only
-  const goodsCounts = useMemo(() => {
-    const units = new Set<string>();
-    const categories = new Set<string>();
-    const brands = new Set<string>();
-    const locations = new Set<string>();
-    const attributeNames = new Set<string>();
+  const [goodsCounts, setGoodsCounts] = useState({
+    units: 0,
+    categories: 0,
+    brands: 0,
+    locations: 0,
+    attributes: 0,
+  });
+  const [countsReady, setCountsReady] = useState(false);
 
-    for (const p of deferredProducts) {
-      const u = p.unit?.trim();
-      if (u) units.add(u);
-      (p.units || []).forEach(pu => {
-        const n = pu.name?.trim();
-        if (n) units.add(n);
+  // Compute counts off the render thread — runs during browser idle time
+  useEffect(() => {
+    setCountsReady(false);
+    const compute = () => {
+      const units = new Set<string>();
+      const categories = new Set<string>();
+      const brands = new Set<string>();
+      const locations = new Set<string>();
+      const attributeNames = new Set<string>();
+      for (const p of products) {
+        const u = p.unit?.trim();
+        if (u) units.add(u);
+        (p.units || []).forEach(pu => {
+          const n = pu.name?.trim();
+          if (n) units.add(n);
+        });
+        const cat = String(p.categoryPath || p.categoryId || '').trim();
+        if (cat) categories.add(cat);
+        const br = p.brand?.trim();
+        if (br) brands.add(br);
+        const loc = p.location?.trim();
+        if (loc) locations.add(loc);
+        (p.attributes || []).forEach(a => {
+          const n = String(a.name || '').trim();
+          if (n) attributeNames.add(n);
+        });
+        Object.keys(p.variantAttributes || {}).forEach(k => {
+          const n = k.trim();
+          if (n) attributeNames.add(n);
+        });
+      }
+      setGoodsCounts({
+        units: units.size,
+        categories: categories.size,
+        brands: brands.size,
+        locations: locations.size,
+        attributes: attributeNames.size,
       });
-      const cat = String(p.categoryPath || p.categoryId || '').trim();
-      if (cat) categories.add(cat);
-      const br = p.brand?.trim();
-      if (br) brands.add(br);
-      const loc = p.location?.trim();
-      if (loc) locations.add(loc);
-      (p.attributes || []).forEach(a => {
-        const n = String(a.name || '').trim();
-        if (n) attributeNames.add(n);
-      });
-      Object.keys(p.variantAttributes || {}).forEach(k => {
-        const n = k.trim();
-        if (n) attributeNames.add(n);
-      });
-    }
-
-    return {
-      units: units.size,
-      categories: categories.size,
-      brands: brands.size,
-      locations: locations.size,
-      attributes: attributeNames.size,
+      setCountsReady(true);
     };
-  }, [deferredProducts]);
+    if (typeof requestIdleCallback !== 'undefined') {
+      const id = requestIdleCallback(compute);
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(compute, 0);
+    return () => clearTimeout(id);
+  }, [products]);
 
   // Full sorted detail — only computed when user opens a detail view
   const goodsDetail = useMemo(() => {
@@ -364,31 +378,31 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         <GoodsOverviewLine
           title="Đơn vị tính"
           description="Tất cả đơn vị đang dùng trong hàng hóa và quy đổi."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.units} đơn vị tính`}
+          countLabel={countsReady ? `Có ${goodsCounts.units} đơn vị tính` : 'Đang tính...'}
           onOpen={() => setGoodsDetailView('units')}
         />
         <GoodsOverviewLine
           title="Thuộc tính"
           description="Các nhóm thuộc tính biến thể đang có trong danh mục."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.attributes} nhóm thuộc tính`}
+          countLabel={countsReady ? `Có ${goodsCounts.attributes} nhóm thuộc tính` : 'Đang tính...'}
           onOpen={() => setGoodsDetailView('attributes')}
         />
         <GoodsOverviewLine
           title="Nhóm hàng"
           description="Các nhóm hàng đang được gán cho sản phẩm."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.categories} nhóm hàng`}
+          countLabel={countsReady ? `Có ${goodsCounts.categories} nhóm hàng` : 'Đang tính...'}
           onOpen={() => setGoodsDetailView('categories')}
         />
         <GoodsOverviewLine
           title="Thương hiệu"
           description="Các thương hiệu đang xuất hiện trong danh sách hàng hóa."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.brands} thương hiệu`}
+          countLabel={countsReady ? `Có ${goodsCounts.brands} thương hiệu` : 'Đang tính...'}
           onOpen={() => setGoodsDetailView('brands')}
         />
         <GoodsOverviewLine
           title="Vị trí"
           description="Các vị trí bán hàng hoặc lưu trữ đang được dùng."
-          countLabel={isStale ? 'Đang tính...' : `Có ${goodsCounts.locations} vị trí`}
+          countLabel={countsReady ? `Có ${goodsCounts.locations} vị trí` : 'Đang tính...'}
           onOpen={() => setGoodsDetailView('locations')}
         />
       </Section>

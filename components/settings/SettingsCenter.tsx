@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -404,9 +404,9 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('store');
   const [visitedTabs, setVisitedTabs] = useState<Set<SettingsTab>>(() => new Set(['store']));
 
-  const handleSetActiveTab = (tab: SettingsTab) => {
+  const handleSetActiveTab = useCallback((tab: SettingsTab) => {
     startTransition(() => setActiveTab(tab));
-  };
+  }, []);
   const [logoUploading, setLogoUploading] = useState(false);
   const [claudeStatus, setClaudeStatus] = useState<'idle' | 'testing' | 'success' | 'error'>(
     'idle'
@@ -504,12 +504,22 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
       .catch(() => {});
   }, [isOpen]);
 
+  const handleNavigateAndClose = useCallback(
+    (id: string) => {
+      onNavigate(id);
+      onClose();
+    },
+    [onNavigate, onClose]
+  );
+
+  const handleGoodsSetActiveTab = useCallback(
+    (tab: string) => handleSetActiveTab(tab as SettingsTab),
+    [handleSetActiveTab]
+  );
+
   if (!isOpen) return null;
 
-  const navigateAndClose = (id: string) => {
-    onNavigate(id);
-    onClose();
-  };
+  const navigateAndClose = handleNavigateAndClose;
 
   const processAndUploadLogo = async (file: File) => {
     setLogoUploading(true);
@@ -1172,8 +1182,8 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                       alertConfig={alertConfig}
                       inventorySettings={inventorySettings || DEFAULT_POS_INVENTORY_SETTINGS}
                       onUpdateInventorySettings={onUpdateInventorySettings}
-                      onNavigate={navigateAndClose}
-                      onSetActiveTab={(tab: string) => handleSetActiveTab(tab as SettingsTab)}
+                      onNavigate={handleNavigateAndClose}
+                      onSetActiveTab={handleGoodsSetActiveTab}
                     />
                   </div>
                 )}
