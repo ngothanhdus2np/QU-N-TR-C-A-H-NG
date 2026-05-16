@@ -1184,6 +1184,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                       onUpdateInventorySettings={onUpdateInventorySettings}
                       onNavigate={handleNavigateAndClose}
                       onSetActiveTab={handleGoodsSetActiveTab}
+                      onRefresh={onRefresh}
                     />
                   </div>
                 )}

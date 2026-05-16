@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Database, Package, ServerCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Database, Package, Pencil, ServerCog, X } from 'lucide-react';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../../src/lib';
 import type { AlertConfig, POSInventorySettings, POSProduct } from '../../../types';
 
@@ -10,6 +10,7 @@ interface GoodsTabProps {
   onUpdateInventorySettings: (settings: POSInventorySettings) => Promise<void>;
   onNavigate: (id: string) => void;
   onSetActiveTab: (tab: string) => void;
+  onRefresh?: () => void;
 }
 
 type GoodsDetailView = 'units' | 'attributes' | 'categories' | 'brands' | 'locations';
@@ -26,7 +27,10 @@ const DetailEmptyState = () => (
   <p className="py-6 text-center text-sm text-slate-400">Chưa có dữ liệu.</p>
 );
 
-const CategoryTreeView: React.FC<{ nodes: CatNode[] }> = ({ nodes }) => {
+const CategoryTreeView: React.FC<{ nodes: CatNode[]; onEdit: (node: CatNode) => void }> = ({
+  nodes,
+  onEdit,
+}) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (path: string) =>
@@ -42,30 +46,42 @@ const CategoryTreeView: React.FC<{ nodes: CatNode[] }> = ({ nodes }) => {
     const isExpanded = expanded.has(node.path);
     return (
       <div key={node.path}>
-        <button
-          type="button"
-          onClick={() => hasChildren && toggle(node.path)}
-          className={`w-full flex items-center gap-2 py-2.5 text-left text-sm rounded-lg transition-colors ${hasChildren ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
-          style={{ paddingLeft: `${12 + depth * 20}px`, paddingRight: 12 }}
+        <div
+          className="flex items-center rounded-lg transition-colors hover:bg-slate-50 group"
+          style={{ paddingLeft: `${12 + depth * 20}px`, paddingRight: 4 }}
         >
-          <span className="w-4 shrink-0 flex items-center justify-center text-slate-400">
-            {hasChildren ? (
-              isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )
-            ) : (
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-300 mx-auto" />
-            )}
-          </span>
-          <span
-            className={`flex-1 min-w-0 truncate ${depth === 0 ? 'font-medium text-slate-800' : depth === 1 ? 'text-slate-700' : 'text-slate-600'}`}
+          <button
+            type="button"
+            onClick={() => hasChildren && toggle(node.path)}
+            className={`flex-1 flex items-center gap-2 py-2.5 text-left text-sm min-w-0 ${hasChildren ? 'cursor-pointer' : 'cursor-default'}`}
           >
-            {node.name}
-          </span>
-          <span className="shrink-0 text-xs text-slate-400">{node.count} SP</span>
-        </button>
+            <span className="w-4 shrink-0 flex items-center justify-center text-slate-400">
+              {hasChildren ? (
+                isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-300 mx-auto" />
+              )}
+            </span>
+            <span
+              className={`flex-1 min-w-0 truncate ${depth === 0 ? 'font-medium text-slate-800' : depth === 1 ? 'text-slate-700' : 'text-slate-600'}`}
+            >
+              {node.name}
+            </span>
+            <span className="shrink-0 text-xs text-slate-400 mr-1">{node.count} SP</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onEdit(node)}
+            className="shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 opacity-0 group-hover:opacity-100 transition-all"
+            title="Sửa nhóm hàng"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {isExpanded && hasChildren && (
           <div>{node.children.map(child => renderNode(child, depth + 1))}</div>
         )}
@@ -74,6 +90,120 @@ const CategoryTreeView: React.FC<{ nodes: CatNode[] }> = ({ nodes }) => {
   };
 
   return <div className="-mx-1">{nodes.map(node => renderNode(node, 0))}</div>;
+};
+
+const CategoryEditPopup: React.FC<{
+  node: CatNode;
+  allNodes: CatNode[];
+  onSave: (oldPath: string, newPath: string) => Promise<void>;
+  onClose: () => void;
+}> = ({ node, allNodes, onSave, onClose }) => {
+  const parts = node.path.split(' >> ');
+  const currentName = parts[parts.length - 1];
+  const currentParentPath = parts.length > 1 ? parts.slice(0, -1).join(' >> ') : '';
+
+  const [name, setName] = useState(currentName);
+  const [parentPath, setParentPath] = useState(currentParentPath);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const parentOptions = useMemo(() => {
+    const result: { label: string; value: string; depth: number }[] = [];
+    const descPrefix = node.path + ' >> ';
+    const traverse = (nodes: CatNode[], depth: number) => {
+      for (const n of nodes) {
+        if (n.path === node.path || n.path.startsWith(descPrefix)) continue;
+        result.push({ label: n.name, value: n.path, depth });
+        traverse(n.children, depth + 1);
+      }
+    };
+    traverse(allNodes, 0);
+    return result;
+  }, [allNodes, node.path]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Tên không được để trống');
+      return;
+    }
+    const newPath = parentPath ? `${parentPath} >> ${trimmed}` : trimmed;
+    setSaving(true);
+    try {
+      await onSave(node.path, newPath);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Lỗi lưu');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm bg-white rounded-xl shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">Sửa nhóm hàng</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-700">Tên nhóm hàng</span>
+            <input
+              type="text"
+              value={name}
+              onChange={e => {
+                setName(e.target.value);
+                setError('');
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              autoFocus
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-700">Nhóm cha</span>
+            <select
+              value={parentPath}
+              onChange={e => setParentPath(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">— Không có nhóm cha —</option>
+              {parentOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {' '.repeat(opt.depth * 4)}
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && <p className="text-xs text-rose-500">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50/60">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="rounded-xl px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Đang lưu...' : 'Lưu'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
@@ -166,8 +296,10 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   onUpdateInventorySettings,
   onNavigate,
   onSetActiveTab,
+  onRefresh,
 }) => {
   const [goodsDetailView, setGoodsDetailView] = useState<GoodsDetailView | null>(null);
+  const [editingNode, setEditingNode] = useState<CatNode | null>(null);
   const [goodsBarcodeManualMode, setGoodsBarcodeManualMode] = useState(() => {
     try {
       return localStorage.getItem(GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY) === 'true';
@@ -306,7 +438,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       let currentMap = rootMap;
       let pathSoFar = '';
       for (const part of parts) {
-        pathSoFar = pathSoFar ? `${pathSoFar}>>${part}` : part;
+        pathSoFar = pathSoFar ? `${pathSoFar} >> ${part}` : part;
         if (!currentMap.has(part)) {
           currentMap.set(part, { name: part, path: pathSoFar, count: 0, childMap: new Map() });
         }
@@ -345,6 +477,17 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     onNavigate(id);
   };
 
+  const handleSaveCategory = async (oldPath: string, newPath: string) => {
+    const res = await fetch('/api/categories/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPath, newPath }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Lỗi lưu');
+    onRefresh?.();
+  };
+
   if (goodsDetailView) {
     const detailTitles: Record<GoodsDetailView, string> = {
       units: 'Đơn vị tính',
@@ -364,54 +507,64 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
             : null;
 
     return (
-      <div className="space-y-4">
-        <button
-          type="button"
-          onClick={() => setGoodsDetailView(null)}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
-        >
-          ← Quay lại tổng quan
-        </button>
-        <Section title={detailTitles[goodsDetailView]} icon={Package}>
-          {goodsDetailView === 'categories' ? (
-            !goodsDetail || goodsDetail.categoryTree.length === 0 ? (
-              <DetailEmptyState />
-            ) : (
-              <CategoryTreeView nodes={goodsDetail.categoryTree} />
-            )
-          ) : goodsDetailView === 'attributes' ? (
-            !goodsDetail || goodsDetail.attributes.length === 0 ? (
-              <DetailEmptyState />
-            ) : (
-              <div className="space-y-5">
-                {goodsDetail.attributes.map(attr => (
-                  <div key={attr.name}>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {attr.name}
-                      <span className="ml-1.5 font-normal normal-case text-slate-400">
-                        ({attr.values.length} giá trị)
-                      </span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {attr.values.map(v => (
-                        <Chip key={v} label={v} />
-                      ))}
+      <>
+        {editingNode && goodsDetail && (
+          <CategoryEditPopup
+            node={editingNode}
+            allNodes={goodsDetail.categoryTree}
+            onSave={handleSaveCategory}
+            onClose={() => setEditingNode(null)}
+          />
+        )}
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setGoodsDetailView(null)}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            ← Quay lại tổng quan
+          </button>
+          <Section title={detailTitles[goodsDetailView]} icon={Package}>
+            {goodsDetailView === 'categories' ? (
+              !goodsDetail || goodsDetail.categoryTree.length === 0 ? (
+                <DetailEmptyState />
+              ) : (
+                <CategoryTreeView nodes={goodsDetail.categoryTree} onEdit={setEditingNode} />
+              )
+            ) : goodsDetailView === 'attributes' ? (
+              !goodsDetail || goodsDetail.attributes.length === 0 ? (
+                <DetailEmptyState />
+              ) : (
+                <div className="space-y-5">
+                  {goodsDetail.attributes.map(attr => (
+                    <div key={attr.name}>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {attr.name}
+                        <span className="ml-1.5 font-normal normal-case text-slate-400">
+                          ({attr.values.length} giá trị)
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {attr.values.map(v => (
+                          <Chip key={v} label={v} />
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ))}
+                </div>
+              )
+            ) : simpleItems && simpleItems.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {simpleItems.map(item => (
+                  <Chip key={item} label={item} />
                 ))}
               </div>
-            )
-          ) : simpleItems && simpleItems.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {simpleItems.map(item => (
-                <Chip key={item} label={item} />
-              ))}
-            </div>
-          ) : (
-            <DetailEmptyState />
-          )}
-        </Section>
-      </div>
+            ) : (
+              <DetailEmptyState />
+            )}
+          </Section>
+        </div>
+      </>
     );
   }
 

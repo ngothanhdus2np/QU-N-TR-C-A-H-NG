@@ -153,18 +153,13 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           .json({ error: 'File không đúng định dạng KiotViet. Cột thứ 3 phải là "Mã hàng".' });
       }
 
-      const { data: existing } = await supabase
-        .from('pos_products')
-        .select('id, sku')
-        .limit(50000);
+      const { data: existing } = await supabase.from('pos_products').select('id, sku').limit(50000);
       const existingProducts = (existing || []) as ExistingProductRecord[];
       const skuToId = new Map<string, string>(
         existingProducts.filter(p => p.sku).map(p => [p.sku!, p.id])
       );
       const existingSkuSet = new Set(
-        existingProducts
-          .map(p => String(p.sku || '').trim())
-          .filter(Boolean)
+        existingProducts.map(p => String(p.sku || '').trim()).filter(Boolean)
       );
       const assignedSkus = new Set<string>();
       let nextSkuNumber = getNextSkuNumberFromValues(existingSkuSet);
@@ -184,7 +179,8 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           } while (existingSkuSet.has(sku) || assignedSkus.has(sku));
         }
         assignedSkus.add(sku);
-        if (sourceSku && !sourceSkuToFinalSku.has(sourceSku)) sourceSkuToFinalSku.set(sourceSku, sku);
+        if (sourceSku && !sourceSkuToFinalSku.has(sourceSku))
+          sourceSkuToFinalSku.set(sourceSku, sku);
         return sku;
       });
 
@@ -360,6 +356,49 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       console.error('[Import /kiotviet-products]', message);
       res.status(500).json({ error: message || 'Lỗi xử lý file Excel' });
     }
+  });
+
+  // Rename / reparent a category — updates category_path on all affected products
+  router.post('/api/categories/rename', requireAuth, async (req, res) => {
+    const { oldPath, newPath } = req.body as { oldPath?: string; newPath?: string };
+    if (!oldPath || !newPath) {
+      return res.status(400).json({ ok: false, error: 'Thiếu oldPath hoặc newPath' });
+    }
+    if (oldPath === newPath) return res.json({ ok: true, updated: 0 });
+
+    // Fetch exact matches + children (paths that start with oldPath + ' >> ')
+    const [{ data: exact }, { data: children }] = await Promise.all([
+      supabase.from('pos_products').select('id, category_path').eq('category_path', oldPath),
+      supabase
+        .from('pos_products')
+        .select('id, category_path')
+        .like('category_path', `${oldPath} >> %`),
+    ]);
+
+    const all = [...(exact ?? []), ...(children ?? [])];
+    if (all.length === 0) return res.json({ ok: true, updated: 0 });
+
+    const updates = all.map((p: { id: string; category_path: string }) => ({
+      id: p.id,
+      category_path: p.category_path.startsWith(oldPath)
+        ? newPath + p.category_path.slice(oldPath.length)
+        : p.category_path,
+    }));
+
+    const BATCH = 300;
+    let updated = 0;
+    let firstError: string | null = null;
+    for (let i = 0; i < updates.length; i += BATCH) {
+      const { error } = await supabase
+        .from('pos_products')
+        .upsert(updates.slice(i, i + BATCH), { onConflict: 'id' });
+      if (error) {
+        if (!firstError) firstError = error.message;
+      } else updated += Math.min(BATCH, updates.length - i);
+    }
+
+    if (firstError) return res.status(500).json({ ok: false, error: firstError });
+    res.json({ ok: true, updated });
   });
 
   return router;
