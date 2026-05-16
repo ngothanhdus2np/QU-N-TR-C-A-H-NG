@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 import { ChevronRight, Database, Package, ServerCog } from 'lucide-react';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../../src/lib';
 import type { AlertConfig, POSInventorySettings, POSProduct } from '../../../types';
@@ -115,6 +115,9 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   onNavigate,
   onSetActiveTab,
 }) => {
+  const deferredProducts = useDeferredValue(products);
+  const isStale = deferredProducts !== products;
+
   const [goodsDetailView, setGoodsDetailView] = useState<GoodsDetailView | null>(null);
   const [goodsBarcodeManualMode, setGoodsBarcodeManualMode] = useState(() => {
     try {
@@ -143,18 +146,18 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       );
 
     const units = collect([
-      ...products.map(product => product.unit),
-      ...products.flatMap(product => (product.units || []).map(unit => unit.name)),
+      ...deferredProducts.map(product => product.unit),
+      ...deferredProducts.flatMap(product => (product.units || []).map(unit => unit.name)),
     ]);
 
     const categoryValues = collect(
-      products.map(product => product.categoryPath || product.categoryId)
+      deferredProducts.map(product => product.categoryPath || product.categoryId)
     );
-    const brands = collect(products.map(product => product.brand));
-    const locations = collect(products.map(product => product.location));
+    const brands = collect(deferredProducts.map(product => product.brand));
+    const locations = collect(deferredProducts.map(product => product.location));
 
     const attributeMap = new Map<string, Set<string>>();
-    products.forEach(product => {
+    deferredProducts.forEach(product => {
       (product.attributes || []).forEach(attribute => {
         const name = String(attribute.name || '').trim();
         if (!name) return;
@@ -182,7 +185,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }));
 
     return { units, categoryValues, brands, locations, attributes };
-  }, [products]);
+  }, [deferredProducts]);
 
   const toggleAllowSellOutOfStock = async () => {
     const nextSettings = {
@@ -322,31 +325,35 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         <GoodsOverviewLine
           title="Đơn vị tính"
           description="Tất cả đơn vị đang dùng trong hàng hóa và quy đổi."
-          countLabel={`Có ${goodsOverview.units.length} đơn vị tính`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.units.length} đơn vị tính`}
           onOpen={() => setGoodsDetailView('units')}
         />
         <GoodsOverviewLine
           title="Thuộc tính"
           description="Các nhóm thuộc tính biến thể đang có trong danh mục."
-          countLabel={`Có ${goodsOverview.attributes.length} nhóm thuộc tính`}
+          countLabel={
+            isStale ? 'Đang tính...' : `Có ${goodsOverview.attributes.length} nhóm thuộc tính`
+          }
           onOpen={() => setGoodsDetailView('attributes')}
         />
         <GoodsOverviewLine
           title="Nhóm hàng"
           description="Các nhóm hàng đang được gán cho sản phẩm."
-          countLabel={`Có ${goodsOverview.categoryValues.length} nhóm hàng`}
+          countLabel={
+            isStale ? 'Đang tính...' : `Có ${goodsOverview.categoryValues.length} nhóm hàng`
+          }
           onOpen={() => setGoodsDetailView('categories')}
         />
         <GoodsOverviewLine
           title="Thương hiệu"
           description="Các thương hiệu đang xuất hiện trong danh sách hàng hóa."
-          countLabel={`Có ${goodsOverview.brands.length} thương hiệu`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.brands.length} thương hiệu`}
           onOpen={() => setGoodsDetailView('brands')}
         />
         <GoodsOverviewLine
           title="Vị trí"
           description="Các vị trí bán hàng hoặc lưu trữ đang được dùng."
-          countLabel={`Có ${goodsOverview.locations.length} vị trí`}
+          countLabel={isStale ? 'Đang tính...' : `Có ${goodsOverview.locations.length} vị trí`}
           onOpen={() => setGoodsDetailView('locations')}
         />
       </Section>

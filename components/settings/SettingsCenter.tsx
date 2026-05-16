@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -400,8 +400,13 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   products = [],
 }) => {
   const logoUploadRef = useRef<HTMLInputElement>(null);
+  const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<SettingsTab>('store');
   const [visitedTabs, setVisitedTabs] = useState<Set<SettingsTab>>(() => new Set(['store']));
+
+  const handleSetActiveTab = (tab: SettingsTab) => {
+    startTransition(() => setActiveTab(tab));
+  };
   const [logoUploading, setLogoUploading] = useState(false);
   const [claudeStatus, setClaudeStatus] = useState<'idle' | 'testing' | 'success' | 'error'>(
     'idle'
@@ -459,6 +464,14 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
       ...(inventorySettings || {}),
     });
   }, [inventorySettings]);
+
+  // Preload all heavy component tabs in background when settings opens
+  useEffect(() => {
+    if (!isOpen) return;
+    startTransition(() => {
+      setVisitedTabs(new Set(['store', 'goods', 'payments', 'printTemplates', 'appearance']));
+    });
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1109,7 +1122,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   return (
     <div className="fixed inset-0 z-[1000] bg-slate-950/45 p-3 backdrop-blur-sm md:p-6">
       <div className="mx-auto flex h-full max-h-[900px] w-full max-w-[1500px] overflow-hidden rounded-xl bg-slate-100 shadow-2xl">
-        <SettingsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <SettingsSidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="shrink-0 border-b border-slate-100 bg-white px-4 py-4 md:px-6">
@@ -1131,10 +1144,12 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               </button>
             </div>
 
-            <MobileSettingsNav activeTab={activeTab} setActiveTab={setActiveTab} />
+            <MobileSettingsNav activeTab={activeTab} setActiveTab={handleSetActiveTab} />
           </header>
 
-          <main className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-4 md:p-6">
+          <main
+            className={`min-h-0 flex-1 overflow-y-auto bg-slate-100 p-4 md:p-6 transition-opacity duration-150 ${isPending ? 'opacity-50' : ''}`}
+          >
             <div className="flex gap-5">
               <div className="min-w-0 flex-1 space-y-4">
                 {/* Inline tabs — conditionally rendered (cheap) */}
@@ -1149,7 +1164,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                       inventorySettings={inventorySettings || DEFAULT_POS_INVENTORY_SETTINGS}
                       onUpdateInventorySettings={onUpdateInventorySettings}
                       onNavigate={navigateAndClose}
-                      onSetActiveTab={(tab: string) => setActiveTab(tab as SettingsTab)}
+                      onSetActiveTab={(tab: string) => handleSetActiveTab(tab as SettingsTab)}
                     />
                   </div>
                 )}
