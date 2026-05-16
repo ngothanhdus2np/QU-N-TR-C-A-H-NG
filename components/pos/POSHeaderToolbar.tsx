@@ -103,7 +103,10 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   }, [searchTerm]);
 
   return (
-    <div className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200">
+    <div
+      className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200"
+      style={{ display: 'flex', alignItems: 'center', flexShrink: 0, height: '56px' }}
+    >
       <div className="relative w-[500px]">
         <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center text-slate-400">
           <Search className="h-4 w-4" />

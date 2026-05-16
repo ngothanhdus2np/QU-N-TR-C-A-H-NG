@@ -800,7 +800,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   if (isMobile) {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div
+        className="flex flex-col h-full bg-slate-50"
+        style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      >
         <POSMobileView
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -858,7 +861,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div
+      className="flex flex-col h-full bg-slate-50"
+      style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+    >
       <POSHeaderToolbar
         productSearchRef={productSearchRef}
         searchResultRefs={searchResultRefs}
@@ -890,7 +896,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
         onViewEODReport={() => setShowEODReport(true)}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div
+        className="flex-1 flex overflow-hidden"
+        style={{ flex: '1 1 0', display: 'flex', overflow: 'hidden' }}
+      >
         {/* Main Area (Left) */}
         <POSCart
           mode={mode}

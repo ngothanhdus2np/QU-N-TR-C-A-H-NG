@@ -443,7 +443,16 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   }, [canUseSplitPayment, setUseSplitPayment, useSplitPayment]);
 
   return (
-    <div className="w-[480px] bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden relative z-20">
+    <div
+      className="w-[480px] bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden relative z-20"
+      style={{
+        width: '480px',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
       {/* Active User Header */}
       <div className="px-4 h-10 flex items-center justify-between bg-white border-b border-slate-100">
         <div className="flex items-center gap-2 group cursor-pointer">

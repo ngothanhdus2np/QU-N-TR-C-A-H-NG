@@ -121,6 +121,7 @@ components/
 - Ghi `auditLog()` cho mọi thay đổi tài chính/lương
 - Chạy `npm test` sau khi sửa `businessLogic.ts` hoặc tách logic POS/Goods — 45 tests phải pass
 - Lương trách nhiệm chỉ tính khi có `responsibilityApprovals` — không tự ý thay đổi
+- Tự động commit sau khi hoàn thành task (không cần hỏi lại) — message ngắn gọn, tiếng Anh, theo conventional commits
 
 **Env vars**: Frontend prefix `VITE_` (vd: `VITE_SUPABASE_URL`) | Backend không prefix  
 **Model AI**: quick tasks → `claude-haiku-4-5`, analysis → `claude-sonnet-4-6`

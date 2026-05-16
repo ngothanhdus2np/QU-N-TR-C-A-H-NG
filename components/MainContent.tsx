@@ -26,7 +26,15 @@ import ShippingOrders from './orders/ShippingOrders';
 import PurchaseInvoices from './orders/PurchaseInvoices';
 import GoodsInternalUse from './inventory/GoodsInternalUse';
 import GoodsDisposal from './inventory/GoodsDisposal';
-import { AppData, AppDataSurgicalUpdate, BrandProfile, ChatMessage, DashboardBreakEvenAnalysis, DiagnosisRange, ProductLine } from '../types';
+import {
+  AppData,
+  AppDataSurgicalUpdate,
+  BrandProfile,
+  ChatMessage,
+  DashboardBreakEvenAnalysis,
+  DiagnosisRange,
+  ProductLine,
+} from '../types';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
@@ -49,7 +57,11 @@ interface MainContentProps {
   setDiagEndDate: (date: string) => void;
   suggestedFocusProducts: ProductLine[];
   breakEvenAnalysis: DashboardBreakEvenAnalysis;
-  updateData: <K extends keyof AppData>(key: K, newList: AppData[K], idToRemove?: string) => Promise<void>;
+  updateData: <K extends keyof AppData>(
+    key: K,
+    newList: AppData[K],
+    idToRemove?: string
+  ) => Promise<void>;
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   offlinePendingCount?: number;
@@ -320,10 +332,21 @@ const MainContent: React.FC<MainContentProps> = ({
   const isPayrollActive = activeTab === 'payroll' || activeTab.startsWith('payroll-');
 
   return (
-    <div className="h-full">
+    <div
+      className="h-full flex flex-col"
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
       {/* Keep POSComputer and GoodsInventory mounted after first visit — hidden via CSS to avoid remount lag */}
       {(isPosActive || visitedTabs.has('pos')) && (
-        <div style={{ display: isPosActive ? undefined : 'none' }} className="h-full">
+        <div
+          style={{
+            display: isPosActive ? 'flex' : 'none',
+            flex: '1 1 0',
+            minHeight: 0,
+            flexDirection: 'column',
+          }}
+          className="flex-1 min-h-0"
+        >
           <ErrorBoundary key="pos" moduleName="pos">
             <POSComputer
               isActive={isPosActive}
@@ -388,9 +411,9 @@ const MainContent: React.FC<MainContentProps> = ({
                   ? 'pricing'
                   : activeTab === 'goods-warranty'
                     ? 'warranty'
-                  : activeTab === 'goods'
-                    ? 'goods'
-                    : undefined
+                    : activeTab === 'goods'
+                      ? 'goods'
+                      : undefined
               }
             />
           </ErrorBoundary>
@@ -481,7 +504,9 @@ const MainContent: React.FC<MainContentProps> = ({
               className="h-full"
             >
               <ErrorBoundary key={activeTab} moduleName={activeTab}>
-                <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>{renderContent()}</div>
+                <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>
+                  {renderContent()}
+                </div>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>

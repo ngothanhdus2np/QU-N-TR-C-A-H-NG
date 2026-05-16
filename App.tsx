@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TopNav from './components/TopNav';
 import MainContent from './components/MainContent';
 import OfflineIndicator from './components/OfflineIndicator';
-import DevQRCode from './components/DevQRCode';
 import { useAppData } from './hooks/useAppData';
 import { useTheme } from './hooks/useTheme';
 import { SIDEBAR_SECTIONS } from './constants/navigation';
@@ -103,7 +102,6 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <OfflineIndicator />
-      <DevQRCode />
       <AnimatePresence initial={false}>
         {activeTab !== 'pos' && (
           <motion.div
@@ -141,7 +139,18 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
       <main
-        className={`flex-1 overflow-y-auto no-scrollbar relative transition-[padding] duration-150 ${activeTab === 'pos' ? 'p-0' : 'pb-8 px-4 md:px-8'}`}
+        className={`relative z-0 ${activeTab === 'pos' ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'flex-1 overflow-y-auto no-scrollbar pb-8 px-4 md:px-8'}`}
+        style={
+          activeTab === 'pos'
+            ? {
+                flex: '1 1 0',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                minHeight: 0,
+              }
+            : { flex: '1 1 0', overflowY: 'auto' }
+        }
       >
         <MainContent
           activeTab={activeTab}

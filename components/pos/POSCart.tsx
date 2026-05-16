@@ -3,57 +3,88 @@ import { Search, Scan, PackageOpen, FileText, Trash2 } from 'lucide-react';
 import { POSProduct, POSOrderItem, ProductGroup } from '../../types';
 import POSConsultant from './POSConsultant';
 
-const CartItemRow = React.memo(({ item, idx, onUpdate, onRemove, isReturnItem, onDiscountClick }: {
-  item: POSOrderItem;
-  idx: number;
-  onUpdate: (id: string, delta: number) => void;
-  onRemove: (id: string) => void;
-  isReturnItem?: boolean;
-  onDiscountClick?: (productId: string, price: number, discount: number, rect: DOMRect) => void;
-}) => (
-  <div className={`flex items-baseline gap-1.5 px-2 py-2 rounded-xl shadow-sm border transition-all font-normal text-lg group
-    ${isReturnItem
-      ? 'bg-rose-50/40 border-rose-200 hover:shadow-sm'
-      : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md'}`}
-  >
-    <span className="w-12 shrink-0 text-center text-slate-400 italic tabular-nums">{idx}</span>
-    <div className="w-14 shrink-0 flex justify-center">
-      <button onClick={() => onRemove(item.productId)} className="text-slate-300 hover:text-rose-500 transition-colors p-0.5">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-    </div>
-    <span className="w-[160px] shrink-0 text-slate-500 uppercase truncate text-center">{item.sku}</span>
-    <span className="flex-1 min-w-0 text-slate-900 uppercase truncate text-center">{item.name}</span>
-    <div className="w-[88px] shrink-0 flex items-center justify-center gap-1 group/qty">
-      <button
-        onClick={() => onUpdate(item.productId, -1)}
-        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 font-normal text-base leading-none px-0.5"
-      >−</button>
-      <span className="border-b border-slate-400 px-2 tabular-nums text-slate-900 min-w-[20px] text-center">{item.quantity}</span>
-      <button
-        onClick={() => onUpdate(item.productId, +1)}
-        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500 font-normal text-base leading-none px-0.5"
-      >+</button>
-    </div>
+const CartItemRow = React.memo(
+  ({
+    item,
+    idx,
+    onUpdate,
+    onRemove,
+    isReturnItem,
+    onDiscountClick,
+  }: {
+    item: POSOrderItem;
+    idx: number;
+    onUpdate: (id: string, delta: number) => void;
+    onRemove: (id: string) => void;
+    isReturnItem?: boolean;
+    onDiscountClick?: (productId: string, price: number, discount: number, rect: DOMRect) => void;
+  }) => (
     <div
-      className={`w-[176px] shrink-0 text-center ${onDiscountClick ? 'cursor-pointer hover:bg-indigo-50 rounded-lg px-1 py-0.5 transition-colors' : ''}`}
-      onClick={onDiscountClick ? (e) => {
-        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-        onDiscountClick(item.productId, item.price, item.discount, rect);
-      } : undefined}
+      className={`flex items-baseline gap-1.5 px-2 py-2 rounded-xl shadow-sm border transition-all font-normal text-lg group
+    ${
+      isReturnItem
+        ? 'bg-rose-50/40 border-rose-200 hover:shadow-sm'
+        : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md'
+    }`}
     >
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="tabular-nums text-slate-900">{item.price.toLocaleString()}</span>
-        {item.discount > 0 && (
-          <span className="tabular-nums text-rose-600 text-xs bg-rose-50 border border-rose-200 rounded px-1.5 leading-tight">
-            - {item.discount.toLocaleString()}
-          </span>
-        )}
+      <span className="w-12 shrink-0 text-center text-slate-400 italic tabular-nums">{idx}</span>
+      <div className="w-14 shrink-0 flex justify-center">
+        <button
+          onClick={() => onRemove(item.productId)}
+          className="text-slate-300 hover:text-rose-500 transition-colors p-0.5"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
+      <span className="w-[160px] shrink-0 text-slate-500 uppercase truncate text-center">
+        {item.sku}
+      </span>
+      <span className="flex-1 min-w-0 text-slate-900 uppercase truncate text-center">
+        {item.name}
+      </span>
+      <div className="w-[88px] shrink-0 flex items-center justify-center gap-1 group/qty">
+        <button
+          onClick={() => onUpdate(item.productId, -1)}
+          className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 font-normal text-base leading-none px-0.5"
+        >
+          −
+        </button>
+        <span className="border-b border-slate-400 px-2 tabular-nums text-slate-900 min-w-[20px] text-center">
+          {item.quantity}
+        </span>
+        <button
+          onClick={() => onUpdate(item.productId, +1)}
+          className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500 font-normal text-base leading-none px-0.5"
+        >
+          +
+        </button>
+      </div>
+      <div
+        className={`w-[176px] shrink-0 text-center ${onDiscountClick ? 'cursor-pointer hover:bg-indigo-50 rounded-lg px-1 py-0.5 transition-colors' : ''}`}
+        onClick={
+          onDiscountClick
+            ? e => {
+                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                onDiscountClick(item.productId, item.price, item.discount, rect);
+              }
+            : undefined
+        }
+      >
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="tabular-nums text-slate-900">{item.price.toLocaleString()}</span>
+          {item.discount > 0 && (
+            <span className="tabular-nums text-rose-600 text-xs bg-rose-50 border border-rose-200 rounded px-1.5 leading-tight">
+              - {item.discount.toLocaleString()}
+            </span>
+          )}
+        </div>
+      </div>
+      <span className="w-[176px] shrink-0 text-center text-slate-900 tabular-nums">
+        {item.total.toLocaleString()}
+      </span>
     </div>
-    <span className="w-[176px] shrink-0 text-center text-slate-900 tabular-nums">{item.total.toLocaleString()}</span>
-  </div>
-));
+  )
+);
 
 interface POSCartProps {
   mode: 'sales' | 'return';
@@ -75,12 +106,27 @@ interface POSCartProps {
 }
 
 const POSCart: React.FC<POSCartProps> = ({
-  mode, cart, returnCart, orderNote,
-  showConsultant, setShowConsultant, products, productGroups, addToCart, consultantSearchRef,
-  onUpdateQuantity, onRemoveFromCart, onUpdateReturnQuantity, onRemoveFromReturnCart,
-  onDiscountClick, onOrderNoteChange,
+  mode,
+  cart,
+  returnCart,
+  orderNote,
+  showConsultant,
+  setShowConsultant,
+  products,
+  productGroups,
+  addToCart,
+  consultantSearchRef,
+  onUpdateQuantity,
+  onRemoveFromCart,
+  onUpdateReturnQuantity,
+  onRemoveFromReturnCart,
+  onDiscountClick,
+  onOrderNoteChange,
 }) => (
-  <div className="flex-1 flex flex-col min-w-0">
+  <div
+    className="flex-1 flex flex-col min-w-0"
+    style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minWidth: 0 }}
+  >
     <div className="flex-1 overflow-y-auto flex flex-col no-scrollbar">
       {mode === 'return' ? (
         <div className="flex-1 flex flex-col">
@@ -101,7 +147,9 @@ const POSCart: React.FC<POSCartProps> = ({
           <div className="h-1/2 overflow-y-auto no-scrollbar border-b border-indigo-100 bg-white italic">
             {returnCart.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-300 py-10">
-                <p className="text-[10px] font-normal uppercase tracking-widest">Danh sách hàng trả trống</p>
+                <p className="text-[10px] font-normal uppercase tracking-widest">
+                  Danh sách hàng trả trống
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 p-2">
@@ -136,7 +184,9 @@ const POSCart: React.FC<POSCartProps> = ({
           <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
             {cart.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-300 py-10">
-                <p className="text-[10px] font-normal uppercase tracking-widest">Danh sách hàng đổi trống</p>
+                <p className="text-[10px] font-normal uppercase tracking-widest">
+                  Danh sách hàng đổi trống
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 p-2">
@@ -156,12 +206,19 @@ const POSCart: React.FC<POSCartProps> = ({
       ) : (
         <div className="overflow-y-auto flex flex-col no-scrollbar max-h-[600px]">
           {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center text-slate-300" style={{ paddingTop: '350px' }}>
+            <div
+              className="flex-1 flex flex-col items-center text-slate-300"
+              style={{ paddingTop: '350px' }}
+            >
               <div className="w-24 h-24 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mb-8 border border-slate-100">
                 <PackageOpen className="h-10 w-10 text-slate-200" />
               </div>
-              <p className="font-normal text-sm uppercase tracking-[0.3em] text-slate-400">Hệ thống chưa có sản phẩm</p>
-              <p className="text-[11px] mt-3 font-normal text-slate-400/60 uppercase tracking-widest italic">Quét mã vạch hoặc ấn F3 để bắt đầu bán hàng</p>
+              <p className="font-normal text-sm uppercase tracking-[0.3em] text-slate-400">
+                Hệ thống chưa có sản phẩm
+              </p>
+              <p className="text-[11px] mt-3 font-normal text-slate-400/60 uppercase tracking-widest italic">
+                Quét mã vạch hoặc ấn F3 để bắt đầu bán hàng
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2 p-2 pt-4 animate-in fade-in duration-300">
