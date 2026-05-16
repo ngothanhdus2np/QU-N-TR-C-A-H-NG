@@ -288,9 +288,7 @@ npm test           # 43 tests phải pass
 
 ## ⏸️ Blocked — Chờ hình mẫu từ user
 
-- [ ] **POS: Split Payment UI riêng** — chờ ảnh layout mẫu
-- [ ] **POS: Return Layout Redesign** — chờ ảnh layout mẫu (màu nền riêng, khóa ô tìm)
-- [ ] **POS: CRM Customer Modal 2 cột** — chờ ảnh layout mẫu
+*(Không còn item nào bị block)*
 
 ---
 
@@ -307,6 +305,9 @@ npm test           # 43 tests phải pass
 
 ## ✅ Hoàn thành gần đây
 
+- [x] **POS: Split Payment UI riêng** — hoàn thành *(2026-05-16)*
+- [x] **POS: Return Layout Redesign** — màu nền riêng, khóa ô tìm khi mode=return *(2026-05-16)*
+- [x] **POS: CRM Customer Modal 2 cột** — layout 2 cột hoàn thành *(2026-05-16)*
 - [x] **Revert display changes GoodsInventory** — xoá sort buttons header, xoá collapse sidebar, xoá bulk action toolbar, khôi phục UI phiên bản trước *(2026-05-16)*
 - [x] **Fix 8 TypeScript errors GoodsInventory.tsx** — selectedIds/favoriteIds → Set, productGroups prop chain, discount props purchase form, audit transactions, onStartAudit handler, 4 row-action handlers, modal props *(2026-05-16)*
 - [x] **Security audit & hardening** — rate limiting, Helmet headers, error tracking, security audit script *(2026-05-16)*
