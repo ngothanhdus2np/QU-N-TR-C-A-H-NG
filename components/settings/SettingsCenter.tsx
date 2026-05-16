@@ -160,8 +160,6 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
   goods: [
     { id: 'goods-info', label: 'Thông tin hàng hóa' },
     { id: 'goods-stock', label: 'Giá vốn, tồn kho' },
-    { id: 'goods-pricing', label: 'Thiết lập giá' },
-    { id: 'goods-warranty', label: 'Bảo hành, bảo trì' },
     { id: 'goods-other', label: 'Khác' },
   ],
   payments: [{ id: 'payment-accounts', label: 'Tài khoản thu chi' }],

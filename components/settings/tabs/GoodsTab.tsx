@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronRight, Database, Package, ServerCog, ShieldCheck, Tag } from 'lucide-react';
+import { ChevronRight, Database, Package, ServerCog } from 'lucide-react';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../../src/lib';
 import type { AlertConfig, POSInventorySettings, POSProduct } from '../../../types';
 
@@ -13,6 +13,16 @@ interface GoodsTabProps {
 }
 
 type GoodsDetailView = 'units' | 'attributes' | 'categories' | 'brands' | 'locations';
+
+const Chip: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+    {label}
+  </span>
+);
+
+const DetailEmptyState = () => (
+  <p className="py-6 text-center text-sm text-slate-400">Chưa có dữ liệu.</p>
+);
 
 const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
 
@@ -196,83 +206,25 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   };
 
   if (goodsDetailView) {
-    const DETAIL_META: Record<GoodsDetailView, { title: string; description: string }> = {
-      units: {
-        title: 'Đơn vị tính',
-        description: `${goodsOverview.units.length} đơn vị đang dùng trong hàng hóa và quy đổi.`,
-      },
-      attributes: {
-        title: 'Thuộc tính',
-        description: `${goodsOverview.attributes.length} nhóm thuộc tính biến thể đang có trong danh mục.`,
-      },
-      categories: {
-        title: 'Nhóm hàng',
-        description: `${goodsOverview.categoryValues.length} nhóm hàng đang được gán cho sản phẩm.`,
-      },
-      brands: {
-        title: 'Thương hiệu',
-        description: `${goodsOverview.brands.length} thương hiệu đang xuất hiện trong danh sách hàng hóa.`,
-      },
-      locations: {
-        title: 'Vị trí',
-        description: `${goodsOverview.locations.length} vị trí bán hàng hoặc lưu trữ đang được dùng.`,
-      },
+    const detailTitles: Record<GoodsDetailView, string> = {
+      units: 'Đơn vị tính',
+      attributes: 'Thuộc tính',
+      categories: 'Nhóm hàng',
+      brands: 'Thương hiệu',
+      locations: 'Vị trí',
     };
 
-    const Chip: React.FC<{ label: string }> = ({ label }) => (
-      <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-        {label}
-      </span>
-    );
+    const simpleItems =
+      goodsDetailView === 'units'
+        ? goodsOverview.units
+        : goodsDetailView === 'categories'
+          ? goodsOverview.categoryValues
+          : goodsDetailView === 'brands'
+            ? goodsOverview.brands
+            : goodsDetailView === 'locations'
+              ? goodsOverview.locations
+              : null;
 
-    const EmptyState = () => (
-      <p className="py-6 text-center text-sm text-slate-400">Chưa có dữ liệu.</p>
-    );
-
-    const renderContent = () => {
-      if (goodsDetailView === 'attributes') {
-        if (goodsOverview.attributes.length === 0) return <EmptyState />;
-        return (
-          <div className="space-y-5">
-            {goodsOverview.attributes.map(attr => (
-              <div key={attr.name}>
-                <p className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  {attr.name}
-                  <span className="ml-1.5 font-normal normal-case text-slate-400">
-                    ({attr.values.length} giá trị)
-                  </span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {attr.values.map(v => (
-                    <Chip key={v} label={v} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      }
-
-      const items =
-        goodsDetailView === 'units'
-          ? goodsOverview.units
-          : goodsDetailView === 'categories'
-            ? goodsOverview.categoryValues
-            : goodsDetailView === 'brands'
-              ? goodsOverview.brands
-              : goodsOverview.locations;
-
-      if (items.length === 0) return <EmptyState />;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {items.map(item => (
-            <Chip key={item} label={item} />
-          ))}
-        </div>
-      );
-    };
-
-    const meta = DETAIL_META[goodsDetailView];
     return (
       <div className="space-y-4">
         <button
@@ -282,8 +234,38 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         >
           ← Quay lại tổng quan
         </button>
-        <Section title={meta.title} description={meta.description} icon={Package}>
-          {renderContent()}
+        <Section title={detailTitles[goodsDetailView]} icon={Package}>
+          {goodsDetailView === 'attributes' ? (
+            goodsOverview.attributes.length === 0 ? (
+              <DetailEmptyState />
+            ) : (
+              <div className="space-y-5">
+                {goodsOverview.attributes.map(attr => (
+                  <div key={attr.name}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {attr.name}
+                      <span className="ml-1.5 font-normal normal-case text-slate-400">
+                        ({attr.values.length} giá trị)
+                      </span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {attr.values.map(v => (
+                        <Chip key={v} label={v} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : simpleItems && simpleItems.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {simpleItems.map(item => (
+                <Chip key={item} label={item} />
+              ))}
+            </div>
+          ) : (
+            <DetailEmptyState />
+          )}
         </Section>
       </div>
     );
@@ -442,34 +424,6 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
             onClick={() => onSetActiveTab('notifications')}
           />
         </div>
-      </Section>
-
-      <Section
-        id="goods-pricing"
-        title="Thiết lập giá"
-        description="Quản lý bảng giá và thiết lập giá bán theo từng nhóm hàng hoặc điều kiện."
-        icon={Tag}
-      >
-        <SettingLine
-          title="Thiết lập giá"
-          description="Xem và chỉnh giá bán theo bảng giá đang chọn cho từng hàng hóa."
-          value="Mở trang"
-          onClick={() => navigateAndClose('goods-pricing')}
-        />
-      </Section>
-
-      <Section
-        id="goods-warranty"
-        title="Bảo hành, bảo trì"
-        description="Thiết lập dữ liệu bảo hành và nhắc lịch bảo trì hàng hóa."
-        icon={ShieldCheck}
-      >
-        <SettingLine
-          title="Bảo hành, bảo trì"
-          description="Dữ liệu đang lấy từ thông tin từng sản phẩm."
-          value="Đã thiết lập"
-          onClick={() => navigateAndClose('goods-warranty')}
-        />
       </Section>
 
       <Section
