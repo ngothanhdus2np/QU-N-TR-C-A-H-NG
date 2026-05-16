@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Database, Package, ServerCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Database, Package, ServerCog } from 'lucide-react';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../../src/lib';
 import type { AlertConfig, POSInventorySettings, POSProduct } from '../../../types';
 
@@ -14,6 +14,8 @@ interface GoodsTabProps {
 
 type GoodsDetailView = 'units' | 'attributes' | 'categories' | 'brands' | 'locations';
 
+type CatNode = { name: string; path: string; count: number; children: CatNode[] };
+
 const Chip: React.FC<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
     {label}
@@ -23,6 +25,56 @@ const Chip: React.FC<{ label: string }> = ({ label }) => (
 const DetailEmptyState = () => (
   <p className="py-6 text-center text-sm text-slate-400">Chưa có dữ liệu.</p>
 );
+
+const CategoryTreeView: React.FC<{ nodes: CatNode[] }> = ({ nodes }) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = (path: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+
+  const renderNode = (node: CatNode, depth: number): React.ReactNode => {
+    const hasChildren = node.children.length > 0;
+    const isExpanded = expanded.has(node.path);
+    return (
+      <div key={node.path}>
+        <button
+          type="button"
+          onClick={() => hasChildren && toggle(node.path)}
+          className={`w-full flex items-center gap-2 py-2.5 text-left text-sm rounded-lg transition-colors ${hasChildren ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
+          style={{ paddingLeft: `${12 + depth * 20}px`, paddingRight: 12 }}
+        >
+          <span className="w-4 shrink-0 flex items-center justify-center text-slate-400">
+            {hasChildren ? (
+              isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-300 mx-auto" />
+            )}
+          </span>
+          <span
+            className={`flex-1 min-w-0 truncate ${depth === 0 ? 'font-medium text-slate-800' : depth === 1 ? 'text-slate-700' : 'text-slate-600'}`}
+          >
+            {node.name}
+          </span>
+          <span className="shrink-0 text-xs text-slate-400">{node.count} SP</span>
+        </button>
+        {isExpanded && hasChildren && (
+          <div>{node.children.map(child => renderNode(child, depth + 1))}</div>
+        )}
+      </div>
+    );
+  };
+
+  return <div className="-mx-1">{nodes.map(node => renderNode(node, 0))}</div>;
+};
 
 const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
 
@@ -206,7 +258,6 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       ...products.map(p => p.unit),
       ...products.flatMap(p => (p.units || []).map(u => u.name)),
     ]);
-    const categoryValues = collect(products.map(p => p.categoryPath || p.categoryId));
     const brands = collect(products.map(p => p.brand));
     const locations = collect(products.map(p => p.location));
 
@@ -237,7 +288,40 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }));
 
-    return { units, categoryValues, brands, locations, attributes };
+    // Build category tree — separator >>
+    type NodeDraft = {
+      name: string;
+      path: string;
+      count: number;
+      childMap: Map<string, NodeDraft>;
+    };
+    const rootMap = new Map<string, NodeDraft>();
+    for (const p of products) {
+      const raw = p.categoryPath || p.categoryId;
+      if (!raw) continue;
+      const parts = String(raw)
+        .split('>>')
+        .map(s => s.trim())
+        .filter(Boolean);
+      let currentMap = rootMap;
+      let pathSoFar = '';
+      for (const part of parts) {
+        pathSoFar = pathSoFar ? `${pathSoFar}>>${part}` : part;
+        if (!currentMap.has(part)) {
+          currentMap.set(part, { name: part, path: pathSoFar, count: 0, childMap: new Map() });
+        }
+        const node = currentMap.get(part)!;
+        node.count++;
+        currentMap = node.childMap;
+      }
+    }
+    const toNodes = (map: Map<string, NodeDraft>): CatNode[] =>
+      Array.from(map.values())
+        .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }))
+        .map(n => ({ name: n.name, path: n.path, count: n.count, children: toNodes(n.childMap) }));
+    const categoryTree = toNodes(rootMap);
+
+    return { units, categoryTree, brands, locations, attributes };
   }, [goodsDetailView, products]);
 
   const toggleAllowSellOutOfStock = async () => {
@@ -273,13 +357,11 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     const simpleItems =
       goodsDetailView === 'units'
         ? goodsDetail?.units
-        : goodsDetailView === 'categories'
-          ? goodsDetail?.categoryValues
-          : goodsDetailView === 'brands'
-            ? goodsDetail?.brands
-            : goodsDetailView === 'locations'
-              ? goodsDetail?.locations
-              : null;
+        : goodsDetailView === 'brands'
+          ? goodsDetail?.brands
+          : goodsDetailView === 'locations'
+            ? goodsDetail?.locations
+            : null;
 
     return (
       <div className="space-y-4">
@@ -291,7 +373,13 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
           ← Quay lại tổng quan
         </button>
         <Section title={detailTitles[goodsDetailView]} icon={Package}>
-          {goodsDetailView === 'attributes' ? (
+          {goodsDetailView === 'categories' ? (
+            !goodsDetail || goodsDetail.categoryTree.length === 0 ? (
+              <DetailEmptyState />
+            ) : (
+              <CategoryTreeView nodes={goodsDetail.categoryTree} />
+            )
+          ) : goodsDetailView === 'attributes' ? (
             !goodsDetail || goodsDetail.attributes.length === 0 ? (
               <DetailEmptyState />
             ) : (
