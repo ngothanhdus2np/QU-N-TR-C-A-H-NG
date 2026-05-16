@@ -30,11 +30,11 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
   return (
     <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-4">
       <div className="flex items-center gap-2 text-sm text-slate-700">
-        <span className="font-bold">Hiển thị</span>
+        <span className="font-normal">Hiển thị</span>
         <select
           value={itemsPerPage}
           onChange={event => onItemsPerPageChange(Number(event.target.value))}
-          className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
         >
           {PAGE_SIZE_OPTIONS.map(size => (
             <option key={size} value={size}>
@@ -62,7 +62,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-10 h-8 px-3 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-sm font-black text-slate-700">
+          <span className="min-w-10 h-8 px-3 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-sm font-normal text-slate-700">
             {totalPages === 0 ? 0 : currentPage}
           </span>
           <button
@@ -83,7 +83,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           </button>
         </div>
 
-        <span className="text-sm text-slate-600 font-black whitespace-nowrap">
+        <span className="text-sm text-slate-600 font-normal whitespace-nowrap">
           {startItem} - {endItem} trong {totalItems.toLocaleString('vi-VN')} hàng hóa (
           {totalSkuItems.toLocaleString('vi-VN')} mã hàng)
         </span>

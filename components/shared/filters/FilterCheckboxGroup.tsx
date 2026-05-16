@@ -103,7 +103,7 @@ export const FilterCheckboxGroup: React.FC<FilterCheckboxGroupProps> = ({
           className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden max-h-[80vh]"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
-            <span className="text-sm font-bold text-slate-800">{label}</span>
+            <span className="text-sm font-normal text-slate-800">{label}</span>
           </div>
           
           {searchable && (
@@ -148,13 +148,13 @@ export const FilterCheckboxGroup: React.FC<FilterCheckboxGroupProps> = ({
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/60 gap-3 shrink-0">
             <button
               onClick={handleToggleAll}
-              className="text-sm text-indigo-600 font-semibold hover:underline whitespace-normal text-left"
+              className="text-sm text-indigo-600 font-normal hover:underline whitespace-normal text-left"
             >
               {pendingSelected.length === options.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
             </button>
             <button
               onClick={handleApply}
-              className="px-5 py-1.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
+              className="px-5 py-1.5 bg-indigo-600 text-white text-sm font-normal rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
             >
               Áp dụng
             </button>
@@ -168,7 +168,7 @@ export const FilterCheckboxGroup: React.FC<FilterCheckboxGroupProps> = ({
         onClick={handleOpen}
         className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
       >
-        <span className={selected.length > 0 ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
+        <span className={selected.length > 0 ? 'text-slate-700 font-normal' : 'text-slate-400'}>
           {selected.length === 0
             ? `Chọn ${label.toLowerCase()}`
             : selected.length === 1

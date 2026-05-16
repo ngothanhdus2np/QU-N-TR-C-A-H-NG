@@ -6,7 +6,7 @@ import {
   ShopeeCostConfig,
   AppDataSurgicalUpdate,
 } from '../../types';
-import { cleanVNNumber, parseVNDate, normalizeHeader, generateId } from '../../businessLogic';
+import { cleanVNNumber, parseVNDate, normalizeHeader, generateId } from '../../src/lib';
 
 interface UseShopeeInventoryOutProps {
   shopeeInventoryOut: ShopeeInventoryOutRecord[];

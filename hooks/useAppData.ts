@@ -1,18 +1,69 @@
 
 import { useEffect, useMemo, useCallback, useReducer, useState } from 'react';
-import { AppData, AppDataSurgicalUpdate, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
+import { AppData, AppDataItem, AppDataSurgicalUpdate, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
 import { INITIAL_APP_DATA } from '../constants/defaultData';
 import { DEFAULT_BRAND } from '../constants/marketing';
 import { apiService, TABLE_MAP } from '../services/apiService';
-import { calculateStrategicSuggestions } from '../businessLogic';
+import { calculateStrategicSuggestions } from '../src/lib';
 import { dataMapper } from '../services/dataMapper';
 import { appReducer } from './appReducer';
 import { AppState } from './stateTypes';
 import { validationService } from '../services/validationService';
 import { incrementPending, getPendingCount, clearPending } from '../services/syncService';
 import { useOfflineSync } from './useOfflineSync';
+import { appDataCache } from '../services/appDataCache';
 
 const localTodayStr = new Date().toLocaleDateString('sv-SE');
+type IdentifiableItem = { id: string };
+type PosSeedProduct = IdentifiableItem & { sku?: unknown };
+type SyncableDataKey =
+  | 'revenue'
+  | 'expenses'
+  | 'payroll'
+  | 'employees'
+  | 'posProducts'
+  | 'posOrders'
+  | 'posCustomers'
+  | 'inventoryTransactions'
+  | 'productGroups'
+  | 'productGroupRevenue';
+type ConfigDataKey =
+  | 'violationTypes'
+  | 'violationOccurrences'
+  | 'customDeductions'
+  | 'holidays'
+  | 'responsibilityApprovals'
+  | 'tetCampaign'
+  | 'expenseCategories'
+  | 'shopeeCosts'
+  | 'dailyAdsConfig'
+  | 'dailyBreakEvenConfig'
+  | 'posPaymentSettings'
+  | 'posInventorySettings';
+
+const CONFIG_KEY_MAP: Record<ConfigDataKey, string> = {
+  violationTypes: 'violation_types',
+  violationOccurrences: 'violation_occurrences',
+  customDeductions: 'custom_penalties',
+  holidays: 'holidays',
+  responsibilityApprovals: 'responsibility_approvals',
+  tetCampaign: 'tet_campaign',
+  expenseCategories: 'expense_categories',
+  shopeeCosts: 'shopee_costs',
+  dailyAdsConfig: 'daily_ads_config',
+  dailyBreakEvenConfig: 'daily_break_even_config',
+  posPaymentSettings: 'pos_payment_settings',
+  posInventorySettings: 'pos_inventory_settings',
+};
+
+const CONFIG_DATA_KEYS = new Set<keyof AppData>(Object.keys(CONFIG_KEY_MAP) as ConfigDataKey[]);
+
+const isIdentifiableItem = (item: unknown): item is IdentifiableItem => (
+  typeof item === 'object' &&
+  item !== null &&
+  'id' in item &&
+  typeof (item as { id?: unknown }).id === 'string'
+);
 
 // localStorage có thể ném QuotaExceededError khi data quá lớn (~6MB posProducts).
 // Fallback: lưu không có posProducts để giữ data tài chính/HR an toàn.
@@ -35,19 +86,51 @@ function safeLocalStorageSet(key: string, data: Partial<AppData> | AppData) {
   }
 }
 
+function parseLocalStorageData(): Partial<AppData> | null {
+  const localDataStr = localStorage.getItem('cfo_brain_local_data');
+  if (!localDataStr) return null;
+
+  try {
+    return JSON.parse(localDataStr) as Partial<AppData>;
+  } catch (error) {
+    console.error('[Storage] Lỗi đọc localStorage cache:', error);
+    return null;
+  }
+}
+
+async function loadCachedDataSnapshot(): Promise<Partial<AppData> | null> {
+  try {
+    const indexedDbData = await appDataCache.getDataSnapshot();
+    return indexedDbData || parseLocalStorageData();
+  } catch (error) {
+    console.error('[Cache] Lỗi đọc IndexedDB snapshot:', error);
+    return parseLocalStorageData();
+  }
+}
+
+async function saveDataSnapshot(data: Partial<AppData> | AppData): Promise<void> {
+  const snapshot = { ...INITIAL_APP_DATA, ...data } as AppData;
+  safeLocalStorageSet('cfo_brain_local_data', snapshot);
+  try {
+    await appDataCache.saveDataSnapshot(snapshot);
+  } catch (error) {
+    console.error('[Cache] Lỗi lưu IndexedDB snapshot:', error);
+  }
+}
+
 const isNetworkSyncError = (err: unknown) => (
   typeof navigator !== 'undefined' && !navigator.onLine
 ) || String(err instanceof Error ? err.message : err).toLowerCase().includes('fetch')
   || String(err instanceof Error ? err.message : err).toLowerCase().includes('network');
 
-const loadBundledPosProducts = async () => {
+const loadBundledPosProducts = async (): Promise<PosSeedProduct[]> => {
   if (typeof window === 'undefined') return [];
 
   try {
     const res = await fetch('/imports/kiotviet-products.json', { cache: 'no-store' });
     if (!res.ok) return [];
     const products = await res.json();
-    return Array.isArray(products) ? products : [];
+    return Array.isArray(products) ? products.filter(isIdentifiableItem) as PosSeedProduct[] : [];
   } catch {
     return [];
   }
@@ -165,20 +248,21 @@ export function useAppData() {
         dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       }
       
-      const localDataStr = localStorage.getItem('cfo_brain_local_data');
-      let localData = localDataStr ? JSON.parse(localDataStr) : null;
+      let localData = await loadCachedDataSnapshot();
 
       if (localStorage.getItem(POS_PRODUCTS_SEED_KEY) !== POS_PRODUCTS_SEED_VERSION) {
         const bundledProducts = await loadBundledPosProducts();
         if (bundledProducts.length > 0) {
           const existingProducts = Array.isArray(localData?.posProducts) ? localData.posProducts : [];
-          const bySku = new Map<string, any>(existingProducts.map((product: any) => [product.sku || product.id, product]));
-          bundledProducts.forEach((product: any) => {
-            const key = product.sku || product.id;
-            bySku.set(key, { ...(bySku.get(key) || {}), ...product });
+          const bySku = new Map<string, AppData['posProducts'][number]>(
+            existingProducts.map((product) => [String(product.sku || product.id), product] as const)
+          );
+          bundledProducts.forEach((product) => {
+            const key = String(product.sku || product.id);
+            bySku.set(key, { ...(bySku.get(key) || {}), ...product } as AppData['posProducts'][number]);
           });
           localData = { ...(localData || {}), posProducts: Array.from(bySku.values()) };
-          safeLocalStorageSet('cfo_brain_local_data', localData);
+          await saveDataSnapshot(localData);
           localStorage.setItem(POS_PRODUCTS_SEED_KEY, POS_PRODUCTS_SEED_VERSION);
         }
       }
@@ -187,9 +271,15 @@ export function useAppData() {
         const mappedBrand = dataMapper.mapBrandProfile(results.brandProfile);
         dispatch({ type: 'SET_BRAND_PROFILE', payload: mappedBrand });
         localStorage.setItem('cfo_brain_brand_profile', JSON.stringify(mappedBrand));
+        await appDataCache.saveBrandProfile(mappedBrand);
       } else {
         const localBrand = localStorage.getItem('cfo_brain_brand_profile');
-        if (localBrand) dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
+        const cachedBrand = await appDataCache.getBrandProfile();
+        if (cachedBrand) {
+          dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
+        } else if (localBrand) {
+          dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
+        }
       }
       
       const newState = dataMapper.mapAllData(results, localData);
@@ -200,7 +290,7 @@ export function useAppData() {
         let totalErrors = 0;
         const pushErrors: string[] = [];
 
-        const syncConfigs = [
+        const syncConfigs: Array<{ key: SyncableDataKey; cloud: unknown[] | undefined; matchKey: 'id' | 'date' }> = [
           { key: 'revenue', cloud: results.revenue, matchKey: 'date' },
           { key: 'expenses', cloud: results.expenses, matchKey: 'id' },
           { key: 'payroll', cloud: results.payroll, matchKey: 'id' },
@@ -214,31 +304,35 @@ export function useAppData() {
         ];
 
         for (const config of syncConfigs) {
-          const cloudItems = (config.cloud || []) as any[];
-          const cloudKeys = new Set(cloudItems.map((i: any) => i[config.matchKey]));
-          const localItems = ((newState as any)[config.key] || []) as any[];
-          const missingOnCloud = localItems.filter((i: any) => !cloudKeys.has(i[config.matchKey]));
+          const cloudItems = (config.cloud || []).filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
+          const cloudKeys = new Set(cloudItems.map((item) => item[config.matchKey]));
+          const localValue = newState[config.key];
+          const localItems = Array.isArray(localValue)
+            ? (localValue as unknown[]).filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+            : [];
+          const missingOnCloud = localItems.filter((item) => !cloudKeys.has(item[config.matchKey]));
 
           if (missingOnCloud.length > 0) {
             try {
               // Validate each item before pushing
               const validItems = missingOnCloud.filter(item => {
-                const errors = validationService.validate(config.key as any, item);
+                const errors = validationService.validate(config.key, item);
                 if (errors.length > 0) {
                   totalErrors++;
-                  pushErrors.push(`${config.key}: ID ${item.id || item.date} - ${errors[0].message}`);
+                  pushErrors.push(`${config.key}: ID ${String(item.id || item.date || 'unknown')} - ${errors[0].message}`);
                   return false;
                 }
                 return true;
               });
 
               if (validItems.length > 0) {
-                await apiService.upsertMany(config.key as any, validItems);
+                await apiService.upsertMany(config.key, validItems);
                 totalPushed += validItems.length;
               }
-            } catch (e: any) {
+            } catch (e: unknown) {
               totalErrors++;
-              pushErrors.push(`Lỗi bảng ${config.key}: ${e.message}`);
+              const message = e instanceof Error ? e.message : String(e);
+              pushErrors.push(`Lỗi bảng ${config.key}: ${message}`);
               console.error(`[Sync] Lỗi đẩy ${config.key}:`, e);
             }
           }
@@ -256,30 +350,63 @@ export function useAppData() {
       }
       
       dispatch({ type: 'SET_DATA', payload: newState });
-      safeLocalStorageSet('cfo_brain_local_data', newState);
+      await saveDataSnapshot(newState);
       clearPending();
       setPendingCount(0);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Lỗi đồng bộ Supabase:", err);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
-      const localDataStr = localStorage.getItem('cfo_brain_local_data');
-      if (localDataStr) dispatch({ type: 'SET_DATA', payload: JSON.parse(localDataStr) });
-      if (isManual) alert(`LỖI ĐỒNG BỘ: ${err.message || "Kiểm tra kết nối và cấu trúc bảng"}`);
+      const cachedData = await loadCachedDataSnapshot();
+      if (cachedData) dispatch({ type: 'SET_DATA', payload: cachedData });
+      const message = err instanceof Error ? err.message : 'Kiểm tra kết nối và cấu trúc bảng';
+      if (isManual) alert(`LỖI ĐỒNG BỘ: ${message}`);
     } finally {
       dispatch({ type: 'SET_SYNCING', payload: false });
     }
   }, []); // Removed 'data' dependency to prevent infinite loop
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+
+    const hydrateThenSync = async () => {
+      const [cachedData, cachedBrand] = await Promise.all([
+        loadCachedDataSnapshot(),
+        appDataCache.getBrandProfile().catch(error => {
+          console.error('[Cache] Lỗi đọc brand profile cache:', error);
+          return null;
+        }),
+      ]);
+
+      if (cancelled) return;
+
+      if (cachedData) {
+        dispatch({ type: 'SET_DATA', payload: cachedData });
+      }
+
+      if (cachedBrand) {
+        dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
+      } else {
+        const localBrand = localStorage.getItem('cfo_brain_brand_profile');
+        if (localBrand) dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
+      }
+
+      fetchData();
+    };
+
+    hydrateThenSync();
+
+    return () => {
+      cancelled = true;
+    };
   }, [fetchData]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
-        await apiService.upsertItem('brandProfile' as any, brandProfile);
+        await apiService.upsertItem('brandProfile', brandProfile);
+        await appDataCache.saveBrandProfile(brandProfile);
       } catch (e) {
         console.error("Brand sync error:", e);
       }
@@ -287,18 +414,21 @@ export function useAppData() {
     return () => clearTimeout(timer);
   }, [brandProfile]);
 
-  const updateData = useCallback(async (key: keyof AppData, newList: any, idToRemove?: string) => { 
+  const updateData = useCallback(async <K extends keyof AppData>(key: K, newList: AppData[K], idToRemove?: string) => {
     // Ensure unique IDs to prevent Supabase errors
-    const uniqueList = Array.isArray(newList) 
-      ? Array.from(new Map(newList.map(item => [item.id, item])).values())
-      : newList;
+    const uniqueList = (() => {
+      if (!Array.isArray(newList)) return newList;
+      const arrayItems = newList as unknown[];
+      if (!arrayItems.every(isIdentifiableItem)) return newList;
+      return Array.from(new Map(arrayItems.map(item => [item.id, item] as const)).values());
+    })();
 
     dispatch({ type: 'SET_DATA', payload: { [key]: uniqueList } });
     
     // Get current data from localStorage to avoid dependency on 'data' state
-    const localDataStr = localStorage.getItem('cfo_brain_local_data');
-    const currentLocalData = localDataStr ? JSON.parse(localDataStr) : {};
-    safeLocalStorageSet('cfo_brain_local_data', { ...currentLocalData, [key]: uniqueList });
+    const currentLocalData = (await loadCachedDataSnapshot()) || {};
+    const nextLocalData = { ...currentLocalData, [key]: uniqueList };
+    await saveDataSnapshot(nextLocalData);
     
     dispatch({ type: 'SET_SYNCING', payload: true });
     try {
@@ -310,28 +440,17 @@ export function useAppData() {
       
       if (uniqueList && Array.isArray(uniqueList) && uniqueList.length > 0 && TABLE_MAP[key as string]) {
         await apiService.upsertMany(key, uniqueList);
-      } else if (['violationTypes', 'violationOccurrences', 'customDeductions', 'holidays', 'responsibilityApprovals', 'tetCampaign', 'expenseCategories', 'shopeeCosts', 'dailyAdsConfig', 'dailyBreakEvenConfig'].includes(key as string)) {
-        const configKeys: any = { 
-          violationTypes: 'violation_types', 
-          violationOccurrences: 'violation_occurrences', 
-          customDeductions: 'custom_penalties', 
-          holidays: 'holidays', 
-          responsibilityApprovals: 'responsibility_approvals', 
-          tetCampaign: 'tet_campaign',
-          expenseCategories: 'expense_categories',
-          shopeeCosts: 'shopee_costs',
-          dailyAdsConfig: 'daily_ads_config',
-          dailyBreakEvenConfig: 'daily_break_even_config'
-        };
-        await apiService.upsertConfig(configKeys[key as string], newList);
+      } else if (CONFIG_DATA_KEYS.has(key)) {
+        await apiService.upsertConfig(CONFIG_KEY_MAP[key as ConfigDataKey], newList);
       }
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       dispatch({ type: 'SET_SYNC_ERRORS', payload: null });
       dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
-    } catch (err: any) { 
+    } catch (err: unknown) {
       console.error(`Error updating ${key}:`, err);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
-      const errorMsg = `LỖI ĐỒNG BỘ [${key}]: ${err.message || 'Lỗi không xác định'}`;
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+      const errorMsg = `LỖI ĐỒNG BỘ [${key}]: ${message}`;
       dispatch({ type: 'SET_SYNC_ERRORS', payload: [errorMsg] });
       throw err;
     } finally { dispatch({ type: 'SET_SYNCING', payload: false }); }
@@ -343,13 +462,14 @@ export function useAppData() {
     
     // Durable Save: Update localStorage immediately before Cloud push
     try {
-      const localDataStr = localStorage.getItem('cfo_brain_local_data');
-      const currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
+      const cachedData = await loadCachedDataSnapshot();
+      const currentLocalData: Record<string, unknown> = { ...state.data, ...(cachedData || {}) };
       
       for (const u of updates) {
-        const key = u.key as keyof AppData;
-        const newList = [...(currentLocalData[key] || [])];
-        const idx = newList.findIndex((i: any) => i.id === u.item.id);
+        const key = u.key as string;
+        const existingItems = Array.isArray(currentLocalData[key]) ? currentLocalData[key] : [];
+        const newList = [...existingItems];
+        const idx = newList.findIndex((item) => isIdentifiableItem(item) && item.id === u.item.id);
         if (u.isDelete) {
           if (idx > -1) newList.splice(idx, 1);
         } else {
@@ -358,23 +478,45 @@ export function useAppData() {
         }
         currentLocalData[key] = newList;
       }
-      safeLocalStorageSet('cfo_brain_local_data', currentLocalData);
+      await saveDataSnapshot(currentLocalData as Partial<AppData>);
     } catch (e) {
       console.error("Local storage sync error:", e);
     }
     
-    try {
-      const inventoryUpdate = updates.find(u => u.key === 'inventoryTransactions');
-      const hasStockUpdates = updates.some(u => u.key === 'posProducts');
-      const shouldUseInventoryRpc = Boolean(inventoryUpdate && hasStockUpdates);
+    const inventoryUpdates = updates.filter(u => u.key === 'inventoryTransactions');
+    const hasStockUpdates = updates.some(u => u.key === 'posProducts');
+    const shouldUseInventoryRpc = inventoryUpdates.length > 0 && hasStockUpdates;
 
-      if (shouldUseInventoryRpc && inventoryUpdate) {
-        if (inventoryUpdate.isDelete) {
-          await apiService.deleteInventoryTransactionWithStock(inventoryUpdate.item.id);
-        } else {
-          await apiService.applyInventoryTransactionWithStock(
-            inventoryUpdate.item as AppData['inventoryTransactions'][number]
-          );
+    // Track successful operations for rollback
+    const completedOperations: Array<{ 
+      key: keyof AppData; 
+      id: string; 
+      isDelete: boolean; 
+      previousData?: AppDataItem<keyof AppData> | { id: string }
+    }> = [];
+
+    try {
+
+      if (shouldUseInventoryRpc) {
+        for (const inventoryUpdate of inventoryUpdates) {
+          if (inventoryUpdate.isDelete) {
+            await apiService.deleteInventoryTransactionWithStock(inventoryUpdate.item.id);
+            completedOperations.push({ 
+              key: inventoryUpdate.key, 
+              id: inventoryUpdate.item.id, 
+              isDelete: true,
+              previousData: inventoryUpdate.item 
+            });
+          } else {
+            await apiService.applyInventoryTransactionWithStock(
+              inventoryUpdate.item as AppData['inventoryTransactions'][number]
+            );
+            completedOperations.push({ 
+              key: inventoryUpdate.key, 
+              id: inventoryUpdate.item.id, 
+              isDelete: false 
+            });
+          }
         }
       }
 
@@ -387,21 +529,61 @@ export function useAppData() {
         }
         if (u.isDelete) {
           await apiService.deleteItem(u.key, u.item.id);
+          completedOperations.push({ 
+            key: u.key, 
+            id: u.item.id, 
+            isDelete: true,
+            previousData: u.item 
+          });
         } else {
           await apiService.upsertItem(u.key, u.item);
+          completedOperations.push({ 
+            key: u.key, 
+            id: u.item.id, 
+            isDelete: false 
+          });
         }
       }
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       dispatch({ type: 'SET_SYNC_ERRORS', payload: null });
       dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("LỖI ĐỒNG BỘ SURGICAL:", err);
+      
+      // Attempt rollback of completed operations
+      if (completedOperations.length > 0) {
+        console.warn(`Đang rollback ${completedOperations.length} operations đã hoàn thành...`);
+        for (const op of completedOperations.reverse()) {
+          try {
+            if (op.isDelete && op.previousData) {
+              // Restore deleted item
+              await apiService.upsertItem(op.key, op.previousData);
+            } else if (!op.isDelete) {
+              // Delete newly created/updated item
+              await apiService.deleteItem(op.key, op.id);
+            }
+          } catch (rollbackErr) {
+            console.error(`Lỗi khi rollback operation cho ${op.key}:${op.id}`, rollbackErr);
+          }
+        }
+      }
+      
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
-      const errorMsg = `LỖI ĐỒNG BỘ DỮ LIỆU: ${err.message || 'Lỗi kết nối hoặc ràng buộc dữ liệu'}`;
+      const message = err instanceof Error ? err.message : 'Lỗi kết nối hoặc ràng buộc dữ liệu';
+      const errorMsg = `LỖI ĐỒNG BỘ DỮ LIỆU: ${message}`;
       dispatch({ type: 'SET_SYNC_ERRORS', payload: [errorMsg] });
 
       if (isNetworkSyncError(err)) {
         for (const u of updates) {
+          if (shouldUseInventoryRpc && u.key === 'posProducts') continue;
+          if (shouldUseInventoryRpc && u.key === 'inventoryTransactions') {
+            await enqueueOp({
+              opType: u.isDelete ? 'inventoryDelete' : 'inventoryApply',
+              dataKey: u.key as string,
+              payload: u.isDelete ? { id: u.item.id } : u.item,
+            });
+            continue;
+          }
           await enqueueOp({
             opType: u.isDelete ? 'deleteItem' : 'upsertItem',
             dataKey: u.key as string,
@@ -414,21 +596,22 @@ export function useAppData() {
     } finally { dispatch({ type: 'SET_SYNCING', payload: false }); }
   }, [state.data, enqueueOp]);
 
-  const pushBatch = useCallback(async (key: keyof AppData, items: any[]) => {
+  const pushBatch = useCallback(async <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => {
     dispatch({ type: 'SET_SYNCING', payload: true });
     
     // Update Local State & Storage first (luôn thành công dù offline)
-    const localDataStr = localStorage.getItem('cfo_brain_local_data');
-    const currentLocalData = localDataStr ? JSON.parse(localDataStr) : { ...state.data };
-    const existingList = [...(currentLocalData[key] || [])];
+    const cachedData = await loadCachedDataSnapshot();
+    const currentLocalData: Record<string, unknown> = { ...state.data, ...(cachedData || {}) };
+    const existingItems = Array.isArray(currentLocalData[key]) ? currentLocalData[key] : [];
+    const existingList = [...existingItems];
     
     // Merge new items into existing list (by ID)
-    const itemMap = new Map(existingList.map(i => [i.id, i]));
-    items.forEach(item => itemMap.set(item.id, item));
+    const itemMap = new Map(existingList.filter(isIdentifiableItem).map((item) => [item.id, item] as const));
+    (items as unknown[]).filter(isIdentifiableItem).forEach((item) => itemMap.set(item.id, item));
     const newList = Array.from(itemMap.values());
     
     dispatch({ type: 'SET_DATA', payload: { [key]: newList } });
-    safeLocalStorageSet('cfo_brain_local_data', { ...currentLocalData, [key]: newList });
+    await saveDataSnapshot({ ...currentLocalData, [key]: newList } as Partial<AppData>);
 
     try {
       if (TABLE_MAP[key as string]) {
@@ -436,7 +619,7 @@ export function useAppData() {
       }
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
       dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`Error pushing batch to ${key}:`, err);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
       // === Offline Queue: lưu vào IndexedDB để retry sau ===

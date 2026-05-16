@@ -37,7 +37,7 @@ class ErrorBoundary extends Component<Props, State> {
             <h3 className="text-base font-black text-slate-900 mb-2">
               {this.props.moduleName ? `${this.props.moduleName} gặp lỗi` : 'Module gặp lỗi'}
             </h3>
-            <p className="text-[11px] text-slate-400 font-medium mb-1">
+            <p className="text-[11px] text-slate-400 font-normal mb-1">
               Phần này không thể hiển thị. Các module khác vẫn hoạt động bình thường.
             </p>
             {this.state.error && (
@@ -47,7 +47,7 @@ class ErrorBoundary extends Component<Props, State> {
             )}
             <button
               onClick={this.handleReset}
-              className="flex items-center gap-2 mx-auto px-5 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-2 mx-auto px-5 py-2.5 bg-indigo-600 text-white text-xs font-normal rounded-xl hover:bg-indigo-700 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Thử lại
             </button>

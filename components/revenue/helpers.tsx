@@ -30,17 +30,17 @@ export const MetricCard = ({ title, value, icon: Icon, color, desc }: MetricCard
     >
       <div>
         <div className={`p-4 rounded-2xl ${colorMap[color]} w-fit mb-6 shadow-sm`}><Icon className="w-6 h-6" /></div>
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-        <h4 className="text-xl font-black text-slate-900 tabular-nums">{value}</h4>
+        <p className="text-[9px] font-normal text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+        <h4 className="text-xl font-normal text-slate-900 tabular-nums">{value}</h4>
       </div>
-      <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mt-4 pt-4 border-t border-slate-50 leading-relaxed">{desc}</p>
+      <p className="text-[8px] font-normal text-slate-400 uppercase tracking-tighter mt-4 pt-4 border-t border-slate-50 leading-relaxed">{desc}</p>
     </motion.div>
   );
 };
 
 export const InputWrapper = ({ label, icon: Icon, children, color = "text-slate-400" }: InputWrapperProps) => (
   <div className="space-y-1.5">
-    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+    <label className="text-[9px] font-normal text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <div className="relative bg-slate-50 border border-slate-100 focus-within:bg-white focus-within:border-blue-500 rounded-xl transition-all shadow-inner overflow-hidden flex items-center">
       <Icon className={`absolute left-3 w-3.5 h-3.5 ${color}`} />
       <div className="pl-9 w-full">{children}</div>

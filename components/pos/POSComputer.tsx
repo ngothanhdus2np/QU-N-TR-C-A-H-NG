@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { generateId } from '../../businessLogic';
+import { generateId } from '../../src/lib';
 import POSCart from './POSCart';
 import POSCheckout from './POSCheckout';
 import POSReceiptModal from './POSReceiptModal';
@@ -12,107 +12,143 @@ import POSToasts from './POSToasts';
 import POSQuickCustomerModal, { QuickCustomerForm } from './POSQuickCustomerModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCurrentStaffId } from '../shared/staff';
-import { POSProduct, POSCustomer, POSOrder, POSOrderItem, BrandProfile } from '../../types';
+import {
+  POSProduct,
+  POSCustomer,
+  POSOrder,
+  POSOrderItem,
+  BrandProfile,
+  POSInventorySettings,
+  POSPaymentSettings,
+  ProductGroup,
+} from '../../types';
+import { InvoiceTab } from './types';
 import { usePOSKeyboard } from './usePOSKeyboard';
 import { usePOSReturnFlow } from './usePOSReturnFlow';
 import { usePOSTabs } from './usePOSTabs';
+import { usePOSState } from '../../hooks/usePOSState';
+import POSMobileView from './POSMobileView';
+import POSMobileCheckoutSheet from './POSMobileCheckoutSheet';
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
+const SKU_COLLATOR = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
 
 interface POSComputerProps {
   products: POSProduct[];
+  productGroups?: ProductGroup[];
   customers: POSCustomer[];
   orders: POSOrder[];
   onPlaceOrder: (
     order: POSOrder,
     updatedProducts: POSProduct[],
     updatedCustomer?: POSCustomer
-  ) => void;
+  ) => Promise<void>;
   onReturnOrder: (
     order: POSOrder,
     updatedProducts: POSProduct[],
     returnedItems: POSOrderItem[],
     exchangeItems: POSOrderItem[]
-  ) => void;
+  ) => Promise<void>;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
   brandProfile?: BrandProfile;
+  paymentSettings?: POSPaymentSettings;
+  inventorySettings?: POSInventorySettings;
   currentStaffName?: string;
   offlinePendingCount?: number;
   isDraining?: boolean;
   isActive?: boolean;
 }
 
-export interface InvoiceTab {
-  id: string;
-  name: string;
-  mode: 'sales' | 'return';
-  cart: POSOrderItem[];
-  returnCart: POSOrderItem[];
-  selectedCustomer: POSCustomer | null;
-  discountValue: number;
-  discountType: 'fixed' | 'percent';
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
-  orderNote: string;
-  otherFees: number;
-  cashReceived: number;
-  // Return specific fields
-  returnDiscount: number;
-  returnFee: number;
-  returnOtherRefund: number;
-  // Split payment fields
-  splitPayment?: {
-    cash: number;
-    bank: number;
-    card: number;
-    momo: number;
-  };
-}
-
 const POSComputer: React.FC<POSComputerProps> = ({
   products,
+  productGroups = [],
   customers,
   orders,
   onPlaceOrder,
+  onReturnOrder,
   onAddCustomer,
   onGoToManagement,
+  paymentSettings,
+  inventorySettings,
   offlinePendingCount = 0,
   isDraining = false,
   isActive = true,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [productSearchSort, setProductSearchSort] = useState<'skuDesc' | 'priceDesc'>('skuDesc');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
-  const [showConsultant, setShowConsultant] = useState(false);
+  // Use custom hook for all state management
+  const posState = usePOSState({ paymentSettings, isActive });
 
-  // Multi-tab state
-  const [tabs, setTabs] = useState<InvoiceTab[]>([
-    {
-      id: 'default',
-      name: 'Hóa đơn 1',
-      mode: 'sales',
-      cart: [],
-      returnCart: [],
-      selectedCustomer: null,
-      discountValue: 0,
-      discountType: 'percent',
-      paymentMethod: 'Cash',
-      orderNote: '',
-      otherFees: 0,
-      cashReceived: 0,
-      returnDiscount: 0,
-      returnFee: 0,
-      returnOtherRefund: 0,
-      splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState('default');
-
-  // Active Tab Data Accessor
-  const activeTab = useMemo(
-    () => tabs.find(t => t.id === activeTabId) || tabs[0],
-    [tabs, activeTabId]
-  );
+  // Destructure commonly used states for convenience
+  const {
+    searchTerm,
+    setSearchTerm,
+    debouncedSearchTerm,
+    setDebouncedSearchTerm,
+    productSearchSort,
+    setProductSearchSort,
+    customerSearch,
+    setCustomerSearch,
+    debouncedCustomerSearch,
+    showConsultant,
+    setShowConsultant,
+    tabs,
+    setTabs,
+    activeTabId,
+    setActiveTabId,
+    activeTab,
+    showAddCustomerModal,
+    setShowAddCustomerModal,
+    showGridMenu,
+    setShowGridMenu,
+    newCustomerForm,
+    setNewCustomerForm,
+    resetNewCustomerForm,
+    useSplitPayment,
+    setUseSplitPayment,
+    showDiscountModal,
+    setShowDiscountModal,
+    billDiscountRect,
+    setBillDiscountRect,
+    showReceiptModal,
+    setShowReceiptModal,
+    isCheckoutLocked,
+    setIsCheckoutLocked,
+    itemDiscountPopup,
+    setItemDiscountPopup,
+    showReturnModal,
+    setShowReturnModal,
+    showEODReport,
+    setShowEODReport,
+    isAutoPrintEnabled,
+    setIsAutoPrintEnabled,
+    lastOrder,
+    setLastOrder,
+    showProductResults,
+    setShowProductResults,
+    selectedResultIndex,
+    setSelectedResultIndex,
+    scanFeedback,
+    setScanFeedback,
+    showScanFeedback,
+    stockWarning,
+    setStockWarning,
+    showStockWarning,
+    showCheckoutSheet,
+    setShowCheckoutSheet,
+    confirmDialog,
+    setConfirmDialog,
+    openConfirm,
+    closeConfirm,
+  } = posState;
 
   // Derived active tab states
   const cart = activeTab.cart;
@@ -129,45 +165,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const returnFee = activeTab.returnFee || 0;
   const returnOtherRefund = activeTab.returnOtherRefund || 0;
   const splitPayment = activeTab.splitPayment || { cash: 0, bank: 0, card: 0, momo: 0 };
+  const allowSellOutOfStock = inventorySettings?.allowSellOutOfStock ?? false;
 
-  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const [showGridMenu, setShowGridMenu] = useState(false);
-  const [newCustomerForm, setNewCustomerForm] = useState<QuickCustomerForm>({
-    code: '',
-    name: '',
-    phone: '',
-    group: 'Khách lẻ',
-    birthday: '',
-    gender: '',
-    address: '',
-    area: '',
-    ward: '',
-    taxCode: '',
-    email: '',
-    facebook: '',
-    notes: '',
-  });
-  const [useSplitPayment, setUseSplitPayment] = useState(false);
-
-  // UI states
-  const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [billDiscountRect, setBillDiscountRect] = useState<DOMRect | null>(null);
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
-  const [isCheckoutLocked, setIsCheckoutLocked] = useState(false);
-
-  // Item-level discount popup
-  const [itemDiscountPopup, setItemDiscountPopup] = useState<ItemDiscountPopupState | null>(null);
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [showEODReport, setShowEODReport] = useState(false);
-  const [isAutoPrintEnabled, setIsAutoPrintEnabled] = useState(true);
-  const [lastOrder, setLastOrder] = useState<POSOrder | null>(null);
-  const [autoPromotion] = useState(0);
-
-  // Return Modal states
-  // Search state enhancements
-  const [showProductResults, setShowProductResults] = useState(false);
-  const [selectedResultIndex, setSelectedResultIndex] = useState(-1);
-
+  // Refs for DOM and stale closure fixes
   const productSearchRef = useRef<HTMLInputElement>(null);
   const consultantSearchRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
@@ -175,28 +175,31 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const checkoutRef = useRef<() => void>(() => {});
   const cartLengthRef = useRef(0);
 
-  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
-  const [stockWarning, setStockWarning] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const [autoPromotion] = useState(0);
 
-  // Confirm Dialog State
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    variant?: 'danger' | 'warning' | 'info' | 'success';
-    confirmLabel?: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-  });
+  const searchableProducts = useMemo(
+    () =>
+      products
+        .filter(product => product.status === 'Active' && !product.isParent)
+        .map(product => ({
+          product,
+          name: product.name?.toLowerCase() || '',
+          sku: product.sku?.toLowerCase() || '',
+          barcode: product.barcode || '',
+        })),
+    [products]
+  );
 
-  const openConfirm = (config: Omit<typeof confirmDialog, 'isOpen'>) => {
-    setConfirmDialog({ ...config, isOpen: true });
-  };
-  const closeConfirm = () => setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+  const searchableCustomers = useMemo(
+    () =>
+      customers.map(customer => ({
+        customer,
+        name: customer.name.toLowerCase(),
+        phone: customer.phone,
+      })),
+    [customers]
+  );
 
   const { updateActiveTab, addNewTab, closeTab } = usePOSTabs({
     tabs,
@@ -205,29 +208,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setActiveTabId,
     openConfirm,
     closeConfirm,
+    defaultPaymentMethod: paymentSettings?.defaultMethod || 'Cash',
   });
 
-  // Show scan feedback
-  const showScanFeedback = (productName: string) => {
-    setScanFeedback(productName);
-    setTimeout(() => setScanFeedback(null), 2000);
-  };
-
-  const showStockWarning = (message: string) => {
-    setStockWarning(message);
-    setTimeout(() => setStockWarning(null), 2500);
-  };
-
-  // Debounce search terms
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedCustomerSearch(customerSearch), 300);
-    return () => clearTimeout(timer);
-  }, [customerSearch]);
+  // Debounce and auto-scroll effects are handled in usePOSState hook
 
   // Auto-scroll dropdown when selectedResultIndex changes
   useEffect(() => {
@@ -239,25 +223,22 @@ const POSComputer: React.FC<POSComputerProps> = ({
       });
     }
   }, [selectedResultIndex]);
+
   // Search filter
   const searchFilteredProducts = useMemo(() => {
     if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) return [];
     const search = debouncedSearchTerm.toLowerCase();
-    return products
+    return searchableProducts
       .filter(
-        p =>
-          p.status === 'Active' &&
-          !p.isParent &&
-          ((p.name?.toLowerCase() || '').includes(search) ||
-            (p.sku?.toLowerCase() || '').includes(search) ||
-            (p.barcode && p.barcode.includes(search)))
+        item =>
+          item.name.includes(search) || item.sku.includes(search) || item.barcode.includes(search)
       )
+      .map(item => item.product)
       .sort((a, b) => {
         if (productSearchSort === 'priceDesc') return b.salePrice - a.salePrice;
-        return (b.sku || '').localeCompare(a.sku || '', 'vi', { numeric: true, sensitivity: 'base' });
-      })
-      .slice(0, 10);
-  }, [products, debouncedSearchTerm, productSearchSort]);
+        return SKU_COLLATOR.compare(b.sku || '', a.sku || '');
+      });
+  }, [searchableProducts, debouncedSearchTerm, productSearchSort]);
 
   useEffect(() => {
     if (debouncedSearchTerm && searchFilteredProducts.length > 0) {
@@ -271,22 +252,27 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const filteredCustomers = useMemo(() => {
     if (!debouncedCustomerSearch) return [];
     const search = debouncedCustomerSearch.toLowerCase();
-    return customers
-      .filter(
-        c => c.phone.includes(debouncedCustomerSearch) || c.name.toLowerCase().includes(search)
-      )
+    return searchableCustomers
+      .filter(item => item.phone.includes(debouncedCustomerSearch) || item.name.includes(search))
+      .map(item => item.customer)
       .slice(0, 10);
-  }, [customers, debouncedCustomerSearch]);
+  }, [searchableCustomers, debouncedCustomerSearch]);
 
   const addToCart = React.useCallback(
     (product: POSProduct) => {
       if (product.isParent) return;
 
+      // Validation: Giá bán phải > 0
+      if (product.salePrice <= 0) {
+        showStockWarning(`${product.name} — chưa có giá bán, vui lòng cập nhật giá`);
+        return;
+      }
+
       // Check stock outside setTabs to avoid side effects inside state updater
       const currentCart = activeTab.cart;
       const existingItem = currentCart.find(item => item.productId === product.id);
       const qtyInCart = existingItem?.quantity ?? 0;
-      if (product.stock <= 0 || qtyInCart >= product.stock) {
+      if (!allowSellOutOfStock && (product.stock <= 0 || qtyInCart >= product.stock)) {
         showStockWarning(`${product.name} — không đủ hàng (tồn: ${product.stock})`);
         return;
       }
@@ -325,7 +311,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         })
       );
     },
-    [activeTabId, activeTab.cart]
+    [activeTabId, activeTab.cart, allowSellOutOfStock]
   );
 
   usePOSKeyboard({
@@ -353,7 +339,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
             if (item.productId === productId) {
               const product = products.find(p => p.id === productId);
               const maxQty = product?.stock ?? Infinity;
-              const newQty = Math.min(maxQty, Math.max(1, item.quantity + delta));
+              const proposedQty = item.quantity + delta;
+
+              // Validation: Cảnh báo số lượng quá lớn (có thể nhập nhầm)
+              if (proposedQty > 10000) {
+                showStockWarning(`Số lượng quá lớn (${proposedQty}), vui lòng kiểm tra lại`);
+              }
+
+              const newQty = allowSellOutOfStock
+                ? Math.max(1, proposedQty)
+                : Math.min(maxQty, Math.max(1, proposedQty));
               return { ...item, quantity: newQty, total: newQty * (item.price - item.discount) };
             }
             return item;
@@ -362,7 +357,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         })
       );
     },
-    [activeTabId, products]
+    [activeTabId, products, allowSellOutOfStock]
   );
 
   const removeFromCart = React.useCallback(
@@ -387,15 +382,24 @@ const POSComputer: React.FC<POSComputerProps> = ({
           if (t.id !== activeTabId) return t;
           return {
             ...t,
-            cart: t.cart.map(item =>
-              item.productId !== productId
-                ? item
-                : {
-                    ...item,
-                    discount: discountAmount,
-                    total: item.quantity * (item.price - discountAmount),
-                  }
-            ),
+            cart: t.cart.map(item => {
+              if (item.productId !== productId) return item;
+
+              // Validation: Chiết khấu không được lớn hơn giá bán
+              const validDiscount = Math.min(Math.max(0, discountAmount), item.price);
+
+              if (discountAmount > item.price) {
+                showStockWarning(
+                  `Chiết khấu không được lớn hơn giá bán (${item.price.toLocaleString()}đ)`
+                );
+              }
+
+              return {
+                ...item,
+                discount: validDiscount,
+                total: item.quantity * (item.price - validDiscount),
+              };
+            }),
           };
         })
       );
@@ -477,13 +481,23 @@ const POSComputer: React.FC<POSComputerProps> = ({
   // Return Invoices filtering
   const currentCashReceived = cashReceived || netPayable;
 
-  const handleCheckout = () => {
-    if (cart.length === 0 || isCheckoutLocked) return;
+  const handleCheckout = async () => {
+    if (isCheckoutLocked) return;
+    if (mode === 'sales' && cart.length === 0) return;
+    if (mode === 'return' && returnCart.length === 0 && cart.length === 0) return;
 
-    const insufficientItem = cart.find(item => {
-      const product = products.find(p => p.id === item.productId);
-      return !product || product.stock < item.quantity;
-    });
+    // Validation: Tổng tiền phải > 0
+    if (mode === 'sales' && netPayable <= 0) {
+      showStockWarning('Tổng tiền thanh toán phải lớn hơn 0');
+      return;
+    }
+
+    const insufficientItem = allowSellOutOfStock
+      ? undefined
+      : cart.find(item => {
+          const product = products.find(p => p.id === item.productId);
+          return !product || product.stock < item.quantity;
+        });
 
     if (insufficientItem) {
       const product = products.find(p => p.id === insufficientItem.productId);
@@ -495,7 +509,51 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
     setIsCheckoutLocked(true);
     const orderId = generateId();
-    const orderCode = `HD-${Date.now().toString().slice(-6)}`;
+    const orderCode = `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString().slice(-6)}`;
+
+    if (mode === 'return') {
+      const returnOrder: POSOrder = {
+        id: orderId,
+        orderCode,
+        date: new Date().toISOString(),
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer?.name,
+        items: returnCart,
+        totalAmount: totalReturnBeforeDiscount,
+        discount: returnDiscount,
+        finalAmount: finalReturnAmount,
+        paymentMethod,
+        staffId: getCurrentStaffId(),
+        pointsEarned: 0,
+        notes: orderNote,
+        isReturn: true,
+      };
+
+      const returnedByProduct = new Map(returnCart.map(item => [item.productId, item.quantity]));
+      const exchangedByProduct = new Map(cart.map(item => [item.productId, item.quantity]));
+      const updatedProducts = products.map(product => {
+        const returnedQty = returnedByProduct.get(product.id) || 0;
+        const exchangedQty = exchangedByProduct.get(product.id) || 0;
+        if (returnedQty === 0 && exchangedQty === 0) return product;
+        return { ...product, stock: product.stock + returnedQty - exchangedQty };
+      });
+
+      try {
+        await onReturnOrder(returnOrder, updatedProducts, returnCart, cart);
+        setLastOrder(returnOrder);
+        if (isAutoPrintEnabled) {
+          setShowReceiptModal(true);
+        } else {
+          handleFinishOrder();
+        }
+        setSearchTerm('');
+        setCustomerSearch('');
+      } catch (err) {
+        setIsCheckoutLocked(false);
+        showStockWarning(err instanceof Error ? err.message : 'Không thể xử lý trả hàng');
+      }
+      return;
+    }
 
     const newOrder: POSOrder = {
       id: orderId,
@@ -532,7 +590,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     }
 
     try {
-      onPlaceOrder(newOrder, updatedProducts, updatedCustomer);
+      await onPlaceOrder(newOrder, updatedProducts, updatedCustomer);
 
       // Set last order for receipt and show modal IF auto-print is enabled
       setLastOrder(newOrder);
@@ -547,13 +605,13 @@ const POSComputer: React.FC<POSComputerProps> = ({
       setCustomerSearch('');
     } catch (err) {
       setIsCheckoutLocked(false);
-      throw err;
+      showStockWarning(err instanceof Error ? err.message : 'Không thể xử lý thanh toán');
     }
   };
 
   useEffect(() => {
     checkoutRef.current = handleCheckout;
-    cartLengthRef.current = cart.length;
+    cartLengthRef.current = mode === 'return' ? cart.length + returnCart.length : cart.length;
   });
 
   const handleFinishOrder = () => {
@@ -725,9 +783,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
       name: newCustomerForm.name,
       phone: newCustomerForm.phone,
       email: newCustomerForm.email || undefined,
-      address: [newCustomerForm.address, newCustomerForm.ward, newCustomerForm.area]
-        .filter(Boolean)
-        .join(', ') || undefined,
+      address:
+        [newCustomerForm.address, newCustomerForm.ward, newCustomerForm.area]
+          .filter(Boolean)
+          .join(', ') || undefined,
       notes: newCustomerForm.notes || undefined,
       points: 0,
       totalSpent: 0,
@@ -736,22 +795,67 @@ const POSComputer: React.FC<POSComputerProps> = ({
     onAddCustomer(newCustomer);
     updateActiveTab({ selectedCustomer: newCustomer });
     setShowAddCustomerModal(false);
-    setNewCustomerForm({
-      code: '',
-      name: '',
-      phone: '',
-      group: 'Khách lẻ',
-      birthday: '',
-      gender: '',
-      address: '',
-      area: '',
-      ward: '',
-      taxCode: '',
-      email: '',
-      facebook: '',
-      notes: '',
-    });
+    resetNewCustomerForm();
   };
+
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-full bg-slate-50">
+        <POSMobileView
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          searchFilteredProducts={searchFilteredProducts}
+          showProductResults={showProductResults}
+          setShowProductResults={setShowProductResults}
+          cart={cart}
+          addToCart={addToCart}
+          updateQuantity={updateQuantity}
+          removeFromCart={removeFromCart}
+          netPayable={netPayable}
+          onOpenCheckout={() => setShowCheckoutSheet(true)}
+          products={products}
+          allowSellOutOfStock={allowSellOutOfStock}
+        />
+        <POSMobileCheckoutSheet
+          isOpen={showCheckoutSheet}
+          onClose={() => setShowCheckoutSheet(false)}
+          cart={cart}
+          netPayable={netPayable}
+          totalBeforeDiscount={totalBeforeDiscount}
+          totalDiscount={totalDiscount}
+          paymentMethod={paymentMethod}
+          onPaymentMethodChange={method => updateActiveTab({ paymentMethod: method })}
+          cashReceived={cashReceived}
+          onCashReceivedChange={amount => updateActiveTab({ cashReceived: amount })}
+          cashSuggestions={cashSuggestions}
+          selectedCustomer={selectedCustomer}
+          customerSearch={customerSearch}
+          setCustomerSearch={setCustomerSearch}
+          filteredCustomers={filteredCustomers}
+          onSelectCustomer={c => {
+            updateActiveTab({ selectedCustomer: c });
+            setCustomerSearch('');
+          }}
+          onClearCustomer={() => updateActiveTab({ selectedCustomer: null })}
+          onConfirm={handleCheckout}
+          isCheckoutLocked={isCheckoutLocked}
+        />
+        {showReceiptModal && lastOrder && (
+          <POSReceiptModal
+            order={lastOrder}
+            cashReceived={cashReceived}
+            onClose={() => setShowReceiptModal(false)}
+            onPrint={handlePrint}
+            onFinish={() => {
+              handleFinishOrder();
+              setShowCheckoutSheet(false);
+            }}
+          />
+        )}
+        <POSToasts scanFeedback={scanFeedback} stockWarning={stockWarning} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -796,6 +900,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           showConsultant={showConsultant}
           setShowConsultant={setShowConsultant}
           products={products}
+          productGroups={productGroups}
           addToCart={addToCart}
           consultantSearchRef={consultantSearchRef}
           onUpdateQuantity={updateQuantity}
@@ -835,6 +940,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           currentCashReceived={currentCashReceived}
           pointsEarned={pointsEarned}
           paymentMethod={paymentMethod}
+          paymentSettings={paymentSettings}
           useSplitPayment={useSplitPayment}
           setUseSplitPayment={setUseSplitPayment}
           splitPayment={splitPayment}
@@ -888,12 +994,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       )}
 
       {/* End of Day Report Modal */}
-      {showEODReport && (
-        <EndOfDayReport
-          orders={orders}
-          onClose={() => setShowEODReport(false)}
-        />
-      )}
+      {showEODReport && <EndOfDayReport orders={orders} onClose={() => setShowEODReport(false)} />}
 
       {/* Confirm Dialog */}
       <ConfirmDialog

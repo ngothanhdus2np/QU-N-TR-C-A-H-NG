@@ -24,18 +24,18 @@ export const PayrollToolbar: React.FC<PayrollToolbarProps> = ({
           type="month"
           value={selectedMonth}
           onChange={e => onChangeMonth(e.target.value)}
-          className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+          className="bg-transparent text-sm font-normal text-slate-700 outline-none cursor-pointer"
         />
       </div>
       <button
         onClick={onExportPayroll}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border-2 border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-all"
+        className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-normal uppercase tracking-widest bg-white border-2 border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-all"
       >
         <FileDown className="w-3.5 h-3.5" /> Xuất Excel
       </button>
       <button
         onClick={onToggleShowResigned}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${
           showResigned
             ? 'bg-indigo-600 text-white shadow-lg'
             : 'bg-white border-2 border-slate-200 text-slate-400 hover:bg-slate-50'

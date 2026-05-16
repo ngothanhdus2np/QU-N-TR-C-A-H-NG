@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import SupplierListPage from './SupplierListPage';
 import SupplierForm from './SupplierForm';
 import SupplierDetailView from './SupplierDetailView';
 import { Supplier, AppData, AppDataSurgicalUpdate } from '../../types';
-import { generateId } from '../../businessLogic';
+import { generateId } from '../../src/lib';
 import { useToast } from '../ui/Toast';
+import { exportToExcel } from '../../services/exportService';
 
 interface SupplierContainerProps {
   data: AppData;
@@ -29,8 +31,9 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null);
+  const supplierFileInputRef = useRef<HTMLInputElement>(null);
 
-  const suppliers = data.suppliers || [];
+  const rawSuppliers = data.suppliers || [];
   const supplierDebts = data.supplierDebts || [];
   const inventoryTransactions = data.inventoryTransactions || [];
 
@@ -55,14 +58,14 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       );
     });
 
-    return suppliers.map(supplier => {
+    return rawSuppliers.map(supplier => {
       return {
         ...supplier,
         totalPurchase: totalPurchaseBySupplier.get(supplier.id) || 0,
         currentDebt: currentDebtBySupplier.get(supplier.id) || 0,
       };
     });
-  }, [suppliers, supplierDebts, inventoryTransactions]);
+  }, [rawSuppliers, supplierDebts, inventoryTransactions]);
 
   const handleCreateSupplier = () => {
     setEditingSupplier(null);
@@ -92,8 +95,8 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
       } else {
         const updatedSuppliers = isEdit
-          ? suppliers.map(s => (s.id === supplierId ? supplier : s))
-          : [...suppliers, supplier];
+          ? rawSuppliers.map(s => (s.id === supplierId ? supplier : s))
+          : [...rawSuppliers, supplier];
         await onUpdateData('suppliers', updatedSuppliers);
       }
 
@@ -113,7 +116,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
 
   const handleDeleteSupplier = async (id: string) => {
     try {
-      const supplier = suppliers.find(s => s.id === id);
+      const supplier = rawSuppliers.find(s => s.id === id);
       if (!supplier) return;
 
       // Check if supplier has debts
@@ -145,7 +148,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       if (onUpdateSurgical) {
         await onUpdateSurgical([{ key: 'suppliers', item: { id }, isDelete: true }]);
       } else {
-        await onUpdateData('suppliers', suppliers.filter(s => s.id !== id));
+        await onUpdateData('suppliers', rawSuppliers.filter(s => s.id !== id));
       }
 
       // Close detail view if viewing deleted supplier
@@ -169,8 +172,87 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   };
 
   const handleImportFile = () => {
-    // TODO: Implement import from Excel
-    showToast('Chức năng import file đang được phát triển', 'info');
+    supplierFileInputRef.current?.click();
+  };
+
+  const handleExportSuppliers = (suppliersToExport: Supplier[]) => {
+    if (suppliersToExport.length === 0) {
+      showToast('Chưa có nhà cung cấp để xuất', 'warning');
+      return;
+    }
+    exportToExcel(
+      suppliersToExport.map(supplier => ({
+        'Mã NCC': supplier.code || supplier.id,
+        'Tên NCC': supplier.name,
+        'Nhóm': supplier.group || '',
+        'Trạng thái': supplier.status || 'active',
+        'Điện thoại': supplier.phone || '',
+        'Email': supplier.email || '',
+        'Địa chỉ': supplier.address || '',
+        'Tổng mua': supplier.totalPurchase || 0,
+        'Nợ hiện tại': supplier.currentDebt || 0,
+        'Ghi chú': supplier.notes || '',
+      })),
+      'Danh_Sach_Nha_Cung_Cap',
+      'Nhà cung cấp'
+    );
+  };
+
+  const handleSupplierFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
+
+      const getCell = (row: Record<string, unknown>, aliases: string[]) => {
+        const key = Object.keys(row).find(k =>
+          aliases.some(alias => k.trim().toLowerCase() === alias.trim().toLowerCase())
+        );
+        return key ? row[key] : '';
+      };
+
+      const existingByName = new Map(rawSuppliers.map(supplier => [supplier.name.trim().toLowerCase(), supplier]));
+      const imported: Supplier[] = [];
+
+      rows.forEach(row => {
+        const name = String(getCell(row, ['Tên NCC', 'Tên nhà cung cấp', 'Nhà cung cấp', 'Name']) || '').trim();
+        if (!name) return;
+        const existing = existingByName.get(name.toLowerCase());
+        imported.push({
+          ...(existing || {}),
+          id: existing?.id || generateId(),
+          name,
+          code: String(getCell(row, ['Mã NCC', 'Mã nhà cung cấp', 'Code']) || existing?.code || '').trim() || undefined,
+          group: String(getCell(row, ['Nhóm', 'Group']) || existing?.group || '').trim() || undefined,
+          phone: String(getCell(row, ['Điện thoại', 'SĐT', 'Phone']) || existing?.phone || '').trim() || undefined,
+          email: String(getCell(row, ['Email']) || existing?.email || '').trim() || undefined,
+          address: String(getCell(row, ['Địa chỉ', 'Address']) || existing?.address || '').trim() || undefined,
+          notes: String(getCell(row, ['Ghi chú', 'Notes']) || existing?.notes || '').trim() || undefined,
+          status: (String(getCell(row, ['Trạng thái', 'Status']) || existing?.status || 'active').trim() as Supplier['status']) || 'active',
+        });
+      });
+
+      if (imported.length === 0) {
+        showToast('Không tìm thấy nhà cung cấp hợp lệ trong file', 'warning');
+        return;
+      }
+
+      const byId = new Map(rawSuppliers.map(supplier => [supplier.id, supplier]));
+      imported.forEach(supplier => byId.set(supplier.id, supplier));
+      const nextSuppliers = Array.from(byId.values());
+
+      await onUpdateData('suppliers', nextSuppliers);
+      showToast(`Đã import ${imported.length} nhà cung cấp`, 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Import suppliers failed', err);
+      showToast('Import nhà cung cấp thất bại. Vui lòng kiểm tra file Excel.', 'error');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   // If viewing detail
@@ -204,6 +286,13 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   // Default: show list
   return (
     <div className="h-full flex flex-col">
+      <input
+        ref={supplierFileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleSupplierFileImport}
+      />
       <div className="flex-1 min-h-0">
         <SupplierListPage
           suppliers={suppliersWithComputed}
@@ -211,6 +300,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
           onViewDetail={handleViewDetail}
           onDeleteSupplier={handleDeleteSupplier}
           onImportFile={handleImportFile}
+          onExportSuppliers={handleExportSuppliers}
         />
       </div>
     </div>

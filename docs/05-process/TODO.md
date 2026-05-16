@@ -271,15 +271,25 @@ npm test           # 43 tests phải pass
 
 ### Refactoring
 
-- [ ] **Tách `StaffManager.tsx`** (827 dòng) → tách state ra hook
-- [ ] **Tách `PayrollManager.tsx`** (777 dòng) → tách state ra hook
+- [x] ~~**Tách `StaffManager.tsx`**~~ (827 dòng) → tách state ra hook *(hoàn thành 2026-05-16)*
+  - [x] ~~Tạo `hooks/useStaffManagerState.ts`~~ (79 dòng)
+  - [x] ~~Di chuyển 3 useState: activeTab, formData, editingEmployee~~
+  - [x] ~~Thêm helpers: resetForm, loadEmployeeForEdit~~
+  - [x] ~~Cập nhật StaffManager.tsx sử dụng hook~~
+  - **Kết quả:** StaffManager.tsx giảm từ 827 → 821 dòng (-0.7%), TypeScript clean, 190/190 tests pass ✅
+
+- [x] ~~**Tách `PayrollManager.tsx`**~~ (777 dòng) → đã có hook từ trước *(verified 2026-05-16)*
+  - **Trạng thái:** File này đã sử dụng `hooks/usePayrollState.ts` (comprehensive hook 243 dòng)
+  - **Hook đã extract:** Tất cả state, constants, computed values, helpers
+  - **Component chỉ còn:** Business logic handlers (finalize, settlement, undo, input changes)
+  - **Kết luận:** Đã được tối ưu tốt, không cần refactor thêm ✅
 
 ### Theo dõi (650–800 dòng, chưa cần tách gấp)
 
 - [x] ~~`GoodsInventory.tsx`~~ (849 dòng) — đã tách barcode utils + useGoodsFilters hook, đã tối ưu tốt *(2026-05-15)*
 - [x] ~~`ProductGroupManager.tsx`~~ (827 dòng) — đã tách 3 sub-tabs (LedgerTab, MatrixTab, TreeTab), đã tối ưu tốt
-- [ ] `StaffManager.tsx` (827 dòng) — có thể tách state ra hook
-- [ ] `PayrollManager.tsx` (777 dòng) — có thể tách state ra hook
+- [x] ~~`StaffManager.tsx`~~ (821 dòng) — đã tách state ra hook useStaffManagerState *(2026-05-16)*
+- [x] ~~`PayrollManager.tsx`~~ (777 dòng) — đã có hook usePayrollState từ trước, đã tối ưu tốt *(2026-05-16)*
 - [ ] `types.ts` (791 dòng) — xem xét tách theo domain (pos, payroll, inventory...)
 - [ ] `services/apiService.ts` (755 dòng) — xem xét tách theo module
 - [ ] `hooks/useAppData.ts` (707 dòng) — đã có task type hóa ở P1

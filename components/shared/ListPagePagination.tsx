@@ -65,9 +65,9 @@ export const ListPagePagination: React.FC<ListPagePaginationProps> = ({
       {/* Left: Items info */}
       <div className="flex items-center gap-4">
         <span className="text-sm text-slate-600">
-          Hiển thị <span className="font-bold text-slate-900">{startItem}</span> -{' '}
-          <span className="font-bold text-slate-900">{endItem}</span> trong tổng số{' '}
-          <span className="font-bold text-slate-900">{totalItems}</span>
+          Hiển thị <span className="font-normal text-slate-900">{startItem}</span> -{' '}
+          <span className="font-normal text-slate-900">{endItem}</span> trong tổng số{' '}
+          <span className="font-normal text-slate-900">{totalItems}</span>
         </span>
 
         {/* Page Size Selector */}
@@ -111,7 +111,7 @@ export const ListPagePagination: React.FC<ListPagePaginationProps> = ({
               <button
                 key={page}
                 onClick={() => onPageChange(page as number)}
-                className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-normal transition-colors ${
                   currentPage === page
                     ? 'bg-indigo-600 text-white'
                     : 'text-slate-600 hover:bg-slate-100'

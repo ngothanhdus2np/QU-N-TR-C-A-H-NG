@@ -205,7 +205,9 @@ export async function runNotificationScheduler(supabase: SupabaseClient) {
             .eq('user_id', ALERT_NOTIFY_KEY)
             .single();
           lastNotified = lastNotifyData?.schedule?.at || '';
-        } catch {}
+        } catch (error) {
+          console.error('[Alert] Lỗi khi lấy thời gian thông báo cuối:', error);
+        }
         const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
         if (lastNotified > sixHoursAgo) return;
 
@@ -216,7 +218,9 @@ export async function runNotificationScheduler(supabase: SupabaseClient) {
             schedule: { at: new Date().toISOString(), count: criticalAlerts.length },
             updated_at: new Date().toISOString(),
           });
-        } catch {}
+        } catch (error) {
+          console.error('[Alert] Lỗi khi cập nhật thời gian thông báo:', error);
+        }
 
         if (isZaloConfigured()) {
           await sendZaloMessage(alertText).catch(e => console.error('[Alert Zalo]', e.message));

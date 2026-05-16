@@ -1,10 +1,65 @@
-import { AppData, BrandProfile } from '../types';
+import { 
+  AppData, 
+  BrandProfile, 
+  ProductLine,
+  SalaryPolicy,
+  ViolationType,
+  ViolationOccurrence,
+  Holiday,
+  ResponsibilityApproval,
+  TetCampaign,
+  ExpenseCategory,
+  DailyBreakEvenConfig,
+  POSInventorySettings,
+  ShopeeCostConfig
+} from '../types';
 import { DEFAULT_BRAND } from '../constants/marketing';
 import {
   DEFAULT_POLICIES,
   DEFAULT_EXPENSE_CATEGORIES,
+  DEFAULT_POS_INVENTORY_SETTINGS,
+  DEFAULT_POS_PAYMENT_SETTINGS,
   INITIAL_APP_DATA,
+  normalizePOSPaymentSettings,
 } from '../constants/defaultData';
+import { buildVariantProductName } from '../src/lib';
+
+type DbRow = Record<string, unknown>;
+type ConfigRow = DbRow & { key?: string; value?: unknown };
+
+interface DataMapperResults {
+  brandProfile?: DbRow | null;
+  employees?: DbRow[];
+  policies?: DbRow[];
+  revenue?: DbRow[];
+  pGroups?: DbRow[];
+  pGroupRev?: DbRow[];
+  expenses?: DbRow[];
+  attendance?: DbRow[];
+  overtime?: DbRow[];
+  sales?: DbRow[];
+  shortages?: DbRow[];
+  advances?: DbRow[];
+  payroll?: DbRow[];
+  perf?: DbRow[];
+  kb?: DbRow[];
+  promotions?: DbRow[];
+  configs?: ConfigRow[];
+  shopeeRevenue?: DbRow[];
+  shopeeProductGroupRevenue?: DbRow[];
+  shopeeSourceData?: DbRow[];
+  shopeeInventoryIn?: DbRow[];
+  shopeeInventoryOut?: DbRow[];
+  posProducts?: DbRow[];
+  posOrders?: DbRow[];
+  posCustomers?: DbRow[];
+  inventoryTransactions?: DbRow[];
+  suppliers?: DbRow[];
+  supplierDebts?: DbRow[];
+}
+
+const getConfigValue = (configs: ConfigRow[] | undefined, key: string) =>
+  configs?.find(config => config.key === key)?.value;
 
 // Parse "SIZE:43|MÀU:ĐỎ" hoặc "MÀU:NÂU" thành { SIZE: "43", MÀU: "ĐỎ" }
 const parseVariantAttrText = (text?: string): Record<string, string> => {
@@ -18,18 +73,18 @@ const parseVariantAttrText = (text?: string): Record<string, string> => {
 };
 
 export const dataMapper = {
-  mapBrandProfile(bp: any): BrandProfile {
+  mapBrandProfile(bp: DbRow): BrandProfile {
     return {
-      name: bp.name || DEFAULT_BRAND.name,
-      story: bp.story || DEFAULT_BRAND.story,
-      voice: bp.voice || DEFAULT_BRAND.voice,
-      targetAudience: bp.target_audience || DEFAULT_BRAND.targetAudience,
-      competitiveAdvantage: bp.competitive_advantage || DEFAULT_BRAND.competitiveAdvantage,
-      logo: bp.logo || DEFAULT_BRAND.logo,
-      inventory: bp.inventory || DEFAULT_BRAND.inventory,
-      phone: bp.phone || DEFAULT_BRAND.phone,
-      address: bp.address || DEFAULT_BRAND.address,
-      hashtags: bp.hashtags || DEFAULT_BRAND.hashtags,
+      name: (bp.name as string) || DEFAULT_BRAND.name,
+      story: (bp.story as string) || DEFAULT_BRAND.story,
+      voice: (bp.voice as string) || DEFAULT_BRAND.voice,
+      targetAudience: (bp.target_audience as string) || DEFAULT_BRAND.targetAudience,
+      competitiveAdvantage: (bp.competitive_advantage as string) || DEFAULT_BRAND.competitiveAdvantage,
+      logo: (bp.logo as string) || DEFAULT_BRAND.logo,
+      inventory: (bp.inventory as ProductLine[]) || DEFAULT_BRAND.inventory,
+      phone: (bp.phone as string) || DEFAULT_BRAND.phone,
+      address: (bp.address as string) || DEFAULT_BRAND.address,
+      hashtags: (bp.hashtags as string) || DEFAULT_BRAND.hashtags,
     };
   },
 
@@ -56,7 +111,7 @@ export const dataMapper = {
     return merged;
   },
 
-  normalizeEmployee(employee: any) {
+  normalizeEmployee(employee: DbRow) {
     const { resigned_date: _legacyResignedDate, ...rest } = employee || {};
     return {
       ...rest,
@@ -64,8 +119,9 @@ export const dataMapper = {
     };
   },
 
-  mapAllData(results: any, localData: any): Partial<AppData> {
-    const cloudEmployees = (results.employees || []).map((e: any) => ({
+  mapAllData(rawResults: unknown, localData: Partial<AppData> | null): Partial<AppData> {
+    const results = rawResults as DataMapperResults;
+    const cloudEmployees = (results.employees || []).map(e => ({
       id: e.id,
       name: e.name,
       position: e.position,
@@ -84,7 +140,7 @@ export const dataMapper = {
       email: e.email,
     }));
 
-    const cloudPolicies = (results.policies || []).map((p: any) => ({
+    const cloudPolicies = (results.policies || []).map(p => ({
       id: p.id,
       name: p.name,
       salaryType: p.salary_type || 'monthly',
@@ -103,7 +159,7 @@ export const dataMapper = {
       responsibilityAllowance: Number(p.responsibility_allowance) ?? 0,
     }));
 
-    const cloudRevenue = (results.revenue || []).map((r: any) => ({
+    const cloudRevenue = (results.revenue || []).map(r => ({
       id: r.id,
       date: r.date,
       totalGrossRevenue: r.total_gross_revenue || r.totalGrossRevenue || 0,
@@ -118,17 +174,19 @@ export const dataMapper = {
     return {
       employees: this.mergeBy(
         cloudEmployees,
-        (localData?.employees || []).map((employee: any) => this.normalizeEmployee(employee))
-      ).map((employee: any) => this.normalizeEmployee(employee)),
+        (localData?.employees || []).map(employee =>
+          this.normalizeEmployee(employee as unknown as DbRow)
+        )
+      ).map(employee => this.normalizeEmployee(employee as unknown as DbRow)),
       salaryPolicies:
-        cloudPolicies.length > 0 ? cloudPolicies : localData?.salaryPolicies || DEFAULT_POLICIES,
+        (cloudPolicies.length > 0 ? cloudPolicies : localData?.salaryPolicies || DEFAULT_POLICIES) as SalaryPolicy[],
       revenue: this.mergeBy(cloudRevenue, localData?.revenue || [], 'date'),
       productGroups: this.mergeBy(
-        (results.pGroups || []).map((g: any) => ({ id: g.id, name: g.name, target: g.target })),
+        (results.pGroups || []).map(g => ({ id: g.id, name: g.name, target: g.target })),
         localData?.productGroups || []
       ),
       productGroupRevenue: this.mergeBy(
-        (results.pGroupRev || []).map((r: any) => ({
+        (results.pGroupRev || []).map(r => ({
           id: r.id,
           date: r.date,
           groupId: r.group_id || r.groupId,
@@ -143,7 +201,7 @@ export const dataMapper = {
         localData?.productGroupRevenue || []
       ),
       expenses: this.mergeBy(
-        (results.expenses || []).map((e: any) => ({
+        (results.expenses || []).map(e => ({
           id: e.id,
           date: e.date,
           category: e.category,
@@ -153,7 +211,7 @@ export const dataMapper = {
         localData?.expenses || []
       ),
       attendance: this.mergeBy(
-        (results.attendance || []).map((a: any) => ({
+        (results.attendance || []).map(a => ({
           id: a.id,
           employeeId: a.employee_id || a.employeeId,
           employeeName: a.employee_name || a.employeeName,
@@ -164,7 +222,7 @@ export const dataMapper = {
         localData?.attendance || []
       ),
       overtime: this.mergeBy(
-        (results.overtime || []).map((o: any) => ({
+        (results.overtime || []).map(o => ({
           id: o.id,
           employeeId: o.employee_id || o.employeeId,
           employeeName: o.employee_name || o.employeeName,
@@ -175,7 +233,7 @@ export const dataMapper = {
         localData?.overtime || []
       ),
       sales: this.mergeBy(
-        (results.sales || []).map((s: any) => ({
+        (results.sales || []).map(s => ({
           id: s.id,
           employeeId: s.employee_id || s.employeeId,
           employeeName: s.employee_name || s.employeeName,
@@ -187,7 +245,7 @@ export const dataMapper = {
         localData?.sales || []
       ),
       shortages: this.mergeBy(
-        (results.shortages || []).map((sh: any) => ({
+        (results.shortages || []).map(sh => ({
           id: sh.id,
           employeeId: sh.employee_id || sh.employeeId,
           employeeName: sh.employee_name || sh.employeeName,
@@ -197,7 +255,7 @@ export const dataMapper = {
         localData?.shortages || []
       ),
       advances: this.mergeBy(
-        (results.advances || []).map((ad: any) => ({
+        (results.advances || []).map(ad => ({
           id: ad.id,
           employeeId: ad.employee_id || ad.employeeId,
           employeeName: ad.employee_name || ad.employeeName,
@@ -207,7 +265,7 @@ export const dataMapper = {
         localData?.advances || []
       ),
       payroll: this.mergeBy(
-        (results.payroll || []).map((p: any) => ({
+        (results.payroll || []).map(p => ({
           id: p.id,
           employeeId: p.employee_id || p.employeeId,
           employeeName: p.employee_name || p.employeeName,
@@ -234,7 +292,7 @@ export const dataMapper = {
         localData?.payroll || []
       ),
       staffPerformance: this.mergeBy(
-        (results.perf || []).map((pf: any) => ({
+        (results.perf || []).map(pf => ({
           id: pf.id,
           employeeId: pf.employee_id || pf.employeeId,
           employeeName: pf.employee_name || pf.employeeName,
@@ -247,7 +305,7 @@ export const dataMapper = {
         localData?.staffPerformance || []
       ),
       knowledgeBase: this.mergeBy(
-        (results.kb || []).map((k: any) => ({
+        (results.kb || []).map(k => ({
           id: k.id,
           category: k.category,
           title: k.title,
@@ -263,7 +321,7 @@ export const dataMapper = {
         localData?.knowledgeBase || []
       ),
       promotions: this.mergeBy(
-        (results.promotions || []).map((p: any) => ({
+        (results.promotions || []).map(p => ({
           id: p.id,
           name: p.name,
           startDate: p.start_date || p.startDate,
@@ -282,37 +340,41 @@ export const dataMapper = {
         localData?.promotions || []
       ),
       violationTypes:
-        results.configs?.find((c: any) => c.key === 'violation_types')?.value ||
-        localData?.violationTypes ||
-        [],
+        (getConfigValue(results.configs, 'violation_types') || localData?.violationTypes || []) as ViolationType[],
       violationOccurrences:
-        results.configs?.find((c: any) => c.key === 'violation_occurrences')?.value ||
+        (getConfigValue(results.configs, 'violation_occurrences') ||
         localData?.violationOccurrences ||
-        [],
+        []) as ViolationOccurrence[],
       customDeductions:
-        results.configs?.find((c: any) => c.key === 'custom_penalties')?.value ||
+        (getConfigValue(results.configs, 'custom_penalties') ||
         localData?.customDeductions ||
-        INITIAL_APP_DATA.customDeductions,
-      holidays:
-        results.configs?.find((c: any) => c.key === 'holidays')?.value || localData?.holidays || [],
+        INITIAL_APP_DATA.customDeductions) as string[],
+      holidays: (getConfigValue(results.configs, 'holidays') || localData?.holidays || []) as Holiday[],
       responsibilityApprovals:
-        results.configs?.find((c: any) => c.key === 'responsibility_approvals')?.value ||
+        (getConfigValue(results.configs, 'responsibility_approvals') ||
         localData?.responsibilityApprovals ||
-        [],
+        []) as ResponsibilityApproval[],
       tetCampaign:
-        results.configs?.find((c: any) => c.key === 'tet_campaign')?.value ||
-        localData?.tetCampaign ||
-        undefined,
+        (getConfigValue(results.configs, 'tet_campaign') || localData?.tetCampaign || undefined) as TetCampaign | undefined,
       expenseCategories:
-        results.configs?.find((c: any) => c.key === 'expense_categories')?.value ||
+        (getConfigValue(results.configs, 'expense_categories') ||
         localData?.expenseCategories ||
-        DEFAULT_EXPENSE_CATEGORIES,
+        DEFAULT_EXPENSE_CATEGORIES) as ExpenseCategory[],
       dailyBreakEvenConfig:
-        results.configs?.find((c: any) => c.key === 'daily_break_even_config')?.value ||
+        (getConfigValue(results.configs, 'daily_break_even_config') ||
         localData?.dailyBreakEvenConfig ||
-        INITIAL_APP_DATA.dailyBreakEvenConfig,
+        INITIAL_APP_DATA.dailyBreakEvenConfig) as DailyBreakEvenConfig,
+      posPaymentSettings: normalizePOSPaymentSettings(
+        getConfigValue(results.configs, 'pos_payment_settings') ||
+          localData?.posPaymentSettings ||
+          DEFAULT_POS_PAYMENT_SETTINGS
+      ),
+      posInventorySettings:
+        (getConfigValue(results.configs, 'pos_inventory_settings') ||
+        localData?.posInventorySettings ||
+        INITIAL_APP_DATA.posInventorySettings) as POSInventorySettings,
       shopeeRevenue: this.mergeBy(
-        (results.shopeeRevenue || []).map((r: any) => ({
+        (results.shopeeRevenue || []).map(r => ({
           id: r.id,
           date: r.date,
           totalGrossRevenue: r.total_gross_revenue || r.totalGrossRevenue || 0,
@@ -327,7 +389,7 @@ export const dataMapper = {
         'date'
       ),
       shopeeProductGroupRevenue: this.mergeBy(
-        (results.shopeeProductGroupRevenue || []).map((r: any) => ({
+        (results.shopeeProductGroupRevenue || []).map(r => ({
           id: r.id,
           date: r.date,
           groupId: r.group_id || r.groupId,
@@ -342,7 +404,7 @@ export const dataMapper = {
         localData?.shopeeProductGroupRevenue || []
       ),
       shopeeSourceData: this.mergeBy(
-        (results.shopeeSourceData || []).map((r: any) => ({
+        (results.shopeeSourceData || []).map(r => ({
           id: r.id,
           sku: r.sku,
           name: r.name,
@@ -354,15 +416,15 @@ export const dataMapper = {
         'sku'
       ),
       shopeeCosts:
-        results.configs?.find((c: any) => c.key === 'shopee_costs')?.value ||
+        (getConfigValue(results.configs, 'shopee_costs') ||
         localData?.shopeeCosts ||
-        INITIAL_APP_DATA.shopeeCosts,
+        INITIAL_APP_DATA.shopeeCosts) as ShopeeCostConfig,
       dailyAdsConfig:
-        results.configs?.find((c: any) => c.key === 'daily_ads_config')?.value ||
+        (getConfigValue(results.configs, 'daily_ads_config') ||
         localData?.dailyAdsConfig ||
-        INITIAL_APP_DATA.dailyAdsConfig,
+        INITIAL_APP_DATA.dailyAdsConfig) as Record<string, number>,
       shopeeInventoryIn: this.mergeBy(
-        (results.shopeeInventoryIn || []).map((r: any) => ({
+        (results.shopeeInventoryIn || []).map(r => ({
           id: r.id,
           date: r.date,
           sku: r.sku,
@@ -373,7 +435,7 @@ export const dataMapper = {
         localData?.shopeeInventoryIn || []
       ),
       shopeeInventoryOut: this.mergeBy(
-        (results.shopeeInventoryOut || []).map((r: any) => ({
+        (results.shopeeInventoryOut || []).map(r => ({
           id: r.id,
           date: r.date,
           status: r.status,
@@ -396,54 +458,62 @@ export const dataMapper = {
         localData?.shopeeInventoryOut || []
       ),
       posProducts: this.mergeBy(
-        (results.posProducts || []).map((p: any) => ({
-          id: p.id,
-          sku: p.is_parent || p.isParent ? '' : p.sku || '',
-          name: p.name,
-          categoryId: p.category_id || p.categoryId,
-          categoryPath: p.category_path || p.categoryPath,
-          importPrice: Number(p.import_price || p.importPrice || 0),
-          salePrice: Number(p.sale_price || p.salePrice || 0),
-          stock: Number(p.stock || 0),
-          expectedOutOfStock: p.expected_out_of_stock || p.expectedOutOfStock,
-          minStock: Number(p.min_stock || p.minStock || 0),
-          maxStock: Number(p.max_stock || p.maxStock || 999999),
-          unit: p.unit,
-          baseUnitCode: p.base_unit_code || p.baseUnitCode,
-          conversionValue: Number(p.conversion_value || p.conversionValue || 1),
-          brand: p.brand,
-          barcode: p.barcode,
-          attributesText: p.attributes_text || p.attributesText,
-          description: p.description,
-          noteTemplate: p.note_template || p.noteTemplate,
-          components: p.components,
-          warranty: p.warranty,
-          periodicMaintenance: p.periodic_maintenance || p.periodicMaintenance,
-          allowPoints: p.allow_points ?? p.allowPoints ?? true,
-          weight: Number(p.weight || 0),
-          weightUnit: p.weight_unit || p.weightUnit,
-          location: p.location,
-          relatedSku: p.related_sku || p.relatedSku || null,
-          createdAt: p.created_at || p.createdAt || null,
-          customerOrders: Number(p.customer_orders || p.customerOrders || 0),
-          directSale: p.direct_sale ?? p.directSale ?? true,
-          productType: p.product_type || p.productType || 'Hàng hóa',
-          images: p.images || [],
-          status: p.status,
-          units: p.units || [],
-          attributes: p.attributes || [],
-          variantAttributes:
+        (results.posProducts || []).map(p => {
+          const attrText = (p.attributes_text || p.attributesText || '') as string;
+          const variantAttributes =
             p.variant_attributes ||
             p.variantAttributes ||
-            parseVariantAttrText(p.attributes_text || p.attributesText),
-          parentId: p.parent_id || p.parentId || null,
-          isParent: p.is_parent ?? p.isParent ?? false,
-          variantCount: Number(p.variant_count ?? p.variantCount ?? 0),
-        })),
+            parseVariantAttrText(attrText);
+          const isParent = p.is_parent ?? p.isParent ?? false;
+          return {
+            id: p.id,
+            sku: isParent ? '' : p.sku || '',
+            name:
+              !isParent && (p.parent_id || p.parentId)
+                ? buildVariantProductName((p.name || '') as string, variantAttributes as Record<string, string>)
+                : (p.name || '') as string,
+            categoryId: p.category_id || p.categoryId,
+            categoryPath: p.category_path || p.categoryPath,
+            importPrice: Number(p.import_price || p.importPrice || 0),
+            salePrice: Number(p.sale_price || p.salePrice || 0),
+            stock: Number(p.stock || 0),
+            expectedOutOfStock: p.expected_out_of_stock || p.expectedOutOfStock,
+            minStock: Number(p.min_stock || p.minStock || 0),
+            maxStock: Number(p.max_stock || p.maxStock || 999999),
+            unit: p.unit,
+            baseUnitCode: p.base_unit_code || p.baseUnitCode,
+            conversionValue: Number(p.conversion_value || p.conversionValue || 1),
+            brand: p.brand,
+            barcode: p.barcode,
+            attributesText: p.attributes_text || p.attributesText,
+            description: p.description,
+            noteTemplate: p.note_template || p.noteTemplate,
+            components: p.components,
+            warranty: p.warranty,
+            periodicMaintenance: p.periodic_maintenance || p.periodicMaintenance,
+            allowPoints: p.allow_points ?? p.allowPoints ?? true,
+            weight: Number(p.weight || 0),
+            weightUnit: p.weight_unit || p.weightUnit,
+            location: p.location,
+            relatedSku: p.related_sku || p.relatedSku || null,
+            createdAt: p.created_at || p.createdAt || null,
+            customerOrders: Number(p.customer_orders || p.customerOrders || 0),
+            directSale: p.direct_sale ?? p.directSale ?? true,
+            productType: p.product_type || p.productType || 'Hàng hóa',
+            images: p.images || [],
+            status: p.status,
+            units: p.units || [],
+            attributes: p.attributes || [],
+            variantAttributes,
+            parentId: p.parent_id || p.parentId || null,
+            isParent,
+            variantCount: Number(p.variant_count ?? p.variantCount ?? 0),
+          };
+        }),
         localData?.posProducts || []
       ),
       posOrders: this.mergeBy(
-        (results.posOrders || []).map((o: any) => ({
+        (results.posOrders || []).map(o => ({
           id: o.id,
           orderCode: o.order_code || o.orderCode,
           date: o.date,
@@ -461,7 +531,7 @@ export const dataMapper = {
         localData?.posOrders || []
       ),
       posCustomers: this.mergeBy(
-        (results.posCustomers || []).map((c: any) => ({
+        (results.posCustomers || []).map(c => ({
           id: c.id,
           name: c.name,
           phone: c.phone,
@@ -476,7 +546,7 @@ export const dataMapper = {
         localData?.posCustomers || []
       ),
       inventoryTransactions: this.mergeBy(
-        (results.inventoryTransactions || []).map((t: any) => ({
+        (results.inventoryTransactions || []).map(t => ({
           id: t.id,
           date: t.date,
           type: t.type,
@@ -509,7 +579,7 @@ export const dataMapper = {
         localData?.inventoryTransactions || []
       ),
       suppliers: this.mergeBy(
-        (results.suppliers || []).map((s: any) => ({
+        (results.suppliers || []).map(s => ({
           id: s.id,
           name: s.name,
           code: s.code,
@@ -523,7 +593,7 @@ export const dataMapper = {
         localData?.suppliers || []
       ),
       supplierDebts: this.mergeBy(
-        (results.supplierDebts || []).map((d: any) => ({
+        (results.supplierDebts || []).map(d => ({
           id: d.id,
           supplierId: d.supplier_id || d.supplierId,
           supplierName: d.supplier_name || d.supplierName,

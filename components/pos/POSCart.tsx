@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Scan, PackageOpen, FileText, Trash2 } from 'lucide-react';
-import { POSProduct, POSOrderItem } from '../../types';
+import { POSProduct, POSOrderItem, ProductGroup } from '../../types';
 import POSConsultant from './POSConsultant';
 
 const CartItemRow = React.memo(({ item, idx, onUpdate, onRemove, isReturnItem, onDiscountClick }: {
@@ -27,12 +27,12 @@ const CartItemRow = React.memo(({ item, idx, onUpdate, onRemove, isReturnItem, o
     <div className="w-[88px] shrink-0 flex items-center justify-center gap-1 group/qty">
       <button
         onClick={() => onUpdate(item.productId, -1)}
-        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 font-black text-base leading-none px-0.5"
+        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 font-normal text-base leading-none px-0.5"
       >−</button>
       <span className="border-b border-slate-400 px-2 tabular-nums text-slate-900 min-w-[20px] text-center">{item.quantity}</span>
       <button
         onClick={() => onUpdate(item.productId, +1)}
-        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500 font-black text-base leading-none px-0.5"
+        className="opacity-0 group-hover/qty:opacity-100 transition-opacity text-slate-400 hover:text-indigo-500 font-normal text-base leading-none px-0.5"
       >+</button>
     </div>
     <div
@@ -63,6 +63,7 @@ interface POSCartProps {
   showConsultant: boolean;
   setShowConsultant: (v: boolean) => void;
   products: POSProduct[];
+  productGroups: ProductGroup[];
   addToCart: (p: POSProduct) => void;
   consultantSearchRef: React.RefObject<HTMLInputElement>;
   onUpdateQuantity: (productId: string, delta: number) => void;
@@ -75,7 +76,7 @@ interface POSCartProps {
 
 const POSCart: React.FC<POSCartProps> = ({
   mode, cart, returnCart, orderNote,
-  showConsultant, setShowConsultant, products, addToCart, consultantSearchRef,
+  showConsultant, setShowConsultant, products, productGroups, addToCart, consultantSearchRef,
   onUpdateQuantity, onRemoveFromCart, onUpdateReturnQuantity, onRemoveFromReturnCart,
   onDiscountClick, onOrderNoteChange,
 }) => (
@@ -90,7 +91,7 @@ const POSCart: React.FC<POSCartProps> = ({
               <input
                 type="text"
                 placeholder="Tìm hàng trả (F3)"
-                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-4 py-2 text-sm font-normal bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
               />
             </div>
             <Scan className="h-5 w-5 text-indigo-500" />
@@ -100,7 +101,7 @@ const POSCart: React.FC<POSCartProps> = ({
           <div className="h-1/2 overflow-y-auto no-scrollbar border-b border-indigo-100 bg-white italic">
             {returnCart.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-300 py-10">
-                <p className="text-[10px] font-black uppercase tracking-widest">Danh sách hàng trả trống</p>
+                <p className="text-[10px] font-normal uppercase tracking-widest">Danh sách hàng trả trống</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 p-2">
@@ -125,7 +126,7 @@ const POSCart: React.FC<POSCartProps> = ({
               <input
                 type="text"
                 placeholder="Tìm hàng đổi (F7)"
-                className="w-full pl-9 pr-4 py-2 text-sm font-bold bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-4 py-2 text-sm font-normal bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all placeholder:text-slate-400"
               />
             </div>
             <Scan className="h-5 w-5 text-indigo-500" />
@@ -135,7 +136,7 @@ const POSCart: React.FC<POSCartProps> = ({
           <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
             {cart.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-300 py-10">
-                <p className="text-[10px] font-black uppercase tracking-widest">Danh sách hàng đổi trống</p>
+                <p className="text-[10px] font-normal uppercase tracking-widest">Danh sách hàng đổi trống</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 p-2">
@@ -153,17 +154,17 @@ const POSCart: React.FC<POSCartProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto pt-4 flex flex-col no-scrollbar">
+        <div className="overflow-y-auto flex flex-col no-scrollbar max-h-[600px]">
           {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
+            <div className="flex-1 flex flex-col items-center text-slate-300" style={{ paddingTop: '350px' }}>
               <div className="w-24 h-24 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mb-8 border border-slate-100">
                 <PackageOpen className="h-10 w-10 text-slate-200" />
               </div>
-              <p className="font-black text-sm uppercase tracking-[0.3em] text-slate-400">Hệ thống chưa có sản phẩm</p>
-              <p className="text-[11px] mt-3 font-bold text-slate-400/60 uppercase tracking-widest italic">Quét mã vạch hoặc ấn F3 để bắt đầu bán hàng</p>
+              <p className="font-normal text-sm uppercase tracking-[0.3em] text-slate-400">Hệ thống chưa có sản phẩm</p>
+              <p className="text-[11px] mt-3 font-normal text-slate-400/60 uppercase tracking-widest italic">Quét mã vạch hoặc ấn F3 để bắt đầu bán hàng</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 p-2 animate-in fade-in duration-300">
+            <div className="flex flex-col gap-2 p-2 pt-4 animate-in fade-in duration-300">
               {cart.map((item, idx) => (
                 <CartItemRow
                   key={item.productId}
@@ -187,7 +188,7 @@ const POSCart: React.FC<POSCartProps> = ({
         <input
           type="text"
           placeholder="Ghi chú đơn hàng"
-          className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-300 placeholder:font-medium"
+          className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-sm font-normal text-slate-800 placeholder:text-slate-300 placeholder:font-normal"
           value={orderNote}
           onChange={e => onOrderNoteChange(e.target.value)}
         />
@@ -199,6 +200,7 @@ const POSCart: React.FC<POSCartProps> = ({
       showConsultant={showConsultant}
       setShowConsultant={setShowConsultant}
       products={products}
+      productGroups={productGroups}
       addToCart={addToCart}
       searchRef={consultantSearchRef}
     />

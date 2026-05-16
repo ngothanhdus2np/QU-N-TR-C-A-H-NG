@@ -17,7 +17,7 @@ export const ExpenseTabs: React.FC<ExpenseTabsProps> = ({
   <div className="flex bg-slate-100 p-1.5 rounded-[2rem] w-fit mx-auto shadow-sm border border-slate-200">
     <button
       onClick={() => setActiveSubTab('efficiency')}
-      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${
+      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${
         activeSubTab === 'efficiency' ? 'bg-white text-emerald-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'
       }`}
     >
@@ -25,7 +25,7 @@ export const ExpenseTabs: React.FC<ExpenseTabsProps> = ({
     </button>
     <button
       onClick={() => setActiveSubTab('categories')}
-      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${
+      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${
         activeSubTab === 'categories' ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'
       }`}
     >
@@ -33,7 +33,7 @@ export const ExpenseTabs: React.FC<ExpenseTabsProps> = ({
     </button>
     <button
       onClick={() => setActiveSubTab('ledger')}
-      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${
+      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${
         activeSubTab === 'ledger' ? 'bg-white text-rose-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'
       }`}
     >
@@ -41,7 +41,7 @@ export const ExpenseTabs: React.FC<ExpenseTabsProps> = ({
     </button>
     <button
       onClick={() => setActiveSubTab('recurring')}
-      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all relative ${
+      className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all relative ${
         activeSubTab === 'recurring' ? 'bg-white text-amber-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'
       }`}
     >

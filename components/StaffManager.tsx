@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   Employee,
   SalaryPolicy,
@@ -40,7 +40,7 @@ import {
   calculateStaffProductivity,
   calculateMarketingPerformance,
   generateId,
-} from '../businessLogic';
+} from '../src/lib';
 import {
   Tooltip,
   ResponsiveContainer,
@@ -48,6 +48,7 @@ import {
   PieChart as RePieChart,
   Pie,
 } from 'recharts';
+import { useStaffManagerState } from '../hooks/useStaffManagerState';
 
 const AnalyticsCard: React.FC<{
   title: string;
@@ -68,11 +69,11 @@ const AnalyticsCard: React.FC<{
       <div className={`p-4 rounded-2xl ${colorMap[color]} w-fit mb-6 shadow-sm`}>
         <Icon className="w-6 h-6" />
       </div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+      <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-1">
         {title}
       </p>
-      <h4 className="text-2xl font-black text-slate-900 tabular-nums">{value}</h4>
-      <p className="text-[9px] text-slate-400 font-bold mt-3 uppercase tracking-tighter leading-relaxed">
+      <h4 className="text-2xl font-normal text-slate-900 tabular-nums">{value}</h4>
+      <p className="text-[9px] text-slate-400 font-normal mt-3 uppercase tracking-tighter leading-relaxed">
         {desc}
       </p>
     </div>
@@ -87,7 +88,7 @@ const DetailInput: React.FC<{
   onChange: (val: string) => void;
 }> = ({ icon: Icon, label, type, value, onChange }) => (
   <div className="space-y-2">
-    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+    <label className="text-[9px] font-normal text-slate-400 uppercase tracking-widest ml-1">
       {label}
     </label>
     <div className="relative group">
@@ -97,7 +98,7 @@ const DetailInput: React.FC<{
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder="..."
-        className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl text-sm font-bold text-slate-800 outline-none transition-all shadow-sm"
+        className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl text-sm font-normal text-slate-800 outline-none transition-all shadow-sm"
       />
     </div>
   </div>
@@ -122,23 +123,16 @@ const StaffManager: React.FC<Props> = ({
   allData,
   requestedTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<'list' | 'performance' | 'ledger'>('performance');
-
-  const [formData, setFormData] = useState({
-    name: '',
-    position: 'Nhân viên',
-    joinDate: new Date().toISOString().split('T')[0],
-    assignedPolicyId: '',
-    photoUrl: '',
-    email: '',
-    dob: '',
-  });
-
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-
-  useEffect(() => {
-    if (requestedTab) setActiveTab(requestedTab);
-  }, [requestedTab]);
+  const {
+    activeTab,
+    setActiveTab,
+    formData,
+    setFormData,
+    editingEmployee,
+    setEditingEmployee,
+    resetForm,
+    loadEmployeeForEdit,
+  } = useStaffManagerState({ requestedTab });
 
   const formatNumber = (num: number) => (num || 0).toLocaleString('vi-VN');
 
@@ -234,12 +228,12 @@ const StaffManager: React.FC<Props> = ({
 
   const CardField = ({ label, value, icon: Icon }: any) => (
     <div className="flex items-center text-[12px]">
-      <div className="w-32 font-black text-slate-400 uppercase tracking-[0.05em] flex items-center gap-2">
+      <div className="w-32 font-normal text-slate-400 uppercase tracking-[0.05em] flex items-center gap-2">
         {Icon && <Icon className="w-3.5 h-3.5 text-emerald-600" />}
         {label}
       </div>
-      <div className="w-6 text-slate-300 font-black">:</div>
-      <div className="flex-1 font-bold text-slate-700 truncate tracking-tight">
+      <div className="w-6 text-slate-300 font-normal">:</div>
+      <div className="flex-1 font-normal text-slate-700 truncate tracking-tight">
         {value || 'N/A'}
       </div>
     </div>
@@ -309,10 +303,10 @@ const StaffManager: React.FC<Props> = ({
               {emp.name}
             </h2>
             <div className="flex flex-col items-center gap-1.5">
-              <div className="inline-block px-8 py-1.5 bg-emerald-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-600/20">
+              <div className="inline-block px-8 py-1.5 bg-emerald-600 text-white rounded-full text-[10px] font-normal uppercase tracking-widest shadow-lg shadow-emerald-600/20">
                 {emp.position}
               </div>
-              <div className="text-[11px] font-black text-emerald-700 uppercase tracking-wider">
+              <div className="text-[11px] font-normal text-emerald-700 uppercase tracking-wider">
                 {currentPolicy?.name || 'Chưa xác định'}
               </div>
             </div>
@@ -348,7 +342,7 @@ const StaffManager: React.FC<Props> = ({
             <div className="p-2.5 bg-emerald-800 rounded-xl">
               <Globe className="w-4.5 h-4.5 text-emerald-400" />
             </div>
-            <span className="text-[10px] font-black text-emerald-400 tracking-[0.2em]">
+            <span className="text-[10px] font-normal text-emerald-400 tracking-[0.2em]">
               WWW.COMPANY.MIS
             </span>
           </div>
@@ -360,7 +354,7 @@ const StaffManager: React.FC<Props> = ({
         {/* Resigned Overlay Effect */}
         {isResigned && (
           <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] pointer-events-none flex items-center justify-center">
-            <div className="bg-rose-600 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.4em] shadow-2xl rotate-[-12deg] border-4 border-white animate-pulse">
+            <div className="bg-rose-600 text-white px-10 py-5 rounded-[2.5rem] font-normal uppercase text-sm tracking-[0.4em] shadow-2xl rotate-[-12deg] border-4 border-white animate-pulse">
               NGỪNG HOẠT ĐỘNG
             </div>
           </div>
@@ -446,21 +440,21 @@ const StaffManager: React.FC<Props> = ({
                   <div key={perf.id} className="space-y-2 group/staff">
                     <div className="flex justify-between items-end">
                       <div>
-                        <span className="text-sm font-black text-slate-800 uppercase">
+                        <span className="text-sm font-normal text-slate-800 uppercase">
                           {perf.name}
                         </span>
-                        <p className="text-[10px] text-slate-400 font-bold">
+                        <p className="text-[10px] text-slate-400 font-normal">
                           Thực đạt: {formatNumber(perf.amount)}đ
                         </p>
                       </div>
                       <div className="text-right">
                         {perf.status === 'Elite' && (
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[9px] font-normal uppercase tracking-widest">
                             Elite Player
                           </span>
                         )}
                         {perf.status === 'Under' && (
-                          <span className="px-3 py-1 bg-rose-100 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          <span className="px-3 py-1 bg-rose-100 text-rose-600 rounded-lg text-[9px] font-normal uppercase tracking-widest">
                             Action Needed
                           </span>
                         )}
@@ -499,7 +493,7 @@ const StaffManager: React.FC<Props> = ({
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
                   Sổ Cái Hiệu Năng Nhân Sự
                 </h3>
-                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mt-1">
+                <p className="text-[10px] text-emerald-600 font-normal uppercase tracking-widest mt-1">
                   Lịch sử snapshot doanh số & thu nhập nhân sự theo tháng
                 </p>
               </div>
@@ -518,12 +512,12 @@ const StaffManager: React.FC<Props> = ({
                     <th className="px-8 py-5 text-center">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 tabular-nums text-[11px] font-bold">
+                <tbody className="divide-y divide-slate-100 tabular-nums text-[11px] font-normal">
                   {performanceLedger.length === 0 ? (
                     <tr>
                       <td
                         colSpan={7}
-                        className="py-20 text-center opacity-40 uppercase text-xs font-black tracking-widest text-slate-400 italic"
+                        className="py-20 text-center opacity-40 uppercase text-xs font-normal tracking-widest text-slate-400 italic"
                       >
                         Chưa có bản ghi hiệu năng. Hãy bấm "Chốt lương" để tạo snapshot.
                       </td>
@@ -552,7 +546,7 @@ const StaffManager: React.FC<Props> = ({
                           {pf.rank ? (
                             <div className="flex items-center justify-center gap-1">
                               <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                              <span className="font-black text-slate-900">#{pf.rank}</span>
+                              <span className="font-normal text-slate-900">#{pf.rank}</span>
                             </div>
                           ) : (
                             'N/A'
@@ -597,7 +591,7 @@ const StaffManager: React.FC<Props> = ({
               className="grid grid-cols-1 md:grid-cols-5 gap-8 relative z-10"
             >
               <div className="md:col-span-1 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">
                   Họ và tên
                 </label>
                 <input
@@ -605,18 +599,18 @@ const StaffManager: React.FC<Props> = ({
                   required
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field py-4 font-bold border-none bg-slate-50"
+                  className="input-field py-4 font-normal border-none bg-slate-50"
                   placeholder="Họ tên..."
                 />
               </div>
               <div className="md:col-span-1 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">
                   Chức vụ
                 </label>
                 <select
                   value={formData.position}
                   onChange={e => setFormData({ ...formData, position: e.target.value })}
-                  className="input-field py-4 font-bold border-none bg-slate-50 appearance-none"
+                  className="input-field py-4 font-normal border-none bg-slate-50 appearance-none"
                 >
                   <option value="Nhân viên">Nhân viên</option>
                   <option value="Quản lý">Quản lý</option>
@@ -624,24 +618,24 @@ const StaffManager: React.FC<Props> = ({
                 </select>
               </div>
               <div className="md:col-span-1 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">
                   Ngày vào làm
                 </label>
                 <input
                   type="date"
                   value={formData.joinDate}
                   onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
-                  className="input-field py-4 font-bold border-none bg-slate-50"
+                  className="input-field py-4 font-normal border-none bg-slate-50"
                 />
               </div>
               <div className="md:col-span-1 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">
                   Gán Nhóm Lương
                 </label>
                 <select
                   value={formData.assignedPolicyId}
                   onChange={e => setFormData({ ...formData, assignedPolicyId: e.target.value })}
-                  className="input-field py-4 font-bold border-none bg-slate-50 appearance-none"
+                  className="input-field py-4 font-normal border-none bg-slate-50 appearance-none"
                 >
                   <option value="">Tự động theo thâm niên</option>
                   {policies.map(p => (
@@ -654,7 +648,7 @@ const StaffManager: React.FC<Props> = ({
               <div className="flex items-end">
                 <button
                   type="submit"
-                  className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2"
+                  className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-normal text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2"
                 >
                   <Plus className="w-5 h-5" /> THÊM NHÂN SỰ
                 </button>
@@ -677,7 +671,7 @@ const StaffManager: React.FC<Props> = ({
               ))}
               {activeEmployees.length === 0 && (
                 <div className="col-span-full py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-200 text-center opacity-40">
-                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                  <p className="text-sm font-normal text-slate-400 uppercase tracking-widest">
                     Chưa có nhân sự đang làm việc
                   </p>
                 </div>
@@ -702,7 +696,7 @@ const StaffManager: React.FC<Props> = ({
             </button>
             <div className="flex flex-col md:flex-row items-center gap-8 mb-12 border-b border-slate-50 pb-10">
               <div
-                className={`w-24 h-24 bg-indigo-600 rounded-[2rem] flex items-center justify-center text-white text-4xl font-black shadow-xl overflow-hidden`}
+                className={`w-24 h-24 bg-indigo-600 rounded-[2rem] flex items-center justify-center text-white text-4xl font-normal shadow-xl overflow-hidden`}
               >
                 {editingEmployee.photoUrl ? (
                   <img
@@ -811,7 +805,7 @@ const StaffManager: React.FC<Props> = ({
               <div className="flex justify-end gap-4 pt-4 border-t border-slate-50">
                 <button
                   type="submit"
-                  className="bg-slate-900 hover:bg-black text-white px-12 py-5 rounded-2xl font-black text-xs shadow-xl flex items-center gap-3 uppercase tracking-widest"
+                  className="bg-slate-900 hover:bg-black text-white px-12 py-5 rounded-2xl font-normal text-xs shadow-xl flex items-center gap-3 uppercase tracking-widest"
                 >
                   <Save className="w-5 h-5" /> CẬP NHẬT HỒ SƠ
                 </button>

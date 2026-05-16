@@ -28,7 +28,7 @@ export const StrategyBadge: React.FC<StrategyBadgeProps> = ({ type, strategies }
   const strategy = strategies.find(s => s.name === type);
   const style = strategy ? STRATEGY_COLORS[strategy.color] : STRATEGY_COLORS['slate'];
   return (
-    <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full border w-fit uppercase tracking-tighter ${style.bg} ${style.text} ${style.border}`}>
+    <span className={`text-[8px] md:text-[9px] font-normal px-2 py-0.5 rounded-full border w-fit uppercase tracking-tighter ${style.bg} ${style.text} ${style.border}`}>
       {type}
     </span>
   );
@@ -38,11 +38,11 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
   <div className="w-full max-w-[550px] bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden text-[#050505]">
     <div className="p-4 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-xs border border-slate-100 shadow-sm overflow-hidden shrink-0">
+        <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-normal text-xs border border-slate-100 shadow-sm overflow-hidden shrink-0">
           {brandLogo ? <img src={brandLogo} className="w-full h-full object-cover" /> : "PS"}
         </div>
         <div className="flex flex-col">
-          <span className="text-[14px] font-bold leading-tight">Giày Dép Phúc Sang</span>
+          <span className="text-[14px] font-normal leading-tight">Giày Dép Phúc Sang</span>
           <div className="flex items-center gap-1 text-[12px] text-[#65676b] font-normal">
             <span>{post.date.split('-').reverse().join('/')}</span> • <Globe size={12}/>
           </div>
@@ -50,7 +50,7 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
       </div>
     </div>
     <div className="px-4 pb-3">
-      <h3 className="font-bold text-[15px] mb-1">{post.topic}</h3>
+      <h3 className="font-normal text-[15px] mb-1">{post.topic}</h3>
       <div className="text-[15px] whitespace-pre-wrap leading-snug">{post.caption}</div>
     </div>
     <div className="bg-slate-50 min-h-[300px] flex items-center justify-center overflow-hidden border-t border-slate-100 relative">
@@ -60,8 +60,8 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
         <div className="flex flex-col items-center justify-center text-center p-10 gap-4">
           <Camera size={60} className="text-slate-200" />
           <div>
-            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1 block">Gợi ý chụp ảnh</span>
-            <p className="text-xs text-slate-400 italic font-medium leading-relaxed max-w-[280px]">
+            <span className="text-[10px] font-normal text-indigo-600 uppercase tracking-widest mb-1 block">Gợi ý chụp ảnh</span>
+            <p className="text-xs text-slate-400 italic font-normal leading-relaxed max-w-[280px]">
               {post.imageInstruction}
             </p>
           </div>

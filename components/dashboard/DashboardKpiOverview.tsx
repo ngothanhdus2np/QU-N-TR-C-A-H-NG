@@ -44,10 +44,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <DollarSign className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               Net Revenue
             </span>
-            <div className="flex items-center justify-end text-emerald-500 gap-1 font-black text-xs mt-1">
+            <div className="flex items-center justify-end text-emerald-500 gap-1 font-normal text-xs mt-1">
               <ArrowUpRight className="w-3 h-3" />
               <span>
                 {prevInsights.rev > 0
@@ -61,11 +61,11 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
           Doanh thu
         </h4>
-        <p className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+        <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
           {insights.periodRev.toLocaleString()}
-          <span className="text-sm ml-1 text-slate-400 font-bold">đ</span>
+          <span className="text-sm ml-1 text-slate-400 font-normal">đ</span>
         </p>
-        <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest">
+        <p className="text-[9px] text-slate-400 mt-4 font-normal uppercase tracking-widest">
           Kỳ trước: {prevInsights.rev.toLocaleString()} đ
         </p>
       </div>
@@ -76,10 +76,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <ShoppingCart className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               COGS Ratio
             </span>
-            <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest block mt-1">
+            <span className="text-[10px] font-normal text-orange-500 uppercase tracking-widest block mt-1">
               {insights.periodRev > 0
                 ? ((insights.totalCogs / insights.periodRev) * 100).toFixed(1)
                 : 0}
@@ -90,9 +90,9 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
           Giá vốn (COGS)
         </h4>
-        <p className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+        <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
           {insights.totalCogs.toLocaleString()}
-          <span className="text-sm ml-1 text-slate-400 font-bold">đ</span>
+          <span className="text-sm ml-1 text-slate-400 font-normal">đ</span>
         </p>
         <div className="h-1 bg-slate-100 rounded-full mt-4 overflow-hidden">
           <div
@@ -110,10 +110,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Gauge className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               Gross Margin
             </span>
-            <div className="flex items-center justify-end text-indigo-500 gap-1 font-black text-xs mt-1">
+            <div className="flex items-center justify-end text-indigo-500 gap-1 font-normal text-xs mt-1">
               <span>
                 {insights.periodRev > 0
                   ? ((insights.periodGross / insights.periodRev) * 100).toFixed(1)
@@ -126,11 +126,11 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
           Lợi nhuận gộp
         </h4>
-        <p className="text-4xl font-black text-indigo-600 tracking-tighter leading-none">
+        <p className="text-4xl font-normal text-indigo-600 tracking-tighter leading-none">
           {insights.periodGross.toLocaleString()}
-          <span className="text-sm ml-1 opacity-50 font-bold">đ</span>
+          <span className="text-sm ml-1 opacity-50 font-normal">đ</span>
         </p>
-        <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest">
+        <p className="text-[9px] text-slate-400 mt-4 font-normal uppercase tracking-widest">
           Kỳ trước: {prevInsights.gross.toLocaleString()} đ
         </p>
       </div>
@@ -141,10 +141,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Wallet className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               OPEX Ratio
             </span>
-            <div className="flex items-center justify-end text-rose-500 gap-1 font-black text-xs mt-1">
+            <div className="flex items-center justify-end text-rose-500 gap-1 font-normal text-xs mt-1">
               <span>
                 {insights.periodRev > 0
                   ? ((insights.periodExp / insights.periodRev) * 100).toFixed(1)
@@ -157,11 +157,11 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
           Chi phí hoạt động
         </h4>
-        <p className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+        <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
           {insights.periodExp.toLocaleString()}
-          <span className="text-sm ml-1 text-slate-400 font-bold">đ</span>
+          <span className="text-sm ml-1 text-slate-400 font-normal">đ</span>
         </p>
-        <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest">
+        <p className="text-[9px] text-slate-400 mt-4 font-normal uppercase tracking-widest">
           Kỳ trước: {prevInsights.exp.toLocaleString()} đ
         </p>
       </div>
@@ -172,10 +172,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Activity className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               EBT Margin
             </span>
-            <div className="flex items-center justify-end text-blue-500 gap-1 font-black text-xs mt-1">
+            <div className="flex items-center justify-end text-blue-500 gap-1 font-normal text-xs mt-1">
               <span>
                 {insights.periodRev > 0
                   ? ((insights.periodProfit / insights.periodRev) * 100).toFixed(1)
@@ -188,11 +188,11 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
           Lợi nhuận trước thuế
         </h4>
-        <p className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+        <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
           {insights.periodProfit.toLocaleString()}
-          <span className="text-sm ml-1 text-slate-400 font-bold">đ</span>
+          <span className="text-sm ml-1 text-slate-400 font-normal">đ</span>
         </p>
-        <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest">
+        <p className="text-[9px] text-slate-400 mt-4 font-normal uppercase tracking-widest">
           Sức khỏe tài chính
         </p>
       </div>
@@ -203,10 +203,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <ShieldCheck className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
               Net Profit
             </span>
-            <div className="flex items-center justify-end text-teal-500 gap-1 font-black text-xs mt-1">
+            <div className="flex items-center justify-end text-teal-500 gap-1 font-normal text-xs mt-1">
               <ArrowUpRight className="w-3 h-3" />
               <span>
                 {prevInsights.profit !== 0
@@ -225,18 +225,18 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
           Lợi nhuận ròng
         </h4>
         <p
-          className={`text-4xl font-black tracking-tighter leading-none ${
+          className={`text-4xl font-normal tracking-tighter leading-none ${
             insights.periodProfit >= 0 ? 'text-teal-600' : 'text-rose-600'
           }`}
         >
           {insights.periodProfit.toLocaleString()}
-          <span className="text-sm ml-1 opacity-50 font-bold">đ</span>
+          <span className="text-sm ml-1 opacity-50 font-normal">đ</span>
         </p>
         <div className="flex items-center gap-1.5 mt-4">
           <div
             className={`w-2 h-2 rounded-full ${insights.periodProfit >= 0 ? 'bg-teal-500 animate-pulse' : 'bg-rose-500'}`}
           />
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">
+          <span className="text-[9px] font-normal text-slate-400 uppercase tracking-[0.1em]">
             {insights.periodProfit >= 0 ? 'Có lãi' : 'Đang lỗ'}
           </span>
         </div>
@@ -249,10 +249,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">
             Báo cáo P&L
           </h3>
-          <p className="text-xl font-black text-slate-900 mt-1">Kết quả Kinh doanh</p>
+          <p className="text-xl font-normal text-slate-900 mt-1">Kết quả Kinh doanh</p>
         </div>
         <div
-          className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider ${
+          className={`px-4 py-2 rounded-2xl text-xs font-normal uppercase tracking-wider ${
             insights.periodProfit >= 0 ? 'bg-teal-50 text-teal-700' : 'bg-rose-50 text-rose-700'
           }`}
         >
@@ -261,27 +261,27 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
       </div>
       <div className="flex flex-col md:flex-row items-stretch gap-2">
         <div className="flex-1 bg-emerald-50 rounded-2xl p-5">
-          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">
+          <p className="text-[9px] font-normal text-emerald-600 uppercase tracking-widest mb-2">
             Doanh thu
           </p>
-          <p className="text-2xl font-black text-emerald-700 tracking-tighter">
+          <p className="text-2xl font-normal text-emerald-700 tracking-tighter">
             {(insights.periodRev / 1e6).toFixed(1)}
-            <span className="text-sm font-bold ml-1">M đ</span>
+            <span className="text-sm font-normal ml-1">M đ</span>
           </p>
           <div className="mt-3 h-1 bg-emerald-200 rounded-full">
             <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
           </div>
         </div>
-        <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">
+        <div className="flex items-center justify-center text-slate-300 font-normal text-xl shrink-0 px-1">
           −
         </div>
         <div className="flex-1 bg-orange-50 rounded-2xl p-5">
-          <p className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-2">
+          <p className="text-[9px] font-normal text-orange-600 uppercase tracking-widest mb-2">
             Giá vốn (COGS)
           </p>
-          <p className="text-2xl font-black text-orange-700 tracking-tighter">
+          <p className="text-2xl font-normal text-orange-700 tracking-tighter">
             {(insights.totalCogs / 1e6).toFixed(1)}
-            <span className="text-sm font-bold ml-1">M đ</span>
+            <span className="text-sm font-normal ml-1">M đ</span>
           </p>
           <div className="mt-3 h-1 bg-orange-200 rounded-full">
             <div
@@ -292,16 +292,16 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">
+        <div className="flex items-center justify-center text-slate-300 font-normal text-xl shrink-0 px-1">
           −
         </div>
         <div className="flex-1 bg-rose-50 rounded-2xl p-5">
-          <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-2">
+          <p className="text-[9px] font-normal text-rose-600 uppercase tracking-widest mb-2">
             Chi phí OPEX
           </p>
-          <p className="text-2xl font-black text-rose-700 tracking-tighter">
+          <p className="text-2xl font-normal text-rose-700 tracking-tighter">
             {(insights.nonPayrollExp / 1e6).toFixed(1)}
-            <span className="text-sm font-bold ml-1">M đ</span>
+            <span className="text-sm font-normal ml-1">M đ</span>
           </p>
           <div className="mt-3 h-1 bg-rose-200 rounded-full">
             <div
@@ -312,16 +312,16 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">
+        <div className="flex items-center justify-center text-slate-300 font-normal text-xl shrink-0 px-1">
           −
         </div>
         <div className="flex-1 bg-violet-50 rounded-2xl p-5">
-          <p className="text-[9px] font-black text-violet-600 uppercase tracking-widest mb-2">
+          <p className="text-[9px] font-normal text-violet-600 uppercase tracking-widest mb-2">
             Lương & Thưởng
           </p>
-          <p className="text-2xl font-black text-violet-700 tracking-tighter">
+          <p className="text-2xl font-normal text-violet-700 tracking-tighter">
             {(insights.payrollTotal / 1e6).toFixed(1)}
-            <span className="text-sm font-bold ml-1">M đ</span>
+            <span className="text-sm font-normal ml-1">M đ</span>
           </p>
           <div className="mt-3 h-1 bg-violet-200 rounded-full">
             <div
@@ -332,33 +332,33 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center justify-center text-slate-300 font-black text-xl shrink-0 px-1">
+        <div className="flex items-center justify-center text-slate-300 font-normal text-xl shrink-0 px-1">
           =
         </div>
         <div
           className={`flex-1 rounded-2xl p-5 ${insights.periodProfit >= 0 ? 'bg-teal-50' : 'bg-rose-100'}`}
         >
           <p
-            className={`text-[9px] font-black uppercase tracking-widest mb-2 ${
+            className={`text-[9px] font-normal uppercase tracking-widest mb-2 ${
               insights.periodProfit >= 0 ? 'text-teal-600' : 'text-rose-600'
             }`}
           >
             Lợi nhuận ròng
           </p>
           <p
-            className={`text-2xl font-black tracking-tighter ${
+            className={`text-2xl font-normal tracking-tighter ${
               insights.periodProfit >= 0 ? 'text-teal-700' : 'text-rose-700'
             }`}
           >
             {(insights.periodProfit / 1e6).toFixed(1)}
-            <span className="text-sm font-bold ml-1">M đ</span>
+            <span className="text-sm font-normal ml-1">M đ</span>
           </p>
           <div className="mt-3 flex items-center gap-1.5">
             <div
               className={`w-2 h-2 rounded-full ${insights.periodProfit >= 0 ? 'bg-teal-500 animate-pulse' : 'bg-rose-500'}`}
             />
             <span
-              className={`text-[9px] font-black uppercase tracking-wider ${
+              className={`text-[9px] font-normal uppercase tracking-wider ${
                 insights.periodProfit >= 0 ? 'text-teal-600' : 'text-rose-600'
               }`}
             >

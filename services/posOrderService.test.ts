@@ -65,12 +65,60 @@ describe('posOrderService', () => {
         grossProfit: 50000,
       }),
     ]);
-    expect(pushBatch).toHaveBeenCalledWith('inventoryTransactions', [
+    expect(updateSurgical).toHaveBeenCalledWith([
+      expect.objectContaining({ key: 'posProducts' }),
       expect.objectContaining({
-        type: 'Sale',
-        referenceId: 'order-1',
-        items: [expect.objectContaining({ previousStock: 10, newStock: 8 })],
+        key: 'inventoryTransactions',
+        item: expect.objectContaining({
+          type: 'Sale',
+          referenceId: 'order-1',
+          items: [expect.objectContaining({ previousStock: 10, newStock: 8 })],
+        }),
       }),
+    ]);
+  });
+
+  it('blocks checkout when stock is insufficient by default', async () => {
+    const pushBatch = vi.fn().mockResolvedValue(undefined);
+    const updateSurgical = vi.fn().mockResolvedValue(undefined);
+    const lowStockData = {
+      ...baseData,
+      posProducts: [{ ...baseProduct, stock: 1 }],
+    } as AppData;
+
+    await expect(processPlaceOrder({
+      data: lowStockData,
+      order: baseOrder,
+      updatedProducts: [{ ...baseProduct, stock: -1 }],
+      pushBatch,
+      updateSurgical,
+    })).rejects.toThrow('Không đủ tồn kho');
+  });
+
+  it('allows negative stock when out-of-stock sales are enabled', async () => {
+    const pushBatch = vi.fn().mockResolvedValue(undefined);
+    const updateSurgical = vi.fn().mockResolvedValue(undefined);
+    const lowStockData = {
+      ...baseData,
+      posProducts: [{ ...baseProduct, stock: 1 }],
+    } as AppData;
+    const updatedProducts = [{ ...baseProduct, stock: -1 }];
+
+    await processPlaceOrder({
+      data: lowStockData,
+      order: baseOrder,
+      updatedProducts,
+      allowSellOutOfStock: true,
+      pushBatch,
+      updateSurgical,
+    });
+
+    expect(updateSurgical).toHaveBeenCalledWith([
+      expect.objectContaining({
+        key: 'posProducts',
+        item: expect.objectContaining({ stock: -1 }),
+      }),
+      expect.objectContaining({ key: 'inventoryTransactions' }),
     ]);
   });
 
@@ -90,11 +138,15 @@ describe('posOrderService', () => {
       updateSurgical,
     });
 
-    expect(pushBatch).toHaveBeenCalledWith('inventoryTransactions', [
+    expect(updateSurgical).toHaveBeenCalledWith([
+      expect.objectContaining({ key: 'posProducts' }),
       expect.objectContaining({
-        type: 'Return',
-        referenceId: 'return-1',
-        items: [expect.objectContaining({ previousStock: 10, newStock: 11 })],
+        key: 'inventoryTransactions',
+        item: expect.objectContaining({
+          type: 'Return',
+          referenceId: 'return-1',
+          items: [expect.objectContaining({ previousStock: 10, newStock: 11 })],
+        }),
       }),
     ]);
   });

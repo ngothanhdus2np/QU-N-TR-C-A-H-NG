@@ -1,8 +1,15 @@
 import React from 'react';
 import { AppDataSurgicalUpdate, POSProduct } from '../../types';
-import { generateId, generateProductVariants, getNextSKUNumber } from '../../businessLogic';
+import {
+  AUTO_SKU_PLACEHOLDER,
+  generateId,
+  generateProductVariants,
+  getNextSKUNumber,
+  isAutoSkuValue,
+  resolveProductSku,
+} from '../../src/lib';
 
-type GoodsTab = 'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form';
+type GoodsTab = 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty' | 'audit_form' | 'product_form';
 type ProductFormTab = 'info' | 'desc' | 'warranty' | 'units' | 'related' | 'channels';
 type CreateModalTab = 'info' | 'desc' | 'warranty';
 type OpenInputModal = (config: {
@@ -37,6 +44,16 @@ const emptyProductForm = (sku = ''): Partial<POSProduct> => ({
   units: [],
   attributes: []
 });
+
+const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
+
+const getGoodsBarcodeManualMode = () => {
+  try {
+    return localStorage.getItem(GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
 
 interface UseGoodsProductEditorArgs {
   products: POSProduct[];
@@ -79,7 +96,7 @@ export const useGoodsProductEditor = ({
   const openCreateProduct = () => {
     setShowCreateModal(true);
     setCreateModalTab('info');
-    setFormData(emptyProductForm('Tự động'));
+    setFormData(emptyProductForm(getGoodsBarcodeManualMode() ? '' : AUTO_SKU_PLACEHOLDER));
   };
 
   const openProductEditor = (product: POSProduct) => {
@@ -97,6 +114,40 @@ export const useGoodsProductEditor = ({
 
     const hasAttributes = formData.attributes && formData.attributes.length > 0 &&
       formData.attributes.some(attr => attr.values && attr.values.length > 0);
+    const normalizedSku = String(formData.sku || '').trim();
+    const normalizedBarcode = String(formData.barcode || '').trim();
+    const normalizedCategoryId = String(formData.categoryId || '').trim();
+    const barcodeManualMode = getGoodsBarcodeManualMode();
+
+    if (!normalizedCategoryId) {
+      showToast('Vui lòng chọn hoặc nhập nhóm hàng!', 'error');
+      return;
+    }
+
+    if (barcodeManualMode && isAutoSkuValue(normalizedSku)) {
+      showToast('Vui lòng nhập hoặc quét mã hàng bạn đang có!', 'error');
+      return;
+    }
+
+    const duplicateSku = !isAutoSkuValue(normalizedSku)
+      ? products.find(
+          product => product.sku === normalizedSku && product.id !== editingProduct?.id
+        )
+      : null;
+    if (duplicateSku) {
+      showToast(`Mã hàng ${normalizedSku} đã tồn tại ở sản phẩm "${duplicateSku.name}".`, 'error');
+      return;
+    }
+
+    const duplicateBarcode = normalizedBarcode
+      ? products.find(
+          product => product.barcode === normalizedBarcode && product.id !== editingProduct?.id
+        )
+      : null;
+    if (duplicateBarcode) {
+      showToast(`Mã vạch ${normalizedBarcode} đã tồn tại ở sản phẩm "${duplicateBarcode.name}".`, 'error');
+      return;
+    }
 
     if (editingProduct) {
       if (onUpdateSurgical) {
@@ -110,7 +161,7 @@ export const useGoodsProductEditor = ({
         id: generateId(),
         sku: '',
         status: 'Active',
-        categoryId: formData.categoryId || 'Chưa phân loại',
+        categoryId: normalizedCategoryId,
         createdAt: new Date().toISOString(),
         isParent: true,
         variantCount: 0
@@ -131,16 +182,12 @@ export const useGoodsProductEditor = ({
 
       showToast(`Đã tạo sản phẩm với ${variantCount} biến thể!`);
     } else {
-      if (!formData.sku) {
-        showToast('Vui lòng nhập mã hàng!', 'error');
-        return;
-      }
-
       const newProduct: POSProduct = {
         ...formData,
         id: generateId(),
+        sku: resolveProductSku(formData.sku, products),
         status: 'Active',
-        categoryId: formData.categoryId || 'Chưa phân loại',
+        categoryId: normalizedCategoryId,
         createdAt: new Date().toISOString()
       } as POSProduct;
 
@@ -157,6 +204,7 @@ export const useGoodsProductEditor = ({
 
     if (isQuickAddMode) {
       setShowProductModal(false);
+      setShowCreateModal(false);
       setIsQuickAddMode(false);
     } else if (!stayOnPage) {
       setActiveTab('goods');
@@ -173,9 +221,10 @@ export const useGoodsProductEditor = ({
 
   const handleOpenQuickAddProduct = () => {
     setEditingProduct(null);
-    setFormData(emptyProductForm(`HH-${Date.now().toString().slice(-6)}`));
+    setFormData(emptyProductForm(getGoodsBarcodeManualMode() ? '' : AUTO_SKU_PLACEHOLDER));
     setIsQuickAddMode(true);
-    setShowProductModal(true);
+    setCreateModalTab('info');
+    setShowCreateModal(true);
   };
 
   const addBaseUnit = () => {

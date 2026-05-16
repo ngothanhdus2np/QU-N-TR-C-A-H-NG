@@ -1,15 +1,16 @@
 import React from 'react';
 import { Package, Plus } from 'lucide-react';
-import { POSProduct } from '../../types';
+import { InventoryTransaction, POSProduct } from '../../types';
 import { GoodsProductDetailPanel } from './GoodsProductDetailPanel';
 import { ProductRow, VariantRow } from './GoodsProductRow';
 
 interface GoodsProductTableBodyProps {
   currentProducts: POSProduct[];
   variantsByParentId: Map<string, POSProduct[]>;
+  transactions?: InventoryTransaction[];
   colCount: number;
-  selectedIds: string[];
-  favoriteIds: string[];
+  selectedIdSet: Set<string>;
+  favoriteIdSet: Set<string>;
   expandedParents: Set<string>;
   viewingProduct: POSProduct | null;
   activeFormTab: string;
@@ -25,14 +26,19 @@ interface GoodsProductTableBodyProps {
   onAddMoreVariants: (parentId: string) => void;
   onAddUnitInView: () => void;
   onAddAttributeInView: () => void;
+  onPrintLabel: (product: POSProduct) => void;
+  onAddSameType: (product: POSProduct) => void;
+  onPurchaseProduct: (product: POSProduct) => void;
+  onStopBusiness: (product: POSProduct) => void;
 }
 
 const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
   currentProducts,
   variantsByParentId,
+  transactions,
   colCount,
-  selectedIds,
-  favoriteIds,
+  selectedIdSet,
+  favoriteIdSet,
   expandedParents,
   viewingProduct,
   activeFormTab,
@@ -48,6 +54,10 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
   onAddMoreVariants,
   onAddUnitInView,
   onAddAttributeInView,
+  onPrintLabel,
+  onAddSameType,
+  onPurchaseProduct,
+  onStopBusiness,
 }) => {
   return (
     <tbody className="divide-y divide-slate-50">
@@ -55,7 +65,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
         <tr>
           <td colSpan={colCount} className="py-20 text-center text-slate-400">
             <Package className="h-10 w-10 mx-auto mb-3 opacity-10" />
-            <p className="font-bold text-sm">Không có dữ liệu</p>
+            <p className="font-normal text-sm">Không có dữ liệu</p>
             <p className="text-xs mt-1">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
           </td>
         </tr>
@@ -70,8 +80,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
             <React.Fragment key={product.id}>
               <ProductRow
                 product={product}
-                isSelected={selectedIds.includes(product.id)}
-                isFavorite={favoriteIds.includes(product.id)}
+                isSelected={selectedIdSet.has(product.id)}
+                isFavorite={favoriteIdSet.has(product.id)}
                 onSelect={onSelect}
                 onToggleFavorite={onToggleFavorite}
                 onEdit={onOpenEditor}
@@ -86,8 +96,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                   <React.Fragment key={variant.id}>
                     <VariantRow
                       variant={variant}
-                      isSelected={selectedIds.includes(variant.id)}
-                      isFavorite={favoriteIds.includes(variant.id)}
+                      isSelected={selectedIdSet.has(variant.id)}
+                      isFavorite={favoriteIdSet.has(variant.id)}
                       onSelect={onSelect}
                       onToggleFavorite={onToggleFavorite}
                       onEdit={onOpenEditor}
@@ -100,12 +110,17 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                         <td colSpan={colCount} className="p-0">
                           <GoodsProductDetailPanel
                             product={viewingProduct}
+                            transactions={transactions}
                             activeTab={activeFormTab as any}
                             onTabChange={tab => onChangeDetailTab(tab)}
                             deleteConfirmText="Bạn có chắc muốn xóa biến thể này?"
                             onDelete={() => onDeleteViewed(viewingProduct.id)}
                             onEdit={() => onEditViewed(viewingProduct)}
                             onClose={() => onToggleView(viewingProduct)}
+                            onPrintLabel={onPrintLabel}
+                            onAddSameType={onAddSameType}
+                            onPurchaseProduct={onPurchaseProduct}
+                            onStopBusiness={onStopBusiness}
                           />
                         </td>
                       </tr>
@@ -121,7 +136,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                         e.stopPropagation();
                         onAddMoreVariants(product.id);
                       }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-2 ml-auto"
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-normal hover:bg-indigo-700 transition-colors flex items-center gap-2 ml-auto"
                     >
                       <Plus className="h-4 w-4" />
                       Thêm hàng hóa cùng loại
@@ -135,6 +150,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                   <td colSpan={colCount} className="p-0">
                     <GoodsProductDetailPanel
                       product={viewingProduct}
+                      transactions={transactions}
                       activeTab={activeFormTab as any}
                       onTabChange={tab => onChangeDetailTab(tab)}
                       deleteConfirmText="Bạn có chắc muốn xóa sản phẩm này?"
@@ -145,6 +161,10 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                       onDelete={() => onDeleteViewed(viewingProduct.id)}
                       onEdit={() => onEditViewed(viewingProduct)}
                       onClose={() => onToggleView(viewingProduct)}
+                      onPrintLabel={onPrintLabel}
+                      onAddSameType={onAddSameType}
+                      onPurchaseProduct={onPurchaseProduct}
+                      onStopBusiness={onStopBusiness}
                     />
                   </td>
                 </tr>

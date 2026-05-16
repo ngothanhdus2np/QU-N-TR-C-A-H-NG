@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { generateId } from '../../businessLogic';
+import { generateId } from '../../src/lib';
 import { POSProduct } from '../../types';
-import type { InvoiceTab } from './POSComputer';
+import type { InvoiceTab } from './types';
 
 interface UsePOSReturnFlowParams {
   activeTabId: string;

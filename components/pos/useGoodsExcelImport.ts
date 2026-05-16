@@ -1,7 +1,7 @@
 import React from 'react';
 import * as XLSX from 'xlsx';
 import { AppData, POSProduct } from '../../types';
-import { generateId } from '../../businessLogic';
+import { formatAutoSku, generateId, getNextSKUNumber, isAutoSkuValue } from '../../src/lib';
 import { ImportStatus } from './GoodsImportExport';
 
 interface UseGoodsExcelImportArgs {
@@ -62,8 +62,11 @@ export const useGoodsExcelImport = ({
           });
         } else {
           const data = XLSX.utils.sheet_to_json(ws) as any[];
+          const nextSkuNumber = getNextSKUNumber(products);
+          const usedSkus = new Set(products.map(product => product.sku).filter(Boolean));
+          let autoSkuOffset = 0;
           const importedProducts: POSProduct[] = data
-            .map((item: any) => {
+            .map((item: any, index) => {
               const findKey = (aliases: string[]) => {
                 const keys = Object.keys(item);
                 for (const alias of aliases) {
@@ -74,10 +77,19 @@ export const useGoodsExcelImport = ({
                 }
                 return null;
               };
+              const importedSku = String(findKey(['Mã hàng', 'SKU', 'Product Code']) || '').trim();
+              let resolvedSku = importedSku;
+              if (isAutoSkuValue(importedSku) || usedSkus.has(importedSku)) {
+                do {
+                  resolvedSku = formatAutoSku(nextSkuNumber + autoSkuOffset);
+                  autoSkuOffset += 1;
+                } while (usedSkus.has(resolvedSku));
+              }
+              usedSkus.add(resolvedSku);
               return {
                 id: generateId(),
                 name: findKey(['Tên sản phẩm', 'Tên hàng', 'Name']) || '',
-                sku: String(findKey(['Mã hàng', 'SKU', 'Product Code']) || `SKU-${Date.now()}`),
+                sku: resolvedSku,
                 categoryId: findKey(['Nhóm hàng', 'Category']) || 'default',
                 importPrice: Number(findKey(['Giá vốn', 'Cost']) || 0),
                 salePrice: Number(findKey(['Giá bán', 'Price']) || 0),
@@ -116,7 +128,7 @@ export const useGoodsExcelImport = ({
     const ws = XLSX.utils.json_to_sheet([
       {
         'Tên sản phẩm': 'Mẫu',
-        'Mã hàng': 'SKU001',
+        'Mã hàng': 'SP000001',
         'Giá vốn': 50000,
         'Giá bán': 100000,
         'Tồn kho': 10,

@@ -388,16 +388,16 @@ const ExpenseManager: React.FC<Props> = ({
             <h5 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-8">Chỉnh sửa Danh mục</h5>
             <form onSubmit={handleEditCategory} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tên hạng mục</label>
-                <input autoFocus type="text" required value={editingCategory.name} onChange={e => setEditingCategory({...editingCategory, name: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none" />
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Tên hạng mục</label>
+                <input autoFocus type="text" required value={editingCategory.name} onChange={e => setEditingCategory({...editingCategory, name: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-normal outline-none" />
               </div>
               
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Thuộc nhóm cha</label>
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Thuộc nhóm cha</label>
                 <select 
                   value={editingCategory.parentId || ''} 
                   onChange={e => setEditingCategory({...editingCategory, parentId: e.target.value || undefined})}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none appearance-none"
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-normal outline-none appearance-none"
                 >
                   <option value="">-- Nhóm Cha Cao Nhất (Cấp 1) --</option>
                   {categories
@@ -418,7 +418,7 @@ const ExpenseManager: React.FC<Props> = ({
                 </select>
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg">LƯU THAY ĐỔI</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-normal uppercase text-xs shadow-lg">LƯU THAY ĐỔI</button>
             </form>
           </div>
         </div>
@@ -438,16 +438,16 @@ const ExpenseManager: React.FC<Props> = ({
                }
             }} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tên tiểu mục</label>
-                <input autoFocus type="text" required placeholder="Tên tiểu mục..." value={manualChildName} onChange={e => setManualChildName(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none" />
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Tên tiểu mục</label>
+                <input autoFocus type="text" required placeholder="Tên tiểu mục..." value={manualChildName} onChange={e => setManualChildName(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-normal outline-none" />
               </div>
               
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Thuộc nhóm cha</label>
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Thuộc nhóm cha</label>
                 <select 
                   value={activeParentId} 
                   onChange={e => setActiveParentId(e.target.value)}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none appearance-none"
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-normal outline-none appearance-none"
                 >
                   {/* Show all potential Level 2 parents (those that have a Level 1 parent) */}
                   {categories.filter(c => c.parentId && parentCategories.some(p => p.id === c.parentId)).map(p => (
@@ -462,7 +462,7 @@ const ExpenseManager: React.FC<Props> = ({
                 </select>
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg">XÁC NHẬN THÊM</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-normal uppercase text-xs shadow-lg">XÁC NHẬN THÊM</button>
             </form>
           </div>
         </div>
@@ -483,16 +483,16 @@ const ExpenseManager: React.FC<Props> = ({
               }
             }} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tên nhóm</label>
-                <input autoFocus type="text" required placeholder="Tên Nhóm..." value={bottomParentName} onChange={e => setBottomParentName(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none" />
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Tên nhóm</label>
+                <input autoFocus type="text" required placeholder="Tên Nhóm..." value={bottomParentName} onChange={e => setBottomParentName(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-normal outline-none" />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Thuộc phân loại (Cấp 1)</label>
+                <label className="text-[10px] font-normal text-slate-400 uppercase ml-1">Thuộc phân loại (Cấp 1)</label>
                 <select 
                   value={bottomParentId || ''} 
                   onChange={e => setBottomParentId(e.target.value || undefined)}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none appearance-none"
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-normal outline-none appearance-none"
                 >
                   <option value="">-- Nhóm Cha Cao Nhất (Cấp 1) --</option>
                   {parentCategories.map(p => (
@@ -501,7 +501,7 @@ const ExpenseManager: React.FC<Props> = ({
                 </select>
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg">XÁC NHẬN THÊM</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-normal uppercase text-xs shadow-lg">XÁC NHẬN THÊM</button>
             </form>
           </div>
         </div>
@@ -525,18 +525,18 @@ const ExpenseManager: React.FC<Props> = ({
                 <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-6 group hover:border-indigo-200 transition-all">
                   <div className="flex-1 flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Hạng mục cũ</p>
-                      <span className="text-xs font-bold text-rose-500 line-through">{res.duplicateName}</span>
+                      <p className="text-[9px] font-normal text-slate-400 uppercase">Hạng mục cũ</p>
+                      <span className="text-xs font-normal text-rose-500 line-through">{res.duplicateName}</span>
                     </div>
                     <ArrowRight className="w-4 h-4 text-slate-300" />
                     <div className="text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Hạng mục gốc</p>
-                      <span className="text-xs font-bold text-emerald-600">{res.originalName}</span>
+                      <p className="text-[9px] font-normal text-slate-400 uppercase">Hạng mục gốc</p>
+                      <span className="text-xs font-normal text-emerald-600">{res.originalName}</span>
                     </div>
                   </div>
                   <button 
                     onClick={() => handleMergeCategories(res.originalId, res.duplicateId, res.originalName, res.duplicateName)}
-                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
+                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-normal text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
                   >
                     Gộp ngay
                   </button>
@@ -545,7 +545,7 @@ const ExpenseManager: React.FC<Props> = ({
             </div>
             
             <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-              <p className="text-[10px] font-bold text-slate-400 italic">* Việc gộp sẽ cập nhật toàn bộ Sổ cái và xóa hạng mục trùng lặp.</p>
+              <p className="text-[10px] font-normal text-slate-400 italic">* Việc gộp sẽ cập nhật toàn bộ Sổ cái và xóa hạng mục trùng lặp.</p>
             </div>
           </div>
         </div>

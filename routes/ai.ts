@@ -1,4 +1,4 @@
-import { Router, Request } from 'express';
+import { Router, Request, RequestHandler } from 'express';
 import { callClaude, callClaudeWithFile, callClaudeChat } from '../services/agents/claudeClient';
 import { CFO_TOOLS, buildAgentSystem } from '../services/agents/cfoAgent';
 
@@ -25,6 +25,8 @@ const getErrorMessage = (error: unknown): string => {
   return 'AI service error';
 };
 
+const AI_SERVICE_ERROR = 'AI service error';
+
 // Dọn map mỗi 5 phút để tránh memory leak
 setInterval(() => {
   const now = Date.now();
@@ -33,8 +35,10 @@ setInterval(() => {
   }
 }, 5 * 60_000);
 
-export function createAiRouter(): Router {
+export function createAiRouter(requireAuth: RequestHandler): Router {
   const router = Router();
+
+  router.use('/api/ai', requireAuth);
 
   // Rate limit mặc định: 10 req/phút cho các endpoint phân tích haiku
   // Rate limit chặt hơn: 5 req/phút cho các endpoint dùng sonnet hoặc upload file
@@ -62,7 +66,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /executive-briefing]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -84,7 +88,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /promotion-analysis]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -106,7 +110,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /product-group-analysis]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -128,7 +132,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /revenue-analysis]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -150,7 +154,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /expense-classify]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -172,7 +176,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /expense-scan]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -200,7 +204,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /knowledge-ocr]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -226,7 +230,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /marketing-monthly-advice]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -252,7 +256,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /marketing-content-plan]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 
@@ -271,7 +275,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /test-connection]', message);
-      res.status(500).json({ ok: false, error: message || 'Claude API không phản hồi' });
+      res.status(500).json({ ok: false, error: 'Claude API không phản hồi' });
     }
   });
 
@@ -326,7 +330,7 @@ export function createAiRouter(): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /chat]', message);
-      res.status(500).json({ error: message || 'AI service error' });
+      res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
 

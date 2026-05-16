@@ -1,14 +1,16 @@
 import React from 'react';
 import {
-  ArrowLeft, ChevronRight, Edit2, FileText, Grid3X3,
+  ArrowLeft, Edit2, FileText, Grid3X3,
   Image as ImageIcon, Info, Package, Plus, Printer, X
 } from 'lucide-react';
-import { POSProduct } from '../../types';
+import { POSProduct, ProductGroup } from '../../types';
+import ProductGroupTreePicker from '../shared/ProductGroupTreePicker';
 
 type ProductFormTab = 'info' | 'desc' | 'warranty' | 'units' | 'related' | 'channels';
 
 interface GoodsLegacyProductFormViewProps {
   formData: Partial<POSProduct>;
+  productGroups: ProductGroup[];
   setFormData: React.Dispatch<React.SetStateAction<Partial<POSProduct>>>;
   editingProduct: POSProduct | null;
   activeFormTab: ProductFormTab;
@@ -29,6 +31,7 @@ const TABS: { id: ProductFormTab; label: string; icon: React.ComponentType<any> 
 
 export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProps> = ({
   formData,
+  productGroups,
   setFormData,
   editingProduct,
   activeFormTab,
@@ -49,9 +52,9 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
               <ImageIcon className="h-8 w-8 text-slate-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">{formData.name || 'Sản phẩm mới'}</h1>
+              <h1 className="text-xl font-normal text-slate-900">{formData.name || 'Sản phẩm mới'}</h1>
               <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                <span>Nhóm hàng: <span className="font-semibold">{formData.categoryId || 'Chưa phân loại'}</span></span>
+                <span>Nhóm hàng: <span className="font-normal">{formData.categoryId || 'Chưa phân loại'}</span></span>
                 <span className="flex items-center gap-1">
                   <span className={`inline-block w-2 h-2 rounded-full ${formData.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
                   {formData.status === 'Active' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
@@ -61,23 +64,23 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
+          <button onClick={onBack} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
             <X className="h-4 w-4" />
             Xóa
           </button>
-          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
+          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Sao chép
           </button>
-          <button onClick={onSave} className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-2">
+          <button onClick={onSave} className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-normal hover:bg-indigo-700 transition-colors flex items-center gap-2">
             <Edit2 className="h-4 w-4" />
             Chỉnh sửa
           </button>
-          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
+          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2">
             <Printer className="h-4 w-4" />
             In tem mã
           </button>
-          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+          <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors">
             <span className="text-lg">...</span>
           </button>
         </div>
@@ -90,7 +93,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
           <button
             key={tab.id}
             onClick={() => setActiveFormTab(tab.id)}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-normal border-b-2 transition-colors ${
               activeFormTab === tab.id
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -110,12 +113,12 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
               <div className="w-32 h-32 bg-slate-100 rounded-lg flex items-center justify-center border-2 border-dashed border-slate-300">
                 <div className="text-center">
                   <ImageIcon className="h-8 w-8 text-slate-400 mx-auto mb-1" />
-                  <button className="text-xs text-indigo-600 font-semibold hover:underline">Xem phần tích</button>
+                  <button className="text-xs text-indigo-600 font-normal hover:underline">Xem phần tích</button>
                 </div>
               </div>
               <div className="flex-1 space-y-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Tên hàng hóa</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Tên hàng hóa</label>
                   <input
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                     value={formData.name}
@@ -125,19 +128,19 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-2 block">Nhóm hàng</label>
-                    <div className="relative">
-                      <input
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
-                        value={formData.categoryId}
-                        onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
-                        placeholder="Chọn nhóm hàng"
-                      />
-                      <ChevronRight className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 rotate-90" />
-                    </div>
+                    <label className="text-sm font-normal text-slate-700 mb-2 block">Nhóm hàng</label>
+                    <ProductGroupTreePicker
+                      groups={productGroups}
+                      selectedPaths={formData.categoryPath || formData.categoryId ? [formData.categoryPath || formData.categoryId || ''] : []}
+                      onSelectionChange={paths => {
+                        const categoryPath = paths[paths.length - 1] || '';
+                        setFormData({ ...formData, categoryId: categoryPath, categoryPath });
+                      }}
+                      placeholder="Chọn nhóm hàng"
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-2 block">Hàng hóa thương</label>
+                    <label className="text-sm font-normal text-slate-700 mb-2 block">Hàng hóa thương</label>
                     <div className="flex items-center gap-2">
                       <input type="checkbox" className="rounded border-slate-300" />
                       <span className="text-sm text-slate-600">Bán trực tiếp</span>
@@ -154,15 +157,19 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
             <div className="space-y-6">
               <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Mã hàng</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Mã hàng</label>
                   <input
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:border-indigo-500"
                     value={formData.sku}
                     onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                    placeholder="Tự động"
                   />
+                  <p className="mt-1 text-[11px] font-normal text-slate-400">
+                    Để trống hoặc nhập “Tự động” để hệ thống cấp mã theo chuẩn SP000001.
+                  </p>
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Giá bán</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Giá bán</label>
                   <input
                     type="number"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-right focus:outline-none focus:border-indigo-500"
@@ -171,7 +178,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Thương hiệu</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Thương hiệu</label>
                   <input
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                     value={formData.brand}
@@ -191,7 +198,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
               <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-2 block">Tồn kho</label>
+                    <label className="text-sm font-normal text-slate-700 mb-2 block">Tồn kho</label>
                     <input
                       type="number"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center focus:outline-none focus:border-indigo-500"
@@ -201,7 +208,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-2 block">Định mức tồn</label>
+                    <label className="text-sm font-normal text-slate-700 mb-2 block">Định mức tồn</label>
                     <input
                       type="number"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center focus:outline-none focus:border-indigo-500"
@@ -215,7 +222,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Giá vốn</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Giá vốn</label>
                   <input
                     type="number"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-right focus:outline-none focus:border-indigo-500"
@@ -224,7 +231,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Vị trí</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Vị trí</label>
                   <input
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                     value={formData.location}
@@ -233,7 +240,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Trọng lượng</label>
+                  <label className="text-sm font-normal text-slate-700 mb-2 block">Trọng lượng</label>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -257,7 +264,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <button className="text-sm text-indigo-600 font-semibold hover:underline flex items-center gap-1">
+            <button className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
               <Plus className="h-4 w-4" />
               Thêm đơn vị tính
             </button>
@@ -268,7 +275,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
       {activeFormTab === 'desc' && (
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <label className="text-sm font-semibold text-slate-700 mb-2 block">Mô tả chi tiết</label>
+            <label className="text-sm font-normal text-slate-700 mb-2 block">Mô tả chi tiết</label>
             <textarea
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 min-h-[200px]"
               value={formData.description}
@@ -282,7 +289,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
       {activeFormTab === 'warranty' && (
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <label className="text-sm font-semibold text-slate-700 mb-2 block">Thông tin bảo hành</label>
+            <label className="text-sm font-normal text-slate-700 mb-2 block">Thông tin bảo hành</label>
             <textarea
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 min-h-[150px]"
               value={formData.warranty}
@@ -300,7 +307,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
               <h3 className="text-sm font-bold text-slate-900">Đơn vị tính quy đổi</h3>
               <button
                 onClick={onAddConversionUnit}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-normal hover:bg-indigo-700 transition-colors flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
                 Thêm đơn vị
@@ -309,9 +316,9 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
             <div className="space-y-2">
               {(formData.units || []).map((unit) => (
                 <div key={unit.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
-                  <span className="text-sm font-semibold text-slate-700 flex-1">{unit.name}</span>
+                  <span className="text-sm font-normal text-slate-700 flex-1">{unit.name}</span>
                   <span className="text-sm text-slate-500">Hệ số: {unit.factor}</span>
-                  <span className="text-sm text-slate-700 font-semibold">{unit.price.toLocaleString()}đ</span>
+                  <span className="text-sm text-slate-700 font-normal">{unit.price.toLocaleString()}đ</span>
                 </div>
               ))}
               {(!formData.units || formData.units.length === 0) && (

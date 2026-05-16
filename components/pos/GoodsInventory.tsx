@@ -26,6 +26,8 @@ import { useGoodsAudit } from './useGoodsAudit';
 import { useGoodsVariantWorkflow } from './useGoodsVariantWorkflow';
 import { useGoodsSelection } from './useGoodsSelection';
 import { useGoodsProductEditor } from './useGoodsProductEditor';
+import { GoodsPriceSetupModal } from './GoodsPriceSetupModal';
+import { GoodsWarrantyMaintenancePage } from './GoodsWarrantyMaintenancePage';
 
 interface GoodsInventoryProps {
   products: POSProduct[];
@@ -662,6 +664,21 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         );
       case 'kho':
         return <GoodsKhoHistory transactions={transactions} />;
+      case 'pricing':
+        return (
+          <GoodsPriceSetupModal
+            isOpen={true}
+            products={products}
+            productGroups={productGroups}
+            currentProduct={{}}
+            editingProduct={null}
+            mode="page"
+            onClose={() => setActiveTab('goods')}
+            onApplyPrice={() => {}}
+          />
+        );
+      case 'warranty':
+        return <GoodsWarrantyMaintenancePage products={products} />;
       case 'audit_form':
         return (
           <GoodsAuditForm
@@ -754,16 +771,19 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         </GoodsProductsWorkspace>
       ) : (
         <>
-          {activeTab !== 'product_form' && activeTab !== 'audit_form' && (
-            <GoodsInventorySecondaryToolbar
-              activeTab={activeTab}
-              showPurchaseForm={showPurchaseForm}
-              searchTerm={searchTerm}
-              onSearchChange={handleSearchChange}
-              onStartAudit={handleStartAudit}
-              setShowPurchaseForm={setShowPurchaseForm}
-            />
-          )}
+          {activeTab !== 'product_form' &&
+            activeTab !== 'audit_form' &&
+            activeTab !== 'pricing' &&
+            activeTab !== 'warranty' && (
+              <GoodsInventorySecondaryToolbar
+                activeTab={activeTab}
+                showPurchaseForm={showPurchaseForm}
+                searchTerm={searchTerm}
+                onSearchChange={handleSearchChange}
+                onStartAudit={handleStartAudit}
+                setShowPurchaseForm={setShowPurchaseForm}
+              />
+            )}
           {renderMainContent()}
         </>
       )}

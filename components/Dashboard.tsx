@@ -6,7 +6,7 @@ import {
   DiagnosisRange,
 } from '../types';
 import { BrainCircuit, Gauge, Briefcase, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
-import { calculateTimeContext, getCategoryType, getTopLevelCategory } from '../businessLogic';
+import { calculateTimeContext, getCategoryType, getTopLevelCategory } from '../src/lib';
 import { DashboardAiAdvisor } from './dashboard/DashboardAiAdvisor';
 import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
 import { DashboardKpiOverview } from './dashboard/DashboardKpiOverview';
@@ -586,7 +586,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <h3 className="text-3xl font-black text-slate-800 mb-4 uppercase tracking-tight">
           Hệ Thống Đang Sẵn Sàng
         </h3>
-        <p className="text-slate-400 max-w-md mx-auto font-medium">
+        <p className="text-slate-400 max-w-md mx-auto font-normal">
           Chào mừng bạn đến với <strong>CFO Brain</strong>. Vui lòng nhập liệu hoặc đồng bộ dữ liệu
           KiotViet để bắt đầu nhận phân tích chiến lược.
         </p>
@@ -631,7 +631,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         >
           <button
             onClick={() => setActiveSubTab('kpi')}
-            className={`flex items-center gap-3 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'kpi'
@@ -643,7 +643,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('trends')}
-            className={`flex items-center gap-3 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'trends'
@@ -655,7 +655,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('structure')}
-            className={`flex items-center gap-3 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'structure'
@@ -667,7 +667,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('ai')}
-            className={`flex items-center gap-3 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'ai'

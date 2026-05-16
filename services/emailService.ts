@@ -6,17 +6,23 @@ export interface EmailConfig {
   to: string;
 }
 
-function getEmailConfig(): EmailConfig | null {
+function getEmailConfig(): EmailConfig {
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_PASS;
   const to = process.env.EMAIL_TO;
-  if (!user || !pass || !to) return null;
+  if (!user || !pass || !to) {
+    throw new Error('Email chưa được cấu hình. Vui lòng thiết lập EMAIL_USER, EMAIL_PASS và EMAIL_TO');
+  }
   return { user, pass, to };
 }
 
 export async function sendEodEmail(date: string, summary: string): Promise<void> {
+  if (!isEmailConfigured()) {
+    console.warn('Email chưa được cấu hình, bỏ qua gửi email');
+    return; // Email chưa cấu hình — bỏ qua, không throw
+  }
+  
   const config = getEmailConfig();
-  if (!config) return; // Email chưa cấu hình — bỏ qua, không throw
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',

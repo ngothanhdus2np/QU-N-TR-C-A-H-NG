@@ -115,6 +115,7 @@ export interface ViolationType {
 }
 
 export interface ViolationOccurrence {
+  id?: string;
   employeeId: string;
   violationTypeId: string;
   occurrence: 1 | 2 | 3;
@@ -127,8 +128,10 @@ export interface ResponsibilityApproval {
 }
 
 export interface TetCampaign {
+  id?: string;
+  year?: number;
   // Giai đoạn Trước Tết
-  commitmentDate: string;
+  commitmentDate?: string;
   carAllowance: number;
   beforeTetExtraDays: string[];
   beforeTetExtraBonus: number;
@@ -164,50 +167,56 @@ export interface Employee {
   photoUrl?: string; // Trường ảnh chân dung mới
   bloodType?: string;
   email?: string;
+  idNumber?: string;
+  bankAccount?: string;
+  emergencyContact?: string;
 }
 
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
-  employeeName: string;
+  employeeName?: string;
   date: string;
-  status: 'Present' | 'AuthorizedLeave' | 'UnauthorizedLeave' | 'Holiday';
+  status: 'Present' | 'AuthorizedLeave' | 'UnauthorizedLeave' | 'Holiday' | 'Absent';
   hours: number;
 }
 
 export interface OvertimeRecord {
   id: string;
   employeeId: string;
-  employeeName: string;
+  employeeName?: string;
   date: string;
   hours: number;
-  multiplier: number;
+  multiplier?: number;
 }
 
 export interface SalesRecord {
   id: string;
   employeeId: string;
-  employeeName: string;
+  employeeName?: string;
   date: string;
   salesAmount: number;
-  commissionRate: number;
-  commissionEarned: number;
+  commissionRate?: number;
+  commissionEarned?: number;
+  customerId?: string;
 }
 
 export interface ShortageRecord {
   id: string;
   employeeId: string;
-  employeeName: string;
+  employeeName?: string;
   date: string;
   amount: number;
+  reason?: string;
 }
 
 export interface AdvanceRecord {
   id: string;
   employeeId: string;
-  employeeName: string;
+  employeeName?: string;
   date: string;
   amount: number;
+  reason?: string;
 }
 
 export interface RevenueRecord {
@@ -404,6 +413,8 @@ export interface AppData {
   posOrders: POSOrder[];
   posCustomers: POSCustomer[];
   inventoryTransactions: InventoryTransaction[];
+  posPaymentSettings?: POSPaymentSettings;
+  posInventorySettings?: POSInventorySettings;
   // Nhà cung cấp
   suppliers: Supplier[];
   supplierDebts: SupplierDebtRecord[];
@@ -435,7 +446,7 @@ export interface POSProductUnit {
 }
 
 export interface POSProductAttribute {
-  id: string;
+  id?: string;
   name: string;
   values: string[];
 }
@@ -511,6 +522,48 @@ export interface POSOrder {
   isReturn?: boolean;
 }
 
+export type POSPaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other';
+
+export interface POSPaymentChannelSettings {
+  enabled: boolean;
+  displayName: string;
+  accountLabel: string;
+  actionLabel: string;
+  helperText: string;
+  qrImage?: string;
+  notes?: string;
+}
+
+export type POSPaymentAccountType = 'bank' | 'wallet';
+
+export interface POSPaymentAccount {
+  id: string;
+  type: POSPaymentAccountType;
+  accountNumber: string;
+  provider: string;
+  bankCode?: string;
+  accountHolder: string;
+  scope: string;
+  note?: string;
+  qrImage?: string;
+  enabled: boolean;
+}
+
+export interface POSPaymentSettings {
+  defaultMethod: POSPaymentMethod;
+  allowSplitPayment: boolean;
+  enabledMethods: POSPaymentMethod[];
+  bank: POSPaymentChannelSettings;
+  card: POSPaymentChannelSettings;
+  wallet: POSPaymentChannelSettings;
+  bankAccounts: POSPaymentAccount[];
+  walletAccounts: POSPaymentAccount[];
+}
+
+export interface POSInventorySettings {
+  allowSellOutOfStock: boolean;
+}
+
 export interface POSCustomer {
   id: string;
   name: string;
@@ -527,20 +580,32 @@ export interface POSCustomer {
 export interface InventoryTransaction {
   id: string;
   date: string;
-  type: 'Import' | 'Export' | 'Check' | 'Sale' | 'Return';
+  type:
+    | 'Import'
+    | 'PurchaseReturn'
+    | 'Export'
+    | 'Check'
+    | 'Sale'
+    | 'Return'
+    | 'internal_use'
+    | 'disposal'
+    | 'return';
   items: {
     productId: string;
-    sku: string;
-    name: string;
+    sku?: string;
+    name?: string;
+    productName?: string;
     quantity: number;
-    previousStock: number;
-    newStock: number;
+    previousStock?: number;
+    newStock?: number;
     price?: number; // Import price for Import transactions
     discount?: number; // Discount for Import transactions
+    costMethod?: 'fixed' | 'average'; // Cost method used when importing stock
+    note?: string; // For disposal reasons
   }[];
   note?: string;
   referenceId?: string; // OrderId or ImportId
-  staffId: string;
+  staffId?: string;
   supplierId?: string; // For Import transactions
   supplierName?: string; // For Import transactions
   totalAmount?: number; // Total amount for Import transactions

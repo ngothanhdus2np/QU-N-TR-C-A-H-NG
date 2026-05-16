@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, Target, DollarSign, Settings, Save, AlertCircle, Sparkles } from 'lucide-react';
 import { RevenueRecord, DailyBreakEvenConfig } from '../types';
-import { calculateDailyBreakEven } from '../businessLogic';
+import { calculateDailyBreakEven } from '../src/lib';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts';
@@ -37,12 +37,12 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
     <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm flex flex-col gap-8">
       <div className="flex justify-between items-center">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 bg-indigo-50 w-fit px-3 py-1 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-wider">
+          <div className="flex items-center gap-2 bg-indigo-50 w-fit px-3 py-1 rounded-full text-[10px] font-normal text-indigo-600 uppercase tracking-wider">
             <Target size={12} /> Mục tiêu lợi nhuận
           </div>
           <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Điểm hòa vốn hàng ngày</h2>
           {autoCalculated && (
-            <div className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 mt-1 w-fit">
+            <div className="flex items-center gap-1.5 text-[9px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 mt-1 w-fit">
               <Sparkles className="w-3 h-3" /> DỮ LIỆU TỰ ĐỘNG THEO CHI PHÍ THÁNG
             </div>
           )}
@@ -58,34 +58,34 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
       {isEditing && (
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col md:flex-row gap-6 items-end animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex-1 space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tổng chi phí cố định / tháng</label>
+            <label className="text-[10px] font-normal text-slate-400 uppercase ml-2">Tổng chi phí cố định / tháng</label>
             <div className="relative">
               <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
               <input 
                 type="number"
                 value={tempConfig.monthlyFixedCosts}
                 onChange={(e) => setTempConfig({ ...tempConfig, monthlyFixedCosts: Number(e.target.value) })}
-                className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500/20 focus:border-indigo-500 font-bold transition-all"
+                className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500/20 focus:border-indigo-500 font-normal transition-all"
                 placeholder="Ví dụ: 50000000"
               />
             </div>
           </div>
           <div className="flex-1 space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tỷ lệ lợi nhuận gộp (%)</label>
+            <label className="text-[10px] font-normal text-slate-400 uppercase ml-2">Tỷ lệ lợi nhuận gộp (%)</label>
             <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-black text-sm">%</div>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-normal text-sm">%</div>
               <input 
                 type="number"
                 value={tempConfig.grossMarginPercent}
                 onChange={(e) => setTempConfig({ ...tempConfig, grossMarginPercent: Number(e.target.value) })}
-                className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500/20 focus:border-indigo-500 font-bold transition-all"
+                className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 ring-indigo-500/20 focus:border-indigo-500 font-normal transition-all"
                 placeholder="Ví dụ: 35"
               />
             </div>
           </div>
           <button 
             onClick={handleSave}
-            className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
+            className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-normal text-xs uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
           >
             <Save size={18} /> Lưu cấu hình
           </button>
@@ -94,32 +94,32 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hòa vốn ngày</span>
-          <div className="text-2xl font-black text-slate-900">
+          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Hòa vốn ngày</span>
+          <div className="text-2xl font-normal text-slate-900">
             {stats.dailyBreakEvenRevenue.toLocaleString('vi-VN')} <span className="text-xs text-slate-400">đ</span>
           </div>
-          <p className="text-[10px] text-slate-400 font-medium">Cần đạt để bù đắp {stats.dailyFixedCost.toLocaleString('vi-VN')}đ chi phí</p>
+          <p className="text-[10px] text-slate-400 font-normal">Cần đạt để bù đắp {stats.dailyFixedCost.toLocaleString('vi-VN')}đ chi phí</p>
         </div>
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Doanh thu ngày chọn</span>
-          <div className="text-2xl font-black text-indigo-600">
+          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Doanh thu ngày chọn</span>
+          <div className="text-2xl font-normal text-indigo-600">
             {stats.currentRevenue.toLocaleString('vi-VN')} <span className="text-xs text-slate-400">đ</span>
           </div>
           <div className="flex items-center gap-2">
             {stats.isProfitable ? (
-              <div className="flex items-center gap-1 text-emerald-600 text-[10px] font-black uppercase">
+              <div className="flex items-center gap-1 text-emerald-600 text-[10px] font-normal uppercase">
                 <TrendingUp size={12} /> Đã có lãi
               </div>
             ) : (
-              <div className="flex items-center gap-1 text-amber-600 text-[10px] font-black uppercase">
+              <div className="flex items-center gap-1 text-amber-600 text-[10px] font-normal uppercase">
                 <TrendingDown size={12} /> Chưa hòa vốn
               </div>
             )}
           </div>
         </div>
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ngày hòa vốn tháng</span>
-          <div className="text-2xl font-black text-slate-900">
+          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Ngày hòa vốn tháng</span>
+          <div className="text-2xl font-normal text-slate-900">
             {stats.breakEvenDay ? `Ngày ${stats.breakEvenDay}` : 'Chưa đạt'}
           </div>
           <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -128,7 +128,7 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
               style={{ width: `${Math.min((stats.cumulativeProfit / (stats.monthlyFixedCosts || 1)) * 100, 100)}%` }}
             ></div>
           </div>
-          <p className="text-[9px] text-slate-400 font-medium">
+          <p className="text-[9px] text-slate-400 font-normal">
             {stats.breakEvenDay 
               ? `Hòa vốn tại ngày ${stats.breakEvenDay}` 
               : `Đã đạt ${((stats.cumulativeProfit / (stats.monthlyFixedCosts || 1)) * 100).toFixed(1)}% chi phí tháng`}
@@ -179,8 +179,8 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
       {!stats.isProfitable && stats.dailyBreakEvenRevenue > 0 && (
         <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3 text-amber-700">
           <AlertCircle size={20} className="shrink-0" />
-          <p className="text-xs font-medium">
-            Bạn cần thêm <span className="font-black">{(stats.dailyBreakEvenRevenue - stats.currentRevenue).toLocaleString('vi-VN')}đ</span> doanh thu nữa để bắt đầu có lợi nhuận trong ngày này.
+          <p className="text-xs font-normal">
+            Bạn cần thêm <span className="font-normal">{(stats.dailyBreakEvenRevenue - stats.currentRevenue).toLocaleString('vi-VN')}đ</span> doanh thu nữa để bắt đầu có lợi nhuận trong ngày này.
           </p>
         </div>
       )}

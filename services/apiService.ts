@@ -1,6 +1,6 @@
 import { supabaseAdmin as supabase } from './supabase';
 import { AppData, InventoryTransaction } from '../types';
-import { isUUID } from '../businessLogic';
+import { buildVariantProductName, isUUID } from '../src/lib';
 
 export const TABLE_MAP: Record<string, string> = {
   employees: 'employees',
@@ -30,6 +30,8 @@ export const TABLE_MAP: Record<string, string> = {
   inventoryTransactions: 'inventory_transactions',
   suppliers: 'suppliers',
   supplierDebts: 'supplier_debts',
+  cashflow: 'cashflow_records',
+  recurringExpenses: 'recurring_expenses',
 };
 
 export const sanitizeItem = (key: keyof AppData, item: any) => {
@@ -40,10 +42,14 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   };
 
   if (key === 'posProducts') {
+    const variantAttributes = item.variantAttributes || {};
+    const name = item.parentId && !item.isParent
+      ? buildVariantProductName(item.name, variantAttributes)
+      : item.name;
     return {
       id: item.id,
       sku: item.isParent && !item.sku ? `__PARENT__${item.id}` : item.sku,
-      name: item.name,
+      name,
       category_id: item.categoryId,
       category_path: item.categoryPath || null,
       import_price: n(item.importPrice),
@@ -75,7 +81,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       status: item.status,
       units: item.units || [],
       attributes: item.attributes || [],
-      variant_attributes: item.variantAttributes || {},
+      variant_attributes: variantAttributes,
       parent_id: item.parentId || null,
       is_parent: item.isParent || false,
       variant_count: n(item.variantCount || 0),
@@ -396,42 +402,39 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       address: item.address,
       shipping_unit: item.shippingUnit,
     };
+  if (key === 'cashflow')
+    return {
+      id: item.id,
+      date: item.date,
+      type: item.type,
+      category: item.category,
+      amount: n(item.amount),
+      description: item.description || null,
+      reference_id: item.referenceId || null,
+    };
+  if (key === 'recurringExpenses')
+    return {
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      amount: n(item.amount),
+      frequency: item.frequency,
+      start_date: item.startDate,
+      end_date: item.endDate || null,
+      last_generated: item.lastGenerated || null,
+      is_active: item.isActive !== false,
+      description: item.description || null,
+    };
   return item;
 };
 
-// Các bảng tài chính/nhân sự cần audit trail
-const AUDITED_TABLES = new Set([
-  'payroll_records',
-  'expense_records',
-  'revenue_records',
-  'advance_records',
-  'shortage_records',
-  'salary_policies',
-  'inventory_transactions',
-  'suppliers',
-  'pos_products',
-]);
-
-async function auditLog(tableName: string, recordId: string, action: string, snapshot?: any) {
-  if (!AUDITED_TABLES.has(tableName)) return;
-  try {
-    await supabase.from('audit_logs').insert({
-      table_name: tableName,
-      record_id: recordId,
-      action,
-      snapshot: snapshot ?? null,
-    });
-  } catch {
-    // Không crash app nếu bảng audit_logs chưa tồn tại
-  }
-}
-
 // Giới hạn mặc định cho time-series tables — đủ cho 2 năm hoạt động
 const DEFAULT_LIMIT = 2000;
+const DEFAULT_META_LIMIT = 5000;
 const SUPABASE_PAGE_SIZE = 1000;
 
 const fetchAllRows = async (tableName: string, orderColumn = 'id') => {
-  const allRows: Record<string, unknown>[] = [];
+  const allRows: any[] = [];
   let offset = 0;
 
   while (true) {
@@ -447,6 +450,19 @@ const fetchAllRows = async (tableName: string, orderColumn = 'id') => {
     if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows, error: null };
     offset += SUPABASE_PAGE_SIZE;
   }
+};
+
+const postDataRoute = async (path: string, body: Record<string, unknown>) => {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error || `Yêu cầu ghi dữ liệu thất bại (${res.status})`);
+  }
+  return data;
 };
 
 export const apiService = {
@@ -492,6 +508,8 @@ export const apiService = {
         transactions,
         suppliers,
         supplierDebts,
+        cashflow,
+        recurringExpenses,
       ] = await Promise.all([
         supabase.from('employees').select('*').limit(500),
         supabase.from('salary_policies').select('*'),
@@ -540,16 +558,16 @@ export const apiService = {
           .select('*')
           .order('month', { ascending: false })
           .limit(DEFAULT_LIMIT),
-        supabase.from('knowledge_base').select('*'),
-        supabase.from('system_configs').select('*'),
-        supabase.from('product_groups').select('*'),
+        supabase.from('knowledge_base').select('*').limit(DEFAULT_META_LIMIT),
+        supabase.from('system_configs').select('*').limit(DEFAULT_META_LIMIT),
+        supabase.from('product_groups').select('*').limit(DEFAULT_META_LIMIT),
         supabase
           .from('product_group_revenue')
           .select('*')
           .order('date', { ascending: false })
           .limit(DEFAULT_LIMIT),
-        supabase.from('promotions').select('*'),
-        supabase.from('brand_profile').select('*'),
+        supabase.from('promotions').select('*').limit(DEFAULT_META_LIMIT),
+        supabase.from('brand_profile').select('*').limit(1),
         supabase
           .from('shopee_revenue_records')
           .select('*')
@@ -560,7 +578,7 @@ export const apiService = {
           .select('*')
           .order('date', { ascending: false })
           .limit(DEFAULT_LIMIT),
-        supabase.from('shopee_source_data').select('*'),
+        supabase.from('shopee_source_data').select('*').limit(DEFAULT_META_LIMIT),
         supabase
           .from('shopee_inventory_in')
           .select('*')
@@ -583,12 +601,22 @@ export const apiService = {
           .select('*')
           .order('date', { ascending: false })
           .limit(DEFAULT_LIMIT),
-        supabase.from('suppliers').select('*').order('name', { ascending: true }),
+        supabase.from('suppliers').select('*').order('name', { ascending: true }).limit(DEFAULT_META_LIMIT),
         supabase
           .from('supplier_debts')
           .select('*')
           .order('date', { ascending: false })
           .limit(DEFAULT_LIMIT),
+        supabase
+          .from('cashflow_records')
+          .select('*')
+          .order('date', { ascending: false })
+          .limit(DEFAULT_LIMIT),
+        supabase
+          .from('recurring_expenses')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(DEFAULT_META_LIMIT),
       ]);
 
       const res_arr = [
@@ -620,6 +648,8 @@ export const apiService = {
         { name: 'Transactions', res: transactions },
         { name: 'Suppliers', res: suppliers },
         { name: 'SupplierDebts', res: supplierDebts },
+        { name: 'Cashflow', res: cashflow },
+        { name: 'RecurringExpenses', res: recurringExpenses },
       ];
 
       const errors = res_arr
@@ -656,6 +686,8 @@ export const apiService = {
           inventoryTransactions: transactions.data,
           suppliers: suppliers.data,
           supplierDebts: supplierDebts.data,
+          cashflow: cashflow.data,
+          recurringExpenses: recurringExpenses.data,
         },
         errors: errors.length > 0 ? errors : null,
       };
@@ -666,109 +698,58 @@ export const apiService = {
 
   async deleteItem(key: keyof AppData, id: string) {
     const tableName = TABLE_MAP[key as string];
-    if (tableName) {
-      // Lưu snapshot trước khi xóa để có thể rollback
-      const { data: snapshot } = await supabase.from(tableName).select('*').eq('id', id).single();
-      const { error } = await supabase.from(tableName).delete().eq('id', id);
-      if (error) {
-        console.error(`Xóa thất bại [${tableName} - ${id}]:`, error);
-        throw new Error(`Xóa thất bại: ${error.message}`);
-      }
-      await auditLog(tableName, id, 'delete', snapshot);
-      return true;
+    if (!tableName) {
+      throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    return null;
+    await postDataRoute('/api/data/delete', { key, id });
+    return { success: true, id, key };
   },
 
   async clearTable(key: keyof AppData) {
     const tableName = TABLE_MAP[key as string];
-    if (tableName) {
-      const { error } = await supabase
-        .from(tableName)
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (error) {
-        console.error(`Xóa bảng thất bại [${tableName}]:`, error);
-        throw new Error(`Xóa bảng thất bại: ${error.message}`);
-      }
-      await auditLog(tableName, '*', 'clearTable');
-      return true;
+    if (!tableName) {
+      throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    return null;
+    await postDataRoute('/api/data/clear', { key });
+    return { success: true, key, message: `Đã xóa toàn bộ dữ liệu từ ${tableName}` };
   },
 
   async upsertItem(key: keyof AppData, item: any) {
     const tableName = TABLE_MAP[key as string];
-    if (tableName) {
-      const payload = sanitizeItem(key, item);
-      const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
-      if (error) {
-        console.error(`Ghi đè thất bại [${tableName} - ${item.id}]:`, error);
-        throw new Error(`Ghi đè thất bại: ${error.message}`);
-      }
-      await auditLog(tableName, item.id, 'upsert', payload);
-      return true;
+    if (!tableName) {
+      throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    return null;
+    const payload = sanitizeItem(key, item);
+    await postDataRoute('/api/data/upsert', { key, payload, recordId: item.id });
+    return { success: true, id: item.id, key };
   },
 
   async upsertMany(key: keyof AppData, items: any[]) {
     const tableName = TABLE_MAP[key as string];
-    if (tableName) {
-      const payload = items.map(item => sanitizeItem(key, item));
-
-      const chunkSize = 100;
-      for (let i = 0; i < payload.length; i += chunkSize) {
-        const chunk = payload.slice(i, i + chunkSize);
-        const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
-        if (error) {
-          console.error(`Ghi đè hàng loạt thất bại [${tableName} - chunk ${i}]:`, error);
-          throw new Error(
-            `Lỗi ở dòng ${i}: ${error.message} (Kiểm tra cấu trúc bảng ${tableName})`
-          );
-        }
-      }
-      return true;
+    if (!tableName) {
+      throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    return null;
+    const payload = items.map(item => sanitizeItem(key, item));
+    await postDataRoute('/api/data/upsert-many', { key, payload });
+    return { success: true, count: items.length, key };
   },
 
   async applyInventoryTransactionWithStock(transaction: InventoryTransaction) {
     const payload = sanitizeItem('inventoryTransactions', transaction);
-    const { error } = await supabase.rpc('apply_inventory_transaction_with_stock', {
-      p_transaction: payload,
+    await postDataRoute('/api/data/inventory/apply', {
+      transactionId: transaction.id,
+      payload,
     });
-    if (error) {
-      console.error('[InventoryRPC] Apply transaction failed:', error);
-      throw new Error(`Ghi giao dịch tồn kho thất bại: ${error.message}`);
-    }
-    await auditLog('inventory_transactions', transaction.id, 'applyWithStock', payload);
-    return true;
+    return { success: true, transactionId: transaction.id };
   },
 
   async deleteInventoryTransactionWithStock(transactionId: string) {
-    const { data: snapshot } = await supabase
-      .from('inventory_transactions')
-      .select('*')
-      .eq('id', transactionId)
-      .single();
-    const { error } = await supabase.rpc('delete_inventory_transaction_with_stock', {
-      p_transaction_id: transactionId,
-    });
-    if (error) {
-      console.error('[InventoryRPC] Delete transaction failed:', error);
-      throw new Error(`Xóa giao dịch tồn kho thất bại: ${error.message}`);
-    }
-    await auditLog('inventory_transactions', transactionId, 'deleteWithStock', snapshot);
-    return true;
+    await postDataRoute('/api/data/inventory/delete', { transactionId });
+    return { success: true, transactionId };
   },
 
   async upsertConfig(key: string, value: any) {
-    const { error } = await supabase.from('system_configs').upsert({ key, value });
-    if (error) {
-      console.error(`Lưu cấu hình thất bại [${key}]:`, error);
-      throw new Error(`Cấu hình thất bại: ${error.message}`);
-    }
-    return true;
+    await postDataRoute('/api/data/config', { key, value });
+    return { success: true, key, value };
   },
 };

@@ -45,7 +45,7 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
         }
         setIsOpen(true);
       }}
-      className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl font-black text-[10px] uppercase tracking-wide transition-all shadow-sm ${isOpen ? 'bg-indigo-50 border-indigo-400 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+      className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl font-normal text-[10px] uppercase tracking-wide transition-all shadow-sm ${isOpen ? 'bg-indigo-50 border-indigo-400 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
     >
       <Grid3X3 className="h-3.5 w-3.5" />
     </button>
@@ -57,10 +57,10 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
         className="bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 overflow-hidden"
       >
         <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Chọn cột hiển thị</span>
+          <span className="text-[10px] font-normal uppercase tracking-widest text-slate-600">Chọn cột hiển thị</span>
           <button
             onClick={() => setVisibleColumns(defaultVisibleColumns)}
-            className="text-[10px] text-indigo-600 font-black hover:underline"
+            className="text-[10px] text-indigo-600 font-normal hover:underline"
           >
             Đặt lại mặc định
           </button>
@@ -69,7 +69,7 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
           {['Mã hàng', 'Tên hàng'].map(label => (
             <label key={label} className="flex items-center gap-2 cursor-not-allowed opacity-50 select-none">
               <input type="checkbox" checked readOnly className="rounded border-slate-300 text-indigo-600 pointer-events-none" />
-              <span className="text-xs font-semibold text-slate-600">{label}</span>
+              <span className="text-xs font-normal text-slate-600">{label}</span>
             </label>
           ))}
           {columns.map(col => (
@@ -83,7 +83,7 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
                 )}
                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span className="text-xs font-semibold text-slate-600">{col.label}</span>
+              <span className="text-xs font-normal text-slate-600">{col.label}</span>
             </label>
           ))}
         </div>

@@ -22,6 +22,7 @@ interface SupplierListPageProps {
   onViewDetail: (supplier: Supplier) => void;
   onDeleteSupplier: (id: string) => void | Promise<void>;
   onImportFile: () => void;
+  onExportSuppliers: (suppliers: Supplier[]) => void;
 }
 
 type SortKey = 'code' | 'name' | 'totalPurchase' | 'currentDebt';
@@ -33,9 +34,10 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   onViewDetail,
   onDeleteSupplier,
   onImportFile,
+  onExportSuppliers,
 }) => {
   const { showToast } = useToast();
-  
+
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,7 +112,16 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
     }
 
     return result;
-  }, [suppliers, searchTerm, groupFilter, statusFilter, debtRangeMin, debtRangeMax, purchaseRangeMin, purchaseRangeMax]);
+  }, [
+    suppliers,
+    searchTerm,
+    groupFilter,
+    statusFilter,
+    debtRangeMin,
+    debtRangeMax,
+    purchaseRangeMin,
+    purchaseRangeMax,
+  ]);
 
   // Sort
   const sortedSuppliers = useMemo(() => {
@@ -214,8 +225,8 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   };
 
   const handleExportSelected = () => {
-    // TODO: Export to Excel
-    showToast(`Xuất Excel: ${selectedSuppliers.length} nhà cung cấp`, 'info');
+    const selected = sortedSuppliers.filter(supplier => selectedSuppliers.includes(supplier.id));
+    onExportSuppliers(selected);
   };
 
   const hasActiveFilters =
@@ -233,8 +244,16 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <FilterCheckboxGroup
           label="Trạng thái"
           options={[
-            { value: 'active', label: 'Đang hoạt động', count: suppliers.filter(s => (s.status || 'active') === 'active').length },
-            { value: 'inactive', label: 'Ngừng hoạt động', count: suppliers.filter(s => s.status === 'inactive').length },
+            {
+              value: 'active',
+              label: 'Đang hoạt động',
+              count: suppliers.filter(s => (s.status || 'active') === 'active').length,
+            },
+            {
+              value: 'inactive',
+              label: 'Ngừng hoạt động',
+              count: suppliers.filter(s => s.status === 'inactive').length,
+            },
           ]}
           selected={statusFilter}
           onChange={setStatusFilter}
@@ -245,7 +264,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       {uniqueGroups.length > 0 && (
         <FilterSection title="Nhóm nhà cung cấp">
           <FilterCheckboxGroup
-            label="Nhóm"
+            label="Nhóm nhà cung cấp"
             options={uniqueGroups.map(group => ({
               value: group,
               label: group,
@@ -308,21 +327,21 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <>
           <button
             onClick={onCreateSupplier}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-normal hover:bg-indigo-700 transition-colors shadow-sm"
           >
             <Plus className="h-4 w-4" />
             Nhà cung cấp
           </button>
           <button
             onClick={onImportFile}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <Upload className="h-4 w-4" />
             Import file
           </button>
           <button
-            onClick={() => showToast('Chức năng xuất file đang được phát triển', 'info')}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            onClick={() => onExportSuppliers(sortedSuppliers)}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <FileDown className="h-4 w-4" />
             Xuất file
@@ -335,14 +354,14 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <>
           <button
             onClick={handleExportSelected}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-xs font-normal hover:bg-indigo-50 transition-colors"
           >
             <FileText className="h-3.5 w-3.5" />
             Xuất Excel
           </button>
           <button
             onClick={handleBulkDelete}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 rounded-lg text-xs font-normal hover:bg-rose-50 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Xóa
@@ -362,7 +381,9 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       headerRender: () => (
         <input
           type="checkbox"
-          checked={selectedSuppliers.length === paginatedSuppliers.length && paginatedSuppliers.length > 0}
+          checked={
+            selectedSuppliers.length === paginatedSuppliers.length && paginatedSuppliers.length > 0
+          }
           onChange={handleToggleSelectAll}
           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
         />
@@ -401,7 +422,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: supplier => (
-        <span className="font-mono font-bold text-indigo-600 text-xs">
+        <span className="font-mono font-normal text-indigo-600 text-xs">
           {supplier.code || supplier.id.slice(0, 8)}
         </span>
       ),
@@ -412,7 +433,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       sortable: true,
       render: supplier => (
         <div>
-          <div className="font-bold text-slate-800 text-sm">{supplier.name}</div>
+          <div className="font-normal text-slate-800 text-sm">{supplier.name}</div>
           {supplier.group && (
             <div className="text-[10px] text-slate-400 mt-0.5">{supplier.group}</div>
           )}
@@ -423,17 +444,13 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       key: 'phone',
       label: 'Điện thoại',
       width: 'w-32',
-      render: supplier => (
-        <span className="text-slate-600 text-sm">{supplier.phone || '—'}</span>
-      ),
+      render: supplier => <span className="text-slate-600 text-sm">{supplier.phone || '—'}</span>,
     },
     {
       key: 'email',
       label: 'Email',
       width: 'w-48',
-      render: supplier => (
-        <span className="text-slate-600 text-sm">{supplier.email || '—'}</span>
-      ),
+      render: supplier => <span className="text-slate-600 text-sm">{supplier.email || '—'}</span>,
     },
     {
       key: 'currentDebt',
@@ -444,7 +461,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       render: supplier => {
         const debt = supplier.currentDebt || 0;
         return (
-          <span className={`font-black text-sm ${debt > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+          <span className={`font-normal text-sm ${debt > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
             {debt > 0 ? debt.toLocaleString() + 'đ' : '—'}
           </span>
         );
@@ -459,7 +476,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       render: supplier => {
         const total = supplier.totalPurchase || 0;
         return (
-          <span className="font-bold text-slate-700 text-sm">
+          <span className="font-normal text-slate-700 text-sm">
             {total > 0 ? total.toLocaleString() + 'đ' : '—'}
           </span>
         );
@@ -538,7 +555,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
                 <FileText className="w-10 h-10 text-slate-300" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-slate-800">Chưa có nhà cung cấp</p>
+                <p className="text-sm font-normal text-slate-800">Chưa có nhà cung cấp</p>
                 <p className="text-xs text-slate-400 mt-1">
                   Bấm nút "Nhà cung cấp" để thêm nhà cung cấp mới
                 </p>

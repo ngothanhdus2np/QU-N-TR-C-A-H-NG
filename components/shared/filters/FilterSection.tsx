@@ -14,7 +14,7 @@ export const FilterSection: React.FC<FilterSectionProps> = ({ title, children, a
   return (
     <div className="px-4 py-3 border-b border-slate-100">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-slate-700">{title}</span>
+        <span className="text-xs font-normal text-slate-700">{title}</span>
         {action}
       </div>
       {children}

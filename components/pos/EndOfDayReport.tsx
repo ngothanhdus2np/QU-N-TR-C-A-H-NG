@@ -167,12 +167,12 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
     win.document.close();
   };
 
-  const thStyle = "border border-slate-300 px-3 py-2 font-bold text-left text-xs";
-  const thRStyle = "border border-slate-300 px-3 py-2 font-bold text-right text-xs";
+  const thStyle = "border border-slate-300 px-3 py-2 font-normal text-left text-xs";
+  const thRStyle = "border border-slate-300 px-3 py-2 font-normal text-right text-xs";
   const tdStyle = "border border-slate-200 px-3 py-1.5 text-xs";
   const tdRStyle = "border border-slate-200 px-3 py-1.5 text-xs text-right";
-  const grpTdStyle = "border border-slate-300 px-3 py-2 font-bold text-xs";
-  const grpTdRStyle = "border border-slate-300 px-3 py-2 font-bold text-xs text-right";
+  const grpTdStyle = "border border-slate-300 px-3 py-2 font-normal text-xs";
+  const grpTdRStyle = "border border-slate-300 px-3 py-2 font-normal text-xs text-right";
 
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
@@ -180,21 +180,21 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
 
       {/* Filter bar */}
       <div className="bg-white border-b border-slate-200 h-12 flex items-center px-4 gap-3 shrink-0 shadow-sm">
-        <span className="font-black text-slate-800 text-sm mr-3">Báo cáo cuối ngày</span>
+        <span className="font-normal text-slate-800 text-sm mr-3">Báo cáo cuối ngày</span>
 
         <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
           <input
             type="date"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
-            className="bg-transparent text-slate-700 font-bold outline-none text-xs"
+            className="bg-transparent text-slate-700 font-normal outline-none text-xs"
           />
         </div>
 
         <select
           value={paperSize}
           onChange={e => setPaperSize(e.target.value as 'A4' | 'A5')}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+          className="border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 text-xs font-normal text-slate-700 outline-none cursor-pointer"
         >
           <option value="A4">Khổ A4</option>
           <option value="A5">Khổ A5</option>
@@ -219,7 +219,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <span className="text-xs font-bold text-slate-600 w-10 text-center tabular-nums">{zoom}%</span>
+          <span className="text-xs font-normal text-slate-600 w-10 text-center tabular-nums">{zoom}%</span>
           <button
             onClick={() => setZoom(z => Math.min(150, z + 10))}
             className="p-1.5 hover:bg-slate-100 rounded text-slate-500 transition-colors"
@@ -232,7 +232,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
 
         <button
           onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all"
+          className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-normal uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all"
         >
           <Printer className="w-3.5 h-3.5" />
           In báo cáo
@@ -318,7 +318,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
                         <td className={tdRStyle}>0</td>
                         <td className={tdRStyle}>0</td>
                         <td className={tdRStyle}>0</td>
-                        <td className={`${tdRStyle} font-bold`}>{fmt(order.finalAmount)}</td>
+                        <td className={`${tdRStyle} font-normal`}>{fmt(order.finalAmount)}</td>
                       </tr>
                     ))}
                   </>
@@ -361,7 +361,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
                         <td className={tdRStyle}>0</td>
                         <td className={tdRStyle}>0</td>
                         <td className={tdRStyle}>0</td>
-                        <td className={`${tdRStyle} font-bold text-rose-500`}>-{fmt(order.finalAmount)}</td>
+                        <td className={`${tdRStyle} font-normal text-rose-500`}>-{fmt(order.finalAmount)}</td>
                       </tr>
                     ))}
                   </>
@@ -383,18 +383,18 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
               <div className="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-lg">
                 <div className="grid grid-cols-3 gap-4 text-xs">
                   <div>
-                    <div className="text-slate-400 font-bold mb-1">Tổng đơn bán</div>
-                    <div className="font-black text-slate-800 text-sm">{salesSummary.count} đơn</div>
-                    <div className="text-slate-500 font-bold mt-0.5">{fmt(salesSummary.actual)}đ</div>
+                    <div className="text-slate-400 font-normal mb-1">Tổng đơn bán</div>
+                    <div className="font-normal text-slate-800 text-sm">{salesSummary.count} đơn</div>
+                    <div className="text-slate-500 font-normal mt-0.5">{fmt(salesSummary.actual)}đ</div>
                   </div>
                   <div>
-                    <div className="text-slate-400 font-bold mb-1">Tổng đơn trả</div>
-                    <div className="font-black text-rose-500 text-sm">{returnSummary.count} đơn</div>
-                    <div className="text-rose-400 font-bold mt-0.5">-{fmt(returnSummary.actual)}đ</div>
+                    <div className="text-slate-400 font-normal mb-1">Tổng đơn trả</div>
+                    <div className="font-normal text-rose-500 text-sm">{returnSummary.count} đơn</div>
+                    <div className="text-rose-400 font-normal mt-0.5">-{fmt(returnSummary.actual)}đ</div>
                   </div>
                   <div className="border-l border-slate-200 pl-4">
-                    <div className="text-slate-400 font-bold mb-1">Thực thu cuối ngày</div>
-                    <div className="font-black text-indigo-700 text-lg tabular-nums">{fmt(netActual)}đ</div>
+                    <div className="text-slate-400 font-normal mb-1">Thực thu cuối ngày</div>
+                    <div className="font-normal text-indigo-700 text-lg tabular-nums">{fmt(netActual)}đ</div>
                   </div>
                 </div>
               </div>

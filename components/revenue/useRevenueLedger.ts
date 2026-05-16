@@ -6,7 +6,7 @@ import {
   RevenueAuditColumnKey,
   RevenueAuditConflict,
 } from '../../types';
-import { cleanVNNumber, parseVNDate, processExcelRawData, generateId } from '../../businessLogic';
+import { cleanVNNumber, parseVNDate, processExcelRawData, generateId } from '../../src/lib';
 
 interface UseRevenueLedgerProps {
   list: RevenueRecord[];

@@ -404,9 +404,9 @@ CREATE OR REPLACE FUNCTION decrement_product_stock(
 BEGIN
   RETURN QUERY
   UPDATE pos_products
-  SET stock = stock - p_quantity
+  SET stock = pos_products.stock - p_quantity
   WHERE pos_products.id = p_product_id
-    AND stock >= p_quantity
+    AND pos_products.stock >= p_quantity
   RETURNING pos_products.id, pos_products.stock;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -419,7 +419,7 @@ CREATE OR REPLACE FUNCTION increment_product_stock(
 BEGIN
   RETURN QUERY
   UPDATE pos_products
-  SET stock = stock + p_quantity
+  SET stock = pos_products.stock + p_quantity
   WHERE pos_products.id = p_product_id
   RETURNING pos_products.id, pos_products.stock;
 END;
@@ -461,7 +461,7 @@ ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS decrease_count NUMER
 
 CREATE OR REPLACE FUNCTION apply_inventory_transaction_with_stock(
   p_transaction JSONB
-) RETURNS TABLE(id UUID, date TEXT, type TEXT) AS $$
+) RETURNS TABLE(transaction_id UUID, date TEXT, type TEXT) AS $$
 DECLARE
   item JSONB;
   tx_id UUID := (p_transaction->>'id')::UUID;
@@ -524,11 +524,23 @@ BEGIN
   LOOP
     IF tx_type = 'Import' THEN
       UPDATE pos_products
-      SET stock = stock + COALESCE((item->>'quantity')::INT, 0)
+      SET stock = pos_products.stock + COALESCE((item->>'quantity')::INT, 0)
+      WHERE pos_products.id = (item->>'productId')::UUID;
+    ELSIF tx_type = 'Sale' THEN
+      UPDATE pos_products
+      SET stock = GREATEST(0, pos_products.stock - ABS(COALESCE((item->>'quantity')::INT, 0)))
+      WHERE pos_products.id = (item->>'productId')::UUID
+        AND pos_products.stock >= ABS(COALESCE((item->>'quantity')::INT, 0));
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Insufficient stock for product %', item->>'productId';
+      END IF;
+    ELSIF tx_type = 'Return' THEN
+      UPDATE pos_products
+      SET stock = pos_products.stock + ABS(COALESCE((item->>'quantity')::INT, 0))
       WHERE pos_products.id = (item->>'productId')::UUID;
     ELSIF tx_type = 'Check' THEN
       UPDATE pos_products
-      SET stock = COALESCE((item->>'newStock')::INT, stock)
+      SET stock = COALESCE((item->>'newStock')::INT, pos_products.stock)
       WHERE pos_products.id = (item->>'productId')::UUID;
     END IF;
   END LOOP;
@@ -554,11 +566,19 @@ BEGIN
     LOOP
       IF tx.type = 'Import' THEN
         UPDATE pos_products
-        SET stock = GREATEST(0, stock - COALESCE((item->>'quantity')::INT, 0))
+        SET stock = GREATEST(0, pos_products.stock - COALESCE((item->>'quantity')::INT, 0))
+        WHERE pos_products.id = (item->>'productId')::UUID;
+      ELSIF tx.type = 'Sale' THEN
+        UPDATE pos_products
+        SET stock = pos_products.stock + ABS(COALESCE((item->>'quantity')::INT, 0))
+        WHERE pos_products.id = (item->>'productId')::UUID;
+      ELSIF tx.type = 'Return' THEN
+        UPDATE pos_products
+        SET stock = GREATEST(0, pos_products.stock - ABS(COALESCE((item->>'quantity')::INT, 0)))
         WHERE pos_products.id = (item->>'productId')::UUID;
       ELSIF tx.type = 'Check' THEN
         UPDATE pos_products
-        SET stock = COALESCE((item->>'previousStock')::INT, stock)
+        SET stock = COALESCE((item->>'previousStock')::INT, pos_products.stock)
         WHERE pos_products.id = (item->>'productId')::UUID;
       END IF;
     END LOOP;
@@ -582,3 +602,92 @@ ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS variant_attributes JSONB DEFAU
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS parent_id TEXT;
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS is_parent BOOLEAN DEFAULT false;
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS variant_count INTEGER DEFAULT 0;
+
+-- =============================================================================
+-- PRODUCTION SECURITY HARDENING (2026-05-13)
+-- Chạy block này sau khi môi trường ghi dữ liệu đã đi qua backend service-role
+-- hoặc Supabase authenticated user. Nếu app vẫn ghi trực tiếp bằng anon client,
+-- block này sẽ chặn cloud write đúng theo mục tiêu bảo mật production.
+-- =============================================================================
+
+-- 1. Không cho anon ghi/xóa trực tiếp bảng hàng hóa.
+REVOKE INSERT, UPDATE, DELETE ON pos_products FROM anon;
+GRANT SELECT ON pos_products TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON pos_products TO authenticated;
+
+DROP POLICY IF EXISTS "pos_products_allow_insert" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_allow_update" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_allow_delete" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_authenticated_insert" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_authenticated_update" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_authenticated_delete" ON pos_products;
+
+CREATE POLICY "pos_products_authenticated_insert"
+  ON pos_products FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY "pos_products_authenticated_update"
+  ON pos_products FOR UPDATE
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "pos_products_authenticated_delete"
+  ON pos_products FOR DELETE
+  TO authenticated
+  USING (true);
+
+-- 2. Không cho anon upload/update/delete tài liệu knowledge storage.
+UPDATE storage.buckets
+SET public = false
+WHERE id = 'knowledge-files';
+
+DROP POLICY IF EXISTS "knowledge-files public read" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files anon upload" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files anon update" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files anon delete" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files authenticated read" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files authenticated upload" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files authenticated update" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files authenticated delete" ON storage.objects;
+
+CREATE POLICY "knowledge-files authenticated read"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'knowledge-files');
+
+CREATE POLICY "knowledge-files authenticated upload"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'knowledge-files');
+
+CREATE POLICY "knowledge-files authenticated update"
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (bucket_id = 'knowledge-files')
+  WITH CHECK (bucket_id = 'knowledge-files');
+
+CREATE POLICY "knowledge-files authenticated delete"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'knowledge-files');
+
+-- 3. Không cho anon gọi RPC SECURITY DEFINER sửa tồn kho.
+REVOKE EXECUTE ON FUNCTION decrement_product_stock(UUID, INT) FROM anon;
+REVOKE EXECUTE ON FUNCTION increment_product_stock(UUID, INT) FROM anon;
+REVOKE EXECUTE ON FUNCTION apply_inventory_transaction_with_stock(JSONB) FROM anon;
+REVOKE EXECUTE ON FUNCTION delete_inventory_transaction_with_stock(UUID) FROM anon;
+
+GRANT EXECUTE ON FUNCTION decrement_product_stock(UUID, INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION increment_product_stock(UUID, INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION apply_inventory_transaction_with_stock(JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION delete_inventory_transaction_with_stock(UUID) TO authenticated;
+
+ALTER FUNCTION decrement_product_stock(UUID, INT) SET search_path = public;
+ALTER FUNCTION increment_product_stock(UUID, INT) SET search_path = public;
+ALTER FUNCTION apply_inventory_transaction_with_stock(JSONB) SET search_path = public;
+ALTER FUNCTION delete_inventory_transaction_with_stock(UUID) SET search_path = public;
+
+-- Reload PostgREST schema cache so newly created/replaced RPCs are callable via Supabase REST.
+NOTIFY pgrst, 'reload schema';

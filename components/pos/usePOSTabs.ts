@@ -1,6 +1,7 @@
 import React from 'react';
-import { generateId } from '../../businessLogic';
-import type { InvoiceTab } from './POSComputer';
+import { generateId } from '../../src/lib';
+import type { InvoiceTab } from './types';
+import type { POSPaymentMethod } from '../../types';
 
 type ConfirmConfig = {
   title: string;
@@ -17,9 +18,14 @@ interface UsePOSTabsParams {
   setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
   openConfirm: (config: ConfirmConfig) => void;
   closeConfirm: () => void;
+  defaultPaymentMethod?: POSPaymentMethod;
 }
 
-const createEmptySalesTab = (id: string, name: string): InvoiceTab => ({
+const createEmptySalesTab = (
+  id: string,
+  name: string,
+  defaultPaymentMethod: POSPaymentMethod = 'Cash'
+): InvoiceTab => ({
   id,
   name,
   mode: 'sales',
@@ -28,7 +34,7 @@ const createEmptySalesTab = (id: string, name: string): InvoiceTab => ({
   selectedCustomer: null,
   discountValue: 0,
   discountType: 'percent',
-  paymentMethod: 'Cash',
+  paymentMethod: defaultPaymentMethod,
   orderNote: '',
   otherFees: 0,
   cashReceived: 0,
@@ -45,6 +51,7 @@ export const usePOSTabs = ({
   setActiveTabId,
   openConfirm,
   closeConfirm,
+  defaultPaymentMethod = 'Cash',
 }: UsePOSTabsParams) => {
   const updateActiveTab = React.useCallback((updates: Partial<InvoiceTab>) => {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, ...updates } : t));
@@ -56,13 +63,13 @@ export const usePOSTabs = ({
       return match ? parseInt(match[0]) : 0;
     })) + 1;
     const newId = generateId();
-    setTabs(prev => [...prev, createEmptySalesTab(newId, `Hóa đơn ${nextNum}`)]);
+    setTabs(prev => [...prev, createEmptySalesTab(newId, `Hóa đơn ${nextNum}`, defaultPaymentMethod)]);
     setActiveTabId(newId);
-  }, [setActiveTabId, setTabs, tabs]);
+  }, [defaultPaymentMethod, setActiveTabId, setTabs, tabs]);
 
   const performCloseTab = React.useCallback((id: string) => {
     if (tabs.length === 1) {
-      setTabs([createEmptySalesTab('default', 'Hóa đơn 1')]);
+      setTabs([createEmptySalesTab('default', 'Hóa đơn 1', defaultPaymentMethod)]);
       setActiveTabId('default');
       return;
     }
@@ -72,7 +79,7 @@ export const usePOSTabs = ({
     if (activeTabId === id) {
       setActiveTabId(newTabs[0].id);
     }
-  }, [activeTabId, setActiveTabId, setTabs, tabs]);
+  }, [activeTabId, defaultPaymentMethod, setActiveTabId, setTabs, tabs]);
 
   const closeTab = React.useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();

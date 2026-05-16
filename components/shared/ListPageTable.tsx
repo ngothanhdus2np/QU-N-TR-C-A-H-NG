@@ -65,7 +65,7 @@ export function ListPageTable<T>({
           {columns.map(col => (
             <th
               key={col.key}
-              className={`px-4 py-3 font-bold text-[11px] uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 ${
+              className={`px-4 py-3 font-normal text-[11px] uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 ${
                 col.align === 'center'
                   ? 'text-center'
                   : col.align === 'right'
@@ -99,7 +99,7 @@ export function ListPageTable<T>({
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
                     <span className="text-3xl text-slate-300">📋</span>
                   </div>
-                  <p className="text-sm font-bold text-slate-400">Không có dữ liệu</p>
+                  <p className="text-sm font-normal text-slate-400">Không có dữ liệu</p>
                 </div>
               )}
             </td>

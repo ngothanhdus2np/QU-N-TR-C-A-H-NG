@@ -38,7 +38,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
       <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
         <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 flex items-start gap-4">
           <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-          <p className="text-xs text-amber-800 font-medium">
+          <p className="text-xs text-amber-800 font-normal">
             Phát hiện dữ liệu khác biệt. Vui lòng chọn phương án cập nhật.
           </p>
         </div>
@@ -53,7 +53,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
                 <th className="px-6 py-4 text-center">Phương án</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 text-xs font-bold">
+            <tbody className="divide-y divide-slate-50 text-xs font-normal">
               {auditConflicts.map((conflict, idx) => (
                 <tr
                   key={`${conflict.date}-${conflict.columnKey}`}
@@ -72,7 +72,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
                         next[idx].resolution = 'keep';
                         setAuditConflicts(next);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase mr-2 ${conflict.resolution === 'keep' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-normal uppercase mr-2 ${conflict.resolution === 'keep' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}
                     >
                       Giữ
                     </button>
@@ -82,7 +82,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
                         next[idx].resolution = 'update';
                         setAuditConflicts(next);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase ${conflict.resolution === 'update' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-400'}`}
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-normal uppercase ${conflict.resolution === 'update' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-400'}`}
                     >
                       Sửa
                     </button>
@@ -98,13 +98,13 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
           onClick={() =>
             setAuditConflicts(auditConflicts.map(c => ({ ...c, resolution: 'update' })))
           }
-          className="text-xs font-black text-rose-600 uppercase"
+          className="text-xs font-normal text-rose-600 uppercase"
         >
           Cập nhật tất cả
         </button>
         <button
           onClick={onResolveConflicts}
-          className="px-12 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl"
+          className="px-12 py-4 bg-slate-900 text-white rounded-2xl font-normal text-[10px] uppercase shadow-xl"
         >
           XÁC NHẬN ĐỐI SOÁT
         </button>

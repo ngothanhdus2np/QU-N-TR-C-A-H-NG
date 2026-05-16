@@ -58,7 +58,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 overflow-hidden">
         <div className="flex flex-col gap-6">
           <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col items-center gap-4">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Logo Thương Hiệu</span>
+            <span className="text-[10px] font-normal uppercase text-slate-400 tracking-widest">Logo Thương Hiệu</span>
             <div onClick={() => logoUploadRef.current?.click()} className="w-32 h-32 rounded-[2rem] border-4 border-dashed border-slate-100 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-all overflow-hidden bg-slate-50 relative">
               {loading && (
                 <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10">
@@ -69,23 +69,23 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
             </div>
           </div>
           <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4">
-             <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-2">Liên hệ & CTA</span>
+             <span className="text-[10px] font-normal uppercase text-indigo-600 tracking-widest flex items-center gap-2">Liên hệ & CTA</span>
              <div className="space-y-3">
                <div className="flex flex-col gap-1">
-                 <label className="text-[9px] font-black uppercase text-slate-400">Tên cửa hàng</label>
-                 <input value={brandProfile.name || ""} onChange={e => onUpdate({...brandProfile, name: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="Tên cửa hàng (hiện trên hóa đơn)" />
+                 <label className="text-[9px] font-normal uppercase text-slate-400">Tên cửa hàng</label>
+                 <input value={brandProfile.name || ""} onChange={e => onUpdate({...brandProfile, name: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-normal outline-none w-full" placeholder="Tên cửa hàng (hiện trên hóa đơn)" />
                </div>
                <div className="flex flex-col gap-1">
-                 <label className="text-[9px] font-black uppercase text-slate-400">Số điện thoại</label>
-                 <input value={brandProfile.phone || ""} onChange={e => onUpdate({...brandProfile, phone: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="Số điện thoại" />
+                 <label className="text-[9px] font-normal uppercase text-slate-400">Số điện thoại</label>
+                 <input value={brandProfile.phone || ""} onChange={e => onUpdate({...brandProfile, phone: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-normal outline-none w-full" placeholder="Số điện thoại" />
                </div>
                <div className="flex flex-col gap-1">
-                 <label className="text-[9px] font-black uppercase text-slate-400">Địa chỉ</label>
-                 <input value={brandProfile.address || ""} onChange={e => onUpdate({...brandProfile, address: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="Địa chỉ" />
+                 <label className="text-[9px] font-normal uppercase text-slate-400">Địa chỉ</label>
+                 <input value={brandProfile.address || ""} onChange={e => onUpdate({...brandProfile, address: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-normal outline-none w-full" placeholder="Địa chỉ" />
                </div>
                <div className="flex flex-col gap-1">
-                 <label className="text-[9px] font-black uppercase text-slate-400">Hashtag</label>
-                 <input value={brandProfile.hashtags || ""} onChange={e => onUpdate({...brandProfile, hashtags: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-bold outline-none w-full" placeholder="#Hashtag" />
+                 <label className="text-[9px] font-normal uppercase text-slate-400">Hashtag</label>
+                 <input value={brandProfile.hashtags || ""} onChange={e => onUpdate({...brandProfile, hashtags: e.target.value})} className="bg-slate-50 border rounded-xl p-3 text-xs font-normal outline-none w-full" placeholder="#Hashtag" />
                </div>
              </div>
           </div>
@@ -93,20 +93,20 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
         <div className="lg:col-span-2 flex flex-col gap-8 overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 h-64">
-                <span className="text-[10px] font-black uppercase text-red-600 tracking-widest flex items-center gap-2"><MessageSquare size={14}/> Giọng văn thương hiệu</span>
-                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">Mô tả cách Phúc Sang trò chuyện với khách hàng (thân thiện, bình dân, chân thành...)</p>
-                <textarea value={brandProfile.voice} onChange={e => onUpdate({...brandProfile, voice: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-medium outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
+                <span className="text-[10px] font-normal uppercase text-red-600 tracking-widest flex items-center gap-2"><MessageSquare size={14}/> Giọng văn thương hiệu</span>
+                <p className="text-[10px] text-slate-400 font-normal leading-relaxed">Mô tả cách Phúc Sang trò chuyện với khách hàng (thân thiện, bình dân, chân thành...)</p>
+                <textarea value={brandProfile.voice} onChange={e => onUpdate({...brandProfile, voice: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
              </div>
              <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 h-64">
-                <span className="text-[10px] font-black uppercase text-green-600 tracking-widest flex items-center gap-2"><Users size={14}/> Khách hàng mục tiêu</span>
-                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">Ai là người thường xuyên mua sắm tại Phúc Sang? (Nội trợ, học sinh, công nhân...)</p>
-                <textarea value={brandProfile.targetAudience} onChange={e => onUpdate({...brandProfile, targetAudience: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-medium outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
+                <span className="text-[10px] font-normal uppercase text-green-600 tracking-widest flex items-center gap-2"><Users size={14}/> Khách hàng mục tiêu</span>
+                <p className="text-[10px] text-slate-400 font-normal leading-relaxed">Ai là người thường xuyên mua sắm tại Phúc Sang? (Nội trợ, học sinh, công nhân...)</p>
+                <textarea value={brandProfile.targetAudience} onChange={e => onUpdate({...brandProfile, targetAudience: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
              </div>
           </div>
           <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 flex-1">
-             <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest flex items-center gap-2"><Sparkles size={14}/> Câu chuyện thương hiệu</span>
-             <p className="text-[10px] text-slate-400 font-medium leading-relaxed">Lý do Phúc Sang ra đời và giá trị cốt lõi mà bạn mang lại cho khách hàng.</p>
-             <textarea value={brandProfile.story} onChange={e => onUpdate({...brandProfile, story: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-medium outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
+             <span className="text-[10px] font-normal uppercase text-amber-600 tracking-widest flex items-center gap-2"><Sparkles size={14}/> Câu chuyện thương hiệu</span>
+             <p className="text-[10px] text-slate-400 font-normal leading-relaxed">Lý do Phúc Sang ra đời và giá trị cốt lõi mà bạn mang lại cho khách hàng.</p>
+             <textarea value={brandProfile.story} onChange={e => onUpdate({...brandProfile, story: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-all" />
           </div>
         </div>
       </div>

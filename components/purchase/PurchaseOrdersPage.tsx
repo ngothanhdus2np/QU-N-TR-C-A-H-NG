@@ -23,6 +23,7 @@ interface PurchaseOrdersPageProps {
   onCreatePurchase: () => void;
   onViewDetail: (transaction: InventoryTransaction) => void;
   onDeletePurchase: (id: string) => void | Promise<void>;
+  onExportPurchases: (transactions: InventoryTransaction[]) => void;
 }
 
 type SortKey = 'date' | 'code' | 'supplier' | 'amount' | 'status';
@@ -34,9 +35,10 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   onCreatePurchase,
   onViewDetail,
   onDeletePurchase,
+  onExportPurchases,
 }) => {
   const { showToast } = useToast();
-  
+
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +107,15 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
     }
 
     return result;
-  }, [purchaseOrders, searchTerm, dateRange, statusFilter, supplierFilter, creatorFilter, suppliers]);
+  }, [
+    purchaseOrders,
+    searchTerm,
+    dateRange,
+    statusFilter,
+    supplierFilter,
+    creatorFilter,
+    suppliers,
+  ]);
 
   // Sort
   const sortedOrders = useMemo(() => {
@@ -211,8 +221,8 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   };
 
   const handleExportSelected = () => {
-    // TODO: Export to Excel
-    showToast(`Xuất Excel: ${selectedOrders.length} phiếu`, 'info');
+    const selected = sortedOrders.filter(order => selectedOrders.includes(order.id));
+    onExportPurchases(selected);
   };
 
   // Get unique values for filters
@@ -235,9 +245,21 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
         <FilterCheckboxGroup
           label="Trạng thái"
           options={[
-            { value: 'draft', label: 'Phiếu tạm', count: purchaseOrders.filter(o => o.status === 'draft').length },
-            { value: 'completed', label: 'Đã nhập hàng', count: purchaseOrders.filter(o => (o.status || 'completed') === 'completed').length },
-            { value: 'cancelled', label: 'Đã hủy', count: purchaseOrders.filter(o => o.status === 'cancelled').length },
+            {
+              value: 'draft',
+              label: 'Phiếu tạm',
+              count: purchaseOrders.filter(o => o.status === 'draft').length,
+            },
+            {
+              value: 'completed',
+              label: 'Đã nhập hàng',
+              count: purchaseOrders.filter(o => (o.status || 'completed') === 'completed').length,
+            },
+            {
+              value: 'cancelled',
+              label: 'Đã hủy',
+              count: purchaseOrders.filter(o => o.status === 'cancelled').length,
+            },
           ]}
           selected={statusFilter}
           onChange={setStatusFilter}
@@ -260,7 +282,8 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
           options={suppliers.map(s => ({
             value: s.id,
             label: s.name,
-            count: purchaseOrders.filter(o => o.supplierId === s.id || o.supplierName === s.name).length,
+            count: purchaseOrders.filter(o => o.supplierId === s.id || o.supplierName === s.name)
+              .length,
           }))}
           selected={supplierFilter}
           onChange={setSupplierFilter}
@@ -293,14 +316,14 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
         <>
           <button
             onClick={onCreatePurchase}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-normal hover:bg-indigo-700 transition-colors shadow-sm"
           >
             <Plus className="h-4 w-4" />
-            Nhập hàng
+            Phiếu nhập hàng
           </button>
           <button
-            onClick={() => showToast('Chức năng xuất file đang được phát triển', 'info')}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            onClick={() => onExportPurchases(sortedOrders)}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <FileDown className="h-4 w-4" />
             Xuất file
@@ -313,14 +336,14 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
         <>
           <button
             onClick={handleExportSelected}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-xs font-normal hover:bg-indigo-50 transition-colors"
           >
             <FileText className="h-3.5 w-3.5" />
             Xuất Excel
           </button>
           <button
             onClick={handleBulkDelete}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 rounded-lg text-xs font-normal hover:bg-rose-50 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Xóa
@@ -379,7 +402,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: order => (
-        <span className="font-mono font-bold text-indigo-600 text-xs">{order.id.slice(0, 12)}</span>
+        <span className="font-mono font-normal text-indigo-600 text-xs">{order.id.slice(0, 12)}</span>
       ),
     },
     {
@@ -404,7 +427,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       label: 'Nhà cung cấp',
       sortable: true,
       render: order => (
-        <span className="font-semibold text-slate-800 text-sm">
+        <span className="font-normal text-slate-800 text-sm">
           {order.supplierName || 'NCC vãng lai'}
         </span>
       ),
@@ -424,7 +447,9 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             const discount = itemWithPrice.discount || 0;
             return sum + item.quantity * price - discount;
           }, 0);
-        return <span className="font-black text-emerald-600 text-sm">{total.toLocaleString()}đ</span>;
+        return (
+          <span className="font-normal text-emerald-600 text-sm">{total.toLocaleString()}đ</span>
+        );
       },
     },
     {
@@ -480,7 +505,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   return (
     <div className="h-full">
       <ListPageLayout
-        sidebarTitle="Phiếu nhập hàng"
+        sidebarTitle="Nhập hàng"
         sidebar={sidebar}
         toolbar={toolbar}
         pagination={pagination}
@@ -501,7 +526,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
                 <FileText className="w-10 h-10 text-slate-300" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-slate-800">Chưa có phiếu nhập hàng</p>
+                <p className="text-sm font-normal text-slate-800">Chưa có phiếu nhập hàng</p>
                 <p className="text-xs text-slate-400 mt-1">
                   Bấm nút "Nhập hàng" để tạo phiếu nhập mới
                 </p>

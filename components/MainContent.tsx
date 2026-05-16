@@ -1,4 +1,5 @@
 import React, { useTransition, useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import Dashboard from './Dashboard';
 import ChatInterface from './ChatInterface';
 import RevenueManager from './RevenueManager';
@@ -17,6 +18,14 @@ import CustomerPoints from './pos/CustomerPoints';
 import SupplierContainer from './suppliers/SupplierContainer';
 import PurchaseOrdersContainer from './purchase/PurchaseOrdersContainer';
 import AuditContainer from './audit/AuditContainer';
+import OrderInvoices from './orders/OrderInvoices';
+import OrderReturns from './orders/OrderReturns';
+import OrderRepairs from './orders/OrderRepairs';
+import DeliveryPartners from './orders/DeliveryPartners';
+import ShippingOrders from './orders/ShippingOrders';
+import PurchaseInvoices from './orders/PurchaseInvoices';
+import GoodsInternalUse from './inventory/GoodsInternalUse';
+import GoodsDisposal from './inventory/GoodsDisposal';
 import { AppData, AppDataSurgicalUpdate, BrandProfile, ChatMessage, DashboardBreakEvenAnalysis, DiagnosisRange, ProductLine } from '../types';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
@@ -126,6 +135,7 @@ const MainContent: React.FC<MainContentProps> = ({
         return (
           <ProductGroupManager
             productGroups={data.productGroups || []}
+            products={data.posProducts || []}
             groupRevenue={data.productGroupRevenue || []}
             onUpdateGroups={newList => updateData('productGroups', newList)}
             onUpdateGroupRevenue={newList => updateData('productGroupRevenue', newList)}
@@ -232,12 +242,14 @@ const MainContent: React.FC<MainContentProps> = ({
           />
         );
       case 'goods-purchase':
+      case 'purchase-returns':
         return (
           <PurchaseOrdersContainer
             data={data}
             onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
             onPushBatch={pushBatch}
+            initialView={activeTab === 'purchase-returns' ? 'returns' : 'imports'}
           />
         );
       case 'goods-audit':
@@ -249,13 +261,61 @@ const MainContent: React.FC<MainContentProps> = ({
             onPushBatch={pushBatch}
           />
         );
+      case 'order-invoices':
+        return (
+          <OrderInvoices
+            orders={data.posOrders || []}
+            customers={data.posCustomers || []}
+            storeName={brandProfile.name}
+          />
+        );
+      case 'order-returns':
+        return (
+          <OrderReturns
+            orders={data.posOrders || []}
+            products={data.posProducts || []}
+            customers={data.posCustomers || []}
+            onUpdateSurgical={updateSurgical}
+          />
+        );
+      case 'order-repairs':
+        return <OrderRepairs />;
+      case 'delivery-partners':
+        return <DeliveryPartners />;
+      case 'shipping-orders':
+        return <ShippingOrders />;
+      case 'purchase-invoices':
+        return (
+          <PurchaseInvoices
+            transactions={data.inventoryTransactions || []}
+            suppliers={data.suppliers || []}
+            supplierDebts={data.supplierDebts || []}
+          />
+        );
+      case 'goods-internal-use':
+        return (
+          <GoodsInternalUse
+            products={data.posProducts || []}
+            data={data}
+            onUpdateSurgical={updateSurgical}
+          />
+        );
+      case 'goods-disposal':
+        return (
+          <GoodsDisposal
+            products={data.posProducts || []}
+            data={data}
+            onUpdateSurgical={updateSurgical}
+          />
+        );
       default:
         return null;
     }
   };
 
   const isPosActive = activeTab === 'pos';
-  const isGoodsActive = activeTab === 'goods';
+  const isGoodsActive =
+    activeTab === 'goods' || activeTab === 'goods-pricing' || activeTab === 'goods-warranty';
   const isStaffActive = activeTab === 'staff' || activeTab.startsWith('staff-');
   const isPayrollActive = activeTab === 'payroll' || activeTab.startsWith('payroll-');
 
@@ -268,8 +328,11 @@ const MainContent: React.FC<MainContentProps> = ({
             <POSComputer
               isActive={isPosActive}
               products={data.posProducts || []}
+              productGroups={data.productGroups || []}
               customers={data.posCustomers || []}
               orders={data.posOrders || []}
+              paymentSettings={data.posPaymentSettings}
+              inventorySettings={data.posInventorySettings}
               brandProfile={brandProfile}
               currentStaffName={brandProfile?.name || 'Quản lý'}
               onGoToManagement={() => handleSetActiveTab('dashboard')}
@@ -279,27 +342,29 @@ const MainContent: React.FC<MainContentProps> = ({
                 const updatedCustomers = [...(data.posCustomers || []), customer];
                 updateData('posCustomers', updatedCustomers);
               }}
-              onPlaceOrder={(order, updatedProducts, updatedCustomer) => {
+              onPlaceOrder={(order, updatedProducts, updatedCustomer) =>
                 processPlaceOrder({
                   data,
                   order,
                   updatedProducts,
                   updatedCustomer,
+                  allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   pushBatch,
                   updateSurgical,
-                });
-              }}
-              onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems) => {
+                })
+              }
+              onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems) =>
                 processReturnOrder({
                   data,
                   returnOrder,
                   updatedProducts,
                   returnedItems,
                   exchangeItems,
+                  allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   pushBatch,
                   updateSurgical,
-                });
-              }}
+                })
+              }
             />
           </ErrorBoundary>
         </div>
@@ -313,11 +378,20 @@ const MainContent: React.FC<MainContentProps> = ({
             <GoodsInventory
               products={data.posProducts || []}
               transactions={data.inventoryTransactions || []}
+              productGroups={data.productGroups || []}
               onUpdateProducts={newList => updateData('posProducts', newList)}
               onUpdateSurgical={updateSurgical}
               onPushBatch={pushBatch}
               onAddTransaction={t => pushBatch('inventoryTransactions', [t])}
-              requestedTab={activeTab === 'goods' ? 'goods' : undefined}
+              requestedTab={
+                activeTab === 'goods-pricing'
+                  ? 'pricing'
+                  : activeTab === 'goods-warranty'
+                    ? 'warranty'
+                  : activeTab === 'goods'
+                    ? 'goods'
+                    : undefined
+              }
             />
           </ErrorBoundary>
         </div>
@@ -397,9 +471,20 @@ const MainContent: React.FC<MainContentProps> = ({
             <TableSkeleton />
           </div>
         ) : (
-          <ErrorBoundary key={activeTab} moduleName={activeTab}>
-            <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>{renderContent()}</div>
-          </ErrorBoundary>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              className="h-full"
+            >
+              <ErrorBoundary key={activeTab} moduleName={activeTab}>
+                <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>{renderContent()}</div>
+              </ErrorBoundary>
+            </motion.div>
+          </AnimatePresence>
         ))}
     </div>
   );

@@ -36,7 +36,7 @@ export const DashboardTrendsPanel: React.FC<DashboardTrendsPanelProps> = ({
           <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
             Xu hướng Tài chính
           </h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
             Biến động Doanh thu & Lợi nhuận qua các tháng
           </p>
         </div>
@@ -131,7 +131,7 @@ export const DashboardTrendsPanel: React.FC<DashboardTrendsPanelProps> = ({
               <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">
                 Chi tiết tháng {selectedTrendMonth.split('-')[1]}/{selectedTrendMonth.split('-')[0]}
               </h4>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+              <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
                 Biến động chi tiết theo từng ngày
               </p>
             </div>

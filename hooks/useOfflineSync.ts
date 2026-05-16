@@ -57,6 +57,13 @@ export function useOfflineSync(): UseOfflineSyncReturn {
           if (op.opType === 'pushBatch') {
             const items = Array.isArray(op.payload) ? op.payload : [op.payload];
             await apiService.upsertMany(key, items);
+          } else if (op.opType === 'inventoryApply') {
+            await apiService.applyInventoryTransactionWithStock(
+              op.payload as AppData['inventoryTransactions'][number]
+            );
+          } else if (op.opType === 'inventoryDelete') {
+            const payload = op.payload as { id: string };
+            await apiService.deleteInventoryTransactionWithStock(payload.id);
           } else if (op.opType === 'upsertItem') {
             await apiService.upsertItem(key, op.payload);
           } else if (op.opType === 'deleteItem') {

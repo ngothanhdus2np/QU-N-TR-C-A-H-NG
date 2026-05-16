@@ -1,0 +1,105 @@
+import { useState } from 'react';
+import { PurchaseItem, PurchaseDiscountType } from '../components/pos/GoodsPurchaseForm';
+
+export function usePurchaseFormState() {
+  // Purchase form states
+  const [showPurchaseForm, setShowPurchaseForm] = useState(false);
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
+  const [purchaseSupplier, setPurchaseSupplier] = useState('');
+  const [purchaseNote, setPurchaseNote] = useState('');
+  const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(0);
+  const [purchaseDiscountType, setPurchaseDiscountType] = useState<PurchaseDiscountType>('fixed');
+
+  // Purchase return form states
+  const [showPurchaseReturnForm, setShowPurchaseReturnForm] = useState(false);
+  const [returnItems, setReturnItems] = useState<PurchaseItem[]>([]);
+  const [returnSupplier, setReturnSupplier] = useState('');
+  const [returnNote, setReturnNote] = useState('');
+  const [returnDiscountValue, setReturnDiscountValue] = useState(0);
+  const [returnDiscountType, setReturnDiscountType] = useState<PurchaseDiscountType>('fixed');
+  const [returnSupplierPaidAmount, setReturnSupplierPaidAmount] = useState(0);
+  const [returnApplySupplierDebt, setReturnApplySupplierDebt] = useState(true);
+
+  // Helper functions
+  const resetPurchaseForm = () => {
+    setPurchaseItems([]);
+    setPurchaseSupplier('');
+    setPurchaseNote('');
+    setPurchaseDiscountValue(0);
+    setPurchaseDiscountType('fixed');
+  };
+
+  const resetReturnForm = () => {
+    setReturnItems([]);
+    setReturnSupplier('');
+    setReturnNote('');
+    setReturnDiscountValue(0);
+    setReturnDiscountType('fixed');
+    setReturnSupplierPaidAmount(0);
+    setReturnApplySupplierDebt(true);
+  };
+
+  const getPurchaseItemsNetTotal = () =>
+    purchaseItems.reduce((sum, item) => sum + item.quantity * item.price - item.discount, 0);
+
+  const getPurchaseBillDiscountAmount = () => {
+    const netTotal = Math.max(0, getPurchaseItemsNetTotal());
+    return purchaseDiscountType === 'percent'
+      ? Math.min(netTotal, Math.round((netTotal * purchaseDiscountValue) / 100))
+      : Math.min(netTotal, purchaseDiscountValue);
+  };
+
+  const getReturnItemsNetTotal = () =>
+    returnItems.reduce((sum, item) => sum + item.quantity * item.price - item.discount, 0);
+
+  const getReturnBillDiscountAmount = () => {
+    const netTotal = Math.max(0, getReturnItemsNetTotal());
+    return returnDiscountType === 'percent'
+      ? Math.min(netTotal, Math.round((netTotal * returnDiscountValue) / 100))
+      : Math.min(netTotal, returnDiscountValue);
+  };
+
+  const getReturnSupplierMustPay = () =>
+    Math.max(0, getReturnItemsNetTotal() - getReturnBillDiscountAmount());
+
+  return {
+    // Purchase form
+    showPurchaseForm,
+    setShowPurchaseForm,
+    purchaseItems,
+    setPurchaseItems,
+    purchaseSupplier,
+    setPurchaseSupplier,
+    purchaseNote,
+    setPurchaseNote,
+    purchaseDiscountValue,
+    setPurchaseDiscountValue,
+    purchaseDiscountType,
+    setPurchaseDiscountType,
+    resetPurchaseForm,
+    getPurchaseItemsNetTotal,
+    getPurchaseBillDiscountAmount,
+
+    // Return form
+    showPurchaseReturnForm,
+    setShowPurchaseReturnForm,
+    returnItems,
+    setReturnItems,
+    returnSupplier,
+    setReturnSupplier,
+    returnNote,
+    setReturnNote,
+    returnDiscountValue,
+    setReturnDiscountValue,
+    returnDiscountType,
+    setReturnDiscountType,
+    returnSupplierPaidAmount,
+    setReturnSupplierPaidAmount,
+    returnApplySupplierDebt,
+    setReturnApplySupplierDebt,
+    resetReturnForm,
+    getReturnItemsNetTotal,
+    getReturnBillDiscountAmount,
+    getReturnSupplierMustPay,
+  };
+}

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Truck, Plus, Pencil, Trash2, X, Save, CreditCard, TrendingDown, ChevronDown, FileDown } from 'lucide-react';
 import { AppDataSurgicalUpdate, Supplier, SupplierDebtRecord } from '../../types';
-import { generateId } from '../../businessLogic';
+import { generateId } from '../../src/lib';
 import { exportToExcel } from '../../services/exportService';
 
 interface Props {
@@ -127,8 +127,8 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
           <p className="text-sm text-slate-500 mt-1">Quản lý danh sách nhà cung cấp và theo dõi công nợ</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Tổng công nợ</p>
-          <p className={`text-2xl font-black ${totalDebt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(totalDebt)}</p>
+          <p className="text-xs text-slate-400 uppercase tracking-widest font-normal">Tổng công nợ</p>
+          <p className={`text-2xl font-normal ${totalDebt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(totalDebt)}</p>
         </div>
       </div>
 
@@ -136,7 +136,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
       <div className="flex bg-slate-100 p-1 rounded-xl w-fit gap-1">
         {(['list', 'debt'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            className={`px-5 py-2 rounded-lg text-sm font-normal transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {tab === 'list' ? 'Danh Sách NCC' : 'Sổ Công Nợ'}
           </button>
         ))}
@@ -147,7 +147,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
         <div className="space-y-4">
           <div className="flex justify-end">
             <button onClick={openAddSupplier}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-normal hover:bg-indigo-700 transition-colors">
               <Plus className="w-4 h-4" /> Thêm NCC
             </button>
           </div>
@@ -155,7 +155,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
           {suppliers.length === 0 ? (
             <div className="text-center py-20 text-slate-400">
               <Truck className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="font-semibold">Chưa có nhà cung cấp nào</p>
+              <p className="font-normal">Chưa có nhà cung cấp nào</p>
               <p className="text-sm">Nhấn "Thêm NCC" để bắt đầu</p>
             </div>
           ) : (
@@ -165,15 +165,15 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
                 return (
                   <div key={s.id} className="bg-white rounded-2xl border border-slate-100 p-5 flex items-center justify-between gap-4 shadow-sm">
                     <div className="flex-1 min-w-0">
-                      <p className="font-black text-slate-800 text-base">{s.name}</p>
+                      <p className="font-normal text-slate-800 text-base">{s.name}</p>
                       <div className="flex flex-wrap gap-3 mt-1">
                         {s.phone && <span className="text-xs text-slate-500">{s.phone}</span>}
                         {s.address && <span className="text-xs text-slate-500 truncate max-w-xs">{s.address}</span>}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs text-slate-400 font-bold uppercase">Còn nợ</p>
-                      <p className={`text-lg font-black ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(debt)}</p>
+                      <p className="text-xs text-slate-400 font-normal uppercase">Còn nợ</p>
+                      <p className={`text-lg font-normal ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(debt)}</p>
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button onClick={() => { setFilterSupplierId(s.id); setActiveTab('debt'); }}
@@ -203,7 +203,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="relative">
               <select value={filterSupplierId} onChange={e => setFilterSupplierId(e.target.value)}
-                className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2 pr-8 text-sm font-semibold text-slate-700 outline-none shadow-sm cursor-pointer">
+                className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2 pr-8 text-sm font-normal text-slate-700 outline-none shadow-sm cursor-pointer">
                 <option value="all">— Tất cả NCC —</option>
                 {suppliers.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -224,7 +224,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
                   })),
                   `CongNo_${filterSupplierId === 'all' ? 'TatCa' : suppliers.find(s => s.id === filterSupplierId)?.name ?? filterSupplierId}`
                 )}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-emerald-600 rounded-xl text-sm font-bold hover:bg-emerald-50 hover:border-emerald-200 transition-colors shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-emerald-600 rounded-xl text-sm font-normal hover:bg-emerald-50 hover:border-emerald-200 transition-colors shadow-sm"
               >
                 <FileDown className="w-4 h-4" /> Xuất Excel
               </button>
@@ -232,7 +232,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
                 const s = suppliers.find(sup => sup.id === filterSupplierId);
                 openAddDebt(s?.id || '', s?.name || '');
               }}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-normal hover:bg-indigo-700 transition-colors">
                 <Plus className="w-4 h-4" /> Ghi nhận
               </button>
             </div>
@@ -246,16 +246,16 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
             return (
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold uppercase">Tổng phát sinh</p>
-                  <p className="text-xl font-black text-slate-800 mt-1">{fmt(totalPurchase)}</p>
+                  <p className="text-xs text-slate-400 font-normal uppercase">Tổng phát sinh</p>
+                  <p className="text-xl font-normal text-slate-800 mt-1">{fmt(totalPurchase)}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold uppercase">Đã thanh toán</p>
-                  <p className="text-xl font-black text-emerald-600 mt-1">{fmt(totalPayment)}</p>
+                  <p className="text-xs text-slate-400 font-normal uppercase">Đã thanh toán</p>
+                  <p className="text-xl font-normal text-emerald-600 mt-1">{fmt(totalPayment)}</p>
                 </div>
                 <div className={`rounded-2xl border p-4 shadow-sm ${debt > 0 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                  <p className="text-xs text-slate-400 font-bold uppercase">Còn lại</p>
-                  <p className={`text-xl font-black mt-1 ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(debt)}</p>
+                  <p className="text-xs text-slate-400 font-normal uppercase">Còn lại</p>
+                  <p className={`text-xl font-normal mt-1 ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(debt)}</p>
                 </div>
               </div>
             );
@@ -265,7 +265,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
           {debtsWithBalance.length === 0 ? (
             <div className="text-center py-16 text-slate-400">
               <TrendingDown className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p className="font-semibold">Chưa có giao dịch nào</p>
+              <p className="font-normal">Chưa có giao dịch nào</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
@@ -285,15 +285,15 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
                   {debtsWithBalance.map(d => (
                     <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.date.split('-').reverse().join('/')}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-700">{d.supplierName}</td>
+                      <td className="px-4 py-3 font-normal text-slate-700">{d.supplierName}</td>
                       <td className="px-4 py-3 text-slate-500">{d.description}</td>
-                      <td className="px-4 py-3 text-right font-bold text-rose-600">
+                      <td className="px-4 py-3 text-right font-normal text-rose-600">
                         {d.type === 'purchase' ? fmt(d.amount) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-emerald-600">
+                      <td className="px-4 py-3 text-right font-normal text-emerald-600">
                         {d.type === 'payment' ? fmt(d.amount) : '—'}
                       </td>
-                      <td className={`px-4 py-3 text-right font-black ${d.runningBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      <td className={`px-4 py-3 text-right font-normal ${d.runningBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                         {fmt(d.runningBalance)}
                       </td>
                       <td className="px-4 py-3">
@@ -313,7 +313,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
       {/* ── Modal: Supplier Form ── */}
       {showSupplierForm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-800">{editingSupplierId ? 'Sửa NCC' : 'Thêm NCC mới'}</h3>
@@ -329,7 +329,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
                 { label: 'Ghi chú', field: 'notes', placeholder: 'Điều khoản thanh toán, liên hệ...' },
               ].map(({ label, field, placeholder }) => (
                 <div key={field}>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
+                  <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">{label}</label>
                   <input
                     value={(supplierForm as any)[field] || ''}
                     onChange={e => setSupplierForm(f => ({ ...f, [field]: e.target.value }))}
@@ -341,11 +341,11 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowSupplierForm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-normal text-sm hover:bg-slate-50 transition-colors">
                 Hủy
               </button>
               <button onClick={saveSupplier}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-normal text-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
                 <Save className="w-4 h-4" /> Lưu
               </button>
             </div>
@@ -355,7 +355,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
       {/* ── Modal: Debt Form ── */}
       {showDebtForm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-800">Ghi nhận giao dịch</h3>
@@ -366,12 +366,12 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
             <div className="space-y-3">
               {/* Loại giao dịch */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loại giao dịch</label>
+                <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">Loại giao dịch</label>
                 <div className="flex gap-2 mt-1">
                   {[{ value: 'purchase', label: 'Mua hàng (nợ)' }, { value: 'payment', label: 'Thanh toán (trả)' }].map(opt => (
                     <button key={opt.value}
                       onClick={() => setDebtForm(f => ({ ...f, type: opt.value as any }))}
-                      className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${debtForm.type === opt.value
+                      className={`flex-1 py-2 rounded-xl text-sm font-normal transition-all ${debtForm.type === opt.value
                         ? opt.value === 'purchase' ? 'bg-rose-100 text-rose-700 border-2 border-rose-300' : 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300'
                         : 'bg-slate-100 text-slate-500 border-2 border-transparent hover:bg-slate-200'}`}>
                       {opt.label}
@@ -382,7 +382,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
               {/* NCC */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nhà cung cấp</label>
+                <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">Nhà cung cấp</label>
                 <div className="relative mt-1">
                   <select value={debtForm.supplierId}
                     onChange={e => {
@@ -399,7 +399,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
               {/* Ngày */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ngày</label>
+                <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">Ngày</label>
                 <input type="date" value={debtForm.date}
                   onChange={e => setDebtForm(f => ({ ...f, date: e.target.value }))}
                   className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400" />
@@ -407,7 +407,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
               {/* Số tiền */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Số tiền (đ)</label>
+                <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">Số tiền (đ)</label>
                 <input type="number" value={debtForm.amount || ''}
                   onChange={e => setDebtForm(f => ({ ...f, amount: Number(e.target.value) }))}
                   placeholder="0"
@@ -416,7 +416,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
               {/* Mô tả */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mô tả</label>
+                <label className="text-xs font-normal text-slate-500 uppercase tracking-wider">Mô tả</label>
                 <input value={debtForm.description}
                   onChange={e => setDebtForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="VD: Nhập 50 đôi giày mùa hè"
@@ -426,11 +426,11 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowDebtForm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-normal text-sm hover:bg-slate-50 transition-colors">
                 Hủy
               </button>
               <button onClick={saveDebt}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-normal text-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
                 <Save className="w-4 h-4" /> Lưu
               </button>
             </div>

@@ -76,7 +76,7 @@ const DiagnosisTab: React.FC<Props> = ({
           </div>
         </div>
         <div className="mt-10 pt-8 border-t border-white/10 relative z-10">
-          <button onClick={runRevenueDiagnosis} disabled={isDiagnosing || !revenueAnalytics} className="w-full px-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
+          <button onClick={runRevenueDiagnosis} disabled={isDiagnosing || !revenueAnalytics} className="w-full px-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-3xl font-normal text-[11px] uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
             {isDiagnosing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
             {isDiagnosing ? "Đang giải mã dữ liệu..." : "Bắt đầu Siêu Chẩn Đoán"}
           </button>

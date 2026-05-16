@@ -1,7 +1,7 @@
 import React from 'react';
 import { Employee } from '../../types';
 import { TrendingUp, Trophy, Crown, Medal } from 'lucide-react';
-import { isStaffActive } from '../../businessLogic';
+import { isStaffActive } from '../../src/lib';
 
 interface StaffRanking {
   id: string;
@@ -32,7 +32,7 @@ const SalesTab: React.FC<Props> = ({
           <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-xl"><Trophy className="w-6 h-6" /></div>
           <div>
             <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Bảng Vàng Doanh Số Tháng {selectedMonth.split('-').reverse().join('/')}</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Xếp hạng hiệu quả đóng góp doanh thu của nhân sự</p>
+            <p className="text-[10px] text-slate-400 font-normal uppercase tracking-widest mt-0.5">Xếp hạng hiệu quả đóng góp doanh thu của nhân sự</p>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -50,13 +50,13 @@ const SalesTab: React.FC<Props> = ({
                   <div className={`w-14 h-14 rounded-2xl ${theme.bg} text-white flex items-center justify-center shadow-lg`}>
                     <theme.icon className="w-8 h-8" />
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${theme.text}`}>{theme.label}</span>
+                  <span className={`text-[10px] font-normal uppercase tracking-[0.2em] ${theme.text}`}>{theme.label}</span>
                 </div>
                 <div className="relative z-10">
                   <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{r.name}</h4>
                   <div className="mt-4 flex items-end gap-2">
-                    <span className="text-2xl font-black text-slate-800 tabular-nums">{(r.totalAmount || 0).toLocaleString()}</span>
-                    <span className="text-[10px] font-bold text-slate-400 mb-1.5">VNĐ</span>
+                    <span className="text-2xl font-normal text-slate-800 tabular-nums">{(r.totalAmount || 0).toLocaleString()}</span>
+                    <span className="text-[10px] font-normal text-slate-400 mb-1.5">VNĐ</span>
                   </div>
                 </div>
               </div>
@@ -89,15 +89,15 @@ const SalesTab: React.FC<Props> = ({
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                      <p className={`text-sm font-bold truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                      <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
                       <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
                     </td>
                     {daysArray.map(day => (
                       <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                        <input type="text" defaultValue={getSalesCellValue(emp.id, day)} onBlur={(e) => handleSalesInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-amber-50/50" />
+                        <input type="text" defaultValue={getSalesCellValue(emp.id, day)} onBlur={(e) => handleSalesInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-normal outline-none border-none focus:bg-amber-50/50" />
                       </td>
                     ))}
-                    <td className="bg-amber-50 text-center font-black text-amber-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalSalesAmount(emp.id) || 0).toLocaleString()}</td>
+                    <td className="bg-amber-50 text-center font-normal text-amber-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalSalesAmount(emp.id) || 0).toLocaleString()}</td>
                   </tr>
                 );
               })}

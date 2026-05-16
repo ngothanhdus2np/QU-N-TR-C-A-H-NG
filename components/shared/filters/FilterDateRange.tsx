@@ -64,7 +64,7 @@ export const FilterDateRange: React.FC<FilterDateRangeProps> = ({
           <button
             key={index}
             onClick={() => handlePresetClick(preset.value())}
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-colors"
+            className="px-3 py-1.5 text-xs font-normal bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-colors"
           >
             {preset.label}
           </button>

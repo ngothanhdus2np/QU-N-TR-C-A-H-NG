@@ -8,7 +8,7 @@ import {
   ViolationOccurrence,
   ViolationType,
 } from '../../types';
-import { calculateSeniority, determineCurrentPolicy } from '../../businessLogic';
+import { calculateSeniority, determineCurrentPolicy } from '../../src/lib';
 
 interface PayrollPrintPreviewModalProps {
   payroll: PayrollRecord;
@@ -84,7 +84,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
               Xem trước Phiếu lương
             </h3>
-            <p className="text-xs text-slate-500 font-bold uppercase">
+            <p className="text-xs text-slate-500 font-normal uppercase">
               Khổ giấy 80mm - Máy in nhiệt
             </p>
           </div>
@@ -104,7 +104,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
             <div className="text-center border-b border-dashed border-black pb-3 mb-3">
               <h1 className="text-[14px] font-black m-0">PHÚC SANG</h1>
               <p className="text-[10px] my-0.5">PHIẾU THANH TOÁN LƯƠNG</p>
-              <p className="text-[12px] font-bold my-0.5">Tháng: {payroll.month}</p>
+              <p className="text-[12px] font-normal my-0.5">Tháng: {payroll.month}</p>
             </div>
 
             <div className="mb-3 text-[10px]">
@@ -123,12 +123,12 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
             </div>
 
             <div className="border-t border-b border-dashed border-black py-2 mb-3">
-              <div className="flex justify-between mb-1 font-bold">
+              <div className="flex justify-between mb-1 font-normal">
                 <span>Lương cơ bản:</span>
                 <span>{(payroll.basicSalary || 0).toLocaleString()}</span>
               </div>
 
-              <div className="flex justify-between mb-1 font-bold">
+              <div className="flex justify-between mb-1 font-normal">
                 <span>Phụ cấp (Theo công):</span>
                 <span>{(payroll.allowance || 0).toLocaleString()}</span>
               </div>
@@ -198,7 +198,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
 
               {currentPolicy?.responsibilityAllowance! > 0 && (
                 <div
-                  className={`flex justify-between mt-1 font-bold ${!isApproved || isResponsibilityCut ? 'line-through opacity-50' : ''}`}
+                  className={`flex justify-between mt-1 font-normal ${!isApproved || isResponsibilityCut ? 'line-through opacity-50' : ''}`}
                 >
                   <span>Trách nhiệm:</span>
                   <span>
@@ -249,7 +249,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
 
               {(payroll.fine > 0 || payroll.shortage > 0 || payroll.advance > 0) && (
                 <div className="mt-2 border-t border-dashed border-black pt-1">
-                  <div className="flex justify-between font-bold">
+                  <div className="flex justify-between font-normal">
                     <span>Khấu trừ:</span>
                     <span>
                       -
@@ -284,7 +284,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
               )}
             </div>
 
-            <div className="flex justify-between text-[14px] font-black mb-4">
+            <div className="flex justify-between text-[14px] font-normal mb-4">
               <span>THỰC NHẬN:</span>
               <span>{(payroll.netPay || 0).toLocaleString()}</span>
             </div>
@@ -299,13 +299,13 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
         <div className="p-6 border-t border-slate-100 bg-white flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-4 px-6 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all border border-slate-200"
+            className="flex-1 py-4 px-6 rounded-2xl font-normal text-slate-600 hover:bg-slate-50 transition-all border border-slate-200"
           >
             Hủy bỏ
           </button>
           <button
             onClick={onConfirmPrint}
-            className="flex-[2] py-4 px-6 rounded-2xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+            className="flex-[2] py-4 px-6 rounded-2xl font-normal text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
           >
             <Printer className="w-5 h-5" />
             Xác nhận In Phiếu

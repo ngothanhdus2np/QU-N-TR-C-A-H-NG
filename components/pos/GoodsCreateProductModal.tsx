@@ -30,7 +30,7 @@ export const GoodsCreateProductModal: React.FC<GoodsCreateProductModalProps> = (
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-900">
@@ -51,7 +51,7 @@ export const GoodsCreateProductModal: React.FC<GoodsCreateProductModalProps> = (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as CreateProductModalTab)}
-                className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-normal border-b-2 transition-colors ${
                   activeTab === tab.id
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -78,20 +78,20 @@ export const GoodsCreateProductModal: React.FC<GoodsCreateProductModalProps> = (
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
             >
               Bỏ qua
             </button>
             <button
               onClick={onSaveAndCreateMore}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1"
             >
               Lưu & Tạo thêm hàng
               <ChevronRight className="h-4 w-4" />
             </button>
             <button
               onClick={onSave}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-normal hover:bg-indigo-700 transition-colors"
             >
               {editingProduct ? 'Cập nhật' : 'Lưu'}
             </button>

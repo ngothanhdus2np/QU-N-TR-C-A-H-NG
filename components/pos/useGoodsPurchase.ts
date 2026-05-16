@@ -1,7 +1,8 @@
 import React from 'react';
 import { POSProduct, InventoryTransaction } from '../../types';
-import { generateId } from '../../businessLogic';
+import { calculateNextImportPrice, generateId, getInventoryCostMethod } from '../../src/lib';
 import { getCurrentStaffId } from '../shared/staff';
+import { PurchaseDiscountType } from './GoodsPurchaseForm';
 
 type PurchaseItem = { productId: string; quantity: number; price: number; name: string; discount: number };
 type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?: number };
@@ -23,6 +24,8 @@ export const useGoodsPurchase = ({
   const [purchaseItems, setPurchaseItems] = React.useState<PurchaseItem[]>([]);
   const [purchaseSupplier, setPurchaseSupplier] = React.useState('');
   const [purchaseNote, setPurchaseNote] = React.useState('');
+  const [purchaseDiscountValue, setPurchaseDiscountValue] = React.useState(0);
+  const [purchaseDiscountType, setPurchaseDiscountType] = React.useState<PurchaseDiscountType>('fixed');
 
   const handleAddProductToPurchase = (product: POSProduct) => {
     const existing = purchaseItems.find(item => item.productId === product.id);
@@ -83,8 +86,17 @@ export const useGoodsPurchase = ({
 
   const handleCompletePurchase = () => {
     if (purchaseItems.length === 0) return;
+    const costMethod = getInventoryCostMethod();
     const updatedProducts = [...products];
     const itemsForTransaction: PurchaseTransactionItem[] = [];
+    const itemsNetTotal = purchaseItems.reduce(
+      (sum, item) => sum + item.quantity * item.price - item.discount,
+      0
+    );
+    const purchaseDiscountAmount =
+      purchaseDiscountType === 'percent'
+        ? Math.min(itemsNetTotal, Math.round((itemsNetTotal * purchaseDiscountValue) / 100))
+        : Math.min(itemsNetTotal, purchaseDiscountValue);
 
     purchaseItems.forEach(item => {
       const idx = updatedProducts.findIndex(product => product.id === item.productId);
@@ -97,9 +109,15 @@ export const useGoodsPurchase = ({
           quantity: item.quantity,
           previousStock: product.stock,
           newStock: product.stock + item.quantity,
-          price: item.price
+          price: item.price,
+          discount: item.discount,
+          costMethod,
         });
-        updatedProducts[idx] = { ...product, stock: product.stock + item.quantity, importPrice: item.price };
+        updatedProducts[idx] = {
+          ...product,
+          stock: product.stock + item.quantity,
+          importPrice: calculateNextImportPrice(product, item.quantity, item.price, costMethod),
+        };
       }
     });
 
@@ -112,12 +130,15 @@ export const useGoodsPurchase = ({
         staffId: getCurrentStaffId(),
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
+        totalAmount: Math.max(0, itemsNetTotal - purchaseDiscountAmount),
       });
     }
     showToast(`Nhập hàng thành công! ${itemsForTransaction.length} mặt hàng.`);
     setPurchaseItems([]);
     setPurchaseSupplier('');
     setPurchaseNote('');
+    setPurchaseDiscountValue(0);
+    setPurchaseDiscountType('fixed');
     setShowPurchaseForm(false);
   };
 
@@ -129,6 +150,10 @@ export const useGoodsPurchase = ({
     setPurchaseSupplier,
     purchaseNote,
     setPurchaseNote,
+    purchaseDiscountValue,
+    purchaseDiscountType,
+    setPurchaseDiscountValue,
+    setPurchaseDiscountType,
     handleAddProductToPurchase,
     handleAddProductsToPurchase,
     updatePurchaseItem,

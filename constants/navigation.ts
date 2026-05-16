@@ -5,7 +5,6 @@ import {
   Landmark,
   UserPlus,
   Library,
-  Fingerprint,
   Tag,
   Megaphone,
   ShoppingCart,
@@ -46,15 +45,15 @@ export const SIDEBAR_SECTIONS = [
     title: 'Hàng hóa',
     groups: [
       { header: 'Hàng hóa', itemIds: ['goods', 'goods-pricing', 'goods-warranty'] },
-      { header: 'Kho hàng', itemIds: ['goods-audit', 'goods-internal-use', 'goods-disposal'] },
+      { header: 'Kho hàng', itemIds: ['goods-audit', 'goods-disposal', 'goods-internal-use'] },
     ],
     items: [
       { id: 'goods', label: 'Danh sách hàng hóa', icon: Package },
       { id: 'goods-pricing', label: 'Thiết lập giá', icon: Tag },
       { id: 'goods-warranty', label: 'Bảo hành, bảo trì', icon: Shield },
       { id: 'goods-audit', label: 'Kiểm kho', icon: ClipboardList },
+      { id: 'goods-disposal', label: 'Trừ hàng lỗi/hư', icon: Trash2 },
       { id: 'goods-internal-use', label: 'Xuất dùng nội bộ', icon: PackageOpen, badge: 'Mới' },
-      { id: 'goods-disposal', label: 'Xuất hủy', icon: Trash2 },
     ],
   },
   {
@@ -131,7 +130,6 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Hệ thống',
     items: [
-      { id: 'brand', label: 'Thương Hiệu', icon: Fingerprint },
       { id: 'sop', label: 'Chính Sách & Quy Trình', icon: Library },
     ],
   },

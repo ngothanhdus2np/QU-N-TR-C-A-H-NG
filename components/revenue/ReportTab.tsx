@@ -16,12 +16,12 @@ const ReportTab: React.FC<Props> = ({ shopeeSourceData, shopeeInventoryOut, time
         <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg"><ClipboardList className="w-6 h-6" /></div>
         <div>
           <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Báo cáo tổng hợp sản phẩm</h3>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Hiệu quả kinh doanh theo từng mã hàng</p>
+          <p className="text-[10px] text-slate-400 font-normal uppercase tracking-widest">Hiệu quả kinh doanh theo từng mã hàng</p>
         </div>
       </div>
       <div className="px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Khoảng lọc: </span>
-        <span className="text-xs font-black text-slate-900 ml-2">
+        <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Khoảng lọc: </span>
+        <span className="text-xs font-normal text-slate-900 ml-2">
           {timeContext.start.split('-').reverse().join('/')} → {timeContext.end.split('-').reverse().join('/')}
         </span>
       </div>
@@ -40,7 +40,7 @@ const ReportTab: React.FC<Props> = ({ shopeeSourceData, shopeeInventoryOut, time
             <th className="p-6 text-right font-black bg-emerald-50 text-emerald-800">Lợi nhuận ròng</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-50 text-xs font-bold tabular-nums">
+        <tbody className="divide-y divide-slate-50 text-xs font-normal tabular-nums">
           {shopeeSourceData.length > 0 ? shopeeSourceData.map(skuItem => {
             const skuOrders = shopeeInventoryOut.filter(o => o.sku === skuItem.sku && o.date >= timeContext.start && o.date <= timeContext.end);
             const totalQty = skuOrders.reduce((sum, o) => sum + o.quantity, 0);
@@ -51,18 +51,18 @@ const ReportTab: React.FC<Props> = ({ shopeeSourceData, shopeeInventoryOut, time
             const totalProfit = skuOrders.reduce((sum, o) => sum + o.netProfit, 0);
             return (
               <tr key={skuItem.id} className="hover:bg-slate-50 transition-all">
-                <td className="p-6 font-black uppercase text-slate-900">{skuItem.sku}</td>
+                <td className="p-6 font-normal uppercase text-slate-900">{skuItem.sku}</td>
                 <td className="p-6 text-right text-blue-600">{totalQty.toLocaleString()}</td>
                 <td className="p-6 text-right">{formatNumber(totalRev)}đ</td>
                 <td className="p-6 text-right text-slate-400">{formatNumber(totalCogs)}đ</td>
                 <td className="p-6 text-right text-amber-600">{formatNumber(totalFees)}đ</td>
                 <td className="p-6 text-right text-rose-400">{formatNumber(totalAds)}đ</td>
-                <td className={`p-6 text-right font-black bg-emerald-50/30 ${totalProfit > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatNumber(totalProfit)}đ</td>
+                <td className={`p-6 text-right font-normal bg-emerald-50/30 ${totalProfit > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatNumber(totalProfit)}đ</td>
               </tr>
             );
           }) : (
             <tr>
-              <td colSpan={7} className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">Chưa có dữ liệu báo cáo</td>
+              <td colSpan={7} className="p-20 text-center text-slate-400 font-normal uppercase tracking-widest">Chưa có dữ liệu báo cáo</td>
             </tr>
           )}
         </tbody>

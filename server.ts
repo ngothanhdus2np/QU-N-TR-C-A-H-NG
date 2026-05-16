@@ -2,11 +2,15 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Validate critical env vars at startup — fail loudly rather than silently degrade
 if (IS_PROD && !process.env.SESSION_SECRET) {
-  console.error('[STARTUP] FATAL: SESSION_SECRET không được set trong môi trường production. Dừng server.');
+  console.error(
+    '[STARTUP] FATAL: SESSION_SECRET không được set trong môi trường production. Dừng server.'
+  );
   process.exit(1);
 }
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('[STARTUP] WARNING: SUPABASE_SERVICE_ROLE_KEY chưa set — fallback về ANON KEY. Row Level Security sẽ được áp dụng đầy đủ nhưng một số admin operation có thể thất bại.');
+  console.error(
+    '[STARTUP] WARNING: SUPABASE_SERVICE_ROLE_KEY chưa set — fallback về ANON KEY. Row Level Security sẽ được áp dụng đầy đủ nhưng một số admin operation có thể thất bại.'
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -21,13 +25,28 @@ import express, { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+
 import { createClient } from '@supabase/supabase-js';
 import { createAiRouter } from './routes/ai';
+import { createDataRouter } from './routes/data';
 import { createFacebookRouter } from './routes/facebook';
 import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
+
+function getLocalIPs(): string[] {
+  const ips: string[] = [];
+  for (const nets of Object.values(os.networkInterfaces())) {
+    for (const net of nets ?? []) {
+      if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
+    }
+  }
+  return ips;
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -81,18 +100,64 @@ async function startServer() {
       `http://localhost:${PORT}`,
       `http://127.0.0.1:${PORT}`,
       process.env.APP_URL,
+      ...(!IS_PROD ? getLocalIPs().map(ip => `http://${ip}:${PORT}`) : []),
     ].filter(Boolean) as string[];
 
-    app.use(cors({
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-        callback(new Error('Not allowed by CORS'));
+    // Security: Helmet middleware for security headers
+    app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:", "blob:"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co"],
+          fontSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          mediaSrc: ["'self'"],
+          frameSrc: ["'none'"],
+        }
       },
-      methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
-      credentials: true,
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+      },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
     }));
-    app.use(express.json({ limit: '15mb' }));
+
+    // Security: Rate limiting
+    const apiLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // limit each IP to 100 requests per windowMs
+      message: 'Too many requests from this IP, please try again later.',
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
+    const authLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 5, // Stricter for auth endpoints
+      message: 'Too many authentication attempts, please try again later.',
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
+    app.use('/api/', apiLimiter);
+    app.use('/api/auth/', authLimiter);
+
+    app.use(
+      cors({
+        origin: (origin, callback) => {
+          if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+          callback(new Error('Not allowed by CORS'));
+        },
+        methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
+        credentials: true,
+      })
+    );
+    app.use(express.json({ limit: '30mb' }));
     app.use(cookieParser());
 
     if (!IS_PROD) {
@@ -102,19 +167,27 @@ async function startServer() {
       });
     }
 
-    app.use(session({
-      secret: process.env.SESSION_SECRET || (IS_PROD ? (() => { throw new Error('SESSION_SECRET required') })() : 'dev-only-insecure-secret'),
-      resave: true,
-      saveUninitialized: true,
-      proxy: true,
-      name: 'fb_session',
-      cookie: {
-        secure: true,
-        sameSite: 'none',
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
-      },
-    }));
+    app.use(
+      session({
+        secret:
+          process.env.SESSION_SECRET ||
+          (IS_PROD
+            ? (() => {
+                throw new Error('SESSION_SECRET required');
+              })()
+            : 'dev-only-insecure-secret'),
+        resave: true,
+        saveUninitialized: true,
+        proxy: true,
+        name: 'fb_session',
+        cookie: {
+          secure: true,
+          sameSite: 'none',
+          httpOnly: true,
+          maxAge: 24 * 60 * 60 * 1000,
+        },
+      })
+    );
 
     app.get('/health', (_req, res) => {
       res.send('OK');
@@ -135,7 +208,8 @@ async function startServer() {
       // Dùng địa chỉ TCP thực (không thể spoof qua HTTP header như req.hostname).
       // Chỉ các process thực sự chạy trên cùng máy (cron nội bộ) mới qua được.
       const remoteAddr = req.socket?.remoteAddress || '';
-      const isTrueLocalhost = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+      const isTrueLocalhost =
+        remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
 
       if (isTrueLocalhost || hasValidKey) return next();
       return res.status(401).json({ error: 'Unauthorized' });
@@ -143,7 +217,8 @@ async function startServer() {
 
     const facebookRoutes = createFacebookRouter({ supabase, requireAuth, configDir: __dirname });
     app.use(facebookRoutes.router);
-    app.use(createAiRouter());
+    app.use(createAiRouter(requireAuth));
+    app.use(createDataRouter(supabase, requireAuth));
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
 
@@ -151,7 +226,7 @@ async function startServer() {
       try {
         const { createServer: createViteServer } = await import('vite');
         const vite = await createViteServer({
-          server: { middlewareMode: true },
+          server: { middlewareMode: true, hmr: { server }, allowedHosts: true },
           appType: 'spa',
         });
         app.use(vite.middlewares);

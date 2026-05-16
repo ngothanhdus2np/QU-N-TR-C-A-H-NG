@@ -1,10 +1,10 @@
 import React from 'react';
 import { POSProduct, InventoryTransaction } from '../../types';
-import { generateId } from '../../businessLogic';
+import { generateId } from '../../src/lib';
 import { AuditItem } from './GoodsAuditForm';
 import { getCurrentStaffId } from '../shared/staff';
 
-type GoodsTab = 'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form';
+type GoodsTab = 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty' | 'audit_form' | 'product_form';
 type InventoryTransactionItem = InventoryTransaction['items'][number];
 
 interface UseGoodsAuditArgs {

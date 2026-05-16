@@ -2,7 +2,14 @@ import { Router, RequestHandler } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import { createHash } from 'crypto';
-import { generateId, cleanVNNumber, parseVNDate } from '../businessLogic';
+import {
+  generateId,
+  cleanVNNumber,
+  parseVNDate,
+  buildVariantProductName,
+  stripVariantProductNameSuffix,
+  formatAutoSku,
+} from '../src/lib';
 
 type KiotVietRevenueInput = {
   date?: string;
@@ -58,6 +65,17 @@ const stableUuidFromKey = (key: string) => {
 const productIdFromSku = (sku: string) => stableUuidFromKey(`pos-product:${sku}`);
 const parentIdFromRelatedSku = (sku: string) => stableUuidFromKey(`pos-product-parent:${sku}`);
 const parentSkuFromRelatedSku = (sku: string) => `__PARENT__${sku}`;
+const APP_SKU_PATTERN = /^SP\d{6}$/;
+
+const getNextSkuNumberFromValues = (skus: Iterable<string | null | undefined>) => {
+  const skuNumbers = Array.from(skus)
+    .map(sku => String(sku || '').trim())
+    .filter(sku => APP_SKU_PATTERN.test(sku))
+    .map(sku => Number(sku.slice(2)))
+    .filter(num => Number.isFinite(num));
+
+  return skuNumbers.length > 0 ? Math.max(...skuNumbers) + 1 : 1;
+};
 
 export function createImportRouter(supabase: SupabaseClient, requireAuth: RequestHandler): Router {
   const router = Router();
@@ -143,11 +161,36 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const skuToId = new Map<string, string>(
         existingProducts.filter(p => p.sku).map(p => [p.sku!, p.id])
       );
+      const existingSkuSet = new Set(
+        existingProducts
+          .map(p => String(p.sku || '').trim())
+          .filter(Boolean)
+      );
+      const assignedSkus = new Set<string>();
+      let nextSkuNumber = getNextSkuNumberFromValues(existingSkuSet);
+      const sourceSkuToFinalSku = new Map<string, string>();
 
-      const dataRows = rows.slice(1).filter(r => r[2] && String(r[2]).trim() !== '');
+      const dataRows = rows
+        .slice(1)
+        .filter(r => String(r[2] || '').trim() !== '' || String(r[3] || '').trim() !== '');
 
-      const records = dataRows.map(r => {
-        const sku = String(r[2] || '').trim();
+      const finalSkusByRow = dataRows.map(r => {
+        const sourceSku = String(r[2] || '').trim();
+        let sku = sourceSku;
+        if (!APP_SKU_PATTERN.test(sku) || assignedSkus.has(sku)) {
+          do {
+            sku = formatAutoSku(nextSkuNumber);
+            nextSkuNumber += 1;
+          } while (existingSkuSet.has(sku) || assignedSkus.has(sku));
+        }
+        assignedSkus.add(sku);
+        if (sourceSku && !sourceSkuToFinalSku.has(sourceSku)) sourceSkuToFinalSku.set(sourceSku, sku);
+        return sku;
+      });
+
+      const records = dataRows.map((r, rowIndex) => {
+        const sku = finalSkusByRow[rowIndex];
+
         const maxStockRaw = Number(r[11] || 999999);
         const catRaw = String(r[1] || '').trim();
         const catId = catRaw.includes('>>') ? catRaw.split('>>').pop()!.trim() : catRaw || 'Khác';
@@ -204,7 +247,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           ...(createdAt && { created_at: createdAt }),
         };
 
-        const relatedSku = r[16] ? String(r[16]).trim() : null;
+        const sourceRelatedSku = r[16] ? String(r[16]).trim() : null;
+        const relatedSku = sourceRelatedSku
+          ? sourceSkuToFinalSku.get(sourceRelatedSku) || sourceRelatedSku
+          : null;
         if (relatedSku) record.related_sku = relatedSku;
 
         return record;
@@ -232,11 +278,19 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
 
         const childRecords = [baseRecord, ...relatedRecords.filter(r => r !== baseRecord)];
         const parentId = parentIdFromRelatedSku(relSku);
+        const baseVariantName = stripVariantProductNameSuffix(
+          String(baseRecord.name || ''),
+          baseRecord.variant_attributes as Record<string, string>
+        );
 
         for (const child of childRecords) {
           child.parent_id = parentId;
           child.is_parent = false;
           child.variant_count = 0;
+          child.name = buildVariantProductName(
+            String(baseVariantName || child.name || ''),
+            child.variant_attributes as Record<string, string>
+          );
         }
 
         const totalStock = childRecords.reduce((sum, child) => sum + Number(child.stock || 0), 0);
@@ -252,6 +306,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           ...baseRecord,
           id: parentId,
           sku: parentSkuFromRelatedSku(relSku),
+          name: baseVariantName || baseRecord.name,
           parent_id: null,
           is_parent: true,
           variant_count: childRecords.length,

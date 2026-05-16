@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React from 'react';
 import {
   AppData,
   AttendanceRecord,
@@ -11,12 +11,10 @@ import {
   UpdateAppData,
 } from '../types';
 import {
-  calculateEmployeePayroll,
   calculateSeniority,
   determineCurrentPolicy,
-  calculateStaffRanking,
   generateId,
-} from '../businessLogic';
+} from '../src/lib';
 import { exportToExcel as xlsxExport } from '../services/exportService';
 import AttendanceTab from './payroll/AttendanceTab';
 import OvertimeTab from './payroll/OvertimeTab';
@@ -27,6 +25,7 @@ import LedgerTab from './payroll/LedgerTab';
 import { PayrollPrintPreviewModal } from './payroll/PayrollPrintPreviewModal';
 import { PayrollToolbar } from './payroll/PayrollToolbar';
 import { buildPayrollPayslipHtml } from './payroll/payrollPayslipPrint';
+import { usePayrollState } from '../hooks/usePayrollState';
 
 interface Props {
   data: AppData;
@@ -45,112 +44,42 @@ const PayrollManager: React.FC<Props> = ({
   setShowResigned,
   requestedTab,
 }) => {
-  const [subTab, setSubTab] = useState<PayrollSubTab>('attendance');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-
-  useEffect(() => {
-    if (requestedTab) setSubTab(requestedTab);
-  }, [requestedTab]);
-  const [isProcessingSettlement, setIsProcessingSettlement] = useState<string | null>(null);
-
-  const archivedPayrolls = useMemo(() => {
-    return data.payroll.filter(p => p.month === selectedMonth);
-  }, [data.payroll, selectedMonth]);
-
-  const employees = useMemo(() => {
-    return data.employees.filter(emp => {
-      const alreadyArchived = archivedPayrolls.some(p => p.employeeId === emp.id);
-      const isResigned = emp.resignedDate && String(emp.resignedDate).trim() !== '';
-
-      if (!showResigned) {
-        if (isResigned || alreadyArchived) return false;
-        return true;
-      }
-
-      const resDate = emp.resignedDate;
-      const isResignedInPast = resDate && resDate < `${selectedMonth}-01`;
-      return !isResignedInPast;
-    });
-  }, [data.employees, selectedMonth, showResigned, archivedPayrolls]);
-
-  const policies = data.salaryPolicies || [];
-  const holidays = data.holidays || [];
-  const violationTypes = data.violationTypes || [];
-  const violationOccurrences = data.violationOccurrences || [];
-  const responsibilityApprovals = data.responsibilityApprovals || [];
-  const shortages = data.shortages || [];
-  const advances = data.advances || [];
-
-  const tet = data.tetCampaign || {
-    commitmentDate: '',
-    carAllowance: 1000000,
-    beforeTetExtraBonus: 500000,
-    afterTetDate: '',
-    lixiBonus: 200000,
-    beforeTetExtraDays: [],
-    afterTetExtraDays: [],
-    afterTetExtraBonus: 300000,
-  };
-
-  const WORKING_DAYS_FIXED = 26;
-  const STANDARD_HOURS_PER_DAY = 11;
-
-  const draftPayrolls = useMemo(() => {
-    return employees.map(emp => {
-      const isResponsibilityApproved = responsibilityApprovals.some(
-        ra => ra.employeeId === emp.id && ra.month === selectedMonth
-      );
-      const existingPayroll = data.payroll.find(
-        p => p.employeeId === emp.id && p.month === selectedMonth
-      );
-
-      return calculateEmployeePayroll(
-        emp,
-        selectedMonth,
-        policies,
-        holidays,
-        data.attendance,
-        data.overtime,
-        data.sales,
-        tet,
-        WORKING_DAYS_FIXED,
-        violationTypes,
-        violationOccurrences,
-        isResponsibilityApproved,
-        shortages,
-        advances,
-        existingPayroll?.id
-      );
-    });
-  }, [
-    employees,
+  const {
+    subTab,
+    setSubTab,
     selectedMonth,
+    setSelectedMonth,
+    showPrintPreview,
+    selectedPayrollForPrint,
+    isProcessingSettlement,
+    setIsProcessingSettlement,
+    WORKING_DAYS_FIXED,
+    STANDARD_HOURS_PER_DAY,
     policies,
     holidays,
-    data.attendance,
-    data.overtime,
-    data.sales,
-    tet,
     violationTypes,
     violationOccurrences,
     responsibilityApprovals,
     shortages,
     advances,
-    data.payroll,
-  ]);
-
-  const staffRankings = useMemo(() => {
-    return calculateStaffRanking(data.sales, employees, selectedMonth);
-  }, [data.sales, employees, selectedMonth]);
-
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [selectedPayrollForPrint, setSelectedPayrollForPrint] = useState<PayrollRecord | null>(
-    null
-  );
+    tet,
+    archivedPayrolls,
+    employees,
+    draftPayrolls,
+    staffRankings,
+    getDaysInMonth,
+    isHoliday,
+    calculateTotalHours,
+    calculateTotalOvertimeHours,
+    calculateTotalSalesAmount,
+    calculateTotalShortageAmount,
+    calculateTotalAdvanceAmount,
+    openPrintPreview,
+    closePrintPreview,
+  } = usePayrollState({ data, showResigned, requestedTab });
 
   const handlePrintPayslip = (payroll: PayrollRecord) => {
-    setSelectedPayrollForPrint(payroll);
-    setShowPrintPreview(true);
+    openPrintPreview(payroll);
   };
 
   const handleConfirmPrint = () => {
@@ -175,50 +104,7 @@ const PayrollManager: React.FC<Props> = ({
       alert('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in phiếu lương.');
     }
 
-    setShowPrintPreview(false);
-  };
-
-  const getDaysInMonth = (monthStr: string) => {
-    const [year, month] = monthStr.split('-').map(Number);
-    return new Date(year, month, 0).getDate();
-  };
-
-  const isHoliday = (day: number) => {
-    const currentMonthPart = selectedMonth.split('-')[1];
-    const dayPart = day.toString().padStart(2, '0');
-    const matchStr = `${currentMonthPart}-${dayPart}`;
-    return holidays.some(h => h.date === matchStr);
-  };
-
-  const calculateTotalHours = (employeeId: string) => {
-    return data.attendance
-      .filter(a => a.employeeId === employeeId && a.date.startsWith(selectedMonth))
-      .reduce((sum, record) => sum + (record.status === 'Present' ? record.hours : 0), 0);
-  };
-
-  const calculateTotalOvertimeHours = (employeeId: string) => {
-    const totalMinutes = data.overtime
-      .filter(ot => ot.employeeId === employeeId && ot.date.startsWith(selectedMonth))
-      .reduce((sum, record) => sum + record.hours, 0);
-    return Number((totalMinutes / 60).toFixed(1));
-  };
-
-  const calculateTotalSalesAmount = (employeeId: string) => {
-    return data.sales
-      .filter(s => s.employeeId === employeeId && s.date.startsWith(selectedMonth))
-      .reduce((sum, record) => sum + record.salesAmount, 0);
-  };
-
-  const calculateTotalShortageAmount = (employeeId: string) => {
-    return shortages
-      .filter(s => s.employeeId === employeeId && s.date.startsWith(selectedMonth))
-      .reduce((sum, record) => sum + record.amount, 0);
-  };
-
-  const calculateTotalAdvanceAmount = (employeeId: string) => {
-    return advances
-      .filter(ad => ad.employeeId === employeeId && ad.date.startsWith(selectedMonth))
-      .reduce((sum, record) => sum + record.amount, 0);
+    closePrintPreview();
   };
 
   const handleFinalizeIndividual = async (
@@ -880,7 +766,7 @@ const PayrollManager: React.FC<Props> = ({
           violationOccurrences={violationOccurrences}
           violationTypes={violationTypes}
           responsibilityApprovals={responsibilityApprovals}
-          onClose={() => setShowPrintPreview(false)}
+          onClose={closePrintPreview}
           onConfirmPrint={handleConfirmPrint}
         />
       )}

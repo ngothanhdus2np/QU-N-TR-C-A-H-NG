@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { KnowledgeBaseArticle, AppData, SalaryPolicy, ViolationType } from '../types';
+import MechanismsViolationsSubTab from './knowledge/MechanismsViolationsSubTab';
+import MechanismsHolidaysSubTab from './knowledge/MechanismsHolidaysSubTab';
+import MechanismsSalarySubTab from './knowledge/MechanismsSalarySubTab';
+import StandardsWorkflowsTab from './knowledge/StandardsWorkflowsTab';
 import {
   Plus,
   Search,
@@ -37,14 +41,11 @@ import {
   Upload,
 } from 'lucide-react';
 import { marked } from 'marked';
-import { supabase } from '../services/supabase';
 
 interface Props {
   data: AppData;
   onUpdateData: (key: keyof AppData, newList: any, idToRemove?: string) => void;
 }
-
-const KNOWLEDGE_FILES_BUCKET = 'knowledge-files';
 
 const buildKnowledgeFilePath = (file: File) => {
   const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
@@ -60,22 +61,38 @@ const buildKnowledgeFilePath = (file: File) => {
   return `originals/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}.${extension}`;
 };
 
-const uploadKnowledgeOriginalFile = async (file: File) => {
-  const path = buildKnowledgeFilePath(file);
-  const { error } = await supabase.storage.from(KNOWLEDGE_FILES_BUCKET).upload(path, file, {
-    cacheControl: '31536000',
-    contentType: file.type || 'application/octet-stream',
-    upsert: false,
+const fileToBase64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
   });
 
-  if (error) {
-    throw new Error(`Không thể lưu file gốc lên Supabase Storage: ${error.message}`);
+const uploadKnowledgeOriginalFile = async (file: File) => {
+  const path = buildKnowledgeFilePath(file);
+  const fileBase64 = await fileToBase64(file);
+  const res = await fetch('/api/data/knowledge/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path,
+      fileBase64,
+      mimeType: file.type || 'application/octet-stream',
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(`Không thể lưu file gốc lên Supabase Storage: ${data.error || res.status}`);
   }
 
-  const { data } = supabase.storage.from(KNOWLEDGE_FILES_BUCKET).getPublicUrl(path);
   return {
-    sourceFilePath: path,
-    sourceFileUrl: data.publicUrl,
+    sourceFilePath: data.sourceFilePath || path,
+    sourceFileUrl: data.sourceFileUrl,
     sourceFileSize: file.size,
   };
 };
@@ -150,28 +167,6 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
       setPolicyForm({});
     }
   }, [selectedPolicyId, policies]);
-
-  const handleUpdateLocalViolation = (id: string, field: keyof ViolationType, value: string) => {
-    setLocalViolations(prev => prev.map(v => (v.id === id ? { ...v, [field]: value } : v)));
-    setHasUnsavedViolations(true);
-  };
-
-  const handleAddLocalViolation = () => {
-    const newViolation: ViolationType = {
-      id: crypto.randomUUID(),
-      name: '',
-      fine1: '',
-      fine2: '',
-      fine3: '',
-    };
-    setLocalViolations(prev => [...prev, newViolation]);
-    setHasUnsavedViolations(true);
-  };
-
-  const handleRemoveLocalViolation = (id: string) => {
-    setLocalViolations(prev => prev.filter(v => v.id !== id));
-    setHasUnsavedViolations(true);
-  };
 
   const saveViolationsToCloud = () => {
     onUpdateData('violationTypes', localViolations);
@@ -322,7 +317,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
               <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
                 Quy Chuẩn & Chính Sách
               </h2>
-              <p className="text-indigo-300 text-sm font-bold uppercase tracking-widest mt-1">
+              <p className="text-indigo-300 text-sm font-normal uppercase tracking-widest mt-1">
                 Hệ cơ chế vận hành chính xác 100%
               </p>
             </div>
@@ -330,19 +325,19 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
           <div className="flex bg-white/10 p-1.5 rounded-2xl border border-white/5">
             <button
               onClick={() => setActiveMainTab('mechanisms')}
-              className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeMainTab === 'mechanisms' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
+              className={`px-8 py-3 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${activeMainTab === 'mechanisms' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
             >
               Cơ chế
             </button>
             <button
               onClick={() => setActiveMainTab('standards')}
-              className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeMainTab === 'standards' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
+              className={`px-8 py-3 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${activeMainTab === 'standards' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
             >
               Quy chuẩn
             </button>
             <button
               onClick={() => setActiveMainTab('workflows')}
-              className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeMainTab === 'workflows' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
+              className={`px-8 py-3 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${activeMainTab === 'workflows' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400 hover:text-white'}`}
             >
               Quy trình
             </button>
@@ -355,615 +350,60 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
           <div className="flex bg-slate-100 p-1 rounded-2xl w-fit mx-auto border border-slate-200">
             <button
               onClick={() => setActiveMechSubTab('salary')}
-              className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeMechSubTab === 'salary' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
+              className={`px-6 py-3 rounded-xl text-[9px] font-normal uppercase transition-all ${activeMechSubTab === 'salary' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
             >
               Nhóm Lương
             </button>
             <button
               onClick={() => setActiveMechSubTab('holidays')}
-              className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeMechSubTab === 'holidays' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
+              className={`px-6 py-3 rounded-xl text-[9px] font-normal uppercase transition-all ${activeMechSubTab === 'holidays' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
             >
               Ngày Lễ
             </button>
             <button
               onClick={() => setActiveMechSubTab('tet')}
-              className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeMechSubTab === 'tet' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
+              className={`px-6 py-3 rounded-xl text-[9px] font-normal uppercase transition-all ${activeMechSubTab === 'tet' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
             >
               Thưởng Tết
             </button>
             <button
               onClick={() => setActiveMechSubTab('violations')}
-              className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${activeMechSubTab === 'violations' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
+              className={`px-6 py-3 rounded-xl text-[9px] font-normal uppercase transition-all ${activeMechSubTab === 'violations' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
             >
               Khấu Trừ
             </button>
           </div>
 
           {activeMechSubTab === 'salary' && (
-            <div className="space-y-12">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
-                {policies.map(p => {
-                  const totalFixedIncome =
-                    (p.baseSalary || 0) +
-                    (p.attendanceAllowance || 0) +
-                    (p.cleaningAllowance || 0) +
-                    (p.customerServiceAllowance || 0) +
-                    (p.housingAllowance || 0) +
-                    (p.responsibilityAllowance || 0);
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedPolicyId(p.id);
-                        setTimeout(
-                          () =>
-                            document
-                              .getElementById('policy-editor')
-                              ?.scrollIntoView({ behavior: 'smooth' }),
-                          100
-                        );
-                      }}
-                      className={`group p-8 rounded-[3.5rem] border-2 transition-all duration-500 h-[880px] cursor-pointer relative overflow-hidden flex flex-col ${selectedPolicyId === p.id ? 'bg-white border-indigo-600 shadow-2xl ring-8 ring-indigo-50 translate-y-[-8px]' : 'bg-white border-slate-100 shadow-lg hover:border-slate-200'}`}
-                    >
-                      <div className="flex items-start justify-between mb-8 relative z-10">
-                        <div
-                          className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${selectedPolicyId === p.id ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}
-                        >
-                          <Layers className="w-8 h-8" />
-                        </div>
-                        <div className="text-right">
-                          <span className="block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest mb-1">
-                            {p.salaryType === 'monthly' ? 'Lương Tháng' : 'Lương Ngày'}
-                          </span>
-                          <span className="block text-[10px] font-bold text-slate-400 uppercase">
-                            ID: {p.id}
-                          </span>
-                        </div>
-                      </div>
-                      <h4 className="font-black text-xl mb-4 text-slate-900 uppercase tracking-tight break-words">
-                        {p.name}
-                      </h4>
-
-                      <div className="p-5 bg-indigo-600 rounded-[2rem] mb-6 shadow-xl shadow-indigo-200 border border-indigo-500 group-hover:scale-[1.02] transition-transform">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Banknote className="w-4 h-4 text-indigo-200" />
-                          <p className="text-[9px] font-black text-indigo-100 uppercase tracking-widest">
-                            Gói thu nhập cố định
-                          </p>
-                        </div>
-                        <p className="text-2xl font-black text-white tabular-nums">
-                          {totalFixedIncome.toLocaleString()}đ
-                        </p>
-                        <p className="text-[8px] text-indigo-200 font-bold uppercase mt-1 italic">
-                          * Chưa gồm Hoa hồng, Ăn tối, OT
-                        </p>
-                      </div>
-
-                      <div className="p-4 bg-slate-50 rounded-2xl mb-6 border border-slate-100/50">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                          <Timer className="w-3 h-3" /> Khoảng thâm niên nhảy bậc
-                        </p>
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1">
-                            <p className="text-[8px] font-bold text-slate-400 uppercase">Bắt đầu</p>
-                            <p className="text-sm font-black text-indigo-700">
-                              {p.startThreshold} ngày
-                            </p>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-indigo-300" />
-                          <div className="flex-1">
-                            <p className="text-[8px] font-bold text-slate-400 uppercase">
-                              Kết thúc
-                            </p>
-                            <p className="text-sm font-black text-indigo-700">
-                              {p.endThreshold === 0 ? '∞ (Vô cực)' : `${p.endThreshold} ngày`}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4 flex-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-slate-400 font-black uppercase">
-                            Lương Cơ Bản
-                          </span>
-                          <span className="text-lg font-black text-slate-900 tabular-nums">
-                            {(p.baseSalary || 0).toLocaleString()}đ
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 mt-4">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">
-                            CHI TIẾT PHỤ CẤP
-                          </p>
-                          <AllowanceRow
-                            icon={CalendarCheck}
-                            label="Chuyên cần"
-                            value={p.attendanceAllowance}
-                          />
-                          <AllowanceRow
-                            icon={Sparkles}
-                            label="Vệ sinh"
-                            value={p.cleaningAllowance}
-                          />
-                          <AllowanceRow
-                            icon={HeartHandshake}
-                            label="CSKH"
-                            value={p.customerServiceAllowance}
-                          />
-                          <AllowanceRow
-                            icon={Utensils}
-                            label="Ăn tối (ngày)"
-                            value={p.dinnerAllowance}
-                          />
-                          <AllowanceRow icon={Home} label="Hỗ trợ ở" value={p.housingAllowance} />
-                          <AllowanceRow
-                            icon={Shield}
-                            label="Trách nhiệm"
-                            value={p.responsibilityAllowance}
-                            color="text-indigo-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 pt-6 border-t border-slate-50 mt-auto">
-                          <div>
-                            <p className="text-[8px] font-black text-emerald-500 uppercase">
-                              Hoa Hồng
-                            </p>
-                            <p className="text-sm font-black">{p.commissionRate || 0}%</p>
-                          </div>
-                          <div>
-                            <p className="text-[8px] font-black text-amber-500 uppercase">
-                              Đơn giá OT
-                            </p>
-                            <p className="text-sm font-black">
-                              {(p.otRate || 0).toLocaleString()}đ
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-6 flex justify-between items-center pt-6 border-t border-slate-50">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleRemovePolicy(p.id);
-                          }}
-                          className="p-3 text-slate-300 hover:text-rose-500 transition-all"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                        <div className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-2xl text-[10px] font-black uppercase group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                          Sửa Cơ Chế
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <button
-                  onClick={handleAddNewPolicy}
-                  className="p-10 rounded-[3.5rem] border-4 border-dashed border-slate-200 hover:border-indigo-400 text-slate-400 flex flex-col items-center justify-center gap-6 h-[880px] transition-all"
-                >
-                  <Plus className="w-16 h-16" />
-                  <span className="text-[12px] font-black uppercase tracking-widest">
-                    Thêm Nhóm Lương
-                  </span>
-                </button>
-              </div>
-
-              {selectedPolicyId && (
-                <div
-                  id="policy-editor"
-                  className="bg-white rounded-[3.5rem] border border-slate-200 shadow-2xl p-10 space-y-12 animate-in slide-in-from-top-4 duration-500 scroll-mt-20"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-8">
-                    <div className="flex items-center gap-5">
-                      <div className="p-4 bg-indigo-600 text-white rounded-3xl shadow-xl">
-                        <Settings className="w-8 h-8" />
-                      </div>
-                      <div>
-                        <h4 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
-                          Cấu hình: {policyForm.name}
-                        </h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                          Chỉnh sửa điều kiện nhảy bậc và phụ cấp
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => setSelectedPolicyId(null)}
-                        className="px-8 py-5 rounded-2xl font-black text-xs text-slate-400 uppercase"
-                      >
-                        Hủy bỏ
-                      </button>
-                      <button
-                        onClick={handleSavePolicy}
-                        className="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-xs shadow-xl flex items-center gap-4 uppercase tracking-widest hover:bg-black transition-all"
-                      >
-                        <Save className="w-6 h-6" /> Lưu Cơ Chế
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-16">
-                    <div className="xl:col-span-2 space-y-12">
-                      <div className="p-8 bg-indigo-50 rounded-[2.5rem] border border-indigo-100 space-y-8">
-                        <div className="flex items-center gap-3 border-b border-indigo-200 pb-4">
-                          <Timer className="w-6 h-6 text-indigo-600" />
-                          <h5 className="text-[12px] font-black text-indigo-900 uppercase tracking-widest">
-                            ĐIỀU KIỆN THỜI GIAN (NHẢY BẬC TỰ ĐỘNG)
-                          </h5>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                          <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-500 uppercase ml-1">
-                              Mốc Bắt Đầu (Ngày công tác)
-                            </label>
-                            <div className="relative">
-                              <input
-                                type="number"
-                                value={policyForm.startThreshold || 0}
-                                onChange={e =>
-                                  setPolicyForm({
-                                    ...policyForm,
-                                    startThreshold: Number(e.target.value),
-                                  })
-                                }
-                                className="w-full px-8 py-5 bg-white border-2 border-indigo-200 rounded-[2rem] text-xl font-black text-indigo-900 outline-none focus:border-indigo-500 transition-all shadow-inner"
-                              />
-                              <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                                Ngày
-                              </span>
-                            </div>
-                          </div>
-                          <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-500 uppercase ml-1">
-                              Mốc Kết Thúc (0 = Vô cực)
-                            </label>
-                            <div className="relative">
-                              <input
-                                type="number"
-                                value={policyForm.endThreshold || 0}
-                                onChange={e =>
-                                  setPolicyForm({
-                                    ...policyForm,
-                                    endThreshold: Number(e.target.value),
-                                  })
-                                }
-                                className="w-full px-8 py-5 bg-white border-2 border-indigo-200 rounded-[2rem] text-xl font-black text-indigo-900 outline-none focus:border-indigo-500 transition-all shadow-inner"
-                              />
-                              <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                {policyForm.endThreshold === 0 && (
-                                  <span className="text-2xl font-black text-indigo-400">∞</span>
-                                )}
-                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                                  {policyForm.endThreshold === 0 ? 'TRỞ ĐI' : 'NGÀY'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-4 p-4 bg-indigo-100/50 rounded-2xl border border-indigo-200/50">
-                          <Info className="w-5 h-5 text-indigo-600 mt-1" />
-                          <p className="text-[11px] text-indigo-800 font-medium leading-relaxed italic">
-                            Gợi ý: Hệ thống sẽ tự động gán bậc lương dựa trên số ngày nhân viên đã
-                            làm việc. Nếu mốc Kết thúc là 0, bậc này sẽ kéo dài mãi mãi cho đến khi
-                            có bậc cao hơn.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Tên Nhóm
-                          </label>
-                          <input
-                            type="text"
-                            value={policyForm.name || ''}
-                            onChange={e => setPolicyForm({ ...policyForm, name: e.target.value })}
-                            className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Lương Gốc (đ)
-                          </label>
-                          <input
-                            type="number"
-                            value={policyForm.baseSalary || 0}
-                            onChange={e =>
-                              setPolicyForm({ ...policyForm, baseSalary: Number(e.target.value) })
-                            }
-                            className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Đơn giá OT (đ/h)
-                          </label>
-                          <input
-                            type="number"
-                            value={policyForm.otRate || 0}
-                            onChange={e =>
-                              setPolicyForm({ ...policyForm, otRate: Number(e.target.value) })
-                            }
-                            className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                            Hoa Hồng (%)
-                          </label>
-                          <input
-                            type="number"
-                            value={policyForm.commissionRate || 0}
-                            onChange={e =>
-                              setPolicyForm({
-                                ...policyForm,
-                                commissionRate: Number(e.target.value),
-                              })
-                            }
-                            className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-base font-bold outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-8 bg-slate-50 p-8 rounded-[3rem] border border-slate-100 shadow-inner">
-                      <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
-                        <Sparkles className="w-6 h-6 text-emerald-500" />
-                        <h5 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">
-                          Phụ cấp Cố định
-                        </h5>
-                      </div>
-                      <div className="space-y-5">
-                        <AllowanceInput
-                          icon={CalendarCheck}
-                          label="Chuyên cần"
-                          value={policyForm.attendanceAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, attendanceAllowance: v })
-                          }
-                        />
-                        <AllowanceInput
-                          icon={Sparkles}
-                          label="Vệ sinh"
-                          value={policyForm.cleaningAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, cleaningAllowance: v })
-                          }
-                        />
-                        <AllowanceInput
-                          icon={HeartHandshake}
-                          label="CSKH"
-                          value={policyForm.customerServiceAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, customerServiceAllowance: v })
-                          }
-                        />
-                        <AllowanceInput
-                          icon={Utensils}
-                          label="Ăn tối"
-                          value={policyForm.dinnerAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, dinnerAllowance: v })
-                          }
-                        />
-                        <AllowanceInput
-                          icon={Home}
-                          label="Hỗ trợ Ở"
-                          value={policyForm.housingAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, housingAllowance: v })
-                          }
-                        />
-                        <AllowanceInput
-                          icon={ResponsibilityIcon}
-                          label="Trách nhiệm"
-                          value={policyForm.responsibilityAllowance}
-                          onChange={(v: number) =>
-                            setPolicyForm({ ...policyForm, responsibilityAllowance: v })
-                          }
-                          color="text-rose-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <MechanismsSalarySubTab
+              policies={policies}
+              selectedPolicyId={selectedPolicyId}
+              setSelectedPolicyId={setSelectedPolicyId}
+              policyForm={policyForm}
+              setPolicyForm={setPolicyForm}
+              onSavePolicy={handleSavePolicy}
+              onRemovePolicy={handleRemovePolicy}
+              onAddNewPolicy={handleAddNewPolicy}
+            />
           )}
 
           {activeMechSubTab === 'holidays' && (
-            <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-lg">
-                    <DateIcon className="w-6 h-6" />
-                  </div>
-                  <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                    Ngày Lễ (x2 Lương)
-                  </h4>
-                </div>
-                <button
-                  onClick={() =>
-                    onUpdateData('holidays', [
-                      ...holidays,
-                      { id: crypto.randomUUID(), date: '01-01', name: 'Mới' },
-                    ])
-                  }
-                  className="p-3 bg-slate-900 text-white rounded-xl shadow-lg"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="space-y-4">
-                {holidays.map(h => (
-                  <div
-                    key={h.id}
-                    className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 group"
-                  >
-                    <input
-                      type="text"
-                      value={h.date}
-                      placeholder="MM-DD"
-                      onChange={e =>
-                        onUpdateData(
-                          'holidays',
-                          holidays.map(item =>
-                            item.id === h.id ? { ...item, date: e.target.value } : item
-                          )
-                        )
-                      }
-                      className="w-24 px-4 py-2 bg-white border border-slate-200 rounded-xl font-black text-xs text-center outline-none focus:border-indigo-500"
-                    />
-                    <input
-                      type="text"
-                      value={h.name}
-                      placeholder="Tên ngày lễ..."
-                      onChange={e =>
-                        onUpdateData(
-                          'holidays',
-                          holidays.map(item =>
-                            item.id === h.id ? { ...item, name: e.target.value } : item
-                          )
-                        )
-                      }
-                      className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      onClick={() =>
-                        onUpdateData(
-                          'holidays',
-                          holidays.filter(item => item.id !== h.id)
-                        )
-                      }
-                      className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <MechanismsHolidaysSubTab
+              holidays={holidays}
+              onUpdate={updatedHolidays => onUpdateData('holidays', updatedHolidays)}
+            />
           )}
 
           {activeMechSubTab === 'violations' && (
-            <div className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl max-w-6xl mx-auto space-y-10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-lg">
-                    <Gavel className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                      Ma trận Kỷ luật & Khấu trừ
-                    </h4>
-                    {hasUnsavedViolations && (
-                      <span className="flex items-center gap-1.5 text-rose-500 font-bold text-[10px] uppercase mt-1 animate-pulse">
-                        <AlertTriangle className="w-3 h-3" /> Có thay đổi chưa lưu
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleAddLocalViolation}
-                    className="px-6 py-3 bg-slate-100 text-slate-900 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all"
-                  >
-                    <Plus className="w-4 h-4" /> Thêm lỗi mới
-                  </button>
-                  <button
-                    onClick={saveViolationsToCloud}
-                    disabled={!hasUnsavedViolations}
-                    className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center gap-2 transition-all ${hasUnsavedViolations ? 'bg-indigo-600 text-white hover:bg-black' : 'bg-slate-50 text-slate-300 cursor-not-allowed'}`}
-                  >
-                    <Save className="w-4 h-4" /> Lưu cấu hình
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-x-auto rounded-3xl border border-slate-100">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
-                      <th className="px-6 py-5">Lỗi vi phạm</th>
-                      <th className="px-6 py-5">Lần 1</th>
-                      <th className="px-6 py-5">Lần 2</th>
-                      <th className="px-6 py-5">Lần 3</th>
-                      <th className="px-6 py-5 text-center">Xóa</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {localViolations.map(v => (
-                      <tr key={v.id} className="hover:bg-slate-50/50">
-                        <td className="px-6 py-4 align-top">
-                          <textarea
-                            value={v.name}
-                            onChange={e => handleUpdateLocalViolation(v.id, 'name', e.target.value)}
-                            className="w-full bg-transparent border-none outline-none font-black text-xs resize-none overflow-hidden min-h-[40px]"
-                            rows={2}
-                            onInput={(e: any) => {
-                              e.target.style.height = 'auto';
-                              e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                          />
-                        </td>
-                        <td className="px-6 py-4 align-top">
-                          <input
-                            type="text"
-                            value={v.fine1}
-                            onChange={e =>
-                              handleUpdateLocalViolation(v.id, 'fine1', e.target.value)
-                            }
-                            className="w-full bg-transparent border-none outline-none text-xs"
-                            placeholder="VD: Nhắc nhở"
-                          />
-                        </td>
-                        <td className="px-6 py-4 align-top">
-                          <input
-                            type="text"
-                            value={v.fine2}
-                            onChange={e =>
-                              handleUpdateLocalViolation(v.id, 'fine2', e.target.value)
-                            }
-                            className="w-full bg-transparent border-none outline-none text-xs"
-                            placeholder="VD: 50.000đ"
-                          />
-                        </td>
-                        <td className="px-6 py-4 align-top">
-                          <input
-                            type="text"
-                            value={v.fine3}
-                            onChange={e =>
-                              handleUpdateLocalViolation(v.id, 'fine3', e.target.value)
-                            }
-                            className="w-full bg-transparent border-none outline-none text-xs"
-                            placeholder="VD: Mất phụ cấp"
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-center align-top">
-                          <button
-                            onClick={() => handleRemoveLocalViolation(v.id)}
-                            className="p-2 text-slate-300 hover:text-rose-500 transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {localViolations.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="py-12 text-center text-slate-400 italic font-bold"
-                        >
-                          Chưa có danh mục khấu trừ. Bấm "Thêm lỗi mới" để bắt đầu.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <MechanismsViolationsSubTab
+              localViolations={localViolations}
+              setLocalViolations={violations => {
+                setLocalViolations(violations);
+                setHasUnsavedViolations(true);
+              }}
+              hasUnsaved={hasUnsavedViolations}
+              onSave={saveViolationsToCloud}
+            />
           )}
 
           {activeMechSubTab === 'tet' && (
@@ -980,7 +420,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                     <h4 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
                       GIAI ĐOẠN 1: TRƯỚC TẾT (PHÚC LỢI CAM KẾT)
                     </h4>
-                    <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest mt-1">
+                    <p className="text-[10px] text-amber-600 font-normal uppercase tracking-widest mt-1">
                       Đảm bảo nhân sự phục vụ khách hàng giai đoạn cao điểm
                     </p>
                   </div>
@@ -998,7 +438,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                             carAllowance: Number(e.target.value),
                           })
                         }
-                        className="w-full bg-transparent border-none outline-none font-black text-lg text-slate-800"
+                        className="w-full bg-transparent border-none outline-none font-normal text-lg text-slate-800"
                       />
                     </InputWrapper>
                     <InputWrapper label="Thưởng chuyên cần Trước Tết (đ)" icon={CheckCircle2}>
@@ -1011,14 +451,14 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                             beforeTetExtraBonus: Number(e.target.value),
                           })
                         }
-                        className="w-full bg-transparent border-none outline-none font-black text-lg text-slate-800"
+                        className="w-full bg-transparent border-none outline-none font-normal text-lg text-slate-800"
                       />
                     </InputWrapper>
                   </div>
                   <div className="bg-amber-50 rounded-[2.5rem] p-8 border border-amber-100 space-y-6">
                     <div className="flex items-center gap-3 border-b border-amber-200 pb-4">
                       <CalendarDays className="w-5 h-5 text-amber-600" />
-                      <span className="text-[11px] font-black text-amber-900 uppercase">
+                      <span className="text-[11px] font-normal text-amber-900 uppercase">
                         Danh sách ngày cam kết (Trước Tết)
                       </span>
                     </div>
@@ -1026,7 +466,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       {(tet.beforeTetExtraDays || []).map(d => (
                         <div
                           key={d}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-[10px] font-black text-amber-700"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-[10px] font-normal text-amber-700"
                         >
                           {d.split('-').reverse().join('/')}
                           <button
@@ -1039,7 +479,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       ))}
                       <input
                         type="date"
-                        className="px-3 py-1 bg-white border border-amber-200 rounded-xl text-[10px] font-bold outline-none"
+                        className="px-3 py-1 bg-white border border-amber-200 rounded-xl text-[10px] font-normal outline-none"
                         onChange={e => {
                           addTetExtraDay('before', e.target.value);
                           e.target.value = '';
@@ -1073,7 +513,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                         onChange={e =>
                           onUpdateData('tetCampaign', { ...tet, afterTetDate: e.target.value })
                         }
-                        className="w-full bg-transparent border-none outline-none font-black text-slate-800"
+                        className="w-full bg-transparent border-none outline-none font-normal text-slate-800"
                       />
                     </InputWrapper>
                     <InputWrapper label="Mức Lì xì khai xuân (đ)" icon={Banknote}>
@@ -1083,14 +523,14 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                         onChange={e =>
                           onUpdateData('tetCampaign', { ...tet, lixiBonus: Number(e.target.value) })
                         }
-                        className="w-full bg-transparent border-none outline-none font-black text-lg text-slate-800"
+                        className="w-full bg-transparent border-none outline-none font-normal text-lg text-slate-800"
                       />
                     </InputWrapper>
                   </div>
                   <div className="bg-rose-50 rounded-[2.5rem] p-8 border border-rose-100 space-y-6">
                     <div className="flex items-center gap-3 border-b border-rose-200 pb-4">
                       <CalendarDays className="w-5 h-5 text-rose-600" />
-                      <span className="text-[11px] font-black text-rose-900 uppercase">
+                      <span className="text-[11px] font-normal text-rose-900 uppercase">
                         Danh sách ngày cam kết (Sau Tết)
                       </span>
                     </div>
@@ -1098,7 +538,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       {(tet.afterTetExtraDays || []).map(d => (
                         <div
                           key={d}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-rose-200 rounded-xl text-[10px] font-black text-rose-700"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-rose-200 rounded-xl text-[10px] font-normal text-rose-700"
                         >
                           {d.split('-').reverse().join('/')}
                           <button
@@ -1111,7 +551,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       ))}
                       <input
                         type="date"
-                        className="px-3 py-1 bg-white border border-rose-200 rounded-xl text-[10px] font-bold outline-none"
+                        className="px-3 py-1 bg-white border border-rose-200 rounded-xl text-[10px] font-normal outline-none"
                         onChange={e => {
                           addTetExtraDay('after', e.target.value);
                           e.target.value = '';
@@ -1127,242 +567,28 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
       )}
 
       {(activeMainTab === 'standards' || activeMainTab === 'workflows') && (
-        <div className="space-y-10 animate-in slide-in-from-bottom-4 duration-500">
-          {/* KHO TÀI LIỆU GỐC & UPLOAD AI */}
-          <div className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-              <UploadCloud className="w-64 h-64 text-indigo-600" />
-            </div>
-            <div className="flex flex-col md:flex-row items-center justify-between gap-10 relative z-10">
-              <div className="flex-1">
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                    <Upload className="w-6 h-6" />
-                  </div>
-                  Kho tài liệu gốc (Số hóa AI)
-                </h3>
-                <p className="text-sm font-medium text-slate-500 mt-2">
-                  Tải lên văn bản gốc (.pdf, .png, .jpg). Claude AI sẽ tự động bóc tách và chuyển
-                  thành Quy chuẩn Markdown để nhân viên tra cứu nhanh.
-                </p>
-              </div>
-              <div className="flex-shrink-0">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handleDocumentUpload}
-                  accept=".pdf,.png,.jpg,.jpeg"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isParsing}
-                  className="px-14 py-6 bg-slate-900 hover:bg-black text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl flex items-center gap-4 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isParsing ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  ) : (
-                    <UploadCloud className="w-6 h-6" />
-                  )}
-                  {isParsing ? 'Đang giải mã tài liệu...' : 'Tải lên văn bản (.pdf, .png)'}
-                </button>
-              </div>
-            </div>
-
-            {aiDocSuggestion && (
-              <div className="mt-10 p-8 bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-[2.5rem] animate-in zoom-in-95 duration-300">
-                <div className="flex items-start justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg">
-                      <Sparkles className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-indigo-900 uppercase tracking-tight">
-                        AI Đã Giải Mã Thành Công
-                      </h4>
-                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
-                        Đang xem trước bản thảo quy chuẩn
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setAiDocSuggestion(null)}
-                      className="px-6 py-3 bg-white text-slate-400 rounded-xl font-black text-[10px] uppercase shadow-sm"
-                    >
-                      Bỏ qua
-                    </button>
-                    <button
-                      onClick={applyAiDocSuggestion}
-                      className="px-10 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-indigo-200"
-                    >
-                      Lưu vào Quy chuẩn
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-indigo-400 uppercase ml-1">
-                      Tiêu đề đề xuất
-                    </label>
-                    <input
-                      type="text"
-                      value={aiDocSuggestion.title}
-                      onChange={e =>
-                        setAiDocSuggestion({ ...aiDocSuggestion, title: e.target.value })
-                      }
-                      className="w-full px-6 py-4 bg-white border-none rounded-2xl font-black text-slate-800"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-indigo-400 uppercase ml-1">
-                      Danh mục đề xuất
-                    </label>
-                    <select
-                      value={aiDocSuggestion.category}
-                      onChange={e =>
-                        setAiDocSuggestion({ ...aiDocSuggestion, category: e.target.value as any })
-                      }
-                      className="w-full px-6 py-4 bg-white border-none rounded-2xl font-black text-slate-800"
-                    >
-                      {categories.map(c => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-indigo-400 uppercase ml-1">
-                    Nội dung đã bóc tách (Markdown)
-                  </label>
-                  <textarea
-                    value={aiDocSuggestion.content}
-                    onChange={e =>
-                      setAiDocSuggestion({ ...aiDocSuggestion, content: e.target.value })
-                    }
-                    className="w-full px-6 py-4 bg-white border-none rounded-2xl text-xs font-medium min-h-[200px]"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder={`Tìm kiếm ${activeMainTab === 'standards' ? 'quy chuẩn' : 'quy trình'}...`}
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-16 pr-6 py-5 bg-white border-2 border-slate-100 focus:border-indigo-500 rounded-[2rem] shadow-xl outline-none text-base font-bold transition-all"
-              />
-            </div>
-            <div className="flex gap-4">
-              <select
-                value={selectedCategory}
-                onChange={e => setSelectedCategory(e.target.value)}
-                className="px-8 py-5 bg-white border-2 border-slate-100 rounded-[2rem] shadow-xl outline-none font-black text-[10px] uppercase tracking-widest appearance-none min-w-[180px]"
-              >
-                <option value="Tất cả">Tất cả danh mục</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => {
-                  setCurrentArticle({ category: 'Vận hành' as any, title: '', content: '' });
-                  setIsEditing(true);
-                }}
-                className="px-8 py-5 bg-indigo-600 text-white rounded-[2rem] shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-black transition-all"
-              >
-                <Plus className="w-5 h-5" />{' '}
-                {activeMainTab === 'standards' ? 'Soạn Quy chuẩn mới' : 'Soạn Quy trình mới'}
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredList.map(item => (
-              <div
-                key={item.id}
-                className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-xl hover:shadow-2xl transition-all cursor-pointer group flex flex-col justify-between h-[360px]"
-                onClick={() => setViewArticle(item)}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-indigo-100">
-                      {item.category}
-                    </span>
-                    <p className="text-[9px] font-bold text-slate-400">
-                      {new Date(item.updatedAt).toLocaleDateString('vi-VN')}
-                    </p>
-                  </div>
-                  <h4 className="text-xl font-black text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-3 uppercase tracking-tight">
-                    {item.title}
-                  </h4>
-
-                  {item.sourceFileName && (
-                    <div className="mt-4 flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100">
-                      <FileSearch className="w-4 h-4 text-indigo-400" />
-                      <span className="text-[8px] font-black text-slate-400 uppercase truncate">
-                        Bản gốc: {item.sourceFileName}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center justify-between pt-6 border-t border-slate-50 mt-auto">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        setCurrentArticle(item);
-                        setIsEditing(true);
-                      }}
-                      className="p-2.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        onUpdateData(
-                          'knowledgeBase',
-                          list.filter(it => it.id !== item.id),
-                          item.id
-                        );
-                      }}
-                      className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-400 font-black text-[10px] uppercase tracking-widest group-hover:text-indigo-600 transition-colors">
-                    Xem chi tiết <ChevronRight className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {filteredList.length === 0 && (
-              <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
-                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  {activeMainTab === 'standards' ? (
-                    <Library className="w-8 h-8 text-slate-300" />
-                  ) : (
-                    <Workflow className="w-8 h-8 text-slate-300" />
-                  )}
-                </div>
-                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">
-                  Chưa có nội dung {activeMainTab === 'standards' ? 'quy chuẩn' : 'quy trình'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        <StandardsWorkflowsTab
+          mode={activeMainTab}
+          list={list}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+          categories={categories}
+          isEditing={isEditing}
+          setIsEditing={setIsEditing}
+          currentArticle={currentArticle}
+          setCurrentArticle={setCurrentArticle}
+          viewArticle={viewArticle}
+          setViewArticle={setViewArticle}
+          isParsing={isParsing}
+          fileInputRef={fileInputRef}
+          handleDocumentUpload={handleDocumentUpload}
+          aiDocSuggestion={aiDocSuggestion}
+          setAiDocSuggestion={setAiDocSuggestion}
+          applyAiDocSuggestion={applyAiDocSuggestion}
+          onUpdateData={onUpdateData}
+        />
       )}
 
       {/* MODALS */}
@@ -1391,7 +617,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
                       Tiêu đề
                     </label>
                     <input
@@ -1400,11 +626,11 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       onChange={e =>
                         setCurrentArticle({ ...currentArticle, title: e.target.value })
                       }
-                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none"
+                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-normal outline-none"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
                       Danh mục
                     </label>
                     <select
@@ -1412,7 +638,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       onChange={e =>
                         setCurrentArticle({ ...currentArticle, category: e.target.value as any })
                       }
-                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none"
+                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-normal outline-none appearance-none"
                     >
                       {categories.map(c => (
                         <option key={c} value={c}>
@@ -1423,7 +649,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
                     Nội dung (Markdown)
                   </label>
                   <textarea
@@ -1431,7 +657,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                     onChange={e =>
                       setCurrentArticle({ ...currentArticle, content: e.target.value })
                     }
-                    className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none min-h-[300px]"
+                    className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-normal outline-none min-h-[300px]"
                     placeholder="Sử dụng Markdown để định dạng văn bản..."
                   />
                 </div>
@@ -1452,7 +678,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                       setIsEditing(false);
                     }
                   }}
-                  className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl tracking-[0.2em]"
+                  className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-normal uppercase text-xs shadow-xl tracking-[0.2em]"
                 >
                   Lưu nội dung
                 </button>
@@ -1461,7 +687,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
               <div className="space-y-8">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest mb-4 inline-block">
+                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-normal uppercase tracking-widest mb-4 inline-block">
                       {viewArticle?.category}
                     </span>
                     <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-tight">
@@ -1474,7 +700,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                         className="mt-4 flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all w-fit"
                       >
                         <FileDown className="w-5 h-5" />
-                        <span className="text-[10px] font-black uppercase">
+                        <span className="text-[10px] font-normal uppercase">
                           Tải xuống tệp gốc ({viewArticle.sourceFileName})
                         </span>
                       </a>
@@ -1514,7 +740,7 @@ const AllowanceInput = ({
       <div className="p-2 bg-slate-50 rounded-xl shadow-sm">
         <Icon className={`w-3.5 h-3.5 ${color}`} />
       </div>
-      <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+      <span className="text-[9px] font-normal text-slate-500 uppercase tracking-tighter">
         {label}
       </span>
     </div>
@@ -1522,7 +748,7 @@ const AllowanceInput = ({
       type="number"
       value={value || 0}
       onChange={e => onChange(Number(e.target.value))}
-      className="w-32 bg-transparent border-none outline-none font-black text-slate-800 text-right text-sm"
+      className="w-32 bg-transparent border-none outline-none font-normal text-slate-800 text-right text-sm"
     />
   </div>
 );
@@ -1531,15 +757,15 @@ const AllowanceRow = ({ icon: Icon, label, value, color = 'text-slate-400' }: an
   <div className="flex items-center justify-between py-1 border-b border-slate-50/50 last:border-none">
     <div className="flex items-center gap-2.5">
       <Icon className={`w-3 h-3 ${color}`} />
-      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{label}</span>
+      <span className="text-[10px] font-normal text-slate-500 uppercase tracking-tight">{label}</span>
     </div>
-    <span className="text-xs font-black text-slate-700">{(value || 0).toLocaleString()}đ</span>
+    <span className="text-xs font-normal text-slate-700">{(value || 0).toLocaleString()}đ</span>
   </div>
 );
 
 const InputWrapper = ({ label, icon: Icon, children }: any) => (
   <div className="space-y-1.5 flex-1">
-    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+    <label className="text-[9px] font-normal text-slate-400 uppercase tracking-widest ml-1">
       {label}
     </label>
     <div className="relative bg-slate-50 border border-slate-100 focus-within:bg-white focus-within:border-amber-500 rounded-2xl transition-all shadow-inner flex items-center p-4">

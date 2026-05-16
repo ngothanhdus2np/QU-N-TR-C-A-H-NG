@@ -257,11 +257,11 @@ const RevenueManager: React.FC<Props> = ({
   const getHeatmapColor = (value: number) => {
     if (value <= 0) return 'transparent';
     const intensity = value / maxFinancialValue;
-    if (intensity > 0.8) return 'bg-emerald-500 text-white font-black';
-    if (intensity > 0.5) return 'bg-emerald-400 text-white font-black';
-    if (intensity > 0.3) return 'bg-emerald-200 text-emerald-900 font-bold';
-    if (intensity > 0.1) return 'bg-emerald-100 text-emerald-800 font-bold';
-    return 'bg-emerald-50 text-emerald-700 font-bold';
+    if (intensity > 0.8) return 'bg-emerald-500 text-white font-normal';
+    if (intensity > 0.5) return 'bg-emerald-400 text-white font-normal';
+    if (intensity > 0.3) return 'bg-emerald-200 text-emerald-900 font-normal';
+    if (intensity > 0.1) return 'bg-emerald-100 text-emerald-800 font-normal';
+    return 'bg-emerald-50 text-emerald-700 font-normal';
   };
 
   // --- PHÂN TÍCH DOANH THU ---

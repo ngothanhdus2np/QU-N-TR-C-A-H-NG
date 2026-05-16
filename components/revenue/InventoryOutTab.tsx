@@ -68,7 +68,7 @@ const InventoryOutTab: React.FC<Props> = ({
             <Upload className="w-5 h-5 text-rose-600" />
           </div>
           <h4 className="text-[11px] font-black text-slate-900 uppercase">Tải file Shopee</h4>
-          <p className="text-[8px] text-slate-400 font-bold uppercase mt-1 text-center">Tự động phân tích đơn hàng</p>
+          <p className="text-[8px] text-slate-400 font-normal uppercase mt-1 text-center">Tự động phân tích đơn hàng</p>
         </div>
 
         <div className="md:col-span-9 space-y-4">
@@ -79,11 +79,11 @@ const InventoryOutTab: React.FC<Props> = ({
                 <h4 className="text-[11px] font-black text-slate-900 uppercase">Quảng cáo ngày</h4>
               </div>
               <div className="flex-1 flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100 w-full">
-                <input type="date" value={selectedAdsDate} onChange={(e) => setSelectedAdsDate(e.target.value)} className="bg-transparent border-none outline-none text-[11px] font-bold text-slate-600 w-32" />
+                <input type="date" value={selectedAdsDate} onChange={(e) => setSelectedAdsDate(e.target.value)} className="bg-transparent border-none outline-none text-[11px] font-normal text-slate-600 w-32" />
                 <div className="h-6 w-[1px] bg-slate-200"></div>
                 <div className="flex-1 flex items-center gap-2">
                   <DollarSign className="w-3.5 h-3.5 text-rose-600" />
-                  <input type="number" value={dailyAdsConfig[selectedAdsDate] || 0} onChange={(e) => handleDistributeAdsCost(Number(e.target.value), selectedAdsDate)} className="bg-transparent border-none outline-none text-slate-900 font-black text-xs w-full" placeholder="Nhập tổng tiền QC của ngày..." />
+                  <input type="number" value={dailyAdsConfig[selectedAdsDate] || 0} onChange={(e) => handleDistributeAdsCost(Number(e.target.value), selectedAdsDate)} className="bg-transparent border-none outline-none text-slate-900 font-normal text-xs w-full" placeholder="Nhập tổng tiền QC của ngày..." />
                 </div>
               </div>
             </div>
@@ -98,7 +98,7 @@ const InventoryOutTab: React.FC<Props> = ({
                 <div>
                   <h4 className="text-[11px] font-black text-slate-900 uppercase">{editingInventoryOutId ? 'Cập nhật đơn hàng' : 'Nhập đơn hàng mới'}</h4>
                   {editingInventoryOutId && (
-                    <p className="text-[8px] font-bold text-indigo-600 uppercase tracking-widest mt-0.5">Đang sửa bản ghi: {shopeeInventoryOut.find(r => r.id === editingInventoryOutId)?.trackingNumber}</p>
+                    <p className="text-[8px] font-normal text-indigo-600 uppercase tracking-widest mt-0.5">Đang sửa bản ghi: {shopeeInventoryOut.find(r => r.id === editingInventoryOutId)?.trackingNumber}</p>
                   )}
                 </div>
               </div>
@@ -109,27 +109,27 @@ const InventoryOutTab: React.FC<Props> = ({
                       setEditingInventoryOutId(null);
                       setInventoryOutForm({ date: localTodayStr, status: 'OK', platform: 'Shopee 2', quantity: 1, salePrice: 0, customerPaid: 0, platformFee: 0, paymentFee: 0, freeshipExtra: 0, affiliateFee: 0, shippingUnit: 'GHN', profitStatus: 'LÃI 2' });
                     }}
-                    className="text-[9px] font-black text-slate-400 hover:text-rose-600 uppercase tracking-widest px-3 py-1 bg-slate-100 rounded-full transition-colors"
+                    className="text-[9px] font-normal text-slate-400 hover:text-rose-600 uppercase tracking-widest px-3 py-1 bg-slate-100 rounded-full transition-colors"
                   >
                     Hủy sửa
                   </button>
                 )}
-                <span className="text-[9px] font-bold text-slate-400 uppercase italic">* Nhập nhanh đơn hàng lẻ</span>
+                <span className="text-[9px] font-normal text-slate-400 uppercase italic">* Nhập nhanh đơn hàng lẻ</span>
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Ngày gửi</label>
-                  <input type="date" value={inventoryOutForm.date} onChange={e => setInventoryOutForm({...inventoryOutForm, date: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Ngày gửi</label>
+                  <input type="date" value={inventoryOutForm.date} onChange={e => setInventoryOutForm({...inventoryOutForm, date: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Mã Vận Đơn</label>
-                  <input type="text" placeholder="Mã vận đơn..." value={inventoryOutForm.orderId || ''} onChange={e => setInventoryOutForm({...inventoryOutForm, orderId: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Mã Vận Đơn</label>
+                  <input type="text" placeholder="Mã vận đơn..." value={inventoryOutForm.orderId || ''} onChange={e => setInventoryOutForm({...inventoryOutForm, orderId: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">SKU</label>
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">SKU</label>
                   <select
                     value={inventoryOutForm.sku || ''}
                     onChange={e => {
@@ -137,46 +137,46 @@ const InventoryOutTab: React.FC<Props> = ({
                       const skuData = shopeeSourceData.find(s => s.sku === sku);
                       setInventoryOutForm({ ...inventoryOutForm, sku, salePrice: skuData?.salePrice || 0, customerPaid: skuData?.salePrice || 0 });
                     }}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500"
                   >
                     <option value="">Chọn SKU</option>
                     {shopeeSourceData.map(s => <option key={s.id} value={s.sku}>{s.sku}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Số lượng</label>
-                  <input type="number" value={inventoryOutForm.quantity || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, quantity: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Số lượng</label>
+                  <input type="number" value={inventoryOutForm.quantity || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, quantity: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Giá bán</label>
-                  <input type="number" value={inventoryOutForm.salePrice || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, salePrice: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Giá bán</label>
+                  <input type="number" value={inventoryOutForm.salePrice || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, salePrice: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Khách trả</label>
-                  <input type="number" value={inventoryOutForm.customerPaid || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, customerPaid: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Khách trả</label>
+                  <input type="number" value={inventoryOutForm.customerPaid || 0} onChange={e => setInventoryOutForm({...inventoryOutForm, customerPaid: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Phí sàn (đ)</label>
-                  <input type="number" value={inventoryOutForm.platformFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, platformFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Phí sàn (đ)</label>
+                  <input type="number" value={inventoryOutForm.platformFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, platformFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Phí thanh toán (đ)</label>
-                  <input type="number" value={inventoryOutForm.paymentFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, paymentFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Phí thanh toán (đ)</label>
+                  <input type="number" value={inventoryOutForm.paymentFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, paymentFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Freeship Extra (đ)</label>
-                  <input type="number" value={inventoryOutForm.freeshipExtra ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, freeshipExtra: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Freeship Extra (đ)</label>
+                  <input type="number" value={inventoryOutForm.freeshipExtra ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, freeshipExtra: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Phí Affiliate (đ)</label>
-                  <input type="number" value={inventoryOutForm.affiliateFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, affiliateFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Phí Affiliate (đ)</label>
+                  <input type="number" value={inventoryOutForm.affiliateFee ?? 0} onChange={e => setInventoryOutForm({...inventoryOutForm, affiliateFee: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Nền tảng</label>
-                  <select value={inventoryOutForm.platform || 'Shopee 2'} onChange={e => setInventoryOutForm({...inventoryOutForm, platform: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500">
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Nền tảng</label>
+                  <select value={inventoryOutForm.platform || 'Shopee 2'} onChange={e => setInventoryOutForm({...inventoryOutForm, platform: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500">
                     <option value="Shopee 1">Shopee 1</option>
                     <option value="Shopee 2">Shopee 2</option>
                     <option value="Lazada">Lazada</option>
@@ -184,8 +184,8 @@ const InventoryOutTab: React.FC<Props> = ({
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">ĐVVC</label>
-                  <select value={inventoryOutForm.shippingUnit || 'GHN'} onChange={e => setInventoryOutForm({...inventoryOutForm, shippingUnit: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500">
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">ĐVVC</label>
+                  <select value={inventoryOutForm.shippingUnit || 'GHN'} onChange={e => setInventoryOutForm({...inventoryOutForm, shippingUnit: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500">
                     <option value="GHN">GHN</option>
                     <option value="SPX">SPX</option>
                     <option value="GHTK">GHTK</option>
@@ -193,13 +193,13 @@ const InventoryOutTab: React.FC<Props> = ({
                   </select>
                 </div>
                 <div className="lg:col-span-3 space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Địa chỉ (Tỉnh/Thành)</label>
-                  <input type="text" placeholder="VD: ĐÀ NẴNG" value={inventoryOutForm.address || ''} onChange={e => setInventoryOutForm({...inventoryOutForm, address: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-rose-500" />
+                  <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Địa chỉ (Tỉnh/Thành)</label>
+                  <input type="text" placeholder="VD: ĐÀ NẴNG" value={inventoryOutForm.address || ''} onChange={e => setInventoryOutForm({...inventoryOutForm, address: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[10px] font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                 </div>
                 <div className="flex items-end">
                   <button
                     onClick={handleAddInventoryOut}
-                    className={`w-full ${editingInventoryOutId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'} text-white py-2 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2`}
+                    className={`w-full ${editingInventoryOutId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'} text-white py-2 rounded-lg font-normal text-[9px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2`}
                   >
                     <Save className="w-3.5 h-3.5" /> {editingInventoryOutId ? 'Cập nhật' : 'Ghi nhận'}
                   </button>
@@ -319,56 +319,56 @@ const InventoryOutTab: React.FC<Props> = ({
             <tbody className="divide-y divide-slate-200 tabular-nums">
               {shopeeInventoryOut.length > 0 ? shopeeInventoryOut.map((item, idx) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-all group border-b border-slate-200">
-                  <td className="p-2 border-r border-slate-200 text-center font-bold text-slate-500">{idx + 1}</td>
+                  <td className="p-2 border-r border-slate-200 text-center font-normal text-slate-500">{idx + 1}</td>
                   <td className="p-2 border-r border-slate-200">
-                    <div className="flex items-center gap-1 bg-emerald-700 text-white px-2 py-1 rounded-md text-[10px] font-black cursor-pointer">
+                    <div className="flex items-center gap-1 bg-emerald-700 text-white px-2 py-1 rounded-md text-[10px] font-normal cursor-pointer">
                       <span>{item.status === 'OK' ? 'OK' : item.status}</span>
                       <ArrowDownToLine className="w-3 h-3 rotate-180" />
                     </div>
                   </td>
                   <td className="p-2 border-r border-slate-200 text-center">{(item.shipDate || item.date).split('-').reverse().join('/')}</td>
-                  <td className="p-2 border-r border-slate-200 text-center font-bold">{item.dailyOrderIndex || 1}</td>
+                  <td className="p-2 border-r border-slate-200 text-center font-normal">{item.dailyOrderIndex || 1}</td>
                   <td className="p-2 border-r border-slate-200">
-                    <div className="flex items-center justify-between bg-orange-200 text-orange-800 px-2 py-1 rounded-md text-[10px] font-black cursor-pointer">
+                    <div className="flex items-center justify-between bg-orange-200 text-orange-800 px-2 py-1 rounded-md text-[10px] font-normal cursor-pointer">
                       <span>{item.platform || 'Shopee 2'}</span>
                       <ArrowDownToLine className="w-3 h-3 rotate-180" />
                     </div>
                   </td>
                   <td className="p-2 border-r border-slate-200 font-mono text-indigo-600">
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter text-indigo-400">Vận Đơn</span>
+                      <span className="text-[9px] font-normal text-slate-500 uppercase tracking-tighter text-indigo-400">Vận Đơn</span>
                       <span className="truncate max-w-[150px]">{item.trackingNumber || '-'}</span>
                     </div>
                   </td>
                   <td className="p-2 border-r border-slate-200">
-                    <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-[10px] font-black cursor-pointer">
+                    <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-[10px] font-normal cursor-pointer">
                       <span>{item.sku}</span>
                       <ArrowDownToLine className="w-3 h-3 rotate-180" />
                     </div>
                   </td>
                   <td className="p-2 border-r border-slate-200 text-slate-500 truncate max-w-[200px]">{item.productName || '-'}</td>
-                  <td className="p-2 border-r border-slate-200 text-center font-bold">{item.quantity}</td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold">{formatNumber(item.salePrice)} đ</td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold">{formatNumber(item.customerPaid)} đ</td>
+                  <td className="p-2 border-r border-slate-200 text-center font-normal">{item.quantity}</td>
+                  <td className="p-2 border-r border-slate-200 text-right font-normal">{formatNumber(item.salePrice)} đ</td>
+                  <td className="p-2 border-r border-slate-200 text-right font-normal">{formatNumber(item.customerPaid)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.platformFee)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.paymentFee)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.freeshipExtra)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.affiliateFee)} đ</td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-700 bg-slate-50">{formatNumber(item.salePrice - item.platformFee - item.paymentFee - item.freeshipExtra - item.affiliateFee)} đ</td>
+                  <td className="p-2 border-r border-slate-200 text-right font-normal text-slate-700 bg-slate-50">{formatNumber(item.salePrice - item.platformFee - item.paymentFee - item.freeshipExtra - item.affiliateFee)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.handlingFee)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.adsCost)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.adsTax)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-right text-slate-500">{formatNumber(item.personalIncomeTax)} đ</td>
-                  <td className={`p-2 border-r border-slate-200 text-right font-black ${item.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatNumber(item.netProfit)} đ</td>
+                  <td className={`p-2 border-r border-slate-200 text-right font-normal ${item.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{formatNumber(item.netProfit)} đ</td>
                   <td className="p-2 border-r border-slate-200 text-slate-500 uppercase">{item.address || '-'}</td>
                   <td className="p-2 border-r border-slate-200">
-                    <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-[10px] font-black cursor-pointer">
+                    <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-[10px] font-normal cursor-pointer">
                       <span>{item.shippingUnit || 'GHN'}</span>
                       <ArrowDownToLine className="w-3 h-3 rotate-180" />
                     </div>
                   </td>
                   <td className="p-2 border-r border-slate-200">
-                    <div className={`flex items-center justify-between px-2 py-1 rounded-md text-[10px] font-black cursor-pointer ${item.netProfit >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'}`}>
+                    <div className={`flex items-center justify-between px-2 py-1 rounded-md text-[10px] font-normal cursor-pointer ${item.netProfit >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'}`}>
                       <span>{item.profitStatus || (item.netProfit >= 0 ? 'LÃI 2' : 'LỖ 1')}</span>
                       <ArrowDownToLine className="w-3 h-3 rotate-180" />
                     </div>
@@ -391,7 +391,7 @@ const InventoryOutTab: React.FC<Props> = ({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={24} className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">Chưa có dữ liệu xuất kho</td>
+                  <td colSpan={24} className="p-20 text-center text-slate-400 font-normal uppercase tracking-widest">Chưa có dữ liệu xuất kho</td>
                 </tr>
               )}
             </tbody>

@@ -26,13 +26,25 @@
       "Bash(awk 'NR==1582,/^      case '\\\\''kho'\\\\''/{print NR\": \"$0}' \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/pos/GoodsInventory.tsx\")",
       "Bash(python3 -)",
       "Read(//Users/apple/phucsang app/QU-N-träC-A-H-NG/components/pos/**)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git checkout *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude"
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude/hooks/SessionStart.sh'"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

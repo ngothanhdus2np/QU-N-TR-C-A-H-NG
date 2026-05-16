@@ -75,7 +75,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -110,7 +110,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Tên nhà cung cấp <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -124,7 +124,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Mã nhà cung cấp
                   </label>
                   <input
@@ -137,7 +137,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Nhóm
                   </label>
                   <input
@@ -158,7 +158,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Số điện thoại
                   </label>
                   <input
@@ -171,7 +171,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Email
                   </label>
                   <input
@@ -184,7 +184,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-sm font-normal text-slate-700 mb-2">
                     Địa chỉ
                   </label>
                   <input
@@ -213,7 +213,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                     onChange={e => handleChange('status', e.target.value)}
                     className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-sm font-semibold text-slate-700">Đang hoạt động</span>
+                  <span className="text-sm font-normal text-slate-700">Đang hoạt động</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -224,7 +224,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
                     onChange={e => handleChange('status', e.target.value)}
                     className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-sm font-semibold text-slate-700">Ngừng hoạt động</span>
+                  <span className="text-sm font-normal text-slate-700">Ngừng hoạt động</span>
                 </label>
               </div>
             </div>
@@ -250,14 +250,14 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 bg-slate-100 rounded-xl font-black text-xs uppercase text-slate-600 hover:bg-slate-200 transition-colors"
+            className="px-5 py-2.5 bg-slate-100 rounded-xl font-normal text-xs uppercase text-slate-600 hover:bg-slate-200 transition-colors"
           >
             Hủy
           </button>
           <button
             type="submit"
             onClick={handleSubmit}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-wide shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-normal text-xs uppercase tracking-wide shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors"
           >
             <Save className="h-4 w-4" />
             {isEditMode ? 'Cập nhật' : 'Thêm mới'}

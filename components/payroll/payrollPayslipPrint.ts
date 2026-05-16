@@ -6,7 +6,7 @@ import {
   ViolationOccurrence,
   ViolationType,
 } from '../../types';
-import { calculateSeniority, determineCurrentPolicy } from '../../businessLogic';
+import { calculateSeniority, determineCurrentPolicy } from '../../src/lib';
 
 interface BuildPayrollPayslipHtmlArgs {
   payroll: PayrollRecord;

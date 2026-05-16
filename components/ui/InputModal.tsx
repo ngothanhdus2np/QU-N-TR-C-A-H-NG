@@ -67,7 +67,7 @@ const InputModal: React.FC<InputModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+          <label className="block text-xs font-normal text-slate-500 uppercase tracking-wider mb-1.5">
             {label}
           </label>
           <input
@@ -85,13 +85,13 @@ const InputModal: React.FC<InputModalProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 text-sm font-normal rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
             >
               {cancelLabel}
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              className="px-4 py-2 text-sm font-normal rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
             >
               {confirmLabel}
             </button>

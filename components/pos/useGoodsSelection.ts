@@ -30,6 +30,8 @@ export const useGoodsSelection = ({
   const [favoriteIds, setFavoriteIds] = React.useState<string[]>([]);
   const [expandedParents, setExpandedParents] = React.useState<Set<string>>(new Set());
 
+  const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
+
   const toggleSelectAll = () => {
     if (selectedIds.length === filteredProducts.length) {
       setSelectedIds([]);
@@ -71,7 +73,8 @@ export const useGoodsSelection = ({
             const updates: AppDataSurgicalUpdate[] = selectedIds.map(id => ({ key: 'posProducts', item: { id }, isDelete: true }));
             await onUpdateSurgical(updates);
           } else {
-            const updated = products.filter(product => !selectedIds.includes(product.id));
+            const idsToDelete = new Set(selectedIds);
+            const updated = products.filter(product => !idsToDelete.has(product.id));
             onUpdateProducts(updated);
           }
           setSelectedIds([]);
@@ -87,6 +90,7 @@ export const useGoodsSelection = ({
   return {
     selectedIds,
     setSelectedIds,
+    selectedIdSet,
     favoriteIds,
     expandedParents,
     toggleSelectAll,

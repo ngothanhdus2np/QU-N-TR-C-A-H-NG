@@ -6,7 +6,7 @@ const ReturnInput = ({ value, onChange, placeholder }: { value: string; onChange
   <div className="relative group">
     <input
       type="text"
-      className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 transition-all placeholder:text-slate-300 border-b-2 tracking-tight"
+      className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-normal text-slate-800 outline-none focus:border-indigo-400 transition-all placeholder:text-slate-300 border-b-2 tracking-tight"
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
@@ -85,7 +85,7 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                 <div className="relative">
                   <input
                     type="date"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
                     value={returnSearch.fromDate}
                     onChange={e => setReturnSearch(prev => ({ ...prev, fromDate: e.target.value }))}
                   />
@@ -93,7 +93,7 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                 <div className="relative">
                   <input
                     type="date"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
                     placeholder="Đến ngày"
                     value={returnSearch.toDate}
                     onChange={e => setReturnSearch(prev => ({ ...prev, toDate: e.target.value }))}
@@ -120,14 +120,14 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                 <tbody className="divide-y divide-slate-50 italic">
                   {filteredReturnOrders.map((inv) => (
                     <tr key={inv.id} className="hover:bg-indigo-50/50 group transition-all">
-                      <td className="px-6 py-4 font-black text-indigo-600 cursor-pointer hover:underline">{inv.orderCode}</td>
-                      <td className="px-6 py-4 font-bold text-slate-600">{new Date(inv.date).toLocaleString('vi-VN')}</td>
-                      <td className="px-6 py-4 font-bold text-slate-700">{inv.staffId}</td>
-                      <td className="px-6 py-4 font-bold text-slate-600">{inv.customerName || 'Khách lẻ'}</td>
-                      <td className="px-6 py-4 font-black text-slate-900 text-right">{inv.finalAmount.toLocaleString()}</td>
+                      <td className="px-6 py-4 font-normal text-indigo-600 cursor-pointer hover:underline">{inv.orderCode}</td>
+                      <td className="px-6 py-4 font-normal text-slate-600">{new Date(inv.date).toLocaleString('vi-VN')}</td>
+                      <td className="px-6 py-4 font-normal text-slate-700">{inv.staffId}</td>
+                      <td className="px-6 py-4 font-normal text-slate-600">{inv.customerName || 'Khách lẻ'}</td>
+                      <td className="px-6 py-4 font-normal text-slate-900 text-right">{inv.finalAmount.toLocaleString()}</td>
                       <td className="px-6 py-4 text-center">
                         <button
-                          className="px-4 py-1.5 border border-slate-200 rounded-lg text-[11px] font-black uppercase text-slate-600 hover:bg-slate-950 hover:text-white transition-all shadow-sm"
+                          className="px-4 py-1.5 border border-slate-200 rounded-lg text-[11px] font-normal uppercase text-slate-600 hover:bg-slate-950 hover:text-white transition-all shadow-sm"
                           onClick={onClose}
                         >
                           Chọn
@@ -137,7 +137,7 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                   ))}
                   {filteredReturnOrders.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center text-slate-300 font-bold uppercase tracking-widest">
+                      <td colSpan={6} className="px-6 py-20 text-center text-slate-300 font-normal uppercase tracking-widest">
                         Không tìm thấy hóa đơn phù hợp
                       </td>
                     </tr>
@@ -152,17 +152,17 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                 <PaginationButton icon={<Undo2 className="h-4 w-4 rotate-180" />} />
                 <PaginationButton icon={<ChevronRight className="h-4 w-4 rotate-180" />} />
                 <div className="flex items-center gap-1">
-                  <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center">1</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center justify-center transition-colors">2</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center justify-center transition-colors">3</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center justify-center transition-colors">4</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center justify-center transition-colors">5</button>
+                  <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-normal text-xs flex items-center justify-center">1</button>
+                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">2</button>
+                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">3</button>
+                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">4</button>
+                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">5</button>
                   <span className="text-slate-300 mx-1">...</span>
                 </div>
                 <PaginationButton icon={<ChevronRight className="h-4 w-4" />} />
                 <PaginationButton icon={<Undo2 className="h-4 w-4" />} />
               </div>
-              <div className="text-[11px] font-bold text-slate-400">Hiển thị {filteredReturnOrders.length} hóa đơn</div>
+              <div className="text-[11px] font-normal text-slate-400">Hiển thị {filteredReturnOrders.length} hóa đơn</div>
             </div>
           </div>
         </div>
@@ -170,7 +170,7 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
         {/* Footer action */}
         <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
           <button
-            className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
+            className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-normal uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
             onClick={onReturnFast}
           >
             Trả nhanh

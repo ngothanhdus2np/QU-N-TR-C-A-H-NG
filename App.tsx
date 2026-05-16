@@ -1,14 +1,33 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TopNav from './components/TopNav';
 import MainContent from './components/MainContent';
+import OfflineIndicator from './components/OfflineIndicator';
+import DevQRCode from './components/DevQRCode';
 import { useAppData } from './hooks/useAppData';
 import { useTheme } from './hooks/useTheme';
 import { SIDEBAR_SECTIONS } from './constants/navigation';
+import { registerServiceWorker } from './registerServiceWorker';
 import type { AppAlert } from './types';
 
 const App: React.FC = () => {
+  // Register Service Worker
+  useEffect(() => {
+    registerServiceWorker({
+      onSuccess: registration => {
+        console.log('✅ PWA ready to work offline!');
+      },
+      onUpdate: registration => {
+        console.log('🔄 New version available!');
+      },
+      onOffline: () => {
+        console.log('📴 Working offline');
+      },
+      onOnline: () => {
+        console.log('🌐 Back online, syncing data...');
+      },
+    });
+  }, []);
   const {
     data,
     activeTab,
@@ -49,7 +68,9 @@ const App: React.FC = () => {
     try {
       const res = await fetch('/api/alerts');
       if (res.ok) setAlerts(await res.json());
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   }, []);
 
   useEffect(() => {
@@ -81,61 +102,71 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
-      {activeTab !== 'pos' && (
-        <TopNav
-          sections={SIDEBAR_SECTIONS}
-          activeId={activeTab}
-          onSelect={(id: string) => setActiveTab(id)}
-          isCloudConnected={isCloudConnected}
-          isSyncing={isSyncing || isDraining}
-          syncErrors={syncErrors}
-          lastSyncTime={lastSyncTime}
-          onRefresh={() => fetchData(true)}
-          brandLogo={brandProfile.logo}
-          alerts={alerts}
-          pendingCount={pendingCount}
-          offlinePendingCount={offlinePendingCount}
-          onDrainOfflineQueue={drainQueue}
-          activeThemeId={themeId}
-          onThemeChange={setThemeId}
-        />
-      )}
-      <main className={`flex-1 overflow-y-auto no-scrollbar relative z-0 ${activeTab === 'pos' ? 'p-0' : 'pb-8 px-4 md:px-8'}`}>
-        <AnimatePresence mode="wait">
+      <OfflineIndicator />
+      <DevQRCode />
+      <AnimatePresence initial={false}>
+        {activeTab !== 'pos' && (
           <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
+            key="top-nav"
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="h-full"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.12 }}
+            className="shrink-0"
           >
-            <MainContent
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              data={data}
-              brandProfile={brandProfile}
-              setBrandProfile={setBrandProfile}
-              chatMessages={chatMessages}
-              setChatMessages={setChatMessages}
-              showResigned={showResigned}
-              setShowResigned={setShowResigned}
-              diagnosisRange={diagnosisRange}
-              setDiagnosisRange={setDiagnosisRange}
-              diagStartDate={diagStartDate}
-              setDiagStartDate={setDiagStartDate}
-              diagEndDate={diagEndDate}
-              setDiagEndDate={setDiagEndDate}
-              suggestedFocusProducts={suggestedFocusProducts}
-              breakEvenAnalysis={breakEvenAnalysis}
-              updateData={updateData}
-              updateSurgical={updateSurgical}
-              pushBatch={pushBatch}
+            <TopNav
+              sections={SIDEBAR_SECTIONS}
+              activeId={activeTab}
+              onSelect={(id: string) => setActiveTab(id)}
+              isCloudConnected={isCloudConnected}
+              isSyncing={isSyncing || isDraining}
+              syncErrors={syncErrors}
+              lastSyncTime={lastSyncTime}
+              onRefresh={() => fetchData(true)}
+              alerts={alerts}
+              pendingCount={pendingCount}
               offlinePendingCount={offlinePendingCount}
-              isDraining={isDraining}
+              onDrainOfflineQueue={drainQueue}
+              activeThemeId={themeId}
+              onThemeChange={setThemeId}
+              brandProfile={brandProfile}
+              onUpdateBrand={setBrandProfile}
+              products={data.posProducts || []}
+              paymentSettings={data.posPaymentSettings}
+              onUpdatePaymentSettings={settings => updateData('posPaymentSettings', settings)}
+              inventorySettings={data.posInventorySettings}
+              onUpdateInventorySettings={settings => updateData('posInventorySettings', settings)}
             />
           </motion.div>
-        </AnimatePresence>
+        )}
+      </AnimatePresence>
+      <main
+        className={`flex-1 overflow-y-auto no-scrollbar relative transition-[padding] duration-150 ${activeTab === 'pos' ? 'p-0' : 'pb-8 px-4 md:px-8'}`}
+      >
+        <MainContent
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          data={data}
+          brandProfile={brandProfile}
+          setBrandProfile={setBrandProfile}
+          chatMessages={chatMessages}
+          setChatMessages={setChatMessages}
+          showResigned={showResigned}
+          setShowResigned={setShowResigned}
+          diagnosisRange={diagnosisRange}
+          setDiagnosisRange={setDiagnosisRange}
+          diagStartDate={diagStartDate}
+          setDiagStartDate={setDiagStartDate}
+          diagEndDate={diagEndDate}
+          setDiagEndDate={setDiagEndDate}
+          suggestedFocusProducts={suggestedFocusProducts}
+          breakEvenAnalysis={breakEvenAnalysis}
+          updateData={updateData}
+          updateSurgical={updateSurgical}
+          pushBatch={pushBatch}
+          offlinePendingCount={offlinePendingCount}
+          isDraining={isDraining}
+        />
       </main>
     </div>
   );

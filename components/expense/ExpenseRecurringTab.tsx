@@ -40,24 +40,24 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-all"><Repeat className="w-12 h-12" /></div>
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <span className="px-3 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase">Ngày {recurring.dayOfMonth} hàng tháng</span>
+                  <span className="px-3 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-normal uppercase">Ngày {recurring.dayOfMonth} hàng tháng</span>
                   <h4 className="text-sm font-black text-slate-900 mt-2 uppercase">{recurring.name}</h4>
                 </div>
               </div>
               <div className="space-y-1 mb-6">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Danh mục: {recurring.category}</p>
-                <p className="text-lg font-black text-slate-900 tabular-nums">{formatNumber(recurring.amount)}đ</p>
+                <p className="text-[10px] font-normal text-slate-500 uppercase">Danh mục: {recurring.category}</p>
+                <p className="text-lg font-normal text-slate-900 tabular-nums">{formatNumber(recurring.amount)}đ</p>
               </div>
               <button
                 onClick={() => onPostRecurring(recurring)}
-                className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-normal uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" /> Xác nhận & Ghi sổ
               </button>
             </div>
           ))
         ) : (
-          <div className="col-span-full py-10 text-center text-slate-400 font-bold uppercase text-xs italic">
+          <div className="col-span-full py-10 text-center text-slate-400 font-normal uppercase text-xs italic">
             Tất cả chi phí định kỳ tháng này đã được ghi sổ hoặc chưa đến ngày.
           </div>
         )}
@@ -72,12 +72,12 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
         </h3>
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Tên mẫu chi phí</label>
-            <input type="text" value={recurringForm.name} onChange={e => setRecurringForm({ ...recurringForm, name: e.target.value })} placeholder="Ví dụ: Tiền thuê mặt bằng" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+            <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Tên mẫu chi phí</label>
+            <input type="text" value={recurringForm.name} onChange={e => setRecurringForm({ ...recurringForm, name: e.target.value })} placeholder="Ví dụ: Tiền thuê mặt bằng" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Danh mục</label>
-            <select value={recurringForm.category} onChange={e => setRecurringForm({ ...recurringForm, category: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Danh mục</label>
+            <select value={recurringForm.category} onChange={e => setRecurringForm({ ...recurringForm, category: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-indigo-100">
               <option value="">Chọn danh mục...</option>
               {categories.filter(category => !!category.parentId).map(category => (
                 <option key={category.id} value={category.name}>{category.name}</option>
@@ -86,21 +86,21 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Số tiền (đ)</label>
-              <input type="number" value={recurringForm.amount || ''} onChange={e => setRecurringForm({ ...recurringForm, amount: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Số tiền (đ)</label>
+              <input type="number" value={recurringForm.amount || ''} onChange={e => setRecurringForm({ ...recurringForm, amount: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-indigo-100" />
             </div>
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Ngày trong tháng</label>
-              <input type="number" min="1" max="31" value={recurringForm.dayOfMonth || ''} onChange={e => setRecurringForm({ ...recurringForm, dayOfMonth: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Ngày trong tháng</label>
+              <input type="number" min="1" max="31" value={recurringForm.dayOfMonth || ''} onChange={e => setRecurringForm({ ...recurringForm, dayOfMonth: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-indigo-100" />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Ghi chú thêm</label>
-            <textarea value={recurringForm.description} onChange={e => setRecurringForm({ ...recurringForm, description: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-100 h-20" />
+            <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Ghi chú thêm</label>
+            <textarea value={recurringForm.description} onChange={e => setRecurringForm({ ...recurringForm, description: e.target.value })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-indigo-100 h-20" />
           </div>
           <button
             onClick={onAddRecurring}
-            className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"
+            className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-normal uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" /> Lưu mẫu định kỳ
           </button>
@@ -118,17 +118,17 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
               <div key={recurring.id} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-between group">
                 <div className="flex items-center gap-6">
                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-slate-100">
-                    <span className="text-sm font-black">{recurring.dayOfMonth}</span>
+                    <span className="text-sm font-normal">{recurring.dayOfMonth}</span>
                   </div>
                   <div>
                     <h4 className="text-sm font-black text-slate-900 uppercase">{recurring.name}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{recurring.category} • {formatNumber(recurring.amount)}đ</p>
+                    <p className="text-[10px] font-normal text-slate-400 uppercase">{recurring.category} • {formatNumber(recurring.amount)}đ</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => onToggleRecurringActive(recurring.id)}
-                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${recurring.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
+                    className={`px-4 py-2 rounded-xl text-[9px] font-normal uppercase transition-all ${recurring.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
                   >
                     {recurring.isActive ? 'Đang bật' : 'Đã tắt'}
                   </button>
@@ -137,7 +137,7 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
               </div>
             ))
           ) : (
-            <div className="py-20 text-center text-slate-400 font-bold uppercase text-xs italic">
+            <div className="py-20 text-center text-slate-400 font-normal uppercase text-xs italic">
               Chưa có mẫu chi phí định kỳ nào được tạo.
             </div>
           )}

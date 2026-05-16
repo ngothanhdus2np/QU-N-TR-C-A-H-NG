@@ -2,10 +2,12 @@ import axios from 'axios';
 
 const ZALO_API_URL = 'https://openapi.zalo.me/v2.0/oa/message';
 
-function getZaloConfig(): { token: string; userId: string } | null {
+function getZaloConfig(): { token: string; userId: string } {
   const token = process.env.ZALO_OA_ACCESS_TOKEN;
   const userId = process.env.ZALO_FOLLOWER_ID;
-  if (!token || !userId) return null;
+  if (!token || !userId) {
+    throw new Error('Zalo chưa được cấu hình. Vui lòng thiết lập ZALO_OA_ACCESS_TOKEN và ZALO_FOLLOWER_ID');
+  }
   return { token, userId };
 }
 
@@ -14,8 +16,12 @@ export function isZaloConfigured(): boolean {
 }
 
 export async function sendZaloMessage(text: string): Promise<void> {
+  if (!isZaloConfigured()) {
+    console.warn('Zalo chưa được cấu hình, bỏ qua gửi tin nhắn');
+    return; // Chưa cấu hình — bỏ qua, không throw
+  }
+  
   const config = getZaloConfig();
-  if (!config) return; // Chưa cấu hình — bỏ qua, không throw
 
   await axios.post(
     ZALO_API_URL,

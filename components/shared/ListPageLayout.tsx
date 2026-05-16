@@ -51,7 +51,7 @@ export const ListPageLayout: React.FC<ListPageLayoutProps> = ({
               {hasActiveFilters && onClearFilters && (
                 <button
                   onClick={onClearFilters}
-                  className="text-[10px] text-indigo-600 font-bold hover:underline"
+                  className="text-[10px] text-indigo-600 font-normal hover:underline"
                 >
                   Xóa lọc
                 </button>

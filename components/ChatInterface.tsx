@@ -25,7 +25,7 @@ import {
   calculateExpenseAnalysis,
   calculateDailyBreakEven,
   isStaffActive,
-} from '../businessLogic';
+} from '../src/lib';
 
 interface ChatInterfaceProps {
   data: AppData;
@@ -480,7 +480,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)] bg-white rounded-[3.5rem] border border-slate-200 overflow-hidden shadow-2xl relative">
-      <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
+      <div className="p-8 bg-slate-800 text-white flex items-center justify-between border-b border-slate-700">
         <div className="flex items-center gap-5">
           <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl ring-4 ring-indigo-500/20">
             <BrainCircuit className="w-8 h-8" />
@@ -491,7 +491,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </h4>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
                 Logic Brain Matrix Active
               </span>
             </div>
@@ -502,9 +502,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const meta = AGENT_META[activeAgent] ?? AGENT_META['finance'];
           const AgentIcon = meta.icon;
           return (
-            <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+            <div className="flex items-center gap-2 bg-slate-700 px-4 py-2 rounded-xl border border-slate-600">
               <AgentIcon className="w-3.5 h-3.5 text-slate-300" />
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+              <span className="text-[10px] font-normal text-slate-300 uppercase tracking-widest">
                 {meta.label}
               </span>
             </div>
@@ -525,10 +525,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <Bot className="w-14 h-14 text-indigo-600" />
             </div>
             <div>
-              <p className="text-slate-900 font-black text-2xl uppercase tracking-tight">
+              <p className="text-slate-900 font-normal text-2xl uppercase tracking-tight">
                 Kế Toán Trưởng AI (Audit Core)
               </p>
-              <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-2 leading-relaxed">
+              <p className="text-sm text-slate-500 font-normal uppercase tracking-widest mt-2 leading-relaxed">
                 Tôi đã được nâng cấp cơ chế Truy vấn thông minh. Tôi có thể lọc dữ liệu theo bất kỳ
                 khoảng thời gian nào bạn yêu cầu.
               </p>
@@ -542,7 +542,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     key={domain}
                     onClick={() => setActiveAgent(domain)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-600'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-normal uppercase tracking-widest transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-600'}`}
                   >
                     <Icon className="w-3 h-3" /> {meta.label}
                   </button>
@@ -556,7 +556,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     key={i}
                     onClick={() => setInput(q)}
-                    className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left text-slate-600 italic leading-relaxed"
+                    className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-normal hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left text-slate-600 italic leading-relaxed"
                   >
                     {q}
                   </button>
@@ -581,7 +581,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {msg.role === 'user' ? <User className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
                 </div>
                 <div
-                  className={`p-8 rounded-[2.5rem] text-sm leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white font-black shadow-xl' : 'bg-white text-slate-700 border border-slate-100 shadow-xl'}`}
+                  className={`p-8 rounded-[2.5rem] text-sm leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white font-normal shadow-xl' : 'bg-white text-slate-700 border border-slate-100 shadow-xl'}`}
                 >
                   {msg.role === 'model' ? (
                     <div
@@ -604,13 +604,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="w-12 h-12 rounded-[1.25rem] bg-white border-2 border-slate-100 flex items-center justify-center shadow-md">
                 <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
               </div>
-              <div className="px-8 py-5 rounded-[2rem] bg-white border border-slate-100 text-slate-400 italic text-[10px] font-black uppercase tracking-widest shadow-sm">
+              <div className="px-8 py-5 rounded-[2rem] bg-white border border-slate-100 text-slate-400 italic text-[10px] font-normal uppercase tracking-widest shadow-sm">
                 AI CFO đang{' '}
                 {isQuerying ? 'tự động truy vấn sổ sách...' : 'phân tích dữ liệu chuyên sâu...'}
               </div>
             </div>
             {isQuerying && currentTool && (
-              <div className="ml-16 flex items-center gap-2 text-indigo-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
+              <div className="ml-16 flex items-center gap-2 text-indigo-500 text-[10px] font-normal uppercase tracking-widest animate-pulse">
                 <Database className="w-4 h-4" /> Truy xuất: {currentTool}
               </div>
             )}
@@ -626,7 +626,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}
             placeholder="Ví dụ: Phân tích lợi nhuận tuần đầu tháng 4 so với chi phí..."
-            className="w-full bg-slate-50 pl-8 pr-24 py-6 rounded-[2.5rem] border-2 border-transparent focus:border-indigo-500 outline-none text-base font-bold transition-all shadow-inner"
+            className="w-full bg-slate-50 pl-8 pr-24 py-6 rounded-[2.5rem] border-2 border-transparent focus:border-indigo-500 outline-none text-base font-normal transition-all shadow-inner"
           />
           <button
             onClick={handleSend}

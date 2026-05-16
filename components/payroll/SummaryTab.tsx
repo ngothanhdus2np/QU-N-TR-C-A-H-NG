@@ -7,7 +7,7 @@ import {
   ResponsibilityApproval,
   SalaryPolicy,
 } from '../../types';
-import { calculateSeniority, determineCurrentPolicy } from '../../businessLogic';
+import { calculateSeniority, determineCurrentPolicy } from '../../src/lib';
 import {
   BadgeCheck,
   Check,
@@ -48,13 +48,13 @@ const AccruedDetail = ({
   isCut?: boolean;
 }) => (
   <div className="flex justify-between items-center py-1 text-[10px] border-b border-slate-50/50">
-    <span className={`font-semibold ${isCut ? 'text-rose-400' : 'text-slate-600'}`}>{label}</span>
+    <span className={`font-normal ${isCut ? 'text-rose-400' : 'text-slate-600'}`}>{label}</span>
     <div className="text-right">
-      <span className={`font-black ${isCut ? 'text-rose-500' : 'text-indigo-600'}`}>
+      <span className={`font-normal ${isCut ? 'text-rose-500' : 'text-indigo-600'}`}>
         {(value || 0).toLocaleString()}đ
       </span>
       {!isCut && value > 0 && (
-        <p className="text-[7px] text-slate-400 uppercase font-bold tracking-tighter leading-none">
+        <p className="text-[7px] text-slate-400 uppercase font-normal tracking-tighter leading-none">
           Tích lũy
         </p>
       )}
@@ -72,8 +72,8 @@ const PaySlipDetail = ({
   isCut?: boolean;
 }) => (
   <div className="flex justify-between items-center py-0.5 text-[10px]">
-    <span className={`font-medium ${isCut ? 'text-rose-500' : 'text-slate-400'}`}>{label}:</span>
-    <span className={`font-bold ${isCut ? 'text-rose-600' : 'text-slate-600'}`}>
+    <span className={`font-normal ${isCut ? 'text-rose-500' : 'text-slate-400'}`}>{label}:</span>
+    <span className={`font-normal ${isCut ? 'text-rose-600' : 'text-slate-600'}`}>
       {(value || 0).toLocaleString()}
     </span>
   </div>
@@ -105,7 +105,7 @@ const SummaryTab: React.FC<Props> = ({
             <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
               Phiếu Lương Dự Thảo (Tích lũy đến hôm nay)
             </h3>
-            <p className="text-sm text-slate-500 font-medium italic">
+            <p className="text-sm text-slate-500 font-normal italic">
               Số tiền tích lũy tăng dần theo ngày công thực tế.
             </p>
           </div>
@@ -172,25 +172,25 @@ const SummaryTab: React.FC<Props> = ({
               <div className="p-8 border-b border-slate-100 flex flex-col items-center relative">
                 {isArchived && (
                   <div className="absolute top-4 right-4">
-                    <span className="text-[8px] font-black bg-slate-900 text-white px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1">
+                    <span className="text-[8px] font-normal bg-slate-900 text-white px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1">
                       <Check className="w-2.5 h-2.5" /> Đã chốt
                     </span>
                   </div>
                 )}
                 <h4
-                  className={`font-black text-xl uppercase tracking-tight text-center ${isResigned ? 'text-slate-400' : 'text-slate-900'}`}
+                  className={`font-normal text-xl uppercase tracking-tight text-center ${isResigned ? 'text-slate-400' : 'text-slate-900'}`}
                 >
                   {payroll.employeeName}
                 </h4>
                 <div className="mt-2">
                   <span
-                    className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 border ${payroll.isOfficial ? 'border-emerald-200 text-emerald-600' : 'border-amber-200 text-amber-600'}`}
+                    className={`text-[10px] font-normal uppercase tracking-widest px-3 py-1 border ${payroll.isOfficial ? 'border-emerald-200 text-emerald-600' : 'border-amber-200 text-amber-600'}`}
                   >
                     {currentPolicy.name}
                   </span>
                 </div>
                 {isResigned && (
-                  <div className="mt-2 bg-rose-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase">
+                  <div className="mt-2 bg-rose-600 text-white px-3 py-1 rounded-full text-[8px] font-normal uppercase">
                     ĐÃ NGHỈ VIỆC
                   </div>
                 )}
@@ -198,14 +198,14 @@ const SummaryTab: React.FC<Props> = ({
 
               <div className="p-6 space-y-3 flex-1">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-700">Lương Cơ Bản (Thực nhận)</span>
-                  <span className="font-black text-slate-900">
+                  <span className="font-normal text-slate-700">Lương Cơ Bản (Thực nhận)</span>
+                  <span className="font-normal text-slate-900">
                     {(payroll.basicSalary || 0).toLocaleString()}
                   </span>
                 </div>
 
                 <div className="space-y-1.5 pt-2">
-                  <div className="flex justify-between items-center text-[11px] font-black text-indigo-600 uppercase border-b border-slate-50 pb-1">
+                  <div className="flex justify-between items-center text-[11px] font-normal text-indigo-600 uppercase border-b border-slate-50 pb-1">
                     <span>Phụ Cấp (Tích lũy theo công)</span>
                     <span>{(payroll.allowance || 0).toLocaleString()}</span>
                   </div>
@@ -269,13 +269,13 @@ const SummaryTab: React.FC<Props> = ({
                             )}
                           </button>
                           <span
-                            className={`text-[10px] font-bold uppercase tracking-tighter ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-400'} ${isResponsibilityCut ? 'text-rose-400' : ''}`}
+                            className={`text-[10px] font-normal uppercase tracking-tighter ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-400'} ${isResponsibilityCut ? 'text-rose-400' : ''}`}
                           >
                             Trách nhiệm
                           </span>
                         </div>
                         <span
-                          className={`text-[10px] font-black ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-500'}`}
+                          className={`text-[10px] font-normal ${isApproved && !isResponsibilityCut ? 'text-indigo-600' : 'text-slate-500'}`}
                         >
                           {Math.round(
                             (isResponsibilityCut ? 0 : currentPolicy.responsibilityAllowance || 0) *
@@ -288,24 +288,24 @@ const SummaryTab: React.FC<Props> = ({
                 </div>
 
                 <div className="flex justify-between items-center text-xs pt-2">
-                  <span className="font-bold text-slate-700">
+                  <span className="font-normal text-slate-700">
                     Hoa Hồng ({currentPolicy.commissionRate || 0}%)
                   </span>
-                  <span className="font-black text-emerald-600">
+                  <span className="font-normal text-emerald-600">
                     {(payroll.commissionPay || 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-700">Tăng Ca (OT)</span>
-                  <span className="font-black text-amber-600">
+                  <span className="font-normal text-slate-700">Tăng Ca (OT)</span>
+                  <span className="font-normal text-amber-600">
                     {(payroll.overtimePay || 0).toLocaleString()}
                   </span>
                 </div>
 
                 {payroll.holidayBonus > 0 && (
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-700">Thưởng Lễ</span>
-                    <span className="font-black text-amber-600">
+                    <span className="font-normal text-slate-700">Thưởng Lễ</span>
+                    <span className="font-normal text-amber-600">
                       {(payroll.holidayBonus || 0).toLocaleString()}
                     </span>
                   </div>
@@ -318,19 +318,19 @@ const SummaryTab: React.FC<Props> = ({
                     </div>
                     <div className="flex items-center gap-2 mb-1 relative z-10">
                       <PartyPopper className="w-3.5 h-3.5 text-amber-600" />
-                      <span className="text-[9px] font-black text-amber-800 uppercase tracking-widest">
+                      <span className="text-[9px] font-normal text-amber-800 uppercase tracking-widest">
                         Phúc lợi Tết Nguyên Đán
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] relative z-10">
-                      <span className="font-bold text-amber-700">Trước Tết (Xe & Trực chiến)</span>
-                      <span className="font-black text-amber-900">
+                      <span className="font-normal text-amber-700">Trước Tết (Xe & Trực chiến)</span>
+                      <span className="font-normal text-amber-900">
                         {(payroll.tetBonusBefore || 0).toLocaleString()}đ
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] relative z-10">
-                      <span className="font-bold text-amber-700">Sau Tết (Lì xì & Chuyên cần)</span>
-                      <span className="font-black text-amber-900">
+                      <span className="font-normal text-amber-700">Sau Tết (Lì xì & Chuyên cần)</span>
+                      <span className="font-normal text-amber-900">
                         {(payroll.tetBonusAfter || 0).toLocaleString()}đ
                       </span>
                     </div>
@@ -339,8 +339,8 @@ const SummaryTab: React.FC<Props> = ({
 
                 {payroll.seniorityBonus > 0 && (
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-700">Thâm Niên</span>
-                    <span className="font-black text-indigo-600">
+                    <span className="font-normal text-slate-700">Thâm Niên</span>
+                    <span className="font-normal text-indigo-600">
                       {(payroll.seniorityBonus || 0).toLocaleString()}
                     </span>
                   </div>
@@ -348,7 +348,7 @@ const SummaryTab: React.FC<Props> = ({
 
                 {(payroll.fine > 0 || payroll.shortage > 0 || payroll.advance > 0) && (
                   <div className="space-y-1.5 pt-2 border-t border-slate-50 mt-2">
-                    <div className="flex justify-between items-center text-[11px] font-black text-rose-500 uppercase pb-1">
+                    <div className="flex justify-between items-center text-[11px] font-normal text-rose-500 uppercase pb-1">
                       <span>Khấu Trừ Tài Chính</span>
                       <span>
                         -
@@ -385,11 +385,11 @@ const SummaryTab: React.FC<Props> = ({
                   <div className="mt-4 p-3 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-1.5 mb-1.5 text-slate-400">
                       <Info className="w-3 h-3" />
-                      <span className="text-[9px] font-black uppercase tracking-widest">
+                      <span className="text-[9px] font-normal uppercase tracking-widest">
                         Diễn giải cách tính
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 font-medium leading-relaxed italic">
+                    <div className="text-[10px] text-slate-500 font-normal leading-relaxed italic">
                       {payroll.calculationNote.split(' | ').map((note, i) => (
                         <div key={i} className="flex items-start gap-1">
                           <span className="opacity-40">•</span>
@@ -403,26 +403,26 @@ const SummaryTab: React.FC<Props> = ({
 
               <div className="p-6 bg-slate-900 space-y-4">
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
+                  <span className="text-[10px] font-normal text-slate-400 uppercase tracking-[0.2em] mb-1">
                     Tổng lương thực nhận
                   </span>
-                  <div className="text-3xl font-black text-white tabular-nums">
+                  <div className="text-3xl font-normal text-white tabular-nums">
                     {(payroll.netPay || 0).toLocaleString()}{' '}
-                    <span className="text-xs font-bold text-slate-500">VNĐ</span>
+                    <span className="text-xs font-normal text-slate-500">VNĐ</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => handlePrintPayslip(payroll)}
-                      className="py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      className="py-3 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/10 bg-white/5 text-white hover:bg-white/10"
                     >
                       <Printer className="w-3.5 h-3.5" /> In Phiếu
                     </button>
                     <button
                       onClick={() => handleFinalizeIndividual(payroll)}
                       disabled={isArchived}
-                      className={`py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                      className={`py-3 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                         isArchived
                           ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700'
                           : 'bg-white text-slate-900 hover:bg-indigo-50'
@@ -440,7 +440,7 @@ const SummaryTab: React.FC<Props> = ({
                     <button
                       onClick={() => handleSettlementAndResignation(payroll)}
                       disabled={isProcessing || isArchived}
-                      className={`w-full py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 border ${
+                      className={`w-full py-3.5 rounded-xl font-normal text-[9px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 border ${
                         isArchived
                           ? 'border-slate-700 text-slate-600 bg-slate-800/20 cursor-not-allowed'
                           : 'border-rose-500/30 text-rose-400 bg-rose-500/10 hover:bg-rose-500 hover:text-white'
@@ -455,7 +455,7 @@ const SummaryTab: React.FC<Props> = ({
                     </button>
                   ) : (
                     <div className="w-full py-3.5 bg-rose-900/40 text-rose-200 border-rose-800 border rounded-xl text-center">
-                      <p className="text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                      <p className="text-[10px] font-normal uppercase tracking-widest flex items-center justify-center gap-2">
                         <ShieldCheck className="w-3.5 h-3.5" /> ĐÃ QUYẾT TOÁN
                       </p>
                     </div>

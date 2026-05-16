@@ -38,7 +38,9 @@ npm run dev
 
 ## Tài liệu
 
-- `CLAUDE.md` — Stack, rules, trạng thái hiện tại (đọc trước khi làm việc)
-- `DECISIONS.md` — Lý do đằng sau các quyết định kỹ thuật
-- `ROADMAP.md` — Lịch sử roadmap và technical debt backlog
+- `docs/` — Toàn bộ tài liệu dự án (xem `docs/README.md` để tra cứu)
+- `docs/01-architecture/CLAUDE.md` — Stack, rules, trạng thái hiện tại (đọc trước khi làm việc)
+- `docs/01-architecture/DECISIONS.md` — Lý do đằng sau các quyết định kỹ thuật
+- `docs/05-process/ROADMAP.md` — Lịch sử roadmap và technical debt backlog
+- `docs/05-process/TODO.md` — Danh sách việc cần làm hiện tại
 - `supabase_setup.sql` — SQL schema, chạy thủ công trên Supabase dashboard

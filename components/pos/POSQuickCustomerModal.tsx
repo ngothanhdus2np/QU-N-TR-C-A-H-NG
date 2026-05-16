@@ -41,9 +41,9 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
   };
 
   const inputClass =
-    'w-full border-0 border-b border-slate-300 bg-transparent px-0 py-2 text-[15px] font-semibold text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-0';
+    'w-full border-0 border-b border-slate-300 bg-transparent px-0 py-2 text-[15px] font-normal text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-0';
 
-  const labelClass = 'text-[15px] font-black text-slate-900';
+  const labelClass = 'text-[15px] font-normal text-slate-900';
 
   const field = (
     label: string,
@@ -63,7 +63,7 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
           <div className="flex items-baseline gap-4 min-w-0">
             <h2 className="text-[21px] font-black text-slate-950 whitespace-nowrap">Thêm khách hàng</h2>
             <span className="h-6 w-px bg-slate-300" />
-            <p className="text-lg font-semibold text-slate-500 truncate">
+            <p className="text-lg font-normal text-slate-500 truncate">
               Chi nhánh tạo: Chi nhánh trung tâm
             </p>
           </div>
@@ -77,10 +77,10 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
         </div>
 
         <div className="h-16 px-14 flex items-end gap-14 border-b border-slate-300 shrink-0">
-          <button className="h-16 border-b-2 border-blue-600 px-2 text-lg font-black text-blue-600">
+          <button className="h-16 border-b-2 border-blue-600 px-2 text-lg font-normal text-blue-600">
             Thông tin chung
           </button>
-          <button className="h-16 px-2 text-lg font-bold text-slate-500">Thông tin xuất hóa đơn</button>
+          <button className="h-16 px-2 text-lg font-normal text-slate-500">Thông tin xuất hóa đơn</button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-10 py-8">
@@ -91,7 +91,7 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
               </div>
               <button
                 type="button"
-                className="mt-8 h-11 w-32 rounded-xl border border-blue-600 bg-white text-base font-black text-blue-600 hover:bg-blue-50 transition-colors"
+                className="mt-8 h-11 w-32 rounded-xl border border-blue-600 bg-white text-base font-normal text-blue-600 hover:bg-blue-50 transition-colors"
               >
                 Chọn ảnh
               </button>
@@ -183,7 +183,7 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
                     <CalendarDays className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-700" />
                   </div>
                   <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-3 text-lg font-black text-slate-900">
+                    <label className="flex items-center gap-3 text-lg font-normal text-slate-900">
                       <input
                         type="radio"
                         checked={form.gender === 'male'}
@@ -192,7 +192,7 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
                       />
                       Nam
                     </label>
-                    <label className="flex items-center gap-3 text-lg font-black text-slate-900">
+                    <label className="flex items-center gap-3 text-lg font-normal text-slate-900">
                       <input
                         type="radio"
                         checked={form.gender === 'female'}
@@ -237,13 +237,13 @@ const POSQuickCustomerModal: React.FC<POSQuickCustomerModalProps> = ({
         <div className="h-24 px-10 flex items-center justify-end gap-5 shrink-0">
           <button
             onClick={onClose}
-            className="h-12 w-32 rounded-xl border border-blue-600 bg-white text-lg font-black text-blue-600 hover:bg-blue-50 transition-colors"
+            className="h-12 w-32 rounded-xl border border-blue-600 bg-white text-lg font-normal text-blue-600 hover:bg-blue-50 transition-colors"
           >
             Bỏ qua
           </button>
           <button
             onClick={onSave}
-            className="h-12 w-32 rounded-xl bg-blue-600 text-lg font-black text-white hover:bg-blue-700 transition-colors"
+            className="h-12 w-32 rounded-xl bg-blue-600 text-lg font-normal text-white hover:bg-blue-700 transition-colors"
           >
             Lưu
           </button>

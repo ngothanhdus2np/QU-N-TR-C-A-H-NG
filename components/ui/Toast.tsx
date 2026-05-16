@@ -84,7 +84,7 @@ const ToastItem: React.FC<{ toast: Toast; onClose: () => void }> = ({ toast, onC
       `}
     >
       <div className="flex-shrink-0 mt-0.5">{icons[toast.variant]}</div>
-      <div className="flex-1 text-sm font-medium leading-relaxed">{toast.message}</div>
+      <div className="flex-1 text-sm font-normal leading-relaxed">{toast.message}</div>
       <button
         onClick={onClose}
         className="flex-shrink-0 p-1 rounded-lg hover:bg-black/5 transition-colors"

@@ -70,13 +70,13 @@ export const ListPageToolbar: React.FC<ListPageToolbarProps> = ({
       {selectedCount > 0 && (
         <div className="px-4 py-2.5 bg-indigo-50 border-t border-indigo-100 flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-indigo-900">
+            <span className="text-sm font-normal text-indigo-900">
               Đã chọn {selectedCount} mục
             </span>
             {onClearSelection && (
               <button
                 onClick={onClearSelection}
-                className="text-xs text-indigo-600 font-semibold hover:underline"
+                className="text-xs text-indigo-600 font-normal hover:underline"
               >
                 Bỏ chọn
               </button>

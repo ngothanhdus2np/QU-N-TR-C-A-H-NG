@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { POSProduct, ProductGroup } from '../../types';
 import { GoodsCreateProductInfoTab } from './GoodsCreateProductInfoTab';
 import { GoodsCreateProductModal } from './GoodsCreateProductModal';
 import { GoodsCreateProductTextTab } from './GoodsCreateProductTextTab';
@@ -20,6 +20,8 @@ type PreviewVariant = {
 };
 
 interface GoodsInventoryModalsProps {
+  products: POSProduct[];
+  productGroups: ProductGroup[];
   showProductModal: boolean;
   formData: Partial<POSProduct>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<POSProduct>>>;
@@ -63,11 +65,15 @@ interface GoodsInventoryModalsProps {
   onSaveAddAttributeInView: () => void;
   showAddMoreVariants: boolean;
   addingToParentId: string | null;
+  lockedAddMoreAttributeName?: string;
+  lockedAddMoreAttributeNames?: string[];
   onCloseAddMoreVariants: () => void;
   onSaveMoreVariants: () => void;
 }
 
 export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
+  products,
+  productGroups,
   showProductModal,
   formData,
   setFormData,
@@ -111,12 +117,15 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
   onSaveAddAttributeInView,
   showAddMoreVariants,
   addingToParentId,
+  lockedAddMoreAttributeName,
+  lockedAddMoreAttributeNames,
   onCloseAddMoreVariants,
-  onSaveMoreVariants
+  onSaveMoreVariants,
 }) => (
   <>
     <GoodsProductForm
       isOpen={showProductModal}
+      productGroups={productGroups}
       formData={formData}
       setFormData={setFormData}
       onClose={onCloseProductModal}
@@ -146,6 +155,9 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
     >
       {createModalTab === 'info' && (
         <GoodsCreateProductInfoTab
+          products={products}
+          productGroups={productGroups}
+          editingProduct={editingProduct}
           formData={formData}
           setFormData={setFormData}
           showStockSection={showStockSection}
@@ -196,6 +208,7 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
       setAttributes={setViewModeAttributes}
       previewVariants={previewVariants}
       setPreviewVariants={setPreviewVariants}
+      products={products}
       generatePreviewVariants={generatePreviewVariants}
       onClose={onCloseAddAttributeInView}
       onSave={onSaveAddAttributeInView}
@@ -210,6 +223,9 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
       setAttributes={setViewModeAttributes}
       previewVariants={previewVariants}
       setPreviewVariants={setPreviewVariants}
+      products={products}
+      lockedAttributeName={lockedAddMoreAttributeName}
+      lockedAttributeNames={lockedAddMoreAttributeNames}
       generatePreviewVariants={generatePreviewVariants}
       onClose={onCloseAddMoreVariants}
       onSave={onSaveMoreVariants}

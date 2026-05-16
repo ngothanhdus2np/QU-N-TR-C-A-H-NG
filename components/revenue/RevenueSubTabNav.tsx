@@ -18,7 +18,7 @@ interface RevenueSubTabNavProps {
 }
 
 const getButtonClass = (isActive: boolean, activeColor: string, isShopee?: boolean) =>
-  `flex items-center gap-2 ${isShopee ? 'px-6 py-3' : 'px-8 py-4'} rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all ${
+  `flex items-center gap-2 ${isShopee ? 'px-6 py-3' : 'px-8 py-4'} rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${
     isActive ? `bg-white ${activeColor} shadow-xl` : 'text-slate-400 hover:text-slate-600'
   }`;
 

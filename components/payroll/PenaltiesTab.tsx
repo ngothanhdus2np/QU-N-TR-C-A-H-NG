@@ -1,7 +1,7 @@
 import React from 'react';
 import { Employee, ViolationType } from '../../types';
 import { Wallet2, HandCoins, Gavel, Check } from 'lucide-react';
-import { isStaffActive } from '../../businessLogic';
+import { isStaffActive } from '../../src/lib';
 
 interface Props {
   employees: Employee[];
@@ -50,15 +50,15 @@ const PenaltiesTab: React.FC<Props> = ({
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                      <p className={`text-sm font-bold truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                      <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
                       <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
                     </td>
                     {daysArray.map(day => (
                       <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                        <input type="text" defaultValue={getShortageCellValue(emp.id, day)} onBlur={(e) => handleShortageInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-orange-50/50" />
+                        <input type="text" defaultValue={getShortageCellValue(emp.id, day)} onBlur={(e) => handleShortageInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-normal outline-none border-none focus:bg-orange-50/50" />
                       </td>
                     ))}
-                    <td className="bg-orange-50 text-center font-black text-orange-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalShortageAmount(emp.id) || 0).toLocaleString()}</td>
+                    <td className="bg-orange-50 text-center font-normal text-orange-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalShortageAmount(emp.id) || 0).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -92,15 +92,15 @@ const PenaltiesTab: React.FC<Props> = ({
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                      <p className={`text-sm font-bold truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                      <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
                       <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
                     </td>
                     {daysArray.map(day => (
                       <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                        <input type="text" defaultValue={getAdvanceCellValue(emp.id, day)} onBlur={(e) => handleAdvanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-bold outline-none border-none focus:bg-indigo-50/50" />
+                        <input type="text" defaultValue={getAdvanceCellValue(emp.id, day)} onBlur={(e) => handleAdvanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-[10px] font-normal outline-none border-none focus:bg-indigo-50/50" />
                       </td>
                     ))}
-                    <td className="bg-indigo-50 text-center font-black text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalAdvanceAmount(emp.id) || 0).toLocaleString()}</td>
+                    <td className="bg-indigo-50 text-center font-normal text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalAdvanceAmount(emp.id) || 0).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -125,7 +125,7 @@ const PenaltiesTab: React.FC<Props> = ({
                 <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase border-r border-slate-100 w-[240px] sticky left-0 top-0 bg-slate-50 z-40">Hạng mục khấu trừ</th>
                 {employees.map(emp => (
                   <th key={emp.id} className="px-2 py-5 text-center border-r border-slate-100 min-w-[120px]">
-                    <p className="text-[10px] font-black text-slate-800 uppercase truncate px-2">{emp.name}</p>
+                    <p className="text-[10px] font-normal text-slate-800 uppercase truncate px-2">{emp.name}</p>
                   </th>
                 ))}
               </tr>
@@ -134,7 +134,7 @@ const PenaltiesTab: React.FC<Props> = ({
               {violationTypes.map(vt => (
                 <tr key={vt.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 bg-white sticky left-0 z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.01)]">
-                    <p className="text-xs font-bold text-slate-700">{vt.name}</p>
+                    <p className="text-xs font-normal text-slate-700">{vt.name}</p>
                   </td>
                   {employees.map(emp => (
                     <td key={emp.id} className="p-0 border-r border-slate-100 h-14">

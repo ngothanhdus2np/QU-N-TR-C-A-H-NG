@@ -30,14 +30,14 @@ const MatrixTab: React.FC<Props> = ({
           <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
             {isShopee ? 'Tổng hợp Số lượng bán Shopee' : 'Ma Trận Tài Chính Liên Năm'}
           </h3>
-          <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mt-1">
+          <p className="text-[10px] text-emerald-600 font-normal uppercase tracking-widest mt-1">
             {isShopee ? 'Thống kê chi tiết sản phẩm trong khoảng lọc' : 'So sánh hiệu suất cùng kỳ lọc (Tháng-Ngày) qua các năm'}
           </p>
         </div>
       </div>
       <div className="px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Giai đoạn: </span>
-        <span className="text-xs font-black text-slate-900 ml-2">
+        <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Giai đoạn: </span>
+        <span className="text-xs font-normal text-slate-900 ml-2">
           {timeContext.start.split('-').reverse().join('/')} → {timeContext.end.split('-').reverse().join('/')}
         </span>
       </div>
@@ -64,11 +64,11 @@ const MatrixTab: React.FC<Props> = ({
               const totalCogs = groupRev.reduce((sum, r) => sum + (r.cogs || 0), 0);
               return (
                 <tr key={group.id} className="hover:bg-slate-50 transition-all">
-                  <td className="p-6 font-black text-slate-700 uppercase text-xs">{group.name}</td>
-                  <td className="p-6 text-right tabular-nums font-bold text-blue-600">{totalQty.toLocaleString()}</td>
-                  <td className="p-6 text-right tabular-nums font-bold text-rose-500">{totalRetQty.toLocaleString()}</td>
-                  <td className="p-6 text-right tabular-nums font-bold text-emerald-600">{totalNet.toLocaleString()}đ</td>
-                  <td className="p-6 text-right tabular-nums font-bold text-slate-500">{totalCogs.toLocaleString()}đ</td>
+                  <td className="p-6 font-normal text-slate-700 uppercase text-xs">{group.name}</td>
+                  <td className="p-6 text-right tabular-nums font-normal text-blue-600">{totalQty.toLocaleString()}</td>
+                  <td className="p-6 text-right tabular-nums font-normal text-rose-500">{totalRetQty.toLocaleString()}</td>
+                  <td className="p-6 text-right tabular-nums font-normal text-emerald-600">{totalNet.toLocaleString()}đ</td>
+                  <td className="p-6 text-right tabular-nums font-normal text-slate-500">{totalCogs.toLocaleString()}đ</td>
                 </tr>
               );
             })}
@@ -87,7 +87,7 @@ const MatrixTab: React.FC<Props> = ({
           <tbody className="divide-y divide-slate-50">
             {financialMatrixData.map((row) => (
               <tr key={row.key} className="group hover:bg-slate-50/80 transition-all">
-                <td className="p-5 sticky left-0 z-10 border-r border-slate-100 bg-white group-hover:bg-slate-50"><span className="text-xs uppercase font-black text-slate-700">{row.label}</span></td>
+                <td className="p-5 sticky left-0 z-10 border-r border-slate-100 bg-white group-hover:bg-slate-50"><span className="text-xs uppercase font-normal text-slate-700">{row.label}</span></td>
                 {years.map(y => {
                   const val = row.yearValues[y] || 0;
                   return <td key={y} className={`p-5 text-center tabular-nums text-xs border-r border-slate-50 transition-all ${getHeatmapColor(val)}`}>{val !== 0 ? formatNumber(val) : '0'}</td>;

@@ -39,7 +39,7 @@ export const GoodsInventoryFeedback: React.FC<GoodsInventoryFeedbackProps> = ({
 }) => (
   <>
     {toast && (
-      <div className={`fixed bottom-6 right-6 z-[9998] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${
+      <div className={`fixed bottom-6 right-6 z-[9998] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-normal transition-all animate-in slide-in-from-bottom-4 fade-in duration-300 ${
         toast.type === 'success'
           ? 'bg-emerald-600 text-white'
           : 'bg-rose-600 text-white'

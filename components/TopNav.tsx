@@ -16,10 +16,9 @@ import {
   ShoppingCart,
   ChevronDown,
 } from 'lucide-react';
-import ApiKeySettings from './ApiKeySettings';
-import ThemeSwitcher from './ui/ThemeSwitcher';
+import SettingsCenter from './settings/SettingsCenter';
 import type { AppThemeId } from '../constants/themes';
-import type { AppAlert } from '../types';
+import type { AppAlert, BrandProfile, POSInventorySettings, POSPaymentSettings, POSProduct } from '../types';
 
 interface NavItem {
   id: string;
@@ -43,13 +42,19 @@ interface TopNavProps {
   syncErrors: string[] | null;
   lastSyncTime: string | null;
   onRefresh: () => void;
-  brandLogo?: string;
   alerts?: AppAlert[];
   pendingCount?: number;
   offlinePendingCount?: number;
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
+  brandProfile: BrandProfile;
+  onUpdateBrand: (profile: BrandProfile) => void;
+  products?: POSProduct[];
+  paymentSettings?: POSPaymentSettings;
+  onUpdatePaymentSettings: (settings: POSPaymentSettings) => Promise<void>;
+  inventorySettings?: POSInventorySettings;
+  onUpdateInventorySettings: (settings: POSInventorySettings) => Promise<void>;
 }
 
 const ALERT_ICONS: Record<string, React.ElementType> = {
@@ -73,17 +78,42 @@ const TopNav: React.FC<TopNavProps> = ({
   onDrainOfflineQueue,
   activeThemeId,
   onThemeChange,
+  brandProfile,
+  onUpdateBrand,
+  products = [],
+  paymentSettings,
+  onUpdatePaymentSettings,
+  inventorySettings,
+  onUpdateInventorySettings,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justNavigated = useRef(false);
+
+  // Đóng dropdown khi chuyển tab
+  React.useEffect(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+
+    // Force close và đánh dấu vừa navigate
+    justNavigated.current = true;
+    setOpenSection(null);
+
+    // Đặc biệt: khi về trang POS, luôn đóng dropdown
+    if (activeId === 'pos') {
+      setOpenSection(null);
+    }
+  }, [activeId]);
 
   const openDropdown = (title: string) => {
+    // Reset flag khi user hover lại (sau khi đã rời khỏi)
+    justNavigated.current = false;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpenSection(title);
   };
   const toggleDropdown = (title: string) => {
+    justNavigated.current = false;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpenSection(prev => (prev === title ? null : title));
   };
@@ -91,7 +121,10 @@ const TopNav: React.FC<TopNavProps> = ({
     if (closeTimer.current) clearTimeout(closeTimer.current);
   };
   const closeDropdown = () => {
-    closeTimer.current = setTimeout(() => setOpenSection(null), 150);
+    // Chỉ đóng nếu không phải vừa navigate
+    if (!justNavigated.current) {
+      closeTimer.current = setTimeout(() => setOpenSection(null), 150);
+    }
   };
 
   const activeSection = useMemo(
@@ -141,12 +174,12 @@ const TopNav: React.FC<TopNavProps> = ({
               <CloudOff className="w-3.5 h-3.5 text-rose-500" />
             )}
             <span
-              className={`text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
+              className={`text-[10px] font-normal uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
             >
               {isSyncing ? 'Syncing' : isCloudConnected ? 'Online' : 'Offline'}
             </span>
             {lastSyncTime && !isSyncing && (
-              <span className="text-[9px] text-slate-400 font-bold border-l border-slate-200 pl-2.5">
+              <span className="text-[9px] text-slate-400 font-normal border-l border-slate-200 pl-2.5">
                 {new Date(lastSyncTime).toLocaleTimeString('vi-VN', {
                   hour: '2-digit',
                   minute: '2-digit',
@@ -154,7 +187,7 @@ const TopNav: React.FC<TopNavProps> = ({
               </span>
             )}
             {pendingCount > 0 && !isSyncing && (
-              <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-2 py-0.5 rounded-lg border border-amber-200 border-l border-slate-200 ml-1">
+              <span className="text-[9px] bg-amber-100 text-amber-700 font-normal px-2 py-0.5 rounded-lg border border-amber-200 border-l border-slate-200 ml-1">
                 {pendingCount} chờ sync
               </span>
             )}
@@ -166,7 +199,7 @@ const TopNav: React.FC<TopNavProps> = ({
               onClick={() => onDrainOfflineQueue?.()}
               disabled={isSyncing}
               title={`${offlinePendingCount} đơn hàng chờ sync — Bấm để đồng bộ ngay`}
-              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm shadow-amber-200 animate-pulse"
+              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-normal uppercase tracking-wider transition-all shadow-sm shadow-amber-200 animate-pulse"
             >
               <WifiOff className="w-3 h-3" />
               {offlinePendingCount} offline
@@ -190,8 +223,6 @@ const TopNav: React.FC<TopNavProps> = ({
             <Settings className="w-4 h-4" />
           </button>
 
-          <ThemeSwitcher activeThemeId={activeThemeId} onChange={onThemeChange} />
-
           {/* Notifications */}
           <div className="relative">
             <button
@@ -200,7 +231,7 @@ const TopNav: React.FC<TopNavProps> = ({
             >
               <Bell className="w-4 h-4" />
               {totalBadge > 0 && (
-                <span className="absolute top-2 right-2 w-3.5 h-3.5 bg-rose-500 text-white text-[8px] font-black flex items-center justify-center rounded-full border border-white">
+                <span className="absolute top-2 right-2 w-3.5 h-3.5 bg-rose-500 text-white text-[8px] font-normal flex items-center justify-center rounded-full border border-white">
                   {totalBadge > 9 ? '9+' : totalBadge}
                 </span>
               )}
@@ -220,7 +251,7 @@ const TopNav: React.FC<TopNavProps> = ({
                       Thông báo hệ thống
                     </h3>
                     {totalBadge > 0 && (
-                      <span className="text-[9px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-black uppercase">
+                      <span className="text-[9px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-normal uppercase">
                         {totalBadge} cảnh báo
                       </span>
                     )}
@@ -231,7 +262,7 @@ const TopNav: React.FC<TopNavProps> = ({
                         <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
                           <CheckCircle2 className="w-7 h-7 text-emerald-500" />
                         </div>
-                        <p className="text-sm font-bold text-slate-800">Tất cả đều ổn!</p>
+                        <p className="text-sm font-normal text-slate-800">Tất cả đều ổn!</p>
                         <p className="text-xs text-slate-400 mt-1">Không có sự cố nào.</p>
                       </div>
                     ) : (
@@ -253,7 +284,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                     className={`w-4 h-4 mt-0.5 shrink-0 ${isCritical ? 'text-rose-500' : 'text-amber-500'}`}
                                   />
                                   <div>
-                                    <p className="text-xs font-black text-slate-800">
+                                    <p className="text-xs font-normal text-slate-800">
                                       {alert.title}
                                     </p>
                                     <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
@@ -277,7 +308,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                   className="p-4 bg-white border border-slate-100 rounded-2xl flex items-start gap-3"
                                 >
                                   <div className="mt-1.5 w-2 h-2 bg-rose-500 rounded-full shrink-0 animate-pulse" />
-                                  <p className="text-xs text-slate-600 font-bold leading-relaxed">
+                                  <p className="text-xs text-slate-600 font-normal leading-relaxed">
                                     {err}
                                   </p>
                                 </div>
@@ -295,10 +326,10 @@ const TopNav: React.FC<TopNavProps> = ({
           {/* User */}
           <div className="flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-100">
             <div className="hidden xl:block text-right">
-              <p className="text-xs font-black text-slate-900 tracking-tight leading-none">
+              <p className="text-xs font-normal text-slate-900 tracking-tight leading-none">
                 Ngô Thành Du
               </p>
-              <p className="text-[9px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">
+              <p className="text-[9px] text-indigo-500 font-normal uppercase tracking-widest mt-0.5">
                 Admin CFO
               </p>
             </div>
@@ -312,7 +343,7 @@ const TopNav: React.FC<TopNavProps> = ({
       {/* Row 2 — Hover dropdown nav + Bán hàng CTA */}
       <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 relative z-50 shrink-0 shadow-sm overflow-visible">
         <nav className="flex items-center gap-0.5 flex-1">
-          {sections.map(section => {
+          {activeId !== 'pos' && sections.map(section => {
             const isActive = section === activeSection;
             const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
 
@@ -326,7 +357,7 @@ const TopNav: React.FC<TopNavProps> = ({
               >
                 <button
                   onClick={() => toggleDropdown(section.title)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-indigo-800 text-white'
                       : 'text-indigo-200 hover:bg-white/10 hover:text-white'
@@ -349,7 +380,7 @@ const TopNav: React.FC<TopNavProps> = ({
                       <div className="grid grid-cols-2 divide-x divide-slate-100">
                         {section.groups.map(group => (
                           <div key={group.header} className="py-2">
-                            <div className="px-4 pb-1 pt-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <div className="px-4 pb-1 pt-2 text-[10px] font-normal text-slate-400 uppercase tracking-widest">
                               {group.header}
                             </div>
                             {group.itemIds.map(itemId => {
@@ -364,7 +395,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                     onSelect(item.id);
                                     setOpenSection(null);
                                   }}
-                                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
+                                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
                                     isItemActive
                                       ? 'bg-indigo-50 text-indigo-600'
                                       : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
@@ -373,7 +404,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                   <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                                   <span className="flex-1">{item.label}</span>
                                   {item.badge && (
-                                    <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-black leading-none">
+                                    <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
                                       {item.badge}
                                     </span>
                                   )}
@@ -396,7 +427,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                 onSelect(item.id);
                                 setOpenSection(null);
                               }}
-                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-medium text-left transition-colors whitespace-nowrap ${
+                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
                                 isItemActive
                                   ? 'bg-indigo-50 text-indigo-600'
                                   : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
@@ -405,7 +436,7 @@ const TopNav: React.FC<TopNavProps> = ({
                               <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                               <span className="flex-1">{item.label}</span>
                               {item.badge && (
-                                <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-black leading-none">
+                                <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
                                   {item.badge}
                                 </span>
                               )}
@@ -422,15 +453,40 @@ const TopNav: React.FC<TopNavProps> = ({
         </nav>
 
         <button
-          onClick={() => onSelect('pos')}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-600 rounded-lg text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all hover:bg-indigo-50 shadow-sm shrink-0 ml-2"
+          onClick={() => {
+            setOpenSection(null);
+            justNavigated.current = true;
+            onSelect('pos');
+          }}
+          className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-600 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all hover:bg-indigo-50 shadow-sm shrink-0 ml-2"
         >
           <ShoppingCart className="w-3.5 h-3.5" />
           Bán hàng
         </button>
       </div>
 
-      <ApiKeySettings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsCenter
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onNavigate={onSelect}
+        activeThemeId={activeThemeId}
+        onThemeChange={onThemeChange}
+        isCloudConnected={isCloudConnected}
+        isSyncing={isSyncing}
+        syncErrors={syncErrors}
+        lastSyncTime={lastSyncTime}
+        pendingCount={pendingCount}
+        offlinePendingCount={offlinePendingCount}
+        onRefresh={onRefresh}
+        onDrainOfflineQueue={onDrainOfflineQueue}
+        brandProfile={brandProfile}
+        onUpdateBrand={onUpdateBrand}
+        products={products}
+        paymentSettings={paymentSettings}
+        onUpdatePaymentSettings={onUpdatePaymentSettings}
+        inventorySettings={inventorySettings}
+        onUpdateInventorySettings={onUpdateInventorySettings}
+      />
     </>
   );
 };

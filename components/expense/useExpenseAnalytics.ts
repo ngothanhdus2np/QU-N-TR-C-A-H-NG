@@ -1,6 +1,6 @@
 import React from 'react';
 import { ExpenseCategory, ExpenseRecord, PayrollRecord, ProductGroupRevenue, RevenueRecord, DiagnosisRange } from '../../types';
-import { calculateExpenseAnalysis, calculateMISMetrics, calculateTimeContext, getCategoryType } from '../../businessLogic';
+import { calculateExpenseAnalysis, calculateMISMetrics, calculateTimeContext, getCategoryType } from '../../src/lib';
 
 interface UseExpenseAnalyticsArgs {
   list: ExpenseRecord[];

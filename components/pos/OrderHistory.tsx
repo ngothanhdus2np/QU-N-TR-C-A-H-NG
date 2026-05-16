@@ -79,7 +79,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
             <input 
               type="text" 
               placeholder="Tìm mã đơn, khách hàng... (F4)" 
-              className="w-full md:w-80 pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-indigo-400 focus:shadow-lg focus:shadow-indigo-500/5 transition-all shadow-inner placeholder:text-slate-400" 
+              className="w-full md:w-80 pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-normal outline-none focus:bg-white focus:border-indigo-400 focus:shadow-lg focus:shadow-indigo-500/5 transition-all shadow-inner placeholder:text-slate-400" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -100,13 +100,13 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
               })),
               'DonHang'
             )}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-slate-200 text-emerald-600 rounded-2xl hover:bg-emerald-50 hover:border-emerald-200 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest shadow-sm"
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-slate-200 text-emerald-600 rounded-2xl hover:bg-emerald-50 hover:border-emerald-200 active:scale-95 transition-all text-[11px] font-normal uppercase tracking-widest shadow-sm"
           >
             <FileDown className="h-4 w-4" /> Xuất Excel
           </button>
           <button
             onClick={() => setShowEODReport(true)}
-            className="flex items-center justify-center gap-3 px-8 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest flex-1 md:flex-none shadow-sm shadow-indigo-500/20 group"
+            className="flex items-center justify-center gap-3 px-8 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all text-[11px] font-normal uppercase tracking-widest flex-1 md:flex-none shadow-sm shadow-indigo-500/20 group"
           >
             <BarChart2 className="h-4 w-4" />
             Báo cáo cuối ngày
@@ -134,23 +134,23 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
                     <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner">
                       <FileText className="h-10 w-10 opacity-20" />
                     </div>
-                    <p className="font-black uppercase text-xs tracking-widest leading-loose">Không tìm thấy dữ liệu hóa đơn<br/><span className="text-[10px] opacity-60">Thử thay đổi từ khóa tìm kiếm của bạn</span></p>
+                    <p className="font-normal uppercase text-xs tracking-widest leading-loose">Không tìm thấy dữ liệu hóa đơn<br/><span className="text-[10px] opacity-60">Thử thay đổi từ khóa tìm kiếm của bạn</span></p>
                   </td>
                 </tr>
               ) : (
                 filteredOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50/80 group cursor-pointer transition-all" onClick={() => setSelectedOrder(order)}>
-                    <td className="px-8 py-6 font-mono font-black text-indigo-600 text-sm">
+                    <td className="px-8 py-6 font-mono font-normal text-indigo-600 text-sm">
                       <span className="bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">{order.orderCode}</span>
                     </td>
-                    <td className="px-8 py-6 text-slate-500 font-bold whitespace-nowrap">{new Date(order.date).toLocaleString('vi-VN')}</td>
+                    <td className="px-8 py-6 text-slate-500 font-normal whitespace-nowrap">{new Date(order.date).toLocaleString('vi-VN')}</td>
                     <td className="px-8 py-6">
-                      <div className="font-black text-slate-900 uppercase tracking-tight">{order.customerName || 'Khách vãng lai'}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Hội viên Standard</div>
+                      <div className="font-normal text-slate-900 uppercase tracking-tight">{order.customerName || 'Khách vãng lai'}</div>
+                      <div className="text-[10px] text-slate-400 font-normal uppercase tracking-widest mt-1">Hội viên Standard</div>
                     </td>
-                    <td className="px-8 py-6 text-right font-black text-indigo-600 text-base">{order.finalAmount.toLocaleString()}đ</td>
+                    <td className="px-8 py-6 text-right font-normal text-indigo-600 text-base">{order.finalAmount.toLocaleString()}đ</td>
                     <td className="px-8 py-6 text-center">
-                      <span className="bg-slate-100 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest border border-slate-200">{order.paymentMethod}</span>
+                      <span className="bg-slate-100 px-3 py-1.5 rounded-xl text-[10px] font-normal text-slate-600 uppercase tracking-widest border border-slate-200">{order.paymentMethod}</span>
                     </td>
                     <td className="px-8 py-6 text-center">
                       <button 
@@ -184,7 +184,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
             <div className="bg-slate-50 p-10 border-b border-slate-200 flex justify-between items-center">
               <div>
                 <h3 className="font-black text-2xl text-slate-950 uppercase tracking-tighter">Chi tiết giao dịch</h3>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
+                <div className="text-[10px] font-normal text-slate-400 uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
                    <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-600">{selectedOrder.orderCode}</span>
                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
                    <span>{new Date(selectedOrder.date).toLocaleString('vi-VN')}</span>
@@ -195,12 +195,12 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
             <div className="p-10">
               <div className="grid grid-cols-2 gap-8 mb-10 p-6 bg-slate-50 rounded-[2rem] border border-slate-200 shadow-inner">
                 <div className="space-y-2">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thông tin khách hàng</div>
-                  <div className="font-black text-slate-900 border-l-4 border-indigo-600 pl-4 uppercase tracking-tight">{selectedOrder.customerName || 'Khách vãng lai'}</div>
+                  <div className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Thông tin khách hàng</div>
+                  <div className="font-normal text-slate-900 border-l-4 border-indigo-600 pl-4 uppercase tracking-tight">{selectedOrder.customerName || 'Khách vãng lai'}</div>
                 </div>
                 <div className="text-right space-y-2">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Phương thức</div>
-                  <div className="font-black text-emerald-600 uppercase tracking-[0.1em]">{selectedOrder.paymentMethod}</div>
+                  <div className="text-[10px] font-normal text-slate-400 uppercase tracking-widest text-right">Phương thức</div>
+                  <div className="font-normal text-emerald-600 uppercase tracking-[0.1em]">{selectedOrder.paymentMethod}</div>
                 </div>
               </div>
 
@@ -212,37 +212,37 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
                          <ShoppingBag className="h-6 w-6 text-indigo-400 group-hover:scale-110 transition-transform" />
                       </div>
                       <div>
-                        <div className="font-black text-slate-900 uppercase text-xs tracking-tight">{item.name}</div>
-                        <div className="text-[11px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{item.price.toLocaleString()}đ × {item.quantity} {(item as any).unit || 'đv'}</div>
+                        <div className="font-normal text-slate-900 uppercase text-xs tracking-tight">{item.name}</div>
+                        <div className="text-[11px] text-slate-400 font-normal mt-1 uppercase tracking-widest">{item.price.toLocaleString()}đ × {item.quantity} {(item as any).unit || 'đv'}</div>
                       </div>
                     </div>
-                    <div className="font-black text-slate-900 text-base">{item.total.toLocaleString()}đ</div>
+                    <div className="font-normal text-slate-900 text-base">{item.total.toLocaleString()}đ</div>
                   </div>
                 ))}
               </div>
 
               <div className="bg-indigo-600 p-8 rounded-[2rem] shadow-xl shadow-indigo-600/20 text-white space-y-4">
-                <div className="flex justify-between text-[11px] font-black uppercase tracking-[0.1em] opacity-80">
+                <div className="flex justify-between text-[11px] font-normal uppercase tracking-[0.1em] opacity-80">
                   <span>Tiền hàng thực tế</span>
                   <span className="tabular-nums">{selectedOrder.totalAmount.toLocaleString()}đ</span>
                 </div>
-                <div className="flex justify-between text-[11px] font-black uppercase tracking-[0.1em] opacity-80">
+                <div className="flex justify-between text-[11px] font-normal uppercase tracking-[0.1em] opacity-80">
                   <span>Khuyến mãi & Phiếu giảm</span>
                   <span className="tabular-nums">-{selectedOrder.discount.toLocaleString()}đ</span>
                 </div>
                 <div className="flex justify-between items-end border-t border-white/20 pt-4 mt-2">
                   <div className="flex flex-col">
-                     <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-60 mb-2">Thực thu (Net)</span>
-                     <span className="text-sm font-bold opacity-80 italic tracking-wider">Cảm ơn quý khách!</span>
+                     <span className="text-[10px] font-normal uppercase tracking-[0.4em] opacity-60 mb-2">Thực thu (Net)</span>
+                     <span className="text-sm font-normal opacity-80 italic tracking-wider">Cảm ơn quý khách!</span>
                   </div>
-                  <span className="text-4xl font-black tabular-nums tracking-tighter">{selectedOrder.finalAmount.toLocaleString()}đ</span>
+                  <span className="text-4xl font-normal tabular-nums tracking-tighter">{selectedOrder.finalAmount.toLocaleString()}đ</span>
                 </div>
               </div>
 
               <div className="flex gap-4 mt-10">
                 <button 
                   onClick={() => handlePrint(selectedOrder)}
-                  className="flex-1 py-5 bg-slate-950 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-slate-900 active:scale-95 transition-all flex items-center justify-center gap-4 group"
+                  className="flex-1 py-5 bg-slate-950 text-white rounded-[1.5rem] font-normal uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-slate-900 active:scale-95 transition-all flex items-center justify-center gap-4 group"
                 >
                   <Printer className="h-5 w-5 text-indigo-400 group-hover:scale-110 transition-transform" /> In hóa đơn điện tử
                 </button>

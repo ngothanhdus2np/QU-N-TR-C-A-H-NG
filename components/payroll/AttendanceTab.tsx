@@ -1,7 +1,7 @@
 import React from 'react';
 import { Employee } from '../../types';
 import { ListChecks } from 'lucide-react';
-import { isStaffActive } from '../../businessLogic';
+import { isStaffActive } from '../../src/lib';
 
 interface Props {
   employees: Employee[];
@@ -41,15 +41,15 @@ const AttendanceTab: React.FC<Props> = ({
               return (
                 <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                    <p className={`text-sm font-bold truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                    <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
                     <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
                   </td>
                   {daysArray.map(day => (
                     <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                      <input type="text" defaultValue={getAttendanceCellValue(emp.id, day)} onBlur={(e) => handleAttendanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-xs font-bold outline-none border-none focus:bg-white" />
+                      <input type="text" defaultValue={getAttendanceCellValue(emp.id, day)} onBlur={(e) => handleAttendanceInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-xs font-normal outline-none border-none focus:bg-white" />
                     </td>
                   ))}
-                  <td className="bg-indigo-50 text-center font-black text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)]">{calculateTotalHours(emp.id)}</td>
+                  <td className="bg-indigo-50 text-center font-normal text-indigo-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)]">{calculateTotalHours(emp.id)}</td>
                 </tr>
               );
             })}

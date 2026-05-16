@@ -11,7 +11,9 @@ const STORE_NAME = 'pending_ops';
 export type PendingOpType =
   | 'pushBatch'
   | 'upsertItem'
-  | 'deleteItem';
+  | 'deleteItem'
+  | 'inventoryApply'
+  | 'inventoryDelete';
 
 export interface PendingOp {
   id: string;

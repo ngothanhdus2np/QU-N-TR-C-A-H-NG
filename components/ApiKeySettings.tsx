@@ -141,7 +141,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <BrainCircuit className="w-4 h-4 text-indigo-600" />
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Claude AI</span>
+              <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">Claude AI</span>
             </div>
             <div className="flex items-start space-x-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100 mb-3">
               <p className="text-[11px] text-indigo-800 leading-relaxed">
@@ -150,18 +150,18 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             </div>
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600">Trạng thái kết nối:</span>
+                <span className="text-xs font-normal text-slate-600">Trạng thái kết nối:</span>
                 {claudeStatus === 'idle' && <span className="text-xs text-slate-400 italic">Chưa kiểm tra</span>}
                 {claudeStatus === 'testing' && <span className="text-xs text-indigo-600 flex items-center animate-pulse"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Đang kiểm tra...</span>}
-                {claudeStatus === 'success' && <span className="text-xs text-emerald-600 flex items-center font-bold"><CheckCircle2 className="w-3 h-3 mr-1" />Đã kết nối</span>}
-                {claudeStatus === 'error' && <span className="text-xs text-red-600 flex items-center font-bold"><XCircle className="w-3 h-3 mr-1" />Lỗi</span>}
+                {claudeStatus === 'success' && <span className="text-xs text-emerald-600 flex items-center font-normal"><CheckCircle2 className="w-3 h-3 mr-1" />Đã kết nối</span>}
+                {claudeStatus === 'error' && <span className="text-xs text-red-600 flex items-center font-normal"><XCircle className="w-3 h-3 mr-1" />Lỗi</span>}
               </div>
               {claudeMessage && (
                 <p className={`text-[11px] p-2 rounded border ${claudeStatus === 'success' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-red-600 bg-red-50 border-red-100'}`}>
                   {claudeMessage}
                 </p>
               )}
-              <button onClick={testClaude} disabled={claudeStatus === 'testing'} className="w-full py-2 text-xs font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50">
+              <button onClick={testClaude} disabled={claudeStatus === 'testing'} className="w-full py-2 text-xs font-normal text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50">
                 Kiểm tra kết nối Claude
               </button>
             </div>
@@ -171,14 +171,14 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Mail className="w-4 h-4 text-violet-600" />
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Thông báo Email</span>
+              <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">Thông báo Email</span>
             </div>
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600">Gửi báo cáo 21:00:</span>
+                <span className="text-xs font-normal text-slate-600">Gửi báo cáo 21:00:</span>
                 {emailConfigured === null && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
                 {emailConfigured === true && (
-                  <span className="text-xs text-emerald-600 flex items-center font-bold">
+                  <span className="text-xs text-emerald-600 flex items-center font-normal">
                     <CheckCircle2 className="w-3 h-3 mr-1" />Đã cấu hình
                   </span>
                 )}
@@ -191,13 +191,13 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
               {emailConfigured === true && emailTo && (
                 <p className="text-[11px] text-slate-500">
-                  Gửi đến: <span className="font-mono font-bold text-slate-700">{emailTo}</span>
+                  Gửi đến: <span className="font-mono font-normal text-slate-700">{emailTo}</span>
                 </p>
               )}
 
               {emailConfigured === false && (
                 <div className="text-[11px] text-slate-600 bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
-                  <p className="font-bold text-amber-800">Cách bật email thông báo:</p>
+                  <p className="font-normal text-amber-800">Cách bật email thông báo:</p>
                   <p>1. Bật 2FA trên Google Account</p>
                   <p>2. Tạo App Password tại <span className="font-mono">myaccount.google.com/apppasswords</span></p>
                   <p>3. Thêm vào <span className="font-mono">.env.local</span>:</p>
@@ -212,7 +212,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                       {emailMessage}
                     </p>
                   )}
-                  <button onClick={sendTestEmail} disabled={emailStatus === 'sending'} className="w-full py-2 text-xs font-semibold text-violet-600 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  <button onClick={sendTestEmail} disabled={emailStatus === 'sending'} className="w-full py-2 text-xs font-normal text-violet-600 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {emailStatus === 'sending' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                     Gửi email thử nghiệm
                   </button>
@@ -225,14 +225,14 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <MessageCircle className="w-4 h-4 text-sky-600" />
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Thông báo Zalo OA</span>
+              <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">Thông báo Zalo OA</span>
             </div>
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600">Gửi báo cáo & cảnh báo:</span>
+                <span className="text-xs font-normal text-slate-600">Gửi báo cáo & cảnh báo:</span>
                 {zaloConfigured === null && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
                 {zaloConfigured === true && (
-                  <span className="text-xs text-emerald-600 flex items-center font-bold">
+                  <span className="text-xs text-emerald-600 flex items-center font-normal">
                     <CheckCircle2 className="w-3 h-3 mr-1" />Đã cấu hình
                   </span>
                 )}
@@ -245,13 +245,13 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
               {zaloConfigured === true && zaloFollowerId && (
                 <p className="text-[11px] text-slate-500">
-                  Gửi đến follower: <span className="font-mono font-bold text-slate-700">{zaloFollowerId}</span>
+                  Gửi đến follower: <span className="font-mono font-normal text-slate-700">{zaloFollowerId}</span>
                 </p>
               )}
 
               {zaloConfigured === false && (
                 <div className="text-[11px] text-slate-600 bg-sky-50 border border-sky-100 rounded-lg p-3 space-y-1">
-                  <p className="font-bold text-sky-800">Cách bật Zalo OA:</p>
+                  <p className="font-normal text-sky-800">Cách bật Zalo OA:</p>
                   <p>1. Đăng ký Zalo Official Account tại <span className="font-mono">oa.zalo.me</span></p>
                   <p>2. Lấy Access Token từ <span className="font-mono">developers.zalo.me</span></p>
                   <p>3. Lấy Follower ID (Zalo user ID của chủ nhà)</p>
@@ -267,7 +267,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                       {zaloMessage}
                     </p>
                   )}
-                  <button onClick={sendTestZalo} disabled={zaloStatus === 'sending'} className="w-full py-2 text-xs font-semibold text-sky-600 bg-white border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  <button onClick={sendTestZalo} disabled={zaloStatus === 'sending'} className="w-full py-2 text-xs font-normal text-sky-600 bg-white border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {zaloStatus === 'sending' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                     Gửi Zalo thử nghiệm
                   </button>
@@ -280,46 +280,46 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Bell className="w-4 h-4 text-amber-600" />
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Ngưỡng cảnh báo</span>
+              <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">Ngưỡng cảnh báo</span>
             </div>
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-600 block">Tồn kho tối thiểu mặc định</label>
+                <label className="text-[11px] font-normal text-slate-600 block">Tồn kho tối thiểu mặc định</label>
                 <p className="text-[10px] text-slate-400">Áp dụng cho sản phẩm chưa set ngưỡng riêng</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={1} max={100}
                     value={alertConfig.defaultMinStock}
                     onChange={e => setAlertConfig(c => ({ ...c, defaultMinStock: Number(e.target.value) }))}
-                    className="w-20 text-sm font-bold text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
+                    className="w-20 text-sm font-normal text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
                   />
                   <span className="text-[11px] text-slate-500">sản phẩm</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-600 block">Công nợ NCC quá hạn sau</label>
+                <label className="text-[11px] font-normal text-slate-600 block">Công nợ NCC quá hạn sau</label>
                 <p className="text-[10px] text-slate-400">Cảnh báo nếu còn nợ và không có hoạt động trong X ngày</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={7} max={365}
                     value={alertConfig.debtOverdueDays}
                     onChange={e => setAlertConfig(c => ({ ...c, debtOverdueDays: Number(e.target.value) }))}
-                    className="w-20 text-sm font-bold text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
+                    className="w-20 text-sm font-normal text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
                   />
                   <span className="text-[11px] text-slate-500">ngày</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-600 block">Cảnh báo doanh thu giảm dưới</label>
+                <label className="text-[11px] font-normal text-slate-600 block">Cảnh báo doanh thu giảm dưới</label>
                 <p className="text-[10px] text-slate-400">So với trung bình 6 ngày trước — ví dụ: 50% = doanh thu giảm hơn một nửa</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={10} max={90}
                     value={alertConfig.revenueDropPct}
                     onChange={e => setAlertConfig(c => ({ ...c, revenueDropPct: Number(e.target.value) }))}
-                    className="w-20 text-sm font-bold text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
+                    className="w-20 text-sm font-normal text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400"
                   />
                   <span className="text-[11px] text-slate-500">% trung bình</span>
                 </div>
@@ -328,7 +328,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
               <button
                 onClick={saveAlertConfig}
                 disabled={alertSaveStatus === 'saving'}
-                className="w-full py-2 text-xs font-semibold text-amber-700 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="w-full py-2 text-xs font-normal text-amber-700 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {alertSaveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                 {alertSaveStatus === 'saved' ? 'Đã lưu!' : alertSaveStatus === 'error' ? 'Lỗi lưu' : 'Lưu cấu hình'}
@@ -345,7 +345,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-6 bg-slate-50 border-t border-slate-100">
-          <button onClick={onClose} className="w-full py-3 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95">
+          <button onClick={onClose} className="w-full py-3 text-sm font-normal text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95">
             Đóng
           </button>
         </div>
