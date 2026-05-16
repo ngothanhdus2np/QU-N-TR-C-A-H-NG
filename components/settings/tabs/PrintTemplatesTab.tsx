@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -49,20 +49,113 @@ const SAMPLE_BARCODE_LABEL_PRODUCT = {
 const BARCODE_LABEL_TEMPLATE_STORAGE_KEY = 'barcode_label_template_settings';
 
 const CODE_128_PATTERNS = [
-  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312',
-  '132212', '221213', '221312', '231212', '112232', '122132', '122231', '113222',
-  '123122', '123221', '223211', '221132', '221231', '213212', '223112', '312131',
-  '311222', '321122', '321221', '312212', '322112', '322211', '212123', '212321',
-  '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
-  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121',
-  '313121', '211331', '231131', '213113', '213311', '213131', '311123', '311321',
-  '331121', '312113', '312311', '332111', '314111', '221411', '431111', '111224',
-  '111422', '121124', '121421', '141122', '141221', '112214', '112412', '122114',
-  '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
-  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112',
-  '421211', '212141', '214121', '412121', '111143', '111341', '131141', '114113',
-  '114311', '411113', '411311', '113141', '114131', '311141', '411131', '211412',
-  '211214', '211232', '2331112',
+  '212222',
+  '222122',
+  '222221',
+  '121223',
+  '121322',
+  '131222',
+  '122213',
+  '122312',
+  '132212',
+  '221213',
+  '221312',
+  '231212',
+  '112232',
+  '122132',
+  '122231',
+  '113222',
+  '123122',
+  '123221',
+  '223211',
+  '221132',
+  '221231',
+  '213212',
+  '223112',
+  '312131',
+  '311222',
+  '321122',
+  '321221',
+  '312212',
+  '322112',
+  '322211',
+  '212123',
+  '212321',
+  '232121',
+  '111323',
+  '131123',
+  '131321',
+  '112313',
+  '132113',
+  '132311',
+  '211313',
+  '231113',
+  '231311',
+  '112133',
+  '112331',
+  '132131',
+  '113123',
+  '113321',
+  '133121',
+  '313121',
+  '211331',
+  '231131',
+  '213113',
+  '213311',
+  '213131',
+  '311123',
+  '311321',
+  '331121',
+  '312113',
+  '312311',
+  '332111',
+  '314111',
+  '221411',
+  '431111',
+  '111224',
+  '111422',
+  '121124',
+  '121421',
+  '141122',
+  '141221',
+  '112214',
+  '112412',
+  '122114',
+  '122411',
+  '142112',
+  '142211',
+  '241211',
+  '221114',
+  '413111',
+  '241112',
+  '134111',
+  '111242',
+  '121142',
+  '121241',
+  '114212',
+  '124112',
+  '124211',
+  '411212',
+  '421112',
+  '421211',
+  '212141',
+  '214121',
+  '412121',
+  '111143',
+  '111341',
+  '131141',
+  '114113',
+  '114311',
+  '411113',
+  '411311',
+  '113141',
+  '114131',
+  '311141',
+  '411131',
+  '211412',
+  '211214',
+  '211232',
+  '2331112',
 ];
 
 // Helper functions
@@ -182,22 +275,22 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
 
   // State
   const [activePrintTemplateType, setActivePrintTemplateType] = useState<string>('invoice');
-  
+
   // Invoice template states
   const [isInvoiceTemplateEditing, setIsInvoiceTemplateEditing] = useState(false);
   const [invoiceTemplateName, setInvoiceTemplateName] = useState('Khổ giấy K80');
   const [invoiceTemplateBody, setInvoiceTemplateBody] = useState('');
-  
+
   // Exchange template states
   const [isExchangeTemplateEditing, setIsExchangeTemplateEditing] = useState(false);
   const [exchangeTemplateName, setExchangeTemplateName] = useState('Khổ giấy K80');
   const [exchangeTemplateBody, setExchangeTemplateBody] = useState('');
-  
+
   // Payroll template states
   const [isPayrollTemplateEditing, setIsPayrollTemplateEditing] = useState(false);
   const [payrollTemplateName, setPayrollTemplateName] = useState('Khổ giấy K80');
   const [payrollTemplateBody, setPayrollTemplateBody] = useState('');
-  
+
   // Barcode label states
   const [barcodeLabelTemplateName, setBarcodeLabelTemplateName] = useState('Tem mã 2 tem 35x22');
   const [barcodeLabelWidthMm, setBarcodeLabelWidthMm] = useState(35);
@@ -378,25 +471,37 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
     [brandProfile.name]
   );
 
-  // Current template bodies
-  const currentInvoiceTemplateBody = ensureDiscountSampleRows(
-    invoiceTemplateBody || defaultInvoiceTemplateBody
+  // Current template bodies — memoized so useMemo chain below works correctly
+  const currentInvoiceTemplateBody = useMemo(
+    () => ensureDiscountSampleRows(invoiceTemplateBody || defaultInvoiceTemplateBody),
+    [invoiceTemplateBody, defaultInvoiceTemplateBody]
   );
-  const currentExchangeTemplateBody = exchangeTemplateBody || defaultExchangeTemplateBody;
-  const currentPayrollTemplateBody = payrollTemplateBody || defaultPayrollTemplateBody;
+  const currentExchangeTemplateBody = useMemo(
+    () => exchangeTemplateBody || defaultExchangeTemplateBody,
+    [exchangeTemplateBody, defaultExchangeTemplateBody]
+  );
+  const currentPayrollTemplateBody = useMemo(
+    () => payrollTemplateBody || defaultPayrollTemplateBody,
+    [payrollTemplateBody, defaultPayrollTemplateBody]
+  );
 
-  // Template lines
+  // Deferred values for preview only — textarea updates instantly, preview catches up async
+  const deferredInvoiceBody = useDeferredValue(currentInvoiceTemplateBody);
+  const deferredExchangeBody = useDeferredValue(currentExchangeTemplateBody);
+  const deferredPayrollBody = useDeferredValue(currentPayrollTemplateBody);
+
+  // Template lines — use deferred body so regex work runs in background
   const rawInvoiceTemplateLines = useMemo(
-    () => currentInvoiceTemplateBody.split('\n'),
-    [currentInvoiceTemplateBody]
+    () => deferredInvoiceBody.split('\n'),
+    [deferredInvoiceBody]
   );
   const rawExchangeTemplateLines = useMemo(
-    () => currentExchangeTemplateBody.split('\n'),
-    [currentExchangeTemplateBody]
+    () => deferredExchangeBody.split('\n'),
+    [deferredExchangeBody]
   );
   const rawPayrollTemplateLines = useMemo(
-    () => currentPayrollTemplateBody.split('\n'),
-    [currentPayrollTemplateBody]
+    () => deferredPayrollBody.split('\n'),
+    [deferredPayrollBody]
   );
 
   // Preview tokens
@@ -552,24 +657,25 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
     .code { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
     .price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
   `,
-    [
-      barcodeLabelWidthMm,
-      barcodeLabelHeightMm,
-      barcodeLabelShowBorder,
-      barcodeLabelTotalWidthMm,
-    ]
+    [barcodeLabelWidthMm, barcodeLabelHeightMm, barcodeLabelShowBorder, barcodeLabelTotalWidthMm]
   );
 
-  const renderBarcodeLabelHtml = (product: { name: string; sku: string; price: string }) => `
+  const renderBarcodeLabelHtml = useCallback(
+    (product: { name: string; sku: string; price: string }) => `
     <section class="label">
       ${barcodeLabelShowName ? `<div class="name">${escapeHtml(product.name)}</div>` : ''}
       ${buildCode128Svg(product.sku)}
       ${barcodeLabelShowCode ? `<div class="code">${escapeHtml(product.sku)}</div>` : ''}
       ${barcodeLabelShowPrice ? `<div class="price">${escapeHtml(product.price)}đ</div>` : ''}
     </section>
-  `;
+  `,
+    [barcodeLabelShowName, barcodeLabelShowCode, barcodeLabelShowPrice]
+  );
 
-  const barcodeLabelPreviewItems = Array(barcodeLabelDefaultQty).fill(SAMPLE_BARCODE_LABEL_PRODUCT);
+  const barcodeLabelPreviewItems = useMemo(
+    () => Array(barcodeLabelDefaultQty).fill(SAMPLE_BARCODE_LABEL_PRODUCT),
+    [barcodeLabelDefaultQty]
+  );
 
   // Helper functions for template editing
   const getEditablePrintTemplate = (templateType: EditablePrintTemplateType) => {
@@ -1504,7 +1610,9 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
                   <main
                     className="sheet"
                     dangerouslySetInnerHTML={{
-                      __html: barcodeLabelPreviewItems.map(item => renderBarcodeLabelHtml(item)).join('')
+                      __html: barcodeLabelPreviewItems
+                        .map(item => renderBarcodeLabelHtml(item))
+                        .join(''),
                     }}
                   />
                 </div>
