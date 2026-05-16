@@ -401,6 +401,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 }) => {
   const logoUploadRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('store');
+  const [visitedTabs, setVisitedTabs] = useState<Set<SettingsTab>>(() => new Set(['store']));
   const [logoUploading, setLogoUploading] = useState(false);
   const [claudeStatus, setClaudeStatus] = useState<'idle' | 'testing' | 'success' | 'error'>(
     'idle'
@@ -440,6 +441,17 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 
   const errorCount = syncErrors?.length ?? 0;
   const activeTabMeta = useMemo(() => getPageMeta(activeTab), [activeTab]);
+  const normalizedPaymentSettings = useMemo(
+    () => normalizePOSPaymentSettings(paymentSettings),
+    [paymentSettings]
+  );
+
+  useEffect(() => {
+    setVisitedTabs(prev => {
+      if (prev.has(activeTab)) return prev;
+      return new Set([...prev, activeTab]);
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     setInventoryForm({
@@ -1078,35 +1090,19 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     </div>
   );
 
-  const renderActiveTab = () => {
+  // Inline-only tabs (cheap to remount)
+  const renderInlineTab = () => {
     if (activeTab === 'store') return renderStoreTab();
     if (activeTab === 'pos') return renderPosTab();
-    if (activeTab === 'goods')
-      return (
-        <GoodsTab
-          products={products}
-          alertConfig={alertConfig}
-          inventorySettings={inventorySettings || DEFAULT_POS_INVENTORY_SETTINGS}
-          onUpdateInventorySettings={onUpdateInventorySettings}
-          onNavigate={navigateAndClose}
-          onSetActiveTab={(tab: string) => setActiveTab(tab as SettingsTab)}
-        />
-      );
-    if (activeTab === 'payments')
-      return (
-        <PaymentsTab
-          settings={normalizePOSPaymentSettings(paymentSettings)}
-          onSave={onUpdatePaymentSettings}
-        />
-      );
-    if (activeTab === 'printTemplates') return <PrintTemplatesTab brandProfile={brandProfile} />;
-    if (activeTab === 'appearance')
-      return <AppearanceTab activeThemeId={activeThemeId} onThemeChange={onThemeChange} />;
     if (activeTab === 'notifications') return renderNotificationsTab();
     if (activeTab === 'integrations') return renderIntegrationsTab();
     if (activeTab === 'security') return renderSecurityTab();
-    return renderSyncTab();
+    if (activeTab === 'sync') return renderSyncTab();
+    return null;
   };
+
+  const isComponentTab = (tab: SettingsTab) =>
+    tab === 'goods' || tab === 'payments' || tab === 'printTemplates' || tab === 'appearance';
 
   const ActiveIcon = activeTabMeta.icon;
 
@@ -1140,7 +1136,42 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 
           <main className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-4 md:p-6">
             <div className="flex gap-5">
-              <div className="min-w-0 flex-1 space-y-4">{renderActiveTab()}</div>
+              <div className="min-w-0 flex-1 space-y-4">
+                {/* Inline tabs — conditionally rendered (cheap) */}
+                {!isComponentTab(activeTab) && renderInlineTab()}
+
+                {/* Component tabs — kept mounted after first visit to avoid expensive remount */}
+                {visitedTabs.has('goods') && (
+                  <div style={{ display: activeTab === 'goods' ? undefined : 'none' }}>
+                    <GoodsTab
+                      products={products}
+                      alertConfig={alertConfig}
+                      inventorySettings={inventorySettings || DEFAULT_POS_INVENTORY_SETTINGS}
+                      onUpdateInventorySettings={onUpdateInventorySettings}
+                      onNavigate={navigateAndClose}
+                      onSetActiveTab={(tab: string) => setActiveTab(tab as SettingsTab)}
+                    />
+                  </div>
+                )}
+                {visitedTabs.has('payments') && (
+                  <div style={{ display: activeTab === 'payments' ? undefined : 'none' }}>
+                    <PaymentsTab
+                      settings={normalizedPaymentSettings}
+                      onSave={onUpdatePaymentSettings}
+                    />
+                  </div>
+                )}
+                {visitedTabs.has('printTemplates') && (
+                  <div style={{ display: activeTab === 'printTemplates' ? undefined : 'none' }}>
+                    <PrintTemplatesTab brandProfile={brandProfile} />
+                  </div>
+                )}
+                {visitedTabs.has('appearance') && (
+                  <div style={{ display: activeTab === 'appearance' ? undefined : 'none' }}>
+                    <AppearanceTab activeThemeId={activeThemeId} onThemeChange={onThemeChange} />
+                  </div>
+                )}
+              </div>
               {activeTab !== 'printTemplates' && <RightAnchor activeTab={activeTab} />}
             </div>
           </main>
