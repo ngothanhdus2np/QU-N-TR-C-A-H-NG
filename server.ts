@@ -203,16 +203,22 @@ async function startServer() {
     const requireAuth = (req: Request, res: Response, next: NextFunction) => {
       const apiKey = req.headers['x-api-key'] as string;
       const internalKey = process.env.INTERNAL_API_KEY;
-      const hasValidKey = !!(internalKey && apiKey === internalKey);
-
-      // Dùng địa chỉ TCP thực (không thể spoof qua HTTP header như req.hostname).
-      // Chỉ các process thực sự chạy trên cùng máy (cron nội bộ) mới qua được.
-      const remoteAddr = req.socket?.remoteAddress || '';
-      const isTrueLocalhost =
-        remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
-
-      if (isTrueLocalhost || hasValidKey) return next();
-      return res.status(401).json({ error: 'Unauthorized' });
+      
+      // SECURITY FIX (2026-05-18): Removed loopback address bypass
+      // Previous code allowed all requests from 127.0.0.1, which bypasses auth
+      // when deployed behind reverse proxy (Nginx/Cloudflare Tunnel).
+      // Now ONLY valid API key grants access.
+      
+      if (!internalKey) {
+        console.error('[AUTH] INTERNAL_API_KEY not configured - all requests will be rejected');
+        return res.status(500).json({ error: 'Server configuration error' });
+      }
+      
+      if (apiKey && apiKey === internalKey) {
+        return next();
+      }
+      
+      return res.status(401).json({ error: 'Unauthorized - Valid API key required' });
     };
 
     const facebookRoutes = createFacebookRouter({ supabase, requireAuth, configDir: __dirname });

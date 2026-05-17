@@ -1,0 +1,13 @@
+{
+  "name": "Security Check Before Commit",
+  "version": "1.0.0",
+  "description": "Runs security audit before git commits to catch vulnerabilities early",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["shell"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Before running this git command, verify: 1) No hardcoded secrets or API keys in staged files, 2) No console.log with sensitive data, 3) Authentication bypass code removed from server.ts, 4) RLS policies enabled for new tables. If any security issues found, STOP and fix them first."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Financial Logic Review",
+  "version": "1.0.0",
+  "description": "Reviews financial calculation changes to ensure accuracy",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*PayrollManager.tsx", "*RevenueManager.tsx", "*POSComputer.tsx", "*ExpenseManager.tsx"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "This file contains financial calculations. Review the changes and verify: 1) Payroll uses 26 standard working days (not calendar days), 2) Net salary cannot go negative (use Math.max(0, ...)), 3) Loyalty points use dynamic config (not hardcoded 10000), 4) COGS captured at transaction time, 5) All currency values rounded to nearest đồng, 6) No negative inventory possible. Flag any violations."
+  }
+}

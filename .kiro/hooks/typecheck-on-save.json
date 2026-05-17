@@ -1,0 +1,14 @@
+{
+  "name": "TypeCheck on Save",
+  "version": "1.0.0",
+  "description": "Automatically checks TypeScript types when saving .ts or .tsx files",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*.ts", "*.tsx"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "npm run check",
+    "timeout": 30
+  }
+}
