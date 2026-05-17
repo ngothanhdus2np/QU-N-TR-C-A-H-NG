@@ -401,5 +401,238 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     res.json({ ok: true, updated });
   });
 
+  router.get('/api/categories', requireAuth, async (_req, res) => {
+    const { data, error } = await supabase.from('categories').select('path').order('path');
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    res.json({ ok: true, categories: (data ?? []).map((r: { path: string }) => r.path) });
+  });
+
+  router.post('/api/categories/create', requireAuth, async (req, res) => {
+    const { path } = req.body as { path?: string };
+    if (!path?.trim()) return res.status(400).json({ ok: false, error: 'Thiếu path' });
+    const { error } = await supabase
+      .from('categories')
+      .upsert({ path: path.trim() }, { onConflict: 'path' });
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    res.json({ ok: true });
+  });
+
+  // Import doanh thu từ file "Báo cáo bán hàng theo lợi nhuận" của KiotViet
+  router.post('/api/import/kiotviet-revenue', requireAuth, async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = XLSX.read(buf, { type: 'buffer' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2)
+        return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
+
+      const headers = rows[0];
+      if (String(headers[6] || '').trim() !== 'Mã giao dịch') {
+        return res.status(400).json({
+          error:
+            'File không đúng định dạng. Cần file "Báo cáo bán hàng theo lợi nhuận" từ KiotViet (cột 7 phải là "Mã giao dịch").',
+        });
+      }
+
+      const excelToDate = (serial: number): string => {
+        const ms = (serial - 25569) * 86400 * 1000;
+        return new Date(ms).toISOString().split('T')[0];
+      };
+
+      const lastDayOfMonth = (yearMonth: string): string => {
+        const [y, m] = yearMonth.split('-').map(Number);
+        const d = new Date(y, m, 0).getDate();
+        return `${yearMonth}-${d.toString().padStart(2, '0')}`;
+      };
+
+      // ── Pass 1: aggregate by day (dedup by order) → revenue_records ──
+      type DayAgg = {
+        totalGross: number;
+        discount: number;
+        netRev: number;
+        cogs: number;
+        profit: number;
+      };
+      const seenOrders = new Set<string>();
+      const dateMap = new Map<string, DayAgg>();
+
+      // ── Pass 2: aggregate by group + month → product_group_revenue ──
+      type GroupAgg = { amount: number; qty: number; cogs: number };
+      const groupMonthMap = new Map<string, GroupAgg>(); // key: "groupName|YYYY-MM"
+
+      for (const row of rows.slice(1)) {
+        const orderCode = String(row[6] || '').trim();
+        if (!orderCode) continue;
+
+        const serialDate = Number(row[8]);
+        if (!serialDate) continue;
+        const date = excelToDate(serialDate);
+        const yearMonth = date.slice(0, 7); // "YYYY-MM"
+
+        // Day aggregation — dedup by order
+        if (!seenOrders.has(orderCode)) {
+          seenOrders.add(orderCode);
+          const prev: DayAgg = dateMap.get(date) ?? {
+            totalGross: 0,
+            discount: 0,
+            netRev: 0,
+            cogs: 0,
+            profit: 0,
+          };
+          dateMap.set(date, {
+            totalGross: prev.totalGross + Number(row[9] || 0),
+            discount: prev.discount + Number(row[10] || 0),
+            netRev: prev.netRev + Number(row[11] || 0),
+            cogs: prev.cogs + Number(row[12] || 0),
+            profit: prev.profit + Number(row[13] || 0),
+          });
+        }
+
+        // Group aggregation — every line item counts
+        const groupName = String(row[17] || '').trim();
+        if (groupName) {
+          const qty = Number(row[18] || 0);
+          const price = Number(row[19] || 0);
+          const cost = Number(row[20] || 0);
+          const gmKey = `${groupName}|${yearMonth}`;
+          const prev: GroupAgg = groupMonthMap.get(gmKey) ?? { amount: 0, qty: 0, cogs: 0 };
+          groupMonthMap.set(gmKey, {
+            amount: prev.amount + qty * price,
+            qty: prev.qty + qty,
+            cogs: prev.cogs + qty * cost,
+          });
+        }
+      }
+
+      if (dateMap.size === 0)
+        return res.status(400).json({ error: 'Không tìm thấy dữ liệu hợp lệ.' });
+
+      // ── Upsert revenue_records ──
+      const dates = Array.from(dateMap.keys());
+      const { data: existingRevRecords } = await supabase
+        .from('revenue_records')
+        .select('id, date')
+        .in('date', dates);
+      const existingDateMap = new Map(
+        (existingRevRecords as ExistingRevenueRecord[] | null)?.map(r => [r.date, r.id]) ?? []
+      );
+      const revenueToUpsert = dates.map(date => {
+        const d = dateMap.get(date)!;
+        return {
+          id: existingDateMap.get(date) ?? generateId(),
+          date,
+          total_gross_revenue: Math.round(d.totalGross),
+          discount: Math.round(d.discount),
+          net_revenue: Math.round(d.netRev),
+          total_cogs: Math.round(d.cogs),
+          gross_profit: Math.round(d.profit),
+          revenue_other: 0,
+          returns_value: 0,
+        };
+      });
+
+      const BATCH = 500;
+      let firstError: string | null = null;
+      for (let i = 0; i < revenueToUpsert.length; i += BATCH) {
+        const { error: e } = await supabase
+          .from('revenue_records')
+          .upsert(revenueToUpsert.slice(i, i + BATCH), { onConflict: 'id' });
+        if (e && !firstError) firstError = e.message;
+      }
+      if (firstError) throw new Error(firstError);
+
+      // ── Upsert product_groups + product_group_revenue ──
+      const uniqueGroupNames = Array.from(
+        new Set(Array.from(groupMonthMap.keys()).map(k => k.split('|')[0]))
+      );
+
+      // Fetch existing groups to reuse their IDs
+      const { data: existingGroups } = await supabase
+        .from('product_groups')
+        .select('id, name')
+        .in('name', uniqueGroupNames);
+      const groupNameToId = new Map<string, string>(
+        (existingGroups as { id: string; name: string }[] | null)?.map(g => [g.name, g.id]) ?? []
+      );
+
+      // Create new groups for names not yet in DB
+      const newGroups = uniqueGroupNames
+        .filter(name => !groupNameToId.has(name))
+        .map(name => {
+          const id = stableUuidFromKey(`product-group:${name}`);
+          groupNameToId.set(name, id);
+          return { id, name };
+        });
+      if (newGroups.length > 0) {
+        await supabase.from('product_groups').upsert(newGroups, { onConflict: 'id' });
+      }
+
+      // Build product_group_revenue records (stable ID = deterministic upsert)
+      const groupRevToUpsert = Array.from(groupMonthMap.entries()).map(([key, agg]) => {
+        const [groupName, yearMonth] = key.split('|');
+        const date = lastDayOfMonth(yearMonth);
+        const groupId = groupNameToId.get(groupName) ?? '';
+        return {
+          id: stableUuidFromKey(`pgr:${date}:${groupName}`),
+          date,
+          group_id: groupId || null,
+          group_name: groupName,
+          amount: Math.round(agg.amount),
+          quantity: Math.round(agg.qty),
+          cogs: Math.round(agg.cogs),
+          net_revenue: Math.round(agg.amount),
+          returns_quantity: 0,
+          returns_value: 0,
+        };
+      });
+
+      for (let i = 0; i < groupRevToUpsert.length; i += BATCH) {
+        const { error: e } = await supabase
+          .from('product_group_revenue')
+          .upsert(groupRevToUpsert.slice(i, i + BATCH), { onConflict: 'id' });
+        if (e && !firstError) firstError = e.message;
+      }
+      if (firstError) throw new Error(firstError);
+
+      res.json({
+        success: true,
+        days: dateMap.size,
+        orders: seenOrders.size,
+        groups: uniqueGroupNames.length,
+        groupMonths: groupRevToUpsert.length,
+      });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-revenue]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa toàn bộ hàng hóa (dùng khi chuyển từ app test sang app thật)
+  router.delete('/api/admin/reset-products', requireAuth, async (_req, res) => {
+    try {
+      const { error } = await supabase.from('pos_products').delete().not('id', 'is', null);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa toàn bộ doanh thu (dùng khi chuyển từ app test sang app thật)
+  router.delete('/api/admin/reset-revenue', requireAuth, async (_req, res) => {
+    try {
+      const { error } = await supabase.from('revenue_records').delete().not('id', 'is', null);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
   return router;
 }

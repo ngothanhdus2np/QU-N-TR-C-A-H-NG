@@ -75,8 +75,8 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm pt-20">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">

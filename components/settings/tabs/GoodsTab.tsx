@@ -206,6 +206,156 @@ const CategoryEditPopup: React.FC<{
   );
 };
 
+const CategoryAddPopup: React.FC<{
+  allNodes: CatNode[];
+  onSave: (path: string) => Promise<void>;
+  onClose: () => void;
+}> = ({ allNodes, onSave, onClose }) => {
+  const [name, setName] = useState('');
+  const [parentPath, setParentPath] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const allNames = useMemo(() => {
+    const names = new Set<string>();
+    const traverse = (nodes: CatNode[]) =>
+      nodes.forEach(n => {
+        names.add(n.name);
+        traverse(n.children);
+      });
+    traverse(allNodes);
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [allNodes]);
+
+  const suggestions = useMemo(() => {
+    if (!name.trim()) return [];
+    const lower = name.toLowerCase();
+    return allNames.filter(n => n.toLowerCase().includes(lower)).slice(0, 8);
+  }, [name, allNames]);
+
+  const parentOptions = useMemo(() => {
+    const result: { label: string; value: string; depth: number }[] = [];
+    const traverse = (nodes: CatNode[], depth: number) =>
+      nodes.forEach(n => {
+        result.push({ label: n.name, value: n.path, depth });
+        traverse(n.children, depth + 1);
+      });
+    traverse(allNodes, 0);
+    return result;
+  }, [allNodes]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Tên không được để trống');
+      return;
+    }
+    const path = parentPath ? `${parentPath} >> ${trimmed}` : trimmed;
+    setSaving(true);
+    try {
+      await onSave(path);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Lỗi lưu');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm bg-white rounded-xl shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">Thêm nhóm hàng</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-700">Tên nhóm hàng</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  setError('');
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => name && setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                placeholder="Nhập tên hoặc chọn từ danh sách..."
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                autoFocus
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                  {suggestions.map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseDown={() => {
+                        setName(s);
+                        setShowSuggestions(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 first:rounded-t-xl last:rounded-b-xl"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-700">
+              Nhóm cha{' '}
+              <span className="font-normal text-slate-400">(để trống = thêm nhóm cha)</span>
+            </span>
+            <select
+              value={parentPath}
+              onChange={e => setParentPath(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">— Không có (nhóm cha) —</option>
+              {parentOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {' '.repeat(opt.depth * 4)}
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && <p className="text-xs text-rose-500">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50/60">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="rounded-xl px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Đang lưu...' : 'Thêm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
 
 const Section: React.FC<{
@@ -300,6 +450,18 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
 }) => {
   const [goodsDetailView, setGoodsDetailView] = useState<GoodsDetailView | null>(null);
   const [editingNode, setEditingNode] = useState<CatNode | null>(null);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [savedCategories, setSavedCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (goodsDetailView !== 'categories') return;
+    fetch('/api/categories')
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) setSavedCategories(d.categories ?? []);
+      })
+      .catch(() => {});
+  }, [goodsDetailView]);
   const [goodsBarcodeManualMode, setGoodsBarcodeManualMode] = useState(() => {
     try {
       return localStorage.getItem(GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY) === 'true';
@@ -329,7 +491,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   });
   const [countsReady, setCountsReady] = useState(false);
 
-  // Compute counts off the render thread — runs during browser idle time
+  // Compute counts in chunks to avoid blocking UI - processes 1000 products at a time
   useEffect(() => {
     setCountsReady(false);
     const compute = () => {
@@ -338,43 +500,67 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       const brands = new Set<string>();
       const locations = new Set<string>();
       const attributeNames = new Set<string>();
-      for (const p of products) {
-        const u = p.unit?.trim();
-        if (u) units.add(u);
-        (p.units || []).forEach(pu => {
-          const n = pu.name?.trim();
-          if (n) units.add(n);
-        });
-        const cat = String(p.categoryPath || p.categoryId || '').trim();
-        if (cat) categories.add(cat);
-        const br = p.brand?.trim();
-        if (br) brands.add(br);
-        const loc = p.location?.trim();
-        if (loc) locations.add(loc);
-        (p.attributes || []).forEach(a => {
-          const n = String(a.name || '').trim();
-          if (n) attributeNames.add(n);
-        });
-        Object.keys(p.variantAttributes || {}).forEach(k => {
-          const n = k.trim();
-          if (n) attributeNames.add(n);
-        });
-      }
-      setGoodsCounts({
-        units: units.size,
-        categories: categories.size,
-        brands: brands.size,
-        locations: locations.size,
-        attributes: attributeNames.size,
-      });
-      setCountsReady(true);
+      
+      // Process products in chunks to keep UI responsive
+      const CHUNK_SIZE = 1000;
+      let index = 0;
+      
+      const processChunk = () => {
+        const end = Math.min(index + CHUNK_SIZE, products.length);
+        
+        for (let i = index; i < end; i++) {
+          const p = products[i];
+          const u = p.unit?.trim();
+          if (u) units.add(u);
+          (p.units || []).forEach(pu => {
+            const n = pu.name?.trim();
+            if (n) units.add(n);
+          });
+          const cat = String(p.categoryPath || p.categoryId || '').trim();
+          if (cat) categories.add(cat);
+          const br = p.brand?.trim();
+          if (br) brands.add(br);
+          const loc = p.location?.trim();
+          if (loc) locations.add(loc);
+          (p.attributes || []).forEach(a => {
+            const n = String(a.name || '').trim();
+            if (n) attributeNames.add(n);
+          });
+          Object.keys(p.variantAttributes || {}).forEach(k => {
+            const n = k.trim();
+            if (n) attributeNames.add(n);
+          });
+        }
+        
+        index = end;
+        
+        if (index < products.length) {
+          // Process next chunk - yield to browser between chunks
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(processChunk);
+          } else {
+            setTimeout(processChunk, 0);
+          }
+        } else {
+          // All chunks processed - update state
+          setGoodsCounts({
+            units: units.size,
+            categories: categories.size,
+            brands: brands.size,
+            locations: locations.size,
+            attributes: attributeNames.size,
+          });
+          setCountsReady(true);
+        }
+      };
+      
+      // Start processing after a small delay to let UI render first
+      processChunk();
     };
-    if (typeof requestIdleCallback !== 'undefined') {
-      const id = requestIdleCallback(compute);
-      return () => cancelIdleCallback(id);
-    }
-    const id = setTimeout(compute, 0);
-    return () => clearTimeout(id);
+    
+    // Delay computation slightly to prioritize initial render
+    const timer = setTimeout(compute, 100);
+    return () => clearTimeout(timer);
   }, [products]);
 
   // Full sorted detail — only computed when user opens a detail view
@@ -451,10 +637,26 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       Array.from(map.values())
         .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }))
         .map(n => ({ name: n.name, path: n.path, count: n.count, children: toNodes(n.childMap) }));
+    for (const savedPath of savedCategories) {
+      const parts = String(savedPath)
+        .split('>>')
+        .map(s => s.trim())
+        .filter(Boolean);
+      let currentMap = rootMap;
+      let pathSoFar = '';
+      for (const part of parts) {
+        pathSoFar = pathSoFar ? `${pathSoFar} >> ${part}` : part;
+        if (!currentMap.has(part)) {
+          currentMap.set(part, { name: part, path: pathSoFar, count: 0, childMap: new Map() });
+        }
+        currentMap = currentMap.get(part)!.childMap;
+      }
+    }
+
     const categoryTree = toNodes(rootMap);
 
     return { units, categoryTree, brands, locations, attributes };
-  }, [goodsDetailView, products]);
+  }, [goodsDetailView, products, savedCategories]);
 
   const toggleAllowSellOutOfStock = async () => {
     const nextSettings = {
@@ -488,6 +690,17 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     onRefresh?.();
   };
 
+  const handleAddCategory = async (path: string) => {
+    const res = await fetch('/api/categories/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Lỗi lưu');
+    setSavedCategories(prev => [...prev, path].sort((a, b) => a.localeCompare(b, 'vi')));
+  };
+
   if (goodsDetailView) {
     const detailTitles: Record<GoodsDetailView, string> = {
       units: 'Đơn vị tính',
@@ -514,6 +727,13 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
             allNodes={goodsDetail.categoryTree}
             onSave={handleSaveCategory}
             onClose={() => setEditingNode(null)}
+          />
+        )}
+        {addingCategory && goodsDetail && (
+          <CategoryAddPopup
+            allNodes={goodsDetail.categoryTree}
+            onSave={handleAddCategory}
+            onClose={() => setAddingCategory(false)}
           />
         )}
         <div className="space-y-4">

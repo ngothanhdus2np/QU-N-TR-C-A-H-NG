@@ -691,3 +691,63 @@ ALTER FUNCTION delete_inventory_transaction_with_stock(UUID) SET search_path = p
 
 -- Reload PostgREST schema cache so newly created/replaced RPCs are callable via Supabase REST.
 NOTIFY pgrst, 'reload schema';
+
+-- User-defined categories (independent of products, allows pre-defining structure)
+CREATE TABLE IF NOT EXISTS categories (
+  path TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON categories FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- HOÁ ĐƠN ĐẦU VÀO — Giai đoạn 1 (2026-05-17)
+-- Chạy thủ công trên Supabase dashboard
+-- =====================================================
+
+-- Thêm trường chứng từ vào bảng nhập hàng
+ALTER TABLE inventory_transactions
+  ADD COLUMN IF NOT EXISTS invoice_status TEXT DEFAULT 'none'
+    CHECK (invoice_status IN ('full', 'partial', 'memo_only', 'none')),
+  ADD COLUMN IF NOT EXISTS invoiced_amount NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS invoice_changed_by TEXT,
+  ADD COLUMN IF NOT EXISTS invoice_changed_at TIMESTAMPTZ;
+
+-- Bảng lưu file HĐ VAT đính kèm (1 phiếu nhập → nhiều file)
+CREATE TABLE IF NOT EXISTS invoice_attachments (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  purchase_record_id UUID NOT NULL,
+  file_name          TEXT NOT NULL,
+  file_url           TEXT NOT NULL,
+  file_type          TEXT,             -- 'pdf' | 'xml' | 'image'
+  invoice_number     TEXT,
+  invoice_date       DATE,
+  supplier_tax_id    TEXT,
+  invoice_amount     NUMERIC,
+  vat_amount         NUMERIC,
+  uploaded_by        TEXT,
+  uploaded_at        TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE invoice_attachments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON invoice_attachments FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- =============================================================================
+-- Công nợ khách hàng
+-- =============================================================================
+
+-- Thêm cột debt_amount vào pos_customers
+ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS debt_amount NUMERIC DEFAULT 0;
+
+-- Bảng lịch sử công nợ khách hàng
+CREATE TABLE IF NOT EXISTS customer_debt_history (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  UUID NOT NULL REFERENCES pos_customers(id) ON DELETE CASCADE,
+  date         TEXT NOT NULL,
+  order_id     UUID,
+  type         TEXT NOT NULL CHECK (type IN ('debt', 'repay')),
+  amount       NUMERIC NOT NULL,
+  note         TEXT,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE customer_debt_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON customer_debt_history FOR ALL TO authenticated USING (true) WITH CHECK (true);

@@ -33,6 +33,7 @@ export function usePOSState({ paymentSettings, isActive = true }: UsePOSStatePro
       orderNote: '',
       otherFees: 0,
       cashReceived: 0,
+      isDebtMode: false,
       returnDiscount: 0,
       returnFee: 0,
       returnOtherRefund: 0,
@@ -77,6 +78,11 @@ export function usePOSState({ paymentSettings, isActive = true }: UsePOSStatePro
   const [itemDiscountPopup, setItemDiscountPopup] = useState<ItemDiscountPopupState | null>(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showEODReport, setShowEODReport] = useState(false);
+  const [showProcessOrdersModal, setShowProcessOrdersModal] = useState(false);
+  const [showProcessRepairsModal, setShowProcessRepairsModal] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showSelectInvoiceModal, setShowSelectInvoiceModal] = useState(false);
+  const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
   const [isAutoPrintEnabled, setIsAutoPrintEnabled] = useState(true);
   const [lastOrder, setLastOrder] = useState<POSOrder | null>(null);
 
@@ -211,6 +217,16 @@ export function usePOSState({ paymentSettings, isActive = true }: UsePOSStatePro
     setShowReturnModal,
     showEODReport,
     setShowEODReport,
+    showProcessOrdersModal,
+    setShowProcessOrdersModal,
+    showProcessRepairsModal,
+    setShowProcessRepairsModal,
+    showShortcutsModal,
+    setShowShortcutsModal,
+    showSelectInvoiceModal,
+    setShowSelectInvoiceModal,
+    selectedCartIndex,
+    setSelectedCartIndex,
     isAutoPrintEnabled,
     setIsAutoPrintEnabled,
     lastOrder,

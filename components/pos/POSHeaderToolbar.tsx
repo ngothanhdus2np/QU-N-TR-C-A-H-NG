@@ -2,8 +2,7 @@ import React from 'react';
 import {
   Activity,
   Check,
-  Eye,
-  FileInput,
+  FileText,
   Keyboard,
   LayoutGrid,
   LogOut,
@@ -17,7 +16,6 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Smartphone,
-  StickyNote,
   Undo2,
   X,
 } from 'lucide-react';
@@ -53,6 +51,10 @@ interface POSHeaderToolbarProps {
   setShowGridMenu: React.Dispatch<React.SetStateAction<boolean>>;
   onGoToManagement?: () => void;
   onViewEODReport?: () => void;
+  onProcessOrders?: () => void;
+  onProcessRepairs?: () => void;
+  onShowShortcuts?: () => void;
+  onShowSelectInvoice?: () => void;
 }
 
 const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
@@ -84,6 +86,10 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   setShowGridMenu,
   onGoToManagement,
   onViewEODReport,
+  onProcessOrders,
+  onProcessRepairs,
+  onShowShortcuts,
+  onShowSelectInvoice,
 }) => {
   const [showSortMenu, setShowSortMenu] = React.useState(false);
   const [displayLimit, setDisplayLimit] = React.useState(50);
@@ -451,8 +457,14 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                     onClick={onViewEODReport}
                   />
                   <GridMenuItem
+                    icon={<FileText className="h-4.5 w-4.5" />}
+                    label="Chọn hóa đơn"
+                    onClick={onShowSelectInvoice}
+                  />
+                  <GridMenuItem
                     icon={<ShoppingBag className="h-4.5 w-4.5" />}
                     label="Xử lý đặt hàng"
+                    onClick={onProcessOrders}
                   />
                   <GridMenuItem
                     icon={<Undo2 className="h-4.5 w-4.5" />}
@@ -461,15 +473,13 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                   <GridMenuItem
                     icon={<PenTool className="h-4.5 w-4.5" />}
                     label="Xử lý yêu cầu sửa chữa"
+                    onClick={onProcessRepairs}
                   />
                   <GridMenuItem
-                    icon={<StickyNote className="h-4.5 w-4.5 text-indigo-600" />}
-                    label="Lập phiếu thu"
-                    active
+                    icon={<Keyboard className="h-4.5 w-4.5" />}
+                    label="Phím tắt"
+                    onClick={onShowShortcuts}
                   />
-                  <GridMenuItem icon={<FileInput className="h-4.5 w-4.5" />} label="Import file" />
-                  <GridMenuItem icon={<Eye className="h-4.5 w-4.5" />} label="Tùy chọn hiển thị" />
-                  <GridMenuItem icon={<Keyboard className="h-4.5 w-4.5" />} label="Phím tắt" />
                   <GridMenuItem
                     icon={<LayoutGrid className="h-4.5 w-4.5" />}
                     label="Quản lý"

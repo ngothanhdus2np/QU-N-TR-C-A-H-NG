@@ -9,7 +9,14 @@ import { GoodsCreateProductInfoTab } from '../pos/GoodsCreateProductInfoTab';
 import { GoodsCreateProductModal, CreateProductModalTab } from '../pos/GoodsCreateProductModal';
 import { GoodsCreateProductTextTab } from '../pos/GoodsCreateProductTextTab';
 import SupplierForm from '../suppliers/SupplierForm';
-import { InventoryTransaction, POSProduct, AppData, AppDataSurgicalUpdate, Supplier, SupplierDebtRecord } from '../../types';
+import {
+  InventoryTransaction,
+  POSProduct,
+  AppData,
+  AppDataSurgicalUpdate,
+  Supplier,
+  SupplierDebtRecord,
+} from '../../types';
 import {
   AUTO_SKU_PLACEHOLDER,
   calculateNextImportPrice,
@@ -22,6 +29,7 @@ import { getCurrentStaffId } from '../shared/staff';
 import { exportToExcel, printToPDF } from '../../services/exportService';
 import { usePurchaseFormState } from '../../hooks/usePurchaseFormState';
 import { usePurchaseQuickModals } from '../../hooks/usePurchaseQuickModals';
+import { uploadPurchaseInvoice } from '../../services/invoiceService';
 
 interface PurchaseOrdersContainerProps {
   data: AppData;
@@ -70,6 +78,10 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     resetPurchaseForm,
     getPurchaseItemsNetTotal,
     getPurchaseBillDiscountAmount,
+    invoiceStatus,
+    setInvoiceStatus,
+    invoiceFile,
+    setInvoiceFile,
     showPurchaseReturnForm,
     setShowPurchaseReturnForm,
     returnItems,
@@ -115,7 +127,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
   } = quickModalsState;
 
   // Other states
-  const [selectedPurchaseDetail, setSelectedPurchaseDetail] = React.useState<InventoryTransaction | null>(null);
+  const [selectedPurchaseDetail, setSelectedPurchaseDetail] =
+    React.useState<InventoryTransaction | null>(null);
   const purchaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const returnFileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -141,25 +154,26 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     return item.quantity * (withPrice.price || 0) - (withPrice.discount || 0);
   };
 
-  const buildPurchaseExportRows = (purchases: InventoryTransaction[]) => (
-    purchases.flatMap(purchase => purchase.items.map(item => {
-      const withPrice = item as typeof item & { price?: number; discount?: number };
-      return {
-        'Mã phiếu': purchase.id,
-        'Ngày tạo': new Date(purchase.date).toLocaleString('vi-VN'),
-        'Nhà cung cấp': purchase.supplierName || 'NCC vãng lai',
-        'Người tạo': purchase.staffId || '',
-        'Trạng thái': purchase.status || 'completed',
-        SKU: item.sku || '',
-        'Tên hàng': item.name || item.productId,
-        'Số lượng': item.quantity,
-        'Đơn giá': withPrice.price || 0,
-        'Giảm giá': withPrice.discount || 0,
-        'Thành tiền': getPurchaseLineTotal(item),
-        'Ghi chú': purchase.note || '',
-      };
-    }))
-  );
+  const buildPurchaseExportRows = (purchases: InventoryTransaction[]) =>
+    purchases.flatMap(purchase =>
+      purchase.items.map(item => {
+        const withPrice = item as typeof item & { price?: number; discount?: number };
+        return {
+          'Mã phiếu': purchase.id,
+          'Ngày tạo': new Date(purchase.date).toLocaleString('vi-VN'),
+          'Nhà cung cấp': purchase.supplierName || 'NCC vãng lai',
+          'Người tạo': purchase.staffId || '',
+          'Trạng thái': purchase.status || 'completed',
+          SKU: item.sku || '',
+          'Tên hàng': item.name || item.productId,
+          'Số lượng': item.quantity,
+          'Đơn giá': withPrice.price || 0,
+          'Giảm giá': withPrice.discount || 0,
+          'Thành tiền': getPurchaseLineTotal(item),
+          'Ghi chú': purchase.note || '',
+        };
+      })
+    );
 
   const handleExportPurchases = (purchases: InventoryTransaction[]) => {
     if (purchases.length === 0) {
@@ -174,15 +188,20 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       showToast('Chưa có phiếu trả hàng nhập để xuất', 'warning');
       return;
     }
-    exportToExcel(buildPurchaseExportRows(returns), 'Phieu_Tra_Hang_Nhap', 'Chi tiết trả hàng nhập');
+    exportToExcel(
+      buildPurchaseExportRows(returns),
+      'Phieu_Tra_Hang_Nhap',
+      'Chi tiết trả hàng nhập'
+    );
   };
 
   const handlePrintPurchase = (transaction: InventoryTransaction) => {
     const isPurchaseReturn = transaction.type === 'PurchaseReturn';
     const title = isPurchaseReturn ? 'Phiếu trả hàng nhập' : 'Phiếu nhập hàng';
-    const rows = transaction.items.map(item => {
-      const withPrice = item as typeof item & { price?: number; discount?: number };
-      return `<tr>
+    const rows = transaction.items
+      .map(item => {
+        const withPrice = item as typeof item & { price?: number; discount?: number };
+        return `<tr>
         <td>${item.sku || ''}</td>
         <td>${item.name || item.productId}</td>
         <td class="text-right">${item.quantity}</td>
@@ -190,7 +209,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         <td class="text-right">${(withPrice.discount || 0).toLocaleString('vi-VN')}đ</td>
         <td class="text-right">${getPurchaseLineTotal(item).toLocaleString('vi-VN')}đ</td>
       </tr>`;
-    }).join('');
+      })
+      .join('');
 
     printToPDF(
       `${title} ${transaction.id}`,
@@ -472,7 +492,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       rows.forEach(row => {
         const sku = String(getCell(row, ['Mã hàng', 'SKU', 'Product Code']) || '').trim();
         const name = String(getCell(row, ['Tên hàng', 'Tên sản phẩm', 'Name']) || '').trim();
-        const product = products.find(p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase());
+        const product = products.find(
+          p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase()
+        );
         if (!product) {
           if (sku || name) missing.push(sku || name);
           return;
@@ -482,7 +504,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           productId: product.id,
           name: product.name,
           quantity: Math.max(1, Number(getCell(row, ['Số lượng', 'Quantity', 'SL']) || 1)),
-          price: Number(getCell(row, ['Đơn giá', 'Giá vốn', 'Price', 'Cost']) || product.importPrice || 0),
+          price: Number(
+            getCell(row, ['Đơn giá', 'Giá vốn', 'Price', 'Cost']) || product.importPrice || 0
+          ),
           discount: Number(getCell(row, ['Giảm giá', 'Discount']) || 0),
         });
       });
@@ -539,7 +563,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       rows.forEach(row => {
         const sku = String(getCell(row, ['Mã hàng', 'SKU', 'Product Code']) || '').trim();
         const name = String(getCell(row, ['Tên hàng', 'Tên sản phẩm', 'Name']) || '').trim();
-        const product = products.find(p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase());
+        const product = products.find(
+          p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase()
+        );
         if (!product) {
           if (sku || name) missing.push(sku || name);
           return;
@@ -549,7 +575,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           productId: product.id,
           name: product.name,
           quantity: Math.max(1, Number(getCell(row, ['Số lượng', 'Quantity', 'SL']) || 1)),
-          price: Number(getCell(row, ['Giá nhập', 'Đơn giá', 'Giá vốn', 'Price', 'Cost']) || product.importPrice || 0),
+          price: Number(
+            getCell(row, ['Giá nhập', 'Đơn giá', 'Giá vốn', 'Price', 'Cost']) ||
+              product.importPrice ||
+              0
+          ),
           discount: Number(getCell(row, ['Giảm giá', 'Discount']) || 0),
         });
       });
@@ -610,7 +640,10 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'PhieuTraHangNhap');
-    XLSX.writeFile(workbook, `Mau_Phieu_Tra_Hang_Nhap_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
+    XLSX.writeFile(
+      workbook,
+      `Mau_Phieu_Tra_Hang_Nhap_${new Date().toLocaleDateString('sv-SE')}.xlsx`
+    );
   };
 
   const handleQuickAddProduct = (target: 'purchase' | 'return' = 'purchase') => {
@@ -635,7 +668,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       sku,
       name,
       categoryId: String(quickProductForm.categoryId || quickProductForm.categoryPath || '').trim(),
-      categoryPath: String(quickProductForm.categoryPath || quickProductForm.categoryId || '').trim(),
+      categoryPath: String(
+        quickProductForm.categoryPath || quickProductForm.categoryId || ''
+      ).trim(),
       brand: quickProductForm.brand,
       importPrice,
       salePrice,
@@ -726,6 +761,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         supplierName,
         note: purchaseNote || `Nhập hàng từ ${supplierName}`,
         status: 'completed',
+        invoiceStatus,
         totalAmount: Math.max(0, getPurchaseItemsNetTotal() - getPurchaseBillDiscountAmount()),
         items: purchaseItems.map(item => {
           const product = products.find(p => p.id === item.productId);
@@ -785,6 +821,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           ]);
         }
         throw err;
+      }
+
+      // Upload invoice file nếu có
+      if (invoiceFile) {
+        try {
+          await uploadPurchaseInvoice(transaction.id, invoiceFile, getCurrentStaffId());
+        } catch {
+          showToast('Lưu phiếu thành công nhưng upload HĐ thất bại. Vui lòng thử lại.', 'error');
+        }
       }
 
       // Reset form
@@ -918,7 +963,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
               setShowLocationSection={setShowQuickProductLocationSection}
               showUnitsSection={showQuickProductUnitsSection}
               setShowUnitsSection={setShowQuickProductUnitsSection}
-              addBaseUnit={() => showToast('Vui lòng thêm đơn vị tính sau khi tạo hàng hóa.', 'warning')}
+              addBaseUnit={() =>
+                showToast('Vui lòng thêm đơn vị tính sau khi tạo hàng hóa.', 'warning')
+              }
             />
           )}
           {quickProductModalTab === 'desc' && (
@@ -986,6 +1033,10 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             onSaveDraft={handleSaveDraft}
             onDownloadTemplate={handleDownloadTemplate}
             staffLabel={getCurrentStaffId()}
+            invoiceStatus={invoiceStatus}
+            setInvoiceStatus={setInvoiceStatus}
+            invoiceFile={invoiceFile}
+            setInvoiceFile={setInvoiceFile}
           />
         )}
         {showPurchaseReturnForm && (
@@ -1050,7 +1101,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         <PurchaseOrderDetailModal
           transaction={selectedPurchaseDetail}
           onClose={() => setSelectedPurchaseDetail(null)}
-          onExport={selectedPurchaseDetail.type === 'PurchaseReturn' ? handleExportReturns : handleExportPurchases}
+          onExport={
+            selectedPurchaseDetail.type === 'PurchaseReturn'
+              ? handleExportReturns
+              : handleExportPurchases
+          }
           onPrint={handlePrintPurchase}
         />
       )}

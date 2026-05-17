@@ -10,6 +10,8 @@ const CartItemRow = React.memo(
     onUpdate,
     onRemove,
     isReturnItem,
+    isSelected,
+    onSelect,
     onDiscountClick,
   }: {
     item: POSOrderItem;
@@ -17,14 +19,19 @@ const CartItemRow = React.memo(
     onUpdate: (id: string, delta: number) => void;
     onRemove: (id: string) => void;
     isReturnItem?: boolean;
+    isSelected?: boolean;
+    onSelect?: () => void;
     onDiscountClick?: (productId: string, price: number, discount: number, rect: DOMRect) => void;
   }) => (
     <div
+      onClick={onSelect}
       className={`flex items-baseline gap-1.5 px-2 py-2 rounded-xl shadow-sm border transition-all font-normal text-lg group
     ${
       isReturnItem
         ? 'bg-rose-50/40 border-rose-200 hover:shadow-sm'
-        : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md'
+        : isSelected
+          ? 'bg-indigo-50 border-indigo-400 shadow-md ring-1 ring-indigo-300'
+          : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md'
     }`}
     >
       <span className="w-12 shrink-0 text-center text-slate-400 italic tabular-nums">{idx}</span>
@@ -99,6 +106,8 @@ interface POSCartProps {
   consultantSearchRef: React.RefObject<HTMLInputElement>;
   onUpdateQuantity: (productId: string, delta: number) => void;
   onRemoveFromCart: (productId: string) => void;
+  selectedCartIndex?: number;
+  onSelectCartItem?: (idx: number) => void;
   onUpdateReturnQuantity: (productId: string, delta: number) => void;
   onRemoveFromReturnCart: (productId: string) => void;
   onDiscountClick: (productId: string, price: number, discount: number, rect: DOMRect) => void;
@@ -118,6 +127,8 @@ const POSCart: React.FC<POSCartProps> = ({
   consultantSearchRef,
   onUpdateQuantity,
   onRemoveFromCart,
+  selectedCartIndex = -1,
+  onSelectCartItem,
   onUpdateReturnQuantity,
   onRemoveFromReturnCart,
   onDiscountClick,
@@ -230,6 +241,8 @@ const POSCart: React.FC<POSCartProps> = ({
                   onUpdate={onUpdateQuantity}
                   onRemove={onRemoveFromCart}
                   onDiscountClick={onDiscountClick}
+                  isSelected={idx === selectedCartIndex}
+                  onSelect={() => onSelectCartItem?.(idx)}
                 />
               ))}
             </div>

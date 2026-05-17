@@ -21,6 +21,21 @@
 
 ---
 
+### 2026-05-17 — Claude — Phiên 11 (Hệ thống Hóa đơn đầu vào - Giai đoạn 1-4)
+
+**Đã làm:**
+- `supabase_setup.sql`: Thêm SQL migration — ALTER TABLE inventory_transactions thêm 4 cột (invoice_status, invoiced_amount, invoice_changed_by, invoice_changed_at); CREATE TABLE invoice_attachments với RLS policy
+- `types.ts`: Thêm 4 optional fields vào InventoryTransaction interface (invoiceStatus, invoicedAmount, invoiceChangedBy, invoiceChangedAt)
+- `services/invoiceService.ts` (NEW): Service upload file lên Supabase Storage bucket `purchase-invoices`; lưu record vào bảng `invoice_attachments`; export InvoiceStatus type
+- `components/pos/useGoodsPurchase.ts`: Thêm invoiceStatus + invoiceFile state; handleCompletePurchase → async; upload file sau khi tạo transaction
+- `components/pos/GoodsPurchaseForm.tsx`: Thêm 4 radio buttons chọn trạng thái chứng từ (FileCheck/FileMinus/FileText/FileX icons); nút upload file ẩn; badge "Chứng từ" trong lịch sử phiếu
+- `components/purchase/PurchaseOrdersContainer.tsx`: Wire invoiceStatus vào transaction; upload file sau khi lưu; pass 4 props mới vào GoodsPurchaseForm
+- `components/pos/GoodsInventory.tsx`: Destructure và pass 4 props mới vào GoodsPurchaseForm
+- `components/orders/PurchaseInvoices.tsx` (REWRITE lớn): Giai đoạn 1: InvoiceBadge + cột Chứng từ; Giai đoạn 3: 5 tabs, header thống kê, expandable rows, signed URLs, loading attachments; Giai đoạn 4: import xlsx, showReport/vatRate state, monthlyReport + vatSummary computed, handleExportExcel (2 sheets), toggle Báo cáo/Danh sách, report UI (4 VAT cards + bảng tháng)
+- Files: `supabase_setup.sql`, `types.ts`, `services/invoiceService.ts`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsPurchaseForm.tsx`, `components/purchase/PurchaseOrdersContainer.tsx`, `components/pos/GoodsInventory.tsx`, `components/orders/PurchaseInvoices.tsx`
+
+---
+
 ### 2026-05-16 — Claude — Phiên 10 (Revert GoodsInventory display + fix TypeScript errors)
 
 **Đã làm:**

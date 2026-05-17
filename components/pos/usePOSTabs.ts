@@ -38,10 +38,11 @@ const createEmptySalesTab = (
   orderNote: '',
   otherFees: 0,
   cashReceived: 0,
+  isDebtMode: false,
   returnDiscount: 0,
   returnFee: 0,
   returnOtherRefund: 0,
-  splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 }
+  splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
 });
 
 export const usePOSTabs = ({
@@ -53,55 +54,74 @@ export const usePOSTabs = ({
   closeConfirm,
   defaultPaymentMethod = 'Cash',
 }: UsePOSTabsParams) => {
-  const updateActiveTab = React.useCallback((updates: Partial<InvoiceTab>) => {
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, ...updates } : t));
-  }, [activeTabId, setTabs]);
+  const updateActiveTab = React.useCallback(
+    (updates: Partial<InvoiceTab>) => {
+      setTabs(prev => prev.map(t => (t.id === activeTabId ? { ...t, ...updates } : t)));
+    },
+    [activeTabId, setTabs]
+  );
 
   const addNewTab = React.useCallback(() => {
-    const nextNum = Math.max(0, ...tabs.map(t => {
-      const match = t.name.match(/\d+/);
-      return match ? parseInt(match[0]) : 0;
-    })) + 1;
+    const nextNum =
+      Math.max(
+        0,
+        ...tabs.map(t => {
+          const match = t.name.match(/\d+/);
+          return match ? parseInt(match[0]) : 0;
+        })
+      ) + 1;
     const newId = generateId();
-    setTabs(prev => [...prev, createEmptySalesTab(newId, `Hóa đơn ${nextNum}`, defaultPaymentMethod)]);
+    setTabs(prev => [
+      ...prev,
+      createEmptySalesTab(newId, `Hóa đơn ${nextNum}`, defaultPaymentMethod),
+    ]);
     setActiveTabId(newId);
   }, [defaultPaymentMethod, setActiveTabId, setTabs, tabs]);
 
-  const performCloseTab = React.useCallback((id: string) => {
-    if (tabs.length === 1) {
-      setTabs([createEmptySalesTab('default', 'Hóa đơn 1', defaultPaymentMethod)]);
-      setActiveTabId('default');
-      return;
-    }
+  const performCloseTab = React.useCallback(
+    (id: string) => {
+      if (tabs.length === 1) {
+        setTabs([createEmptySalesTab('default', 'Hóa đơn 1', defaultPaymentMethod)]);
+        setActiveTabId('default');
+        return;
+      }
 
-    const newTabs = tabs.filter(t => t.id !== id);
-    setTabs(newTabs);
-    if (activeTabId === id) {
-      setActiveTabId(newTabs[0].id);
-    }
-  }, [activeTabId, defaultPaymentMethod, setActiveTabId, setTabs, tabs]);
+      const newTabs = tabs.filter(t => t.id !== id);
+      setTabs(newTabs);
+      if (activeTabId === id) {
+        setActiveTabId(newTabs[0].id);
+      }
+    },
+    [activeTabId, defaultPaymentMethod, setActiveTabId, setTabs, tabs]
+  );
 
-  const closeTab = React.useCallback((e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const closeTab = React.useCallback(
+    (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
 
-    const tabToClose = tabs.find(t => t.id === id);
+      const tabToClose = tabs.find(t => t.id === id);
 
-    if (tabToClose && (tabToClose.cart.length > 0 || (tabToClose.returnCart && tabToClose.returnCart.length > 0))) {
-      openConfirm({
-        title: 'Xác nhận đóng hóa đơn',
-        message: `Hóa đơn "${tabToClose.name}" đang có ${tabToClose.cart.length + (tabToClose.returnCart?.length || 0)} sản phẩm. Bạn có chắc chắn muốn đóng?`,
-        variant: 'warning',
-        confirmLabel: 'Đóng hóa đơn',
-        onConfirm: () => {
-          performCloseTab(id);
-          closeConfirm();
-        }
-      });
-      return;
-    }
+      if (
+        tabToClose &&
+        (tabToClose.cart.length > 0 || (tabToClose.returnCart && tabToClose.returnCart.length > 0))
+      ) {
+        openConfirm({
+          title: 'Xác nhận đóng hóa đơn',
+          message: `Hóa đơn "${tabToClose.name}" đang có ${tabToClose.cart.length + (tabToClose.returnCart?.length || 0)} sản phẩm. Bạn có chắc chắn muốn đóng?`,
+          variant: 'warning',
+          confirmLabel: 'Đóng hóa đơn',
+          onConfirm: () => {
+            performCloseTab(id);
+            closeConfirm();
+          },
+        });
+        return;
+      }
 
-    performCloseTab(id);
-  }, [closeConfirm, openConfirm, performCloseTab, tabs]);
+      performCloseTab(id);
+    },
+    [closeConfirm, openConfirm, performCloseTab, tabs]
+  );
 
   return {
     updateActiveTab,

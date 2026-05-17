@@ -17,10 +17,13 @@ import {
   POSCustomer,
   POSOrder,
   POSOrderItem,
+  CustomerDebtRecord,
   BrandProfile,
   POSInventorySettings,
+  POSKeyboardSettings,
   POSPaymentSettings,
   ProductGroup,
+  DEFAULT_POS_KEYBOARD_SHORTCUTS,
 } from '../../types';
 import { InvoiceTab } from './types';
 import { usePOSKeyboard } from './usePOSKeyboard';
@@ -29,6 +32,10 @@ import { usePOSTabs } from './usePOSTabs';
 import { usePOSState } from '../../hooks/usePOSState';
 import POSMobileView from './POSMobileView';
 import POSMobileCheckoutSheet from './POSMobileCheckoutSheet';
+import ProcessOrdersModal from './ProcessOrdersModal';
+import ProcessRepairsModal from './ProcessRepairsModal';
+import ShortcutsModal from './ShortcutsModal';
+import SelectInvoiceModal from './SelectInvoiceModal';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
@@ -50,7 +57,8 @@ interface POSComputerProps {
   onPlaceOrder: (
     order: POSOrder,
     updatedProducts: POSProduct[],
-    updatedCustomer?: POSCustomer
+    updatedCustomer?: POSCustomer,
+    debtRecord?: CustomerDebtRecord
   ) => Promise<void>;
   onReturnOrder: (
     order: POSOrder,
@@ -78,6 +86,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   onReturnOrder,
   onAddCustomer,
   onGoToManagement,
+  brandProfile,
   paymentSettings,
   inventorySettings,
   offlinePendingCount = 0,
@@ -128,6 +137,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setShowReturnModal,
     showEODReport,
     setShowEODReport,
+    showProcessOrdersModal,
+    setShowProcessOrdersModal,
+    showProcessRepairsModal,
+    setShowProcessRepairsModal,
+    showShortcutsModal,
+    setShowShortcutsModal,
+    showSelectInvoiceModal,
+    setShowSelectInvoiceModal,
+    selectedCartIndex,
+    setSelectedCartIndex,
     isAutoPrintEnabled,
     setIsAutoPrintEnabled,
     lastOrder,
@@ -174,6 +193,29 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const searchResultRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const checkoutRef = useRef<() => void>(() => {});
   const cartLengthRef = useRef(0);
+  const isAutoPrintEnabledRef = useRef(isAutoPrintEnabled);
+  const selectedCartIndexRef = useRef(selectedCartIndex);
+  const cartItemsRef = useRef(activeTab.cart);
+  const updateQuantityRef = useRef<(id: string, delta: number) => void>(() => {});
+
+  const [keyboardSettings, setKeyboardSettings] = useState<POSKeyboardSettings>(() => {
+    try {
+      const saved = localStorage.getItem('pos_keyboard_shortcuts');
+      if (saved) return { shortcuts: JSON.parse(saved) };
+    } catch {}
+    return { shortcuts: DEFAULT_POS_KEYBOARD_SHORTCUTS };
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const saved = localStorage.getItem('pos_keyboard_shortcuts');
+        if (saved) setKeyboardSettings({ shortcuts: JSON.parse(saved) });
+      } catch {}
+    };
+    window.addEventListener('pos_keyboard_settings_changed', handler);
+    return () => window.removeEventListener('pos_keyboard_settings_changed', handler);
+  }, []);
 
   const isMobile = useIsMobile();
   const [autoPromotion] = useState(0);
@@ -328,6 +370,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setSearchTerm,
     setDebouncedSearchTerm,
     setShowProductResults,
+    addNewTab,
+    isAutoPrintEnabledRef,
+    setIsAutoPrintEnabled,
+    selectedCartIndexRef,
+    setSelectedCartIndex,
+    cartItemsRef,
+    updateQuantityRef,
+    keyboardSettings,
   });
 
   const updateQuantity = React.useCallback(
@@ -359,6 +409,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
     },
     [activeTabId, products, allowSellOutOfStock]
   );
+
+  // Keep updateQuantityRef current so keyboard handler can call latest version
+  updateQuantityRef.current = updateQuantity;
 
   const removeFromCart = React.useCallback(
     (productId: string) => {
@@ -479,7 +532,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
   }, [netPayable]);
 
   // Return Invoices filtering
-  const currentCashReceived = cashReceived || netPayable;
+  const isDebtMode = activeTab.isDebtMode;
+  const currentCashReceived = isDebtMode ? 0 : cashReceived || netPayable;
 
   const handleCheckout = async () => {
     if (isCheckoutLocked) return;
@@ -580,17 +634,32 @@ const POSComputer: React.FC<POSComputerProps> = ({
     });
 
     let updatedCustomer: POSCustomer | undefined;
+    let debtRecord: CustomerDebtRecord | undefined;
+
     if (selectedCustomer) {
+      const debtAdded = isDebtMode ? netPayable : 0;
       updatedCustomer = {
         ...selectedCustomer,
         points: selectedCustomer.points + pointsEarned,
         totalSpent: selectedCustomer.totalSpent + netPayable,
         lastVisit: new Date().toISOString(),
+        debtAmount: (selectedCustomer.debtAmount ?? 0) + debtAdded,
       };
+      if (debtAdded > 0) {
+        debtRecord = {
+          id: generateId(),
+          customerId: selectedCustomer.id,
+          date: new Date().toISOString(),
+          orderId: orderId,
+          type: 'debt',
+          amount: debtAdded,
+          note: `Đơn hàng ${orderCode}`,
+        };
+      }
     }
 
     try {
-      await onPlaceOrder(newOrder, updatedProducts, updatedCustomer);
+      await onPlaceOrder(newOrder, updatedProducts, updatedCustomer, debtRecord);
 
       // Set last order for receipt and show modal IF auto-print is enabled
       setLastOrder(newOrder);
@@ -612,6 +681,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
   useEffect(() => {
     checkoutRef.current = handleCheckout;
     cartLengthRef.current = mode === 'return' ? cart.length + returnCart.length : cart.length;
+    isAutoPrintEnabledRef.current = isAutoPrintEnabled;
+    selectedCartIndexRef.current = selectedCartIndex;
+    cartItemsRef.current = activeTab.cart;
   });
 
   const handleFinishOrder = () => {
@@ -639,6 +711,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           orderNote: '',
           otherFees: 0,
           cashReceived: 0,
+          isDebtMode: false,
           returnDiscount: 0,
           returnFee: 0,
           returnOtherRefund: 0,
@@ -894,6 +967,22 @@ const POSComputer: React.FC<POSComputerProps> = ({
         setShowGridMenu={setShowGridMenu}
         onGoToManagement={onGoToManagement}
         onViewEODReport={() => setShowEODReport(true)}
+        onProcessOrders={() => {
+          setShowGridMenu(false);
+          setShowProcessOrdersModal(true);
+        }}
+        onProcessRepairs={() => {
+          setShowGridMenu(false);
+          setShowProcessRepairsModal(true);
+        }}
+        onShowShortcuts={() => {
+          setShowGridMenu(false);
+          setShowShortcutsModal(true);
+        }}
+        onShowSelectInvoice={() => {
+          setShowGridMenu(false);
+          setShowSelectInvoiceModal(true);
+        }}
       />
 
       <div
@@ -914,6 +1003,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
           consultantSearchRef={consultantSearchRef}
           onUpdateQuantity={updateQuantity}
           onRemoveFromCart={removeFromCart}
+          selectedCartIndex={selectedCartIndex}
+          onSelectCartItem={idx => setSelectedCartIndex(() => idx)}
           onUpdateReturnQuantity={updateReturnQuantity}
           onRemoveFromReturnCart={removeFromReturnCart}
           onDiscountClick={(productId, price, discount, rect) => {
@@ -947,6 +1038,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           finalReturnAmount={finalReturnAmount}
           amountToPayCustomer={amountToPayCustomer}
           currentCashReceived={currentCashReceived}
+          isDebtMode={activeTab.isDebtMode}
           pointsEarned={pointsEarned}
           paymentMethod={paymentMethod}
           paymentSettings={paymentSettings}
@@ -1004,6 +1096,33 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
       {/* End of Day Report Modal */}
       {showEODReport && <EndOfDayReport orders={orders} onClose={() => setShowEODReport(false)} />}
+
+      {/* Process Orders Modal */}
+      {showProcessOrdersModal && (
+        <ProcessOrdersModal
+          orders={orders}
+          customers={customers}
+          storeName={brandProfile?.name}
+          onClose={() => setShowProcessOrdersModal(false)}
+        />
+      )}
+
+      {/* Process Repairs Modal */}
+      {showProcessRepairsModal && (
+        <ProcessRepairsModal onClose={() => setShowProcessRepairsModal(false)} />
+      )}
+
+      {/* Shortcuts Modal */}
+      {showShortcutsModal && <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />}
+
+      {/* Select Invoice Modal */}
+      {showSelectInvoiceModal && (
+        <SelectInvoiceModal
+          orders={orders}
+          customers={customers}
+          onClose={() => setShowSelectInvoiceModal(false)}
+        />
+      )}
 
       {/* Confirm Dialog */}
       <ConfirmDialog

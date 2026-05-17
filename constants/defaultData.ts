@@ -413,6 +413,7 @@ export const INITIAL_APP_DATA: AppData = {
   posProducts: [],
   posOrders: [],
   posCustomers: [],
+  customerDebtHistory: [],
   inventoryTransactions: [],
   posPaymentSettings: DEFAULT_POS_PAYMENT_SETTINGS,
   posInventorySettings: DEFAULT_POS_INVENTORY_SETTINGS,

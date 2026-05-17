@@ -1,5 +1,6 @@
 import {
   AppData,
+  CustomerDebtRecord,
   InventoryTransaction,
   POSCustomer,
   POSOrder,
@@ -21,6 +22,7 @@ type PlaceOrderArgs = PosOrderCallbacks & {
   order: POSOrder;
   updatedProducts: POSProduct[];
   updatedCustomer?: POSCustomer;
+  debtRecord?: CustomerDebtRecord;
   allowSellOutOfStock?: boolean;
 };
 
@@ -174,6 +176,7 @@ export async function processPlaceOrder({
   order,
   updatedProducts,
   updatedCustomer,
+  debtRecord,
   allowSellOutOfStock = false,
   pushBatch,
   updateSurgical,
@@ -244,6 +247,11 @@ export async function processPlaceOrder({
           await updateSurgical([{ key: 'posCustomers', item: originalCustomer }]);
         }
       });
+    }
+
+    // Bước 3b: Ghi lịch sử công nợ khách hàng (nếu có)
+    if (debtRecord) {
+      await pushBatch('customerDebtHistory', [debtRecord]);
     }
 
     // Bước 4: Cập nhật revenue

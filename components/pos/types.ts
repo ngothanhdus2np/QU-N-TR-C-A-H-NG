@@ -13,6 +13,7 @@ export interface InvoiceTab {
   orderNote: string;
   otherFees: number;
   cashReceived: number;
+  isDebtMode: boolean;
   // Return specific fields
   returnDiscount: number;
   returnFee: number;

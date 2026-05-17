@@ -412,9 +412,11 @@ export interface AppData {
   posProducts: POSProduct[];
   posOrders: POSOrder[];
   posCustomers: POSCustomer[];
+  customerDebtHistory: CustomerDebtRecord[];
   inventoryTransactions: InventoryTransaction[];
   posPaymentSettings?: POSPaymentSettings;
   posInventorySettings?: POSInventorySettings;
+  posKeyboardSettings?: POSKeyboardSettings;
   // Nhà cung cấp
   suppliers: Supplier[];
   supplierDebts: SupplierDebtRecord[];
@@ -564,6 +566,134 @@ export interface POSInventorySettings {
   allowSellOutOfStock: boolean;
 }
 
+export type POSKeyboardAction =
+  | 'addTab'
+  | 'toggleAutoPrint'
+  | 'focusSearch'
+  | 'openConsultant'
+  | 'focusCustomer'
+  | 'checkout'
+  | 'toggleFullscreen'
+  | 'cartQtyUp'
+  | 'cartQtyDown'
+  | 'cartNextItem'
+  | 'cartPrevItem'
+  | 'cartSelectFirst';
+
+export interface POSKeyboardShortcut {
+  id: string;
+  key: string;
+  modifiers?: { shift?: boolean; ctrl?: boolean };
+  label: string;
+  action: POSKeyboardAction;
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+export interface POSKeyboardSettings {
+  shortcuts: POSKeyboardShortcut[];
+}
+
+export const DEFAULT_POS_KEYBOARD_SHORTCUTS: POSKeyboardShortcut[] = [
+  {
+    id: 'addTab',
+    key: 'F1',
+    label: 'Thêm hóa đơn mới',
+    action: 'addTab',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'toggleAutoPrint',
+    key: 'F2',
+    label: 'Bật/tắt in tự động',
+    action: 'toggleAutoPrint',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'focusSearch',
+    key: 'F3',
+    label: 'Tìm hàng hóa',
+    action: 'focusSearch',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'openConsultant',
+    key: 'F3',
+    label: 'Mở tư vấn bán hàng',
+    action: 'openConsultant',
+    enabled: true,
+    isDefault: true,
+    modifiers: { shift: true },
+  },
+  {
+    id: 'focusCustomer',
+    key: 'F4',
+    label: 'Tìm khách hàng',
+    action: 'focusCustomer',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'checkout',
+    key: 'F9',
+    label: 'Thanh toán',
+    action: 'checkout',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'toggleFullscreen',
+    key: 'F11',
+    label: 'Toàn màn hình',
+    action: 'toggleFullscreen',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'cartQtyUp',
+    key: 'ArrowUp',
+    label: 'Tăng số lượng item chọn',
+    action: 'cartQtyUp',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'cartQtyDown',
+    key: 'ArrowDown',
+    label: 'Giảm số lượng item chọn',
+    action: 'cartQtyDown',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'cartNextItem',
+    key: 'Enter',
+    label: 'Chọn item tiếp theo',
+    action: 'cartNextItem',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'cartPrevItem',
+    key: 'Shift',
+    label: 'Chọn item trước',
+    action: 'cartPrevItem',
+    enabled: true,
+    isDefault: true,
+  },
+  {
+    id: 'cartSelectFirst',
+    key: 'Home',
+    label: 'Chọn item đầu tiên',
+    action: 'cartSelectFirst',
+    enabled: true,
+    isDefault: true,
+  },
+];
+
 export interface POSCustomer {
   id: string;
   name: string;
@@ -575,6 +705,17 @@ export interface POSCustomer {
   totalSpent: number;
   lastVisit?: string;
   tier: 'Standard' | 'Silver' | 'Gold' | 'Diamond';
+  debtAmount?: number;
+}
+
+export interface CustomerDebtRecord {
+  id: string;
+  customerId: string;
+  date: string;
+  orderId?: string;
+  type: 'debt' | 'repay';
+  amount: number;
+  note?: string;
 }
 
 export interface InventoryTransaction {
@@ -610,6 +751,11 @@ export interface InventoryTransaction {
   supplierName?: string; // For Import transactions
   totalAmount?: number; // Total amount for Import transactions
   status?: 'draft' | 'completed' | 'cancelled' | 'balanced'; // Status for Import/Check transactions
+  // Invoice tracking fields (for Import transactions)
+  invoiceStatus?: 'full' | 'partial' | 'memo_only' | 'none';
+  invoicedAmount?: number;
+  invoiceChangedBy?: string;
+  invoiceChangedAt?: string;
   // Audit/Check specific fields
   balancedDate?: string; // Date when audit was balanced
   totalActualQty?: number; // Total actual quantity counted

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PurchaseItem, PurchaseDiscountType } from '../components/pos/GoodsPurchaseForm';
+import { InvoiceStatus } from '../services/invoiceService';
 
 export function usePurchaseFormState() {
   // Purchase form states
@@ -9,6 +10,8 @@ export function usePurchaseFormState() {
   const [purchaseNote, setPurchaseNote] = useState('');
   const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(0);
   const [purchaseDiscountType, setPurchaseDiscountType] = useState<PurchaseDiscountType>('fixed');
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>('none');
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   // Purchase return form states
   const [showPurchaseReturnForm, setShowPurchaseReturnForm] = useState(false);
@@ -27,6 +30,8 @@ export function usePurchaseFormState() {
     setPurchaseNote('');
     setPurchaseDiscountValue(0);
     setPurchaseDiscountType('fixed');
+    setInvoiceStatus('none');
+    setInvoiceFile(null);
   };
 
   const resetReturnForm = () => {
@@ -79,6 +84,10 @@ export function usePurchaseFormState() {
     resetPurchaseForm,
     getPurchaseItemsNetTotal,
     getPurchaseBillDiscountAmount,
+    invoiceStatus,
+    setInvoiceStatus,
+    invoiceFile,
+    setInvoiceFile,
 
     // Return form
     showPurchaseReturnForm,

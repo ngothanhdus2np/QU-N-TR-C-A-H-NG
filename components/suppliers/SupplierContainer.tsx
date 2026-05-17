@@ -86,9 +86,25 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       // Strip computed fields before saving
       const { totalPurchase: _totalPurchase, currentDebt: _currentDebt, ...cleanData } = supplierData;
 
+      // Auto-generate supplier code if not provided
+      let supplierCode = cleanData.code?.trim();
+      if (!supplierCode) {
+        // Generate NCC0001, NCC0002, etc.
+        const existingCodes = rawSuppliers
+          .map(s => s.code)
+          .filter(Boolean)
+          .filter(code => /^NCC\d+$/.test(code!))
+          .map(code => parseInt(code!.replace('NCC', ''), 10))
+          .filter(num => !isNaN(num));
+        
+        const maxNum = existingCodes.length > 0 ? Math.max(...existingCodes) : 0;
+        supplierCode = `NCC${String(maxNum + 1).padStart(4, '0')}`;
+      }
+
       const supplier: Supplier = {
         ...cleanData,
         id: supplierId,
+        code: supplierCode,
       };
 
       if (onUpdateSurgical) {
@@ -102,6 +118,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
 
       setShowSupplierForm(false);
       setEditingSupplier(null);
+      showToast(
+        isEdit ? 'Đã cập nhật nhà cung cấp' : 'Đã thêm nhà cung cấp mới',
+        'success'
+      );
     } catch (err) {
       console.error('[SupplierContainer] Save failed', err);
       showToast('Lưu thất bại. Vui lòng thử lại.', 'error');
@@ -155,6 +175,8 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       if (viewingSupplier?.id === id) {
         setViewingSupplier(null);
       }
+
+      showToast('Đã xóa nhà cung cấp', 'success');
     } catch (err) {
       console.error('[SupplierContainer] Delete failed', err);
       showToast('Xóa thất bại. Vui lòng thử lại.', 'error');

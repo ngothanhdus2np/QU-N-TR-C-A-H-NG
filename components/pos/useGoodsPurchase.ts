@@ -3,8 +3,15 @@ import { POSProduct, InventoryTransaction } from '../../types';
 import { calculateNextImportPrice, generateId, getInventoryCostMethod } from '../../src/lib';
 import { getCurrentStaffId } from '../shared/staff';
 import { PurchaseDiscountType } from './GoodsPurchaseForm';
+import { InvoiceStatus, uploadPurchaseInvoice } from '../../services/invoiceService';
 
-type PurchaseItem = { productId: string; quantity: number; price: number; name: string; discount: number };
+type PurchaseItem = {
+  productId: string;
+  quantity: number;
+  price: number;
+  name: string;
+  discount: number;
+};
 type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?: number };
 
 interface UseGoodsPurchaseArgs {
@@ -18,29 +25,37 @@ export const useGoodsPurchase = ({
   products,
   onUpdateProducts,
   onAddTransaction,
-  showToast
+  showToast,
 }: UseGoodsPurchaseArgs) => {
   const [showPurchaseForm, setShowPurchaseForm] = React.useState(false);
   const [purchaseItems, setPurchaseItems] = React.useState<PurchaseItem[]>([]);
   const [purchaseSupplier, setPurchaseSupplier] = React.useState('');
   const [purchaseNote, setPurchaseNote] = React.useState('');
   const [purchaseDiscountValue, setPurchaseDiscountValue] = React.useState(0);
-  const [purchaseDiscountType, setPurchaseDiscountType] = React.useState<PurchaseDiscountType>('fixed');
+  const [purchaseDiscountType, setPurchaseDiscountType] =
+    React.useState<PurchaseDiscountType>('fixed');
+  const [invoiceStatus, setInvoiceStatus] = React.useState<InvoiceStatus>('none');
+  const [invoiceFile, setInvoiceFile] = React.useState<File | null>(null);
 
   const handleAddProductToPurchase = (product: POSProduct) => {
     const existing = purchaseItems.find(item => item.productId === product.id);
     if (existing) {
-      setPurchaseItems(prev => prev.map(item =>
-        item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
-      ));
+      setPurchaseItems(prev =>
+        prev.map(item =>
+          item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      );
     } else {
-      setPurchaseItems(prev => [...prev, {
-        productId: product.id,
-        quantity: 1,
-        price: product.importPrice,
-        name: product.name,
-        discount: 0
-      }]);
+      setPurchaseItems(prev => [
+        ...prev,
+        {
+          productId: product.id,
+          quantity: 1,
+          price: product.importPrice,
+          name: product.name,
+          discount: 0,
+        },
+      ]);
     }
   };
 
@@ -76,15 +91,20 @@ export const useGoodsPurchase = ({
     showToast(`Đã thêm ${purchaseableProducts.length} mặt hàng vào phiếu nhập.`);
   };
 
-  const updatePurchaseItem = (id: string, updates: Partial<{ quantity: number; price: number; discount: number }>) => {
-    setPurchaseItems(prev => prev.map(item => item.productId === id ? { ...item, ...updates } : item));
+  const updatePurchaseItem = (
+    id: string,
+    updates: Partial<{ quantity: number; price: number; discount: number }>
+  ) => {
+    setPurchaseItems(prev =>
+      prev.map(item => (item.productId === id ? { ...item, ...updates } : item))
+    );
   };
 
   const removePurchaseItem = (id: string) => {
     setPurchaseItems(prev => prev.filter(item => item.productId !== id));
   };
 
-  const handleCompletePurchase = () => {
+  const handleCompletePurchase = async () => {
     if (purchaseItems.length === 0) return;
     const costMethod = getInventoryCostMethod();
     const updatedProducts = [...products];
@@ -122,16 +142,25 @@ export const useGoodsPurchase = ({
     });
 
     onUpdateProducts(updatedProducts);
+    const transactionId = generateId();
     if (onAddTransaction) {
       onAddTransaction({
-        id: generateId(),
+        id: transactionId,
         date: new Date().toISOString(),
         type: 'Import',
         staffId: getCurrentStaffId(),
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
         totalAmount: Math.max(0, itemsNetTotal - purchaseDiscountAmount),
+        invoiceStatus,
       });
+    }
+    if (invoiceFile) {
+      try {
+        await uploadPurchaseInvoice(transactionId, invoiceFile, getCurrentStaffId());
+      } catch {
+        showToast('Nhập hàng thành công nhưng upload HĐ thất bại. Vui lòng thử lại.', 'error');
+      }
     }
     showToast(`Nhập hàng thành công! ${itemsForTransaction.length} mặt hàng.`);
     setPurchaseItems([]);
@@ -139,6 +168,8 @@ export const useGoodsPurchase = ({
     setPurchaseNote('');
     setPurchaseDiscountValue(0);
     setPurchaseDiscountType('fixed');
+    setInvoiceStatus('none');
+    setInvoiceFile(null);
     setShowPurchaseForm(false);
   };
 
@@ -158,6 +189,10 @@ export const useGoodsPurchase = ({
     handleAddProductsToPurchase,
     updatePurchaseItem,
     removePurchaseItem,
-    handleCompletePurchase
+    handleCompletePurchase,
+    invoiceStatus,
+    setInvoiceStatus,
+    invoiceFile,
+    setInvoiceFile,
   };
 };

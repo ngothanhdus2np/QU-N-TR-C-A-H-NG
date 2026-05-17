@@ -28,7 +28,9 @@
       "Read(//Users/apple/phucsang app/QU-N-träC-A-H-NG/components/pos/**)",
       "Bash(git add *)",
       "Bash(git checkout *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(lsof -ti:3000,24678)",
+      "Bash(grep -v \"^$\")"
     ],
     "additionalDirectories": [
       "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude"

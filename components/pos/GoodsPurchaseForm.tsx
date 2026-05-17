@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ArrowLeft,
   Search,
@@ -11,8 +11,13 @@ import {
   ChevronLeft,
   History,
   Upload,
+  FileCheck,
+  FileMinus,
+  FileText,
+  FileX,
 } from 'lucide-react';
 import { POSProduct, InventoryTransaction } from '../../types';
+import { InvoiceStatus } from '../../services/invoiceService';
 
 export interface PurchaseItem {
   productId: string;
@@ -51,6 +56,10 @@ interface GoodsPurchaseFormProps {
   onSaveDraft?: () => void;
   onDownloadTemplate: () => void;
   staffLabel?: string;
+  invoiceStatus?: InvoiceStatus;
+  setInvoiceStatus?: (v: InvoiceStatus) => void;
+  invoiceFile?: File | null;
+  setInvoiceFile?: (f: File | null) => void;
 }
 
 export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
@@ -77,7 +86,12 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
   onSaveDraft,
   onDownloadTemplate,
   staffLabel = 'unknown',
+  invoiceStatus = 'none',
+  setInvoiceStatus,
+  invoiceFile,
+  setInvoiceFile,
 }) => {
+  const invoiceFileInputRef = useRef<HTMLInputElement>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -391,6 +405,80 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                 </div>
               </div>
 
+              {/* Chứng từ đầu vào */}
+              <div className="pt-4">
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                    Chứng từ đầu vào
+                  </p>
+                  <div className="space-y-1.5">
+                    {(
+                      [
+                        {
+                          value: 'full',
+                          label: 'Có hóa đơn đầy đủ',
+                          Icon: FileCheck,
+                          color: 'text-green-600',
+                        },
+                        {
+                          value: 'partial',
+                          label: 'Hóa đơn một phần',
+                          Icon: FileMinus,
+                          color: 'text-yellow-600',
+                        },
+                        {
+                          value: 'memo_only',
+                          label: 'Bảng kê không có HĐ',
+                          Icon: FileText,
+                          color: 'text-blue-600',
+                        },
+                        {
+                          value: 'none',
+                          label: 'Không có chứng từ',
+                          Icon: FileX,
+                          color: 'text-red-500',
+                        },
+                      ] as const
+                    ).map(({ value, label, Icon, color }) => (
+                      <label key={value} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="invoiceStatus"
+                          value={value}
+                          checked={invoiceStatus === value}
+                          onChange={() => setInvoiceStatus?.(value)}
+                          className="accent-indigo-600"
+                        />
+                        <Icon className={`w-3.5 h-3.5 ${color}`} />
+                        <span className="text-xs">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {invoiceStatus !== 'none' && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => invoiceFileInputRef.current?.click()}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs border-2 border-dashed border-indigo-300 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-all"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {invoiceFile ? invoiceFile.name : 'Đính kèm file HĐ (PDF/XML/ảnh)'}
+                      </button>
+                      <input
+                        ref={invoiceFileInputRef}
+                        type="file"
+                        accept=".pdf,.xml,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) setInvoiceFile?.(file);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="border-t pt-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-1.5 text-sm font-normal text-slate-700">
@@ -423,7 +511,10 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     <div className="flex w-24 bg-slate-100 rounded-xl p-0.5">
                       <button
                         type="button"
-                        onMouseDown={(e) => { e.preventDefault(); setPurchaseDiscountType('fixed'); }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setPurchaseDiscountType('fixed');
+                        }}
                         className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-all ${
                           purchaseDiscountType === 'fixed'
                             ? 'bg-white shadow-sm text-indigo-600'
@@ -434,7 +525,10 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                       </button>
                       <button
                         type="button"
-                        onMouseDown={(e) => { e.preventDefault(); setPurchaseDiscountType('percent'); }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setPurchaseDiscountType('percent');
+                        }}
                         className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-all ${
                           purchaseDiscountType === 'percent'
                             ? 'bg-white shadow-sm text-indigo-600'
@@ -498,31 +592,48 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                   <th className="p-4 text-left">Ngày nhập</th>
                   <th className="p-4 text-left">Nhà cung cấp</th>
                   <th className="p-4 text-right">Giá trị</th>
+                  <th className="p-4 text-left">Chứng từ</th>
                   <th className="p-4 text-left">Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions
                   .filter(t => t.type === 'Import')
-                  .map(t => (
-                    <tr key={t.id} className="border-b transition-colors hover:bg-slate-50">
-                      <td className="p-4 font-mono font-normal text-indigo-600">
-                        {t.id.slice(0, 8)}
-                      </td>
-                      <td className="p-4 text-slate-500">
-                        {new Date(t.date).toLocaleString('vi-VN')}
-                      </td>
-                      <td className="p-4 font-normal">{t.note?.split('từ ')[1] || '---'}</td>
-                      <td className="p-4 text-right font-normal text-emerald-600">
-                        {(
-                          t.totalAmount ||
-                          t.items.reduce((s, i) => s + i.quantity * (i.price || 0), 0)
-                        ).toLocaleString()}
-                        đ
-                      </td>
-                      <td className="p-4 text-slate-400 text-xs italic">{t.note}</td>
-                    </tr>
-                  ))}
+                  .map(t => {
+                    const badges = {
+                      full: { label: '✅ Đủ HĐ', cls: 'bg-green-100 text-green-700' },
+                      partial: { label: '⚠️ Một phần', cls: 'bg-yellow-100 text-yellow-700' },
+                      memo_only: { label: '📋 Bảng kê', cls: 'bg-blue-100 text-blue-700' },
+                      none: { label: '🔴 Thiếu CT', cls: 'bg-red-100 text-red-600' },
+                    };
+                    const badge = badges[t.invoiceStatus as keyof typeof badges] ?? badges.none;
+                    return (
+                      <tr key={t.id} className="border-b transition-colors hover:bg-slate-50">
+                        <td className="p-4 font-mono font-normal text-indigo-600">
+                          {t.id.slice(0, 8)}
+                        </td>
+                        <td className="p-4 text-slate-500">
+                          {new Date(t.date).toLocaleString('vi-VN')}
+                        </td>
+                        <td className="p-4 font-normal">{t.note?.split('từ ')[1] || '---'}</td>
+                        <td className="p-4 text-right font-normal text-emerald-600">
+                          {(
+                            t.totalAmount ||
+                            t.items.reduce((s, i) => s + i.quantity * (i.price || 0), 0)
+                          ).toLocaleString()}
+                          đ
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-normal ${badge.cls}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-400 text-xs italic">{t.note}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

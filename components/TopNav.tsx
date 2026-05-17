@@ -15,10 +15,18 @@ import {
   Upload,
   ShoppingCart,
   ChevronDown,
+  Palette,
 } from 'lucide-react';
 import SettingsCenter from './settings/SettingsCenter';
 import type { AppThemeId } from '../constants/themes';
-import type { AppAlert, BrandProfile, POSInventorySettings, POSPaymentSettings, POSProduct } from '../types';
+import { APP_THEMES } from '../constants/themes';
+import type {
+  AppAlert,
+  BrandProfile,
+  POSInventorySettings,
+  POSPaymentSettings,
+  POSProduct,
+} from '../types';
 
 interface NavItem {
   id: string;
@@ -88,6 +96,7 @@ const TopNav: React.FC<TopNavProps> = ({
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const justNavigated = useRef(false);
@@ -214,6 +223,60 @@ const TopNav: React.FC<TopNavProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} />
           </button>
+
+          {/* Theme Picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowThemePicker(v => !v)}
+              className={`p-2.5 rounded-xl transition-all ${showThemePicker ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700'}`}
+              title="Chọn giao diện"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            {showThemePicker && (
+              <>
+                <div className="fixed inset-0 z-[200]" onClick={() => setShowThemePicker(false)} />
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[201] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-3 border-b border-slate-50">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      Giao diện
+                    </p>
+                  </div>
+                  <div className="p-2">
+                    {APP_THEMES.map(theme => (
+                      <button
+                        key={theme.id}
+                        onClick={() => {
+                          onThemeChange(theme.id);
+                          setShowThemePicker(false);
+                        }}
+                        className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all ${activeThemeId === theme.id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                      >
+                        <div
+                          className={`mt-0.5 w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border ${activeThemeId === theme.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-100 border-slate-200 text-slate-400'}`}
+                        >
+                          <Palette className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-sm font-bold ${activeThemeId === theme.id ? 'text-indigo-700' : 'text-slate-800'}`}
+                          >
+                            {theme.name}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                            {theme.description}
+                          </p>
+                        </div>
+                        {activeThemeId === theme.id && (
+                          <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0 mt-1" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Settings */}
           <button
@@ -343,113 +406,114 @@ const TopNav: React.FC<TopNavProps> = ({
       {/* Row 2 — Hover dropdown nav + Bán hàng CTA */}
       <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 relative z-50 shrink-0 shadow-sm overflow-visible">
         <nav className="flex items-center gap-0.5 flex-1">
-          {activeId !== 'pos' && sections.map(section => {
-            const isActive = section === activeSection;
-            const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
+          {activeId !== 'pos' &&
+            sections.map(section => {
+              const isActive = section === activeSection;
+              const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
 
-            const isOpen = openSection === section.title;
-            return (
-              <div
-                key={section.title}
-                className="relative"
-                onMouseEnter={() => openDropdown(section.title)}
-                onMouseLeave={closeDropdown}
-              >
-                <button
-                  onClick={() => toggleDropdown(section.title)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-indigo-800 text-white'
-                      : 'text-indigo-200 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {section.title}
-                  <ChevronDown
-                    className={`w-3 h-3 opacity-70 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-
+              const isOpen = openSection === section.title;
+              return (
                 <div
-                  onMouseEnter={cancelClose}
+                  key={section.title}
+                  className="relative"
+                  onMouseEnter={() => openDropdown(section.title)}
                   onMouseLeave={closeDropdown}
-                  className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
                 >
-                  <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
-                    {section.groups ? (
-                      /* 2-column layout with group headers */
-                      <div className="grid grid-cols-2 divide-x divide-slate-100">
-                        {section.groups.map(group => (
-                          <div key={group.header} className="py-2">
-                            <div className="px-4 pb-1 pt-2 text-[10px] font-normal text-slate-400 uppercase tracking-widest">
-                              {group.header}
+                  <button
+                    onClick={() => toggleDropdown(section.title)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
+                      isActive
+                        ? 'bg-indigo-800 text-white'
+                        : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {section.title}
+                    <ChevronDown
+                      className={`w-3 h-3 opacity-70 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  <div
+                    onMouseEnter={cancelClose}
+                    onMouseLeave={closeDropdown}
+                    className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
+                  >
+                    <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
+                      {section.groups ? (
+                        /* 2-column layout with group headers */
+                        <div className="grid grid-cols-2 divide-x divide-slate-100">
+                          {section.groups.map(group => (
+                            <div key={group.header} className="py-2">
+                              <div className="px-4 pb-1 pt-2 text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+                                {group.header}
+                              </div>
+                              {group.itemIds.map(itemId => {
+                                const item = itemMap[itemId];
+                                if (!item) return null;
+                                const Icon = item.icon;
+                                const isItemActive = item.id === activeId;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => {
+                                      onSelect(item.id);
+                                      setOpenSection(null);
+                                    }}
+                                    className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
+                                      isItemActive
+                                        ? 'bg-indigo-50 text-indigo-600'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                                    }`}
+                                  >
+                                    <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                    <span className="flex-1">{item.label}</span>
+                                    {item.badge && (
+                                      <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
+                                        {item.badge}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
                             </div>
-                            {group.itemIds.map(itemId => {
-                              const item = itemMap[itemId];
-                              if (!item) return null;
-                              const Icon = item.icon;
-                              const isItemActive = item.id === activeId;
-                              return (
-                                <button
-                                  key={item.id}
-                                  onClick={() => {
-                                    onSelect(item.id);
-                                    setOpenSection(null);
-                                  }}
-                                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
-                                    isItemActive
-                                      ? 'bg-indigo-50 text-indigo-600'
-                                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                                  }`}
-                                >
-                                  <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                                  <span className="flex-1">{item.label}</span>
-                                  {item.badge && (
-                                    <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
-                                      {item.badge}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      /* Single-column layout */
-                      <div className="py-1">
-                        {section.items.map(item => {
-                          const Icon = item.icon;
-                          const isItemActive = item.id === activeId;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                onSelect(item.id);
-                                setOpenSection(null);
-                              }}
-                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
-                                isItemActive
-                                  ? 'bg-indigo-50 text-indigo-600'
-                                  : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                              }`}
-                            >
-                              <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                              <span className="flex-1">{item.label}</span>
-                              {item.badge && (
-                                <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
-                                  {item.badge}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        /* Single-column layout */
+                        <div className="py-1">
+                          {section.items.map(item => {
+                            const Icon = item.icon;
+                            const isItemActive = item.id === activeId;
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => {
+                                  onSelect(item.id);
+                                  setOpenSection(null);
+                                }}
+                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
+                                  isItemActive
+                                    ? 'bg-indigo-50 text-indigo-600'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                              >
+                                <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                <span className="flex-1">{item.label}</span>
+                                {item.badge && (
+                                  <span className="text-[9px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-normal leading-none">
+                                    {item.badge}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </nav>
 
         <button

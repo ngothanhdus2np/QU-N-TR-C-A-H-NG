@@ -334,5 +334,27 @@ export function createAiRouter(requireAuth: RequestHandler): Router {
     }
   });
 
+  router.post('/api/ai/business-analysis', async (req, res) => {
+    if (!checkRateLimit(req, RL_STANDARD))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
+    try {
+      const { contextData } = req.body as { contextData?: string };
+      if (!contextData) return res.status(400).json({ error: 'contextData là bắt buộc' });
+      const result = await callClaude({
+        model: 'claude-haiku-4-5',
+        system:
+          'Bạn là CFO chiến lược cho chuỗi bán lẻ giày dép Việt Nam. Phân tích sắc bén tình hình kinh doanh, so sánh hiệu quả đa kênh, đưa ra khuyến nghị thực tiễn dựa trên số liệu. Trả lời bằng Tiếng Việt, định dạng Markdown chuyên nghiệp, dùng bảng khi cần so sánh.',
+        userMessage: contextData,
+        temperature: 0.2,
+        maxTokens: 1500,
+      });
+      res.json({ result });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[AI /business-analysis]', message);
+      res.status(500).json({ error: AI_SERVICE_ERROR });
+    }
+  });
+
   return router;
 }

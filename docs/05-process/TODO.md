@@ -9,7 +9,7 @@
 
 ### Kiểm tra kỹ thuật
 
-- [x] ~~Chạy `npx tsc --noEmit`~~ — TypeScript clean ✅ *(2026-05-16)*
+- [x] ~~Chạy `npx tsc --noEmit`~~ — TypeScript clean ✅ *(2026-05-17)*
 - [x] ~~Chạy `npm test`~~ — 162 tests pass ✅ *(2026-05-16)*
 - [x] ~~Fix 4 TypeScript lint debt errors~~ — đã fix showToast type errors ✅ *(2026-05-16)*
 - [x] ~~Implement virtualization cho 12,739+ SKU~~ — đã implement @tanstack/react-virtual ✅ *(2026-05-16)*
@@ -262,6 +262,19 @@ export default React.memo(MechanismsViolationsSubTab);
 npx tsc --noEmit   # phải clean
 npm test           # 43 tests phải pass
 ```
+
+---
+
+## ✅ Hệ thống Hóa đơn đầu vào — HOÀN THÀNH 2026-05-17
+
+- [x] ~~**Giai đoạn 1**: InvoiceBadge + cột Chứng từ trong PurchaseInvoices.tsx~~ *(xong 2026-05-17)*
+- [x] ~~**Giai đoạn 2**: services/invoiceService.ts + types.ts + supabase_setup.sql~~ *(xong 2026-05-17)*
+- [x] ~~**Giai đoạn 3**: Wire invoice state vào useGoodsPurchase + PurchaseOrdersContainer + GoodsInventory; GoodsPurchaseForm UI chọn trạng thái + upload file~~ *(xong 2026-05-17)*
+- [x] ~~**Giai đoạn 4**: Báo cáo VAT + Xuất Excel 2 sheet trong PurchaseInvoices.tsx~~ *(xong 2026-05-17)*
+
+**Việc thủ công trên Supabase dashboard:**
+- [x] ~~Chạy SQL migration trong `supabase_setup.sql`~~ *(xong 2026-05-17)*
+- [x] ~~Tạo Storage bucket `purchase-invoices` với policy: authenticated users INSERT + SELECT~~ *(xong 2026-05-17)*
 
 ---
 

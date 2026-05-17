@@ -22,6 +22,8 @@ interface ListPageTableProps<T> {
   emptyState?: React.ReactNode;
   rowClassName?: (item: T, index: number) => string;
   stickyHeader?: boolean;
+  expandedRowId?: string;
+  expandedRowContent?: React.ReactNode;
 }
 
 /**
@@ -39,6 +41,8 @@ export function ListPageTable<T>({
   emptyState,
   rowClassName,
   stickyHeader = true,
+  expandedRowId,
+  expandedRowContent,
 }: ListPageTableProps<T>) {
   const getValue = (item: T, key: string) => {
     if (item && typeof item === 'object' && key in item) {
@@ -60,7 +64,9 @@ export function ListPageTable<T>({
 
   return (
     <table className="w-full border-collapse text-sm">
-      <thead className={`bg-slate-50 border-b border-slate-200 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
+      <thead
+        className={`bg-slate-50 border-b border-slate-200 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}
+      >
         <tr>
           {columns.map(col => (
             <th
@@ -105,34 +111,48 @@ export function ListPageTable<T>({
             </td>
           </tr>
         ) : (
-          data.map((item, index) => (
-            <tr
-              key={keyExtractor(item, index)}
-              onClick={event => {
-                const target = event.target as HTMLElement;
-                if (target.closest('button,input,a,select,textarea,label')) return;
-                onRowClick?.(item, index);
-              }}
-              className={`border-b border-slate-100 transition-colors ${
-                onRowClick ? 'cursor-pointer hover:bg-slate-50' : ''
-              } ${rowClassName ? rowClassName(item, index) : ''}`}
-            >
-              {columns.map(col => (
-                <td
-                  key={col.key}
-                  className={`px-4 py-3 border-r border-slate-50 last:border-r-0 ${
-                    col.align === 'center'
-                      ? 'text-center'
-                      : col.align === 'right'
-                        ? 'text-right'
-                        : 'text-left'
+          data.map((item, index) => {
+            const rowKey = keyExtractor(item, index);
+            const isExpanded = expandedRowId === rowKey;
+            return (
+              <React.Fragment key={rowKey}>
+                <tr
+                  onClick={event => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest('button,input,a,select,textarea,label')) return;
+                    onRowClick?.(item, index);
+                  }}
+                  className={`border-b border-slate-100 transition-colors ${
+                    isExpanded ? 'bg-blue-50 border-blue-200' : ''
+                  } ${onRowClick && !isExpanded ? 'cursor-pointer hover:bg-slate-50' : ''} ${
+                    rowClassName ? rowClassName(item, index) : ''
                   }`}
                 >
-                  {col.render ? col.render(item, index) : getValue(item, col.key)}
-                </td>
-              ))}
-            </tr>
-          ))
+                  {columns.map(col => (
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 border-r border-slate-50 last:border-r-0 ${
+                        col.align === 'center'
+                          ? 'text-center'
+                          : col.align === 'right'
+                            ? 'text-right'
+                            : 'text-left'
+                      }`}
+                    >
+                      {col.render ? col.render(item, index) : getValue(item, col.key)}
+                    </td>
+                  ))}
+                </tr>
+                {isExpanded && expandedRowContent && (
+                  <tr>
+                    <td colSpan={columns.length} className="p-0">
+                      {expandedRowContent}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })
         )}
       </tbody>
     </table>

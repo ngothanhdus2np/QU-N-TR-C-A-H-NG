@@ -30,8 +30,8 @@ export const GoodsCreateProductModal: React.FC<GoodsCreateProductModalProps> = (
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4 pt-20" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-900">
             {editingProduct ? 'Chỉnh sửa hàng hóa' : 'Tạo hàng hóa'}

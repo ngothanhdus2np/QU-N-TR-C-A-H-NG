@@ -14,7 +14,7 @@ import BrandManager from './marketing/BrandManager';
 import POSComputer from './pos/POSComputer';
 import GoodsInventory from './pos/GoodsInventory';
 import OrderHistory from './pos/OrderHistory';
-import CustomerPoints from './pos/CustomerPoints';
+import CustomerListPage from './customers/CustomerListPage';
 import SupplierContainer from './suppliers/SupplierContainer';
 import PurchaseOrdersContainer from './purchase/PurchaseOrdersContainer';
 import AuditContainer from './audit/AuditContainer';
@@ -26,6 +26,7 @@ import ShippingOrders from './orders/ShippingOrders';
 import PurchaseInvoices from './orders/PurchaseInvoices';
 import GoodsInternalUse from './inventory/GoodsInternalUse';
 import GoodsDisposal from './inventory/GoodsDisposal';
+import AnalysisContainer from './analysis/AnalysisContainer';
 import {
   AppData,
   AppDataSurgicalUpdate,
@@ -128,9 +129,10 @@ const MainContent: React.FC<MainContentProps> = ({
         return <OrderHistory orders={data.posOrders || []} storeName={brandProfile.name} />;
       case 'customers':
         return (
-          <CustomerPoints
+          <CustomerListPage
             customers={data.posCustomers || []}
             orders={data.posOrders || []}
+            customerDebtHistory={data.customerDebtHistory || []}
             onUpdateCustomers={newList => updateData('posCustomers', newList)}
             onUpdateSurgical={updateSurgical}
           />
@@ -320,6 +322,31 @@ const MainContent: React.FC<MainContentProps> = ({
             onUpdateSurgical={updateSurgical}
           />
         );
+      case 'analysis-business':
+        return <AnalysisContainer data={data} initialSection="business" />;
+      case 'analysis-goods':
+        return <AnalysisContainer data={data} initialSection="goods" onUpdate={updateData} />;
+      case 'analysis-customers':
+        return <AnalysisContainer data={data} initialSection="customers" />;
+      case 'analysis-efficiency':
+        return <AnalysisContainer data={data} initialSection="efficiency" />;
+      case 'analysis-placeholder':
+      case 'report-eod':
+      case 'report-sales':
+      case 'report-orders':
+      case 'report-goods':
+      case 'report-customers':
+      case 'report-suppliers':
+      case 'report-staff':
+      case 'report-channels':
+      case 'report-finance':
+        return (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+            <div className="text-5xl">🚧</div>
+            <p className="text-base font-medium text-slate-500">Đang xây dựng</p>
+            <p className="text-sm">Tính năng này sẽ sớm ra mắt.</p>
+          </div>
+        );
       default:
         return null;
     }
@@ -365,12 +392,13 @@ const MainContent: React.FC<MainContentProps> = ({
                 const updatedCustomers = [...(data.posCustomers || []), customer];
                 updateData('posCustomers', updatedCustomers);
               }}
-              onPlaceOrder={(order, updatedProducts, updatedCustomer) =>
+              onPlaceOrder={(order, updatedProducts, updatedCustomer, debtRecord) =>
                 processPlaceOrder({
                   data,
                   order,
                   updatedProducts,
                   updatedCustomer,
+                  debtRecord,
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   pushBatch,
                   updateSurgical,

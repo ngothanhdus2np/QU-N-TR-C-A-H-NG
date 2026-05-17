@@ -320,6 +320,7 @@ interface POSCheckoutProps {
   finalReturnAmount: number;
   amountToPayCustomer: number;
   currentCashReceived: number;
+  isDebtMode: boolean;
   pointsEarned: number;
   // Payment
   paymentMethod: string;
@@ -356,6 +357,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   finalReturnAmount,
   amountToPayCustomer,
   currentCashReceived,
+  isDebtMode,
   pointsEarned,
   paymentMethod,
   paymentSettings,
@@ -775,14 +777,28 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                     </button>
                   </div>
                   {paymentMethod === 'Cash' ? (
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
-                      {cashSuggestions.map((amount, idx) => (
-                        <QuickCashButton
-                          key={idx}
-                          amount={amount}
-                          onClick={() => onUpdateTab({ cashReceived: amount })}
-                        />
-                      ))}
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
+                        {cashSuggestions.map((amount, idx) => (
+                          <QuickCashButton
+                            key={idx}
+                            amount={amount}
+                            onClick={() => onUpdateTab({ cashReceived: amount, isDebtMode: false })}
+                          />
+                        ))}
+                      </div>
+                      {selectedCustomer && mode === 'sales' && (
+                        <button
+                          onClick={() => onUpdateTab({ isDebtMode: !isDebtMode, cashReceived: 0 })}
+                          className={`w-full py-2 rounded-xl text-[12px] font-normal uppercase tracking-wider border transition-all ${
+                            isDebtMode
+                              ? 'bg-rose-50 border-rose-300 text-rose-600'
+                              : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-rose-200 hover:text-rose-500'
+                          }`}
+                        >
+                          {isDebtMode ? '✓ Đang ghi nợ — Bấm để huỷ' : 'Ghi nợ khách hàng'}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <NonCashPaymentPanel
@@ -878,13 +894,25 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               )}
 
               {/* Tiền thừa cho Single Payment Mode */}
-              {!isSplitPaymentActive && currentCashReceived > netPayable && (
+              {!isSplitPaymentActive && !isDebtMode && currentCashReceived > netPayable && (
                 <div className="flex justify-between items-center py-1.5 px-3 bg-emerald-50 border border-emerald-100 rounded-xl animate-in fade-in slide-in-from-top-1">
                   <span className="text-[11px] font-normal text-emerald-800 uppercase tracking-widest">
                     Tiền thừa
                   </span>
                   <span className="text-lg font-normal text-emerald-600 tabular-nums">
                     {(currentCashReceived - netPayable).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Tính vào công nợ */}
+              {!isSplitPaymentActive && isDebtMode && selectedCustomer && mode === 'sales' && (
+                <div className="flex justify-between items-center py-1.5 px-3 bg-rose-50 border border-rose-200 rounded-xl animate-in fade-in slide-in-from-top-1">
+                  <span className="text-[11px] font-normal text-rose-700 uppercase tracking-widest">
+                    Tính vào công nợ
+                  </span>
+                  <span className="text-lg font-normal text-rose-600 tabular-nums">
+                    -{netPayable.toLocaleString()}
                   </span>
                 </div>
               )}
