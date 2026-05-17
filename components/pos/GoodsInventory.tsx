@@ -41,8 +41,8 @@ interface GoodsInventoryProps {
 }
 
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
-const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
-const DEFAULT_PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [30, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 50;
 type ProductFormTab = 'info' | 'desc' | 'warranty' | 'units' | 'related' | 'channels';
 
 const escapeLabelText = (value: string | number | undefined) =>
@@ -206,6 +206,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     purchaseDiscountType,
     setPurchaseDiscountValue,
     setPurchaseDiscountType,
+    invoiceStatus,
+    setInvoiceStatus,
+    invoiceFile,
+    setInvoiceFile,
   } = useGoodsPurchase({ products, onUpdateProducts, onAddTransaction, showToast });
   const {
     auditSearchTerm,
@@ -660,6 +664,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             onRemovePurchaseItem={removePurchaseItem}
             onCompletePurchase={handleCompletePurchase}
             onDownloadTemplate={downloadTemplate}
+            invoiceStatus={invoiceStatus}
+            setInvoiceStatus={setInvoiceStatus}
+            invoiceFile={invoiceFile}
+            setInvoiceFile={setInvoiceFile}
           />
         );
       case 'kho':
