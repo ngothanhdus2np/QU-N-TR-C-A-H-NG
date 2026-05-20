@@ -11,6 +11,7 @@ import {
   Workflow, FileSearch, FileDown, Upload
 } from 'lucide-react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { GoogleGenAI } from "@google/genai";
 
 interface Props {
@@ -692,7 +693,7 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData }) => {
                      </div>
                      <button onClick={() => setViewArticle(null)} className="p-3 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all shadow-sm"><X className="w-6 h-6" /></button>
                   </div>
-                  <div className="markdown-content prose max-w-none bg-slate-50/50 p-10 rounded-[2.5rem] border border-slate-100" dangerouslySetInnerHTML={{ __html: String(marked(viewArticle?.content || '')) }} />
+                  <div className="markdown-content prose max-w-none bg-slate-50/50 p-10 rounded-[2.5rem] border border-slate-100" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked(viewArticle?.content || ''))) }} />
                </div>
              )}
           </div>

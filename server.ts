@@ -66,8 +66,12 @@ const __dirname = path.dirname(__filename);
 const CONFIG_FILE = path.join(__dirname, "fb_config.json");
 
 // Supabase client for scheduler
-const supabaseAdminUrl = 'https://tqouzxlnihfjdyxqlbqs.supabase.co';
-const supabaseAdminKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxb3V6eGxuaWhmamR5eHFsYnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMjc5NzEsImV4cCI6MjA4NTcwMzk3MX0.INIjCt3RFHlq5KYSMymI1mcjVR_l-rHF-9LI5gFYRlY';
+const supabaseAdminUrl = process.env.SUPABASE_URL;
+const supabaseAdminKey = process.env.SUPABASE_ANON_KEY;
+if (!supabaseAdminUrl || !supabaseAdminKey) {
+  console.error("FATAL: SUPABASE_URL hoặc SUPABASE_ANON_KEY chưa được cấu hình trong .env.local");
+  process.exit(1);
+}
 const supabase = createClient(supabaseAdminUrl, supabaseAdminKey);
 
 // Bộ nhớ đệm toàn cục để xử lý vấn đề mất session trong Iframe
@@ -211,10 +215,12 @@ async function startServer() {
     console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
     
     app.set("trust proxy", 1);
+    const allowedOrigin = process.env.APP_URL || `http://localhost:${PORT}`;
     app.use(cors({
-      origin: '*',
+      origin: allowedOrigin,
       methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
+      credentials: true
     }));
     app.use(express.json());
     app.use(cookieParser());
@@ -226,7 +232,7 @@ async function startServer() {
     });
 
     app.use(session({
-      secret: "fb-app-secret-key",
+      secret: process.env.SESSION_SECRET || "change-me-in-production",
       resave: true,
       saveUninitialized: true,
       proxy: true,
@@ -238,6 +244,24 @@ async function startServer() {
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       }
     }));
+
+    // Auth middleware: yêu cầu X-Api-Key header cho các route nội bộ
+    function requireInternalKey(req: any, res: any, next: any) {
+      const apiKey = process.env.INTERNAL_API_KEY;
+      if (apiKey && req.headers['x-api-key'] !== apiKey) {
+        return res.status(401).json({ error: "Không có quyền truy cập. Thiếu hoặc sai X-Api-Key." });
+      }
+      next();
+    }
+
+    // Auth middleware: yêu cầu Facebook session token
+    function requireFbSession(req: any, res: any, next: any) {
+      const token = (req.session as any).fbAccessToken || globalFbAccessToken;
+      if (!token) {
+        return res.status(401).json({ error: "Chưa xác thực Facebook. Vui lòng kết nối lại." });
+      }
+      next();
+    }
 
     // Health check
     app.get("/health", (req, res) => {
@@ -254,7 +278,7 @@ async function startServer() {
       res.json({ appId: fbConfig.appId, hasSecret: !!fbConfig.appSecret });
     });
 
-    app.all("/api/sync-kiotviet*all", async (req, res) => {
+    app.all("/api/sync-kiotviet*all", requireInternalKey, async (req, res) => {
       console.log(">>> NHẬN YÊU CẦU ĐỒNG BỘ KIOTVIET (ALL)");
       const { data } = req.body;
       if (!data || !Array.isArray(data)) {
@@ -466,7 +490,7 @@ async function startServer() {
       }
     });
 
-    app.post("/api/fb/post", async (req, res) => {
+    app.post("/api/fb/post", requireFbSession, async (req, res) => {
       const { pageId, pageAccessToken, message } = req.body;
       if (!pageId || !pageAccessToken || !message) {
         return res.status(400).json({ error: "Thiếu thông tin đăng bài" });

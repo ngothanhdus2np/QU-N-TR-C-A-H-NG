@@ -16,6 +16,7 @@ import {
 import { cleanVNNumber, parseVNDate, normalizeHeader, processExcelRawData, calculateTimeContext, generateId } from '../businessLogic';
 import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import * as XLSX from 'xlsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, BarChart, Bar } from 'recharts';
 import TimeFilter from './TimeFilter';
@@ -1072,7 +1073,7 @@ const RevenueManager: React.FC<Props> = ({
                    <div className="flex items-center gap-4"><div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><FileText className="w-6 h-6" /></div><h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">Báo Cáo Chẩn Đoán Doanh Thu</h4></div>
                    <button onClick={() => setDiagnosisResult(null)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><X className="w-6 h-6" /></button>
                 </div>
-                <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: marked.parse(diagnosisResult) }} />
+                <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked.parse(diagnosisResult))) }} />
              </div>
            )}
         </div>

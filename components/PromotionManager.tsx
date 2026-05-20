@@ -5,6 +5,7 @@ import { PromotionPlan, RevenueRecord, GiftTier, ExpenseRecord } from '../types'
 import { generateId } from '../businessLogic';
 import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 interface PromotionManagerProps {
   promotions: PromotionPlan[];
@@ -272,7 +273,7 @@ const PromotionManager: React.FC<PromotionManagerProps> = ({ promotions, revenue
           </div>
         ) : aiAnalysis ? (
           <div className="prose prose-slate max-w-none prose-headings:font-black prose-headings:text-slate-900 prose-p:text-slate-600 prose-strong:text-indigo-600">
-            <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) as string }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked.parse(aiAnalysis))) }} />
           </div>
         ) : (
           <div className="p-12 text-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">

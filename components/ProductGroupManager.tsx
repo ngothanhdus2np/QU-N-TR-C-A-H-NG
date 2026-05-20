@@ -15,6 +15,7 @@ import { calculateStrategicSuggestions, calculateSeasonalityAnalysis, cleanVNNum
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
 import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import * as XLSX from 'xlsx';
 
 type AnalysisMode = 'range' | 'seasonality';
@@ -593,7 +594,7 @@ const ProductGroupManager: React.FC<Props> = ({ productGroups, groupRevenue, lis
                           </div>
                           <button onClick={() => setDiagnosisResult(null)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><X className="w-6 h-6" /></button>
                        </div>
-                       <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: String(marked.parse(String(diagnosisResult))) }} />
+                       <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked.parse(String(diagnosisResult)))) }} />
                     </div>
                  )}
               </div>

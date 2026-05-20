@@ -19,6 +19,7 @@ import DailyBreakEven from './DailyBreakEven';
 import TimeFilter from './TimeFilter';
 import { GoogleGenAI } from "@google/genai";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 interface DashboardProps {
   data: AppData;
@@ -1072,7 +1073,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 
                 <div className="flex-1 bg-slate-50 rounded-[2rem] p-10 border border-slate-200 overflow-y-auto no-scrollbar">
                   {diagnosisResult ? (
-                    <div className="markdown-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: marked.parse(diagnosisResult) }} />
+                    <div className="markdown-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked.parse(diagnosisResult))) }} />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
                       <Lightbulb className="w-12 h-12 mb-6 text-slate-400" />

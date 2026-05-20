@@ -4,8 +4,9 @@ import { Send, User, Bot, BrainCircuit, Loader2, Sparkles, ShieldAlert, Database
 import { AppData, ChatMessage, RevenueRecord, ExpenseRecord, ShopeeInventoryOutRecord, PayrollRecord } from '../types';
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { marked } from "marked";
-import { 
-  calculateFinancialHealthScore, 
+import DOMPurify from "dompurify";
+import {
+  calculateFinancialHealthScore,
   auditFinancials, 
   calculateSeniority, 
   getPolicyLogicDescription,
@@ -301,7 +302,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ data, messages, setMessag
             <div className={`flex max-w-[85%] gap-5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-12 h-12 rounded-[1.25rem] flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border-2 border-slate-100 text-indigo-600'}`}>{msg.role === 'user' ? <User className="w-6 h-6" /> : <Bot className="w-6 h-6" />}</div>
               <div className={`p-8 rounded-[2.5rem] text-sm leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white font-black shadow-xl' : 'bg-white text-slate-700 border border-slate-100 shadow-xl'}`}>
-                {msg.role === 'model' ? <div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} /> : <p className="text-base">{msg.content}</p>}
+                {msg.role === 'model' ? <div className="markdown-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(String(marked.parse(msg.content))) }} /> : <p className="text-base">{msg.content}</p>}
               </div>
             </div>
           </div>
