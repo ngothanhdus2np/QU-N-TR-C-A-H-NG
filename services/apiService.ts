@@ -2,6 +2,7 @@
 import { supabaseAdmin as supabase } from './supabase';
 import { AppData, Employee, SalaryPolicy, RevenueRecord, ExpenseRecord, AttendanceRecord, OvertimeRecord, SalesRecord, ShortageRecord, AdvanceRecord, PayrollRecord, StaffPerformanceRecord, KnowledgeBaseArticle, ProductGroup, ProductGroupRevenue, PromotionPlan } from '../types';
 import { isUUID } from '../businessLogic';
+import { auditService, isAudited } from './auditService';
 
 export const TABLE_MAP: Record<string, string> = {
   employees: 'employees', salaryPolicies: 'salary_policies', revenue: 'revenue_records', expenses: 'expense_records',
@@ -265,6 +266,9 @@ export const apiService = {
         console.error(`Xóa thất bại [${tableName} - ${id}]:`, error);
         throw new Error(`Xóa thất bại: ${error.message}`);
       }
+      if (isAudited(key as string)) {
+        auditService.log(key as string, id, 'delete');
+      }
       return true;
     }
     return null;
@@ -277,6 +281,9 @@ export const apiService = {
       if (error) {
         console.error(`Xóa bảng thất bại [${tableName}]:`, error);
         throw new Error(`Xóa bảng thất bại: ${error.message}`);
+      }
+      if (isAudited(key as string)) {
+        auditService.log(key as string, null, 'clear_table');
       }
       return true;
     }
@@ -291,6 +298,9 @@ export const apiService = {
       if (error) {
         console.error(`Ghi đè thất bại [${tableName} - ${item.id}]:`, error);
         throw new Error(`Ghi đè thất bại: ${error.message}`);
+      }
+      if (isAudited(key as string)) {
+        auditService.log(key as string, item.id, 'upsert', payload);
       }
       return true;
     }

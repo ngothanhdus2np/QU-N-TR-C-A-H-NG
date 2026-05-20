@@ -155,6 +155,19 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 10. Audit Trail (lịch sử thay đổi tài chính / lương)
+CREATE TABLE IF NOT EXISTS audit_trail (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  table_name TEXT NOT NULL,
+  record_id TEXT,
+  action TEXT NOT NULL,  -- 'upsert' | 'delete' | 'clear_table'
+  new_value JSONB,
+  changed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_trail_table ON audit_trail(table_name);
+CREATE INDEX IF NOT EXISTS idx_audit_trail_changed_at ON audit_trail(changed_at DESC);
+
 -- Enable RLS (Optional but recommended)
 -- ALTER TABLE shopee_revenue_records ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE shopee_product_group_revenue ENABLE ROW LEVEL SECURITY;
