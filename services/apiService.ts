@@ -36,7 +36,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       import_price: n(item.importPrice), sale_price: n(item.salePrice),
       stock: n(item.stock), min_stock: n(item.minStock),
       max_stock: n(item.maxStock) || 999999, unit: item.unit,
-      brand: item.brand, barcode: item.barcode, description: item.description,
+      brand: item.brand, supplier_name: item.supplierName || null, barcode: item.barcode, description: item.description,
       warranty: item.warranty, allow_points: !!item.allowPoints,
       weight: n(item.weight), weight_unit: item.weightUnit,
       location: item.location, images: item.images || [], status: item.status,

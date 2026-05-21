@@ -154,7 +154,7 @@ export const dataMapper = {
         id: p.id, sku: p.sku, name: p.name, categoryId: p.category_id || p.categoryId,
         importPrice: Number(p.import_price || p.importPrice || 0), salePrice: Number(p.sale_price || p.salePrice || 0),
         stock: Number(p.stock || 0), minStock: Number(p.min_stock || p.minStock || 0), maxStock: Number(p.max_stock || p.maxStock || 999999),
-        unit: p.unit, brand: p.brand, barcode: p.barcode, description: p.description, warranty: p.warranty,
+        unit: p.unit, brand: p.brand, supplierName: p.supplier_name || p.supplierName, barcode: p.barcode, description: p.description, warranty: p.warranty,
         allowPoints: p.allow_points ?? p.allowPoints ?? true, weight: Number(p.weight || 0), weightUnit: p.weight_unit || p.weightUnit,
         location: p.location, images: p.images || [], status: p.status, units: p.units || [], attributes: p.attributes || []
       })), localData?.posProducts || []),

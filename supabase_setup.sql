@@ -179,6 +179,14 @@ CREATE TABLE IF NOT EXISTS audit_trail (
   changed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Add supplier_name to pos_products if missing
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='pos_products' AND column_name='supplier_name') THEN
+    ALTER TABLE pos_products ADD COLUMN supplier_name TEXT;
+  END IF;
+END $$;
+
 -- Add supplier_name to inventory_transactions if missing
 DO $$
 BEGIN

@@ -29,6 +29,7 @@ const generateId = () => {
 const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions, suppliers = [], onUpdateProducts, onUpdateSurgical, onPushBatch, onAddTransaction }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
 
   // Debounce search
   React.useEffect(() => {
@@ -96,11 +97,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
 
   const filteredProducts = React.useMemo(() => {
     const lowerSearch = debouncedSearchTerm.toLowerCase();
-    return products.filter(p => 
-      (p.name?.toLowerCase() || '').includes(lowerSearch) || 
-      (p.sku?.toLowerCase() || '').includes(lowerSearch)
-    );
-  }, [products, debouncedSearchTerm]);
+    return products.filter(p => {
+      const matchesSearch = (p.name?.toLowerCase() || '').includes(lowerSearch) || (p.sku?.toLowerCase() || '').includes(lowerSearch);
+      const matchesSupplier = !supplierFilter || (p.supplierName || '') === supplierFilter;
+      return matchesSearch && matchesSupplier;
+    });
+  }, [products, debouncedSearchTerm, supplierFilter]);
 
   const supplierOptions = React.useMemo(() => {
     if (!purchaseSupplier.trim()) return suppliers.filter(s => s.status === 'Active');
@@ -1000,6 +1002,19 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white transition-all uppercase text-xs tracking-tighter" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="V.D: ĐÔI" />
                     </div>
                   </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Nhà cung cấp</label>
+                    <select
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white transition-all text-sm"
+                      value={formData.supplierName || ''}
+                      onChange={e => setFormData({...formData, supplierName: e.target.value || undefined})}
+                    >
+                      <option value="">— Chưa chọn NCC —</option>
+                      {suppliers.filter(s => s.status === 'Active').map(s => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   
                   <div className="pt-6 border-t border-slate-100">
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-4 block tracking-widest">Thuộc tính biến thể (Màu, Size...)</label>
@@ -1197,10 +1212,24 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
 
       {activeTab !== 'product_form' && activeTab !== 'audit_form' && activeTab !== 'suppliers' && (
         <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] shadow-xl border border-slate-200 gap-6 mb-8">
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
            <div className="relative w-full md:w-80">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />
               <input type="text" placeholder="Tìm hàng hóa, mã SKU..." className="w-full pl-12 pr-6 py-3.5 bg-slate-50 rounded-2xl outline-none text-sm font-bold border border-slate-200 focus:bg-white focus:border-indigo-400 transition-all placeholder:text-slate-300 shadow-inner" value={searchTerm} onChange={e => handleSearchChange(e.target.value)} />
            </div>
+           {activeTab === 'goods' && (
+             <select
+               className="py-3.5 pl-4 pr-8 bg-slate-50 rounded-2xl outline-none text-sm font-bold border border-slate-200 focus:bg-white focus:border-indigo-400 transition-all text-slate-600"
+               value={supplierFilter}
+               onChange={e => { setSupplierFilter(e.target.value); setCurrentPage(1); }}
+             >
+               <option value="">Tất cả nhà cung cấp</option>
+               {suppliers.filter(s => s.status === 'Active').map(s => (
+                 <option key={s.id} value={s.name}>{s.name}</option>
+               ))}
+             </select>
+           )}
+          </div>
             <div className="flex gap-3 w-full md:w-auto">
               {activeTab === 'goods' && (
                 <>

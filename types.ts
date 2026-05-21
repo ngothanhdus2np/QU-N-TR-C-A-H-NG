@@ -339,6 +339,7 @@ export interface POSProduct {
   units?: POSProductUnit[];
   attributes?: POSProductAttribute[];
   brand?: string;
+  supplierName?: string;
   barcode?: string;
   description?: string;
   warranty?: string;
