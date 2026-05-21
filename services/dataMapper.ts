@@ -168,9 +168,15 @@ export const dataMapper = {
         id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address, points: Number(c.points || 0),
         totalSpent: Number(c.total_spent || 0), lastVisit: c.last_visit || c.lastVisit, tier: c.tier || 'Standard'
       })), localData?.posCustomers || []),
+      posSuppliers: this.mergeBy((results.posSuppliers || []).map((s: any) => ({
+        id: s.id, name: s.name, phone: s.phone, email: s.email, address: s.address,
+        contactPerson: s.contact_person || s.contactPerson, taxCode: s.tax_code || s.taxCode,
+        notes: s.notes, status: s.status || 'Active'
+      })), localData?.posSuppliers || []),
       inventoryTransactions: this.mergeBy((results.inventoryTransactions || []).map((t: any) => ({
         id: t.id, date: t.date, type: t.type, items: t.items || [], note: t.note,
-        referenceId: t.reference_id || t.referenceId, staffId: t.staff_id || t.staffId
+        referenceId: t.reference_id || t.referenceId, staffId: t.staff_id || t.staffId,
+        supplierName: t.supplier_name || t.supplierName
       })), localData?.inventoryTransactions || [])
     };
   }

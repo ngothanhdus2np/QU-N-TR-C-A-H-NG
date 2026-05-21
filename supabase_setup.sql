@@ -74,7 +74,21 @@ CREATE TABLE IF NOT EXISTS shopee_inventory_out (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. POS Products
+-- 6. POS Suppliers
+CREATE TABLE IF NOT EXISTS pos_suppliers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  contact_person TEXT,
+  tax_code TEXT,
+  notes TEXT,
+  status TEXT DEFAULT 'Active',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 7. POS Products
 CREATE TABLE IF NOT EXISTS pos_products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sku TEXT,
@@ -164,6 +178,14 @@ CREATE TABLE IF NOT EXISTS audit_trail (
   new_value JSONB,
   changed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Add supplier_name to inventory_transactions if missing
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='inventory_transactions' AND column_name='supplier_name') THEN
+    ALTER TABLE inventory_transactions ADD COLUMN supplier_name TEXT;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_audit_trail_table ON audit_trail(table_name);
 CREATE INDEX IF NOT EXISTS idx_audit_trail_changed_at ON audit_trail(changed_at DESC);

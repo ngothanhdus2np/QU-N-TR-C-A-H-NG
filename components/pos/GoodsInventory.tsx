@@ -6,11 +6,12 @@ import {
   Grid3X3, User, Calendar, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { POSProduct, InventoryTransaction } from '../../types';
+import { POSProduct, InventoryTransaction, Supplier } from '../../types';
 
 interface GoodsInventoryProps {
   products: POSProduct[];
   transactions: InventoryTransaction[];
+  suppliers?: Supplier[];
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: { key: any, item: any, isDelete?: boolean }[]) => Promise<void>;
   onPushBatch?: (key: any, items: any[]) => Promise<void>;
@@ -25,7 +26,7 @@ const generateId = () => {
   }
 };
 
-const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions, onUpdateProducts, onUpdateSurgical, onPushBatch, onAddTransaction }) => {
+const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions, suppliers = [], onUpdateProducts, onUpdateSurgical, onPushBatch, onAddTransaction }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
@@ -40,13 +41,18 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setCurrentPage(1);
   };
   const [editingProduct, setEditingProduct] = useState<POSProduct | null>(null);
-  const [activeTab, setActiveTab] = useState<'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form'>('goods');
+  const [activeTab, setActiveTab] = useState<'goods' | 'purchase' | 'kho' | 'audit_form' | 'product_form' | 'suppliers'>('goods');
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [auditSearchTerm, setAuditSearchTerm] = useState('');
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<{ productId: string; quantity: number; price: number; name: string; discount: number }[]>([]);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [purchaseNote, setPurchaseNote ] = useState('');
+
+  // Supplier CRUD state
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [supplierForm, setSupplierForm] = useState<Partial<Supplier>>({ name: '', phone: '', email: '', address: '', contactPerson: '', taxCode: '', notes: '', status: 'Active' });
   const [auditItems, setAuditItems] = useState<{ productId: string; currentStock: number; actualStock: number; note: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -95,6 +101,35 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
       (p.sku?.toLowerCase() || '').includes(lowerSearch)
     );
   }, [products, debouncedSearchTerm]);
+
+  const supplierOptions = React.useMemo(() => {
+    if (!purchaseSupplier.trim()) return suppliers.filter(s => s.status === 'Active');
+    const lower = purchaseSupplier.toLowerCase();
+    return suppliers.filter(s => s.status === 'Active' && s.name.toLowerCase().includes(lower));
+  }, [suppliers, purchaseSupplier]);
+
+  const handleSaveSupplier = () => {
+    if (!supplierForm.name?.trim()) { alert('Vui lòng nhập tên nhà cung cấp!'); return; }
+    const item: Supplier = {
+      id: editingSupplier?.id || generateId(),
+      name: supplierForm.name!.trim(),
+      phone: supplierForm.phone || undefined,
+      email: supplierForm.email || undefined,
+      address: supplierForm.address || undefined,
+      contactPerson: supplierForm.contactPerson || undefined,
+      taxCode: supplierForm.taxCode || undefined,
+      notes: supplierForm.notes || undefined,
+      status: supplierForm.status as 'Active' | 'Inactive' || 'Active'
+    };
+    if (onUpdateSurgical) onUpdateSurgical([{ key: 'posSuppliers', item }]);
+    setEditingSupplier(null);
+    setSupplierForm({ name: '', phone: '', email: '', address: '', contactPerson: '', taxCode: '', notes: '', status: 'Active' });
+  };
+
+  const handleDeleteSupplier = (id: string) => {
+    if (!confirm('Xóa nhà cung cấp này?')) return;
+    if (onUpdateSurgical) onUpdateSurgical([{ key: 'posSuppliers', item: { id }, isDelete: true }]);
+  };
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const currentProducts = React.useMemo(() => {
@@ -325,6 +360,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
         staffId: 'Admin',
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
+        supplierName: purchaseSupplier || undefined,
       });
     }
     alert('Nhập hàng thành công!');
@@ -703,18 +739,44 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
                     {/* Supplier */}
                     <div className="relative">
                       <div className="flex items-center gap-2">
-                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                            <input 
-                              className="w-full pl-10 pr-4 py-2 border rounded-md text-sm outline-none focus:border-indigo-500 transition-all" 
-                              placeholder="Tìm nhà cung cấp" 
-                              value={purchaseSupplier} 
-                              onChange={e => setPurchaseSupplier(e.target.value)} 
-                            />
-                         </div>
-                         <button className="p-2 border rounded-md hover:bg-slate-50 text-indigo-600 transition-all">
-                           <Plus className="h-5 w-5" />
-                         </button>
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                          <input
+                            className="w-full pl-10 pr-4 py-2 border rounded-md text-sm outline-none focus:border-indigo-500 transition-all"
+                            placeholder="Tìm nhà cung cấp"
+                            value={purchaseSupplier}
+                            onChange={e => { setPurchaseSupplier(e.target.value); setShowSupplierDropdown(true); }}
+                            onFocus={() => setShowSupplierDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 150)}
+                          />
+                          {showSupplierDropdown && supplierOptions.length > 0 && (
+                            <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                              {supplierOptions.map(s => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors"
+                                  onMouseDown={() => { setPurchaseSupplier(s.name); setShowSupplierDropdown(false); }}
+                                >
+                                  <div className="text-sm font-bold text-slate-800">{s.name}</div>
+                                  {s.phone && <div className="text-xs text-slate-400">{s.phone}</div>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {showSupplierDropdown && supplierOptions.length === 0 && purchaseSupplier.trim() && (
+                            <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl px-3 py-2 text-xs text-slate-400">
+                              Không tìm thấy nhà cung cấp. Vào tab <span className="font-bold text-indigo-600">Nhà cung cấp</span> để thêm mới.
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="p-2 border rounded-md hover:bg-slate-50 text-indigo-600 transition-all"
+                          title="Quản lý nhà cung cấp"
+                          onClick={() => setActiveTab('suppliers')}
+                        >
+                          <Plus className="h-5 w-5" />
+                        </button>
                       </div>
                     </div>
 
@@ -995,6 +1057,129 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
             </div>
           </div>
         );
+      case 'suppliers':
+        return (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {editingSupplier !== null ? (
+              <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 p-10 max-w-2xl mx-auto space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-black text-slate-900">{editingSupplier.id ? 'Sửa nhà cung cấp' : 'Thêm nhà cung cấp'}</h2>
+                  <button onClick={() => setEditingSupplier(null)} className="p-2 hover:bg-slate-100 rounded-full"><X className="h-5 w-5 text-slate-400" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Tên nhà cung cấp *</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.name || ''} onChange={e => setSupplierForm(f => ({...f, name: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Điện thoại</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.phone || ''} onChange={e => setSupplierForm(f => ({...f, phone: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.email || ''} onChange={e => setSupplierForm(f => ({...f, email: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Người liên hệ</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.contactPerson || ''} onChange={e => setSupplierForm(f => ({...f, contactPerson: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Mã số thuế</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.taxCode || ''} onChange={e => setSupplierForm(f => ({...f, taxCode: e.target.value}))} />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Địa chỉ</label>
+                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.address || ''} onChange={e => setSupplierForm(f => ({...f, address: e.target.value}))} />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Ghi chú</label>
+                    <textarea className="w-full p-3 bg-slate-50 border rounded-xl font-medium outline-none focus:border-indigo-500 min-h-[80px]" value={supplierForm.notes || ''} onChange={e => setSupplierForm(f => ({...f, notes: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Trạng thái</label>
+                    <select className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-indigo-500" value={supplierForm.status || 'Active'} onChange={e => setSupplierForm(f => ({...f, status: e.target.value as 'Active' | 'Inactive'}))}>
+                      <option value="Active">Đang hợp tác</option>
+                      <option value="Inactive">Ngừng hợp tác</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setEditingSupplier(null)} className="flex-1 py-3 border-2 rounded-xl font-black text-xs uppercase hover:bg-slate-50 transition-all">Hủy</button>
+                  <button onClick={handleSaveSupplier} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Lưu nhà cung cấp</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900">Nhà cung cấp</h2>
+                    <p className="text-sm text-slate-400 mt-1">{suppliers.length} nhà cung cấp</p>
+                  </div>
+                  <button
+                    onClick={() => { setEditingSupplier({ id: '', name: '', status: 'Active' }); setSupplierForm({ name: '', phone: '', email: '', address: '', contactPerson: '', taxCode: '', notes: '', status: 'Active' }); }}
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-950 transition-all"
+                  >
+                    + Thêm nhà cung cấp
+                  </button>
+                </div>
+                <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden">
+                  {suppliers.length === 0 ? (
+                    <div className="p-16 text-center text-slate-400">
+                      <User className="w-12 h-12 mx-auto mb-4 text-slate-200" />
+                      <p className="font-bold">Chưa có nhà cung cấp nào</p>
+                      <p className="text-sm mt-1">Nhấn "+ Thêm nhà cung cấp" để bắt đầu</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="p-5 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Tên NCC</th>
+                          <th className="p-5 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Điện thoại</th>
+                          <th className="p-5 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Người liên hệ</th>
+                          <th className="p-5 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Trạng thái</th>
+                          <th className="p-5 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {suppliers.map(s => (
+                          <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition-all">
+                            <td className="p-5">
+                              <div className="font-bold text-slate-900">{s.name}</div>
+                              {s.email && <div className="text-xs text-slate-400">{s.email}</div>}
+                            </td>
+                            <td className="p-5 font-medium text-slate-600">{s.phone || '---'}</td>
+                            <td className="p-5 text-slate-600">{s.contactPerson || '---'}</td>
+                            <td className="p-5">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${s.status === 'Active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                                {s.status === 'Active' ? 'Đang hợp tác' : 'Ngừng'}
+                              </span>
+                            </td>
+                            <td className="p-5 text-center">
+                              <div className="flex justify-center gap-2">
+                                <button
+                                  onClick={() => { setEditingSupplier(s); setSupplierForm({ name: s.name, phone: s.phone, email: s.email, address: s.address, contactPerson: s.contactPerson, taxCode: s.taxCode, notes: s.notes, status: s.status }); }}
+                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteSupplier(s.id)}
+                                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        );
       default: return null;
     }
   };
@@ -1006,10 +1191,11 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
           <button onClick={() => setActiveTab('goods')} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'goods' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Danh mục hàng</button>
           <button onClick={() => { setActiveTab('purchase'); setShowPurchaseForm(false); }} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'purchase' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Nhập hàng (F2)</button>
           <button onClick={() => setActiveTab('kho')} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'kho' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Số dư tồn kho</button>
+          <button onClick={() => { setActiveTab('suppliers'); setEditingSupplier(null); }} className={`px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'suppliers' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Nhà cung cấp</button>
         </div>
       )}
 
-      {activeTab !== 'product_form' && activeTab !== 'audit_form' && (
+      {activeTab !== 'product_form' && activeTab !== 'audit_form' && activeTab !== 'suppliers' && (
         <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] shadow-xl border border-slate-200 gap-6 mb-8">
            <div className="relative w-full md:w-80">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />

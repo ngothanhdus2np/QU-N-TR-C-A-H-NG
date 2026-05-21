@@ -162,10 +162,11 @@ const MainContent: React.FC<MainContentProps> = ({
         );
       case 'goods':
         return (
-          <GoodsInventory 
-            products={data.posProducts || []} 
-            transactions={data.inventoryTransactions || []} 
-            onUpdateProducts={(newList) => updateData('posProducts', newList)} 
+          <GoodsInventory
+            products={data.posProducts || []}
+            transactions={data.inventoryTransactions || []}
+            suppliers={data.posSuppliers || []}
+            onUpdateProducts={(newList) => updateData('posProducts', newList)}
             onUpdateSurgical={updateSurgical}
             onPushBatch={pushBatch}
             onAddTransaction={(t) => pushBatch('inventoryTransactions', [t])}

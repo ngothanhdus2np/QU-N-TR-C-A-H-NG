@@ -18,6 +18,7 @@ export const TABLE_MAP: Record<string, string> = {
   posProducts: 'pos_products',
   posOrders: 'pos_orders',
   posCustomers: 'pos_customers',
+  posSuppliers: 'pos_suppliers',
   inventoryTransactions: 'inventory_transactions'
 };
 
@@ -61,11 +62,20 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       tier: item.tier
     };
   }
+  if (key === 'posSuppliers') {
+    return {
+      id: item.id, name: item.name, phone: item.phone || null, email: item.email || null,
+      address: item.address || null, contact_person: item.contactPerson || null,
+      tax_code: item.taxCode || null, notes: item.notes || null,
+      status: item.status || 'Active'
+    };
+  }
   if (key === 'inventoryTransactions') {
     return {
       id: item.id, date: item.date, type: item.type,
       items: item.items || [], note: item.note,
-      reference_id: item.referenceId, staff_id: item.staffId
+      reference_id: item.referenceId, staff_id: item.staffId,
+      supplier_name: item.supplierName || null
     };
   }
   if (key === 'salaryPolicies') {
@@ -175,7 +185,7 @@ export const apiService = {
     try {
       const [
         employees, policies, revenue, expenses, attendance, overtime, sales, shortages, advances, payroll, perf, kb, configs, pGroups, pGroupRev, promotions, brand,
-        shopeeRevenue, shopeePGroupRev, shopeeSource, shopeeIn, shopeeOut, posProducts, posOrders, posCustomers, transactions
+        shopeeRevenue, shopeePGroupRev, shopeeSource, shopeeIn, shopeeOut, posProducts, posOrders, posCustomers, posSuppliers, transactions
       ] = await Promise.all([
         supabase.from('employees').select('*').limit(10000),
         supabase.from('salary_policies').select('*'),
@@ -202,6 +212,7 @@ export const apiService = {
         supabase.from('pos_products').select('*').limit(10000),
         supabase.from('pos_orders').select('*').limit(10000),
         supabase.from('pos_customers').select('*').limit(10000),
+        supabase.from('pos_suppliers').select('*').limit(10000),
         supabase.from('inventory_transactions').select('*').limit(10000)
       ]);
 
@@ -215,7 +226,8 @@ export const apiService = {
         { name: 'ShopeeGroupRev', res: shopeePGroupRev }, { name: 'ShopeeSource', res: shopeeSource },
         { name: 'ShopeeInvIn', res: shopeeIn }, { name: 'ShopeeInvOut', res: shopeeOut },
         { name: 'PosProducts', res: posProducts }, { name: 'PosOrders', res: posOrders },
-        { name: 'PosCustomers', res: posCustomers }, { name: 'Transactions', res: transactions }
+        { name: 'PosCustomers', res: posCustomers }, { name: 'PosSuppliers', res: posSuppliers },
+        { name: 'Transactions', res: transactions }
       ];
 
       const errors = res_arr
@@ -249,6 +261,7 @@ export const apiService = {
           posProducts: posProducts.data,
           posOrders: posOrders.data,
           posCustomers: posCustomers.data,
+          posSuppliers: posSuppliers.data,
           inventoryTransactions: transactions.data
         },
         errors: errors.length > 0 ? errors : null

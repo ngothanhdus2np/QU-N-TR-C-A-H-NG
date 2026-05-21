@@ -307,6 +307,7 @@ export interface AppData {
   posProducts: POSProduct[];
   posOrders: POSOrder[];
   posCustomers: POSCustomer[];
+  posSuppliers: Supplier[];
   inventoryTransactions: InventoryTransaction[];
 }
 
@@ -402,6 +403,19 @@ export interface InventoryTransaction {
   note?: string;
   referenceId?: string; // OrderId or ImportId
   staffId: string;
+  supplierName?: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  contactPerson?: string;
+  taxCode?: string;
+  notes?: string;
+  status: 'Active' | 'Inactive';
 }
 
 export interface DailyBreakEvenConfig {

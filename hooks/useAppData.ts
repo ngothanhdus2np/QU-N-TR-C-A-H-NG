@@ -145,6 +145,7 @@ export function useAppData() {
           { key: 'posProducts', cloud: results.posProducts, matchKey: 'id' },
           { key: 'posOrders', cloud: results.posOrders, matchKey: 'id' },
           { key: 'posCustomers', cloud: results.posCustomers, matchKey: 'id' },
+          { key: 'posSuppliers', cloud: results.posSuppliers, matchKey: 'id' },
           { key: 'inventoryTransactions', cloud: results.inventoryTransactions, matchKey: 'id' },
           { key: 'productGroups', cloud: results.pGroups, matchKey: 'id' },
           { key: 'productGroupRevenue', cloud: results.pGroupRev, matchKey: 'id' }
