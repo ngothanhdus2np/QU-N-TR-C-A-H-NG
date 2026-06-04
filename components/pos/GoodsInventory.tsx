@@ -47,6 +47,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
   const [purchaseItems, setPurchaseItems] = useState<{ productId: string; quantity: number; price: number; name: string; discount: number }[]>([]);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
   const [purchaseNote, setPurchaseNote ] = useState('');
+  const [purchaseOrderDiscount, setPurchaseOrderDiscount] = useState(0);
   const [auditItems, setAuditItems] = useState<{ productId: string; currentStock: number; actualStock: number; note: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -312,7 +313,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
           newStock: p.stock + item.quantity,
           price: item.price
         });
-        updatedProducts[idx] = { ...p, stock: p.stock + item.quantity, importPrice: item.price };
+        // Tính giá vốn trung bình trọng số sau mỗi lần nhập
+        const totalCurrentValue = (p.stock || 0) * (p.importPrice || 0);
+        const totalNewValue = item.quantity * item.price;
+        const newTotalStock = (p.stock || 0) + item.quantity;
+        const avgCost = newTotalStock > 0 ? (totalCurrentValue + totalNewValue) / newTotalStock : item.price;
+        updatedProducts[idx] = { ...p, stock: newTotalStock, importPrice: Math.round(avgCost) };
       }
     });
 
@@ -331,6 +337,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
     setPurchaseItems([]);
     setPurchaseSupplier('');
     setPurchaseNote('');
+    setPurchaseOrderDiscount(0);
     setShowPurchaseForm(false);
   };
 
@@ -744,17 +751,18 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
                       
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-slate-700">Chiết khấu phiếu</span>
-                        <input 
-                          type="number" 
-                          className="text-right text-base font-bold bg-slate-50 border rounded px-3 py-1.5 w-32 outline-none focus:border-indigo-500 transition-all" 
-                          defaultValue={0} 
+                        <input
+                          type="number"
+                          className="text-right text-base font-bold bg-slate-50 border rounded px-3 py-1.5 w-32 outline-none focus:border-indigo-500 transition-all"
+                          value={purchaseOrderDiscount}
+                          onChange={e => setPurchaseOrderDiscount(Number(e.target.value))}
                         />
                       </div>
 
                       <div className="flex justify-between items-center pt-2 border-t mt-4">
                         <span className="text-sm font-bold text-slate-700">Cần trả nhà cung cấp</span>
                         <span className="text-xl font-black text-indigo-600">
-                          {purchaseItems.reduce((s, i) => s + (i.quantity * i.price - i.discount), 0).toLocaleString()}
+                          {Math.max(0, purchaseItems.reduce((s, i) => s + (i.quantity * i.price - i.discount), 0) - purchaseOrderDiscount).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -833,11 +841,24 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({ products, transactions,
             <h3 className="font-bold text-lg mb-4">Phiếu kiểm kê</h3>
             <div className="relative mb-4">
                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-               <input className="w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg" placeholder="Tìm hàng kiểm..." value={auditSearchTerm} onChange={e => {
-                 setAuditSearchTerm(e.target.value);
-                 const p = products.find(p => p.name.includes(e.target.value) || p.sku.includes(e.target.value));
-                 if (p && !auditItems.find(i => i.productId === p.id)) setAuditItems([...auditItems, { productId: p.id, currentStock: p.stock, actualStock: p.stock, note: '' }]);
-               }} />
+               <input
+                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg"
+                 placeholder="Tìm hàng kiểm... (Enter để thêm vào phiếu)"
+                 value={auditSearchTerm}
+                 onChange={e => setAuditSearchTerm(e.target.value)}
+                 onKeyDown={e => {
+                   if (e.key === 'Enter' && auditSearchTerm) {
+                     const p = products.find(prod =>
+                       prod.name.toLowerCase().includes(auditSearchTerm.toLowerCase()) ||
+                       prod.sku.toLowerCase().includes(auditSearchTerm.toLowerCase())
+                     );
+                     if (p && !auditItems.find(i => i.productId === p.id)) {
+                       setAuditItems([...auditItems, { productId: p.id, currentStock: p.stock, actualStock: p.stock, note: '' }]);
+                       setAuditSearchTerm('');
+                     }
+                   }
+                 }}
+               />
             </div>
             <div className="flex-1 overflow-y-auto">
                <table className="w-full text-sm">

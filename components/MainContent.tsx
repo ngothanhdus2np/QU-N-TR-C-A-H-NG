@@ -98,62 +98,112 @@ const MainContent: React.FC<MainContentProps> = ({
               const updatedCustomers = [...(data.posCustomers || []), customer];
               updateData('posCustomers', updatedCustomers);
             }}
-            onPlaceOrder={(order, updatedProducts, updatedCustomer) => {
+            onPlaceOrder={(order, updatedProducts, updatedCustomer, returnItems) => {
               // 1. Lưu đơn hàng
               pushBatch('posOrders', [order]);
-              
-              // 2. Cập nhật tồn kho (chỉ cập nhật những hàng hóa trong đơn)
-              const stockUpdates = order.items.map(item => {
-                const p = updatedProducts.find(prod => prod.id === item.productId);
+
+              // 2. Cập nhật tồn kho: hàng bán (trừ) + hàng trả (cộng)
+              const changedProductIds = new Set([
+                ...order.items.map(i => i.productId),
+                ...(returnItems || []).map(i => i.productId)
+              ]);
+              const stockUpdates = Array.from(changedProductIds).map(pid => {
+                const p = updatedProducts.find(prod => prod.id === pid);
                 return { key: 'posProducts' as const, item: p };
-              });
+              }).filter(u => u.item !== undefined);
               updateSurgical(stockUpdates);
-              
-              // 3. Ghi log biến động kho (Sale)
-              const saleTransaction = {
-                id: crypto.randomUUID(),
-                date: order.date,
-                type: 'Sale' as const,
-                staffId: order.staffId,
-                items: order.items.map(item => {
-                  const product = (data.posProducts || []).find(p => p.id === item.productId);
-                  return {
-                    productId: item.productId,
-                    sku: item.sku,
-                    name: item.name,
-                    quantity: -item.quantity,
-                    previousStock: product?.stock || 0,
-                    newStock: (product?.stock || 0) - item.quantity
-                  };
-                }),
-                note: `Bán hàng đơn ${order.orderCode}`,
-                referenceId: order.id
-              };
-              pushBatch('inventoryTransactions', [saleTransaction]);
-              
-              // 4. Cập nhật khách hàng (nếu có)
+
+              // 3. Ghi log biến động kho: Sale
+              if (order.items.length > 0) {
+                const saleTransaction = {
+                  id: crypto.randomUUID(),
+                  date: order.date,
+                  type: 'Sale' as const,
+                  staffId: order.staffId,
+                  items: order.items.map(item => {
+                    const product = (data.posProducts || []).find(p => p.id === item.productId);
+                    return {
+                      productId: item.productId,
+                      sku: item.sku,
+                      name: item.name,
+                      quantity: -item.quantity,
+                      previousStock: product?.stock || 0,
+                      newStock: (product?.stock || 0) - item.quantity
+                    };
+                  }),
+                  note: `Bán hàng đơn ${order.orderCode}`,
+                  referenceId: order.id
+                };
+                pushBatch('inventoryTransactions', [saleTransaction]);
+              }
+
+              // 4. Ghi log biến động kho: Return (hoàn kho hàng trả)
+              if (returnItems && returnItems.length > 0) {
+                const returnTransaction = {
+                  id: crypto.randomUUID(),
+                  date: order.date,
+                  type: 'Return' as const,
+                  staffId: order.staffId,
+                  items: returnItems.map(item => {
+                    const product = (data.posProducts || []).find(p => p.id === item.productId);
+                    return {
+                      productId: item.productId,
+                      sku: item.sku,
+                      name: item.name,
+                      quantity: item.quantity,
+                      previousStock: product?.stock || 0,
+                      newStock: (product?.stock || 0) + item.quantity
+                    };
+                  }),
+                  note: `Trả hàng liên quan đơn ${order.orderCode}`,
+                  referenceId: order.id
+                };
+                pushBatch('inventoryTransactions', [returnTransaction]);
+              }
+
+              // 5. Cập nhật khách hàng (nếu có)
               if (updatedCustomer) {
                 updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
               }
-  
-              // 5. Đồng bộ doanh thu vào Dashboard chính (revenue)
-              const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+              // 6. Đồng bộ doanh thu vào Dashboard (tính COGS từ giá vốn sản phẩm)
+              const today = new Date().toLocaleDateString('en-CA');
               const existingRevenue = (data.revenue || []).find(r => r.date === today);
-              
+
+              const orderCogs = order.items.reduce((sum, item) => {
+                const product = (data.posProducts || []).find(p => p.id === item.productId);
+                return sum + item.quantity * (product?.importPrice || 0);
+              }, 0);
+              const returnValue = (returnItems || []).reduce((sum, item) => sum + item.total, 0);
+              const returnCogs = (returnItems || []).reduce((sum, item) => {
+                const product = (data.posProducts || []).find(p => p.id === item.productId);
+                return sum + item.quantity * (product?.importPrice || 0);
+              }, 0);
+              const netSale = order.finalAmount - returnValue;
+              const netCogs = orderCogs - returnCogs;
+
               if (existingRevenue) {
-                const updatedRev = { ...existingRevenue, netRevenue: (existingRevenue.netRevenue || 0) + order.finalAmount };
+                const updatedRev = {
+                  ...existingRevenue,
+                  totalGrossRevenue: (existingRevenue.totalGrossRevenue || 0) + order.totalAmount,
+                  discount: (existingRevenue.discount || 0) + order.discount,
+                  returnsValue: (existingRevenue.returnsValue || 0) + returnValue,
+                  netRevenue: (existingRevenue.netRevenue || 0) + netSale,
+                  totalCogs: (existingRevenue.totalCogs || 0) + netCogs,
+                  grossProfit: (existingRevenue.grossProfit || 0) + netSale - netCogs
+                };
                 updateSurgical([{ key: 'revenue', item: updatedRev }]);
               } else {
                 const newRevenueRecord = {
                   id: crypto.randomUUID(),
                   date: today,
-                  totalGrossRevenue: order.finalAmount,
-                  discount: 0,
+                  totalGrossRevenue: order.totalAmount,
+                  discount: order.discount,
                   revenueOther: 0,
-                  returnsValue: 0,
-                  netRevenue: order.finalAmount,
-                  totalCogs: 0,
-                  grossProfit: order.finalAmount
+                  returnsValue: returnValue,
+                  netRevenue: netSale,
+                  totalCogs: netCogs,
+                  grossProfit: netSale - netCogs
                 };
                 pushBatch('revenue', [newRevenueRecord]);
               }

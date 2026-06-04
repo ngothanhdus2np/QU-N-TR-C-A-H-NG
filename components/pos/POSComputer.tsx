@@ -12,7 +12,7 @@ interface POSComputerProps {
   products: POSProduct[];
   customers: POSCustomer[];
   orders: POSOrder[];
-  onPlaceOrder: (order: POSOrder, updatedProducts: POSProduct[], updatedCustomer?: POSCustomer) => void;
+  onPlaceOrder: (order: POSOrder, updatedProducts: POSProduct[], updatedCustomer?: POSCustomer, returnItems?: POSOrderItem[]) => void;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
 }
@@ -398,7 +398,23 @@ const POSComputer: React.FC<POSComputerProps> = ({ products, customers, orders, 
   const changeDue = currentCashReceived > netPayable ? currentCashReceived - netPayable : 0;
 
   const handleCheckout = () => {
-    if (cart.length === 0) return;
+    // Return mode: cho phép checkout khi returnCart có hàng (dù cart trống)
+    if (cart.length === 0 && returnCart.length === 0) return;
+
+    // Kiểm tra tồn kho trước khi bán
+    if (cart.length > 0) {
+      const outOfStockItems = cart.filter(item => {
+        const product = products.find(p => p.id === item.productId);
+        return product !== undefined && product.stock < item.quantity;
+      });
+      if (outOfStockItems.length > 0) {
+        alert(`Không đủ tồn kho:\n${outOfStockItems.map(i => {
+          const stock = products.find(p => p.id === i.productId)?.stock ?? 0;
+          return `• ${i.name}: cần ${i.quantity}, còn ${stock}`;
+        }).join('\n')}`);
+        return;
+      }
+    }
 
     const orderId = generateId();
     const orderCode = `HD-${Date.now().toString().slice(-6)}`;
@@ -419,10 +435,20 @@ const POSComputer: React.FC<POSComputerProps> = ({ products, customers, orders, 
       notes: orderNote
     };
 
-    const updatedProducts = products.map(p => {
+    // Bước 1: Trừ kho hàng bán (cart)
+    const afterSaleProducts = products.map(p => {
       const cartItem = cart.find(item => item.productId === p.id);
       if (cartItem) {
         return { ...p, stock: p.stock - cartItem.quantity };
+      }
+      return p;
+    });
+
+    // Bước 2: Cộng lại kho hàng trả (returnCart)
+    const updatedProducts = afterSaleProducts.map(p => {
+      const returnItem = returnCart.find(item => item.productId === p.id);
+      if (returnItem) {
+        return { ...p, stock: p.stock + returnItem.quantity };
       }
       return p;
     });
@@ -437,7 +463,7 @@ const POSComputer: React.FC<POSComputerProps> = ({ products, customers, orders, 
       };
     }
 
-    onPlaceOrder(newOrder, updatedProducts, updatedCustomer);
+    onPlaceOrder(newOrder, updatedProducts, updatedCustomer, returnCart.length > 0 ? returnCart : undefined);
     
     // Set last order for receipt and show modal IF auto-print is enabled
     setLastOrder(newOrder);

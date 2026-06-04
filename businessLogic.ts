@@ -197,12 +197,16 @@ export const calculateEmployeePayroll = (emp: Employee, selectedMonth: string, p
       if (pStr.includes('hỗ trợ ở') || pStr.includes('nhà ở') || pStr.includes('mất ở')) lostHousing = true;
       if (pStr.includes('trách nhiệm')) lostResponsibility = true;
       
-      const match = pStr.match(/\d+/g);
-      if (match) { 
-        const n = parseInt(match.join('')); 
-        const amount = (n < 1000 ? n * 1000 : n);
-        disciplinaryDeduction += amount;
-        notes.push(`Phạt: ${vType.name} (${amount.toLocaleString()}đ)`);
+      // Lấy số cuối cùng trong chuỗi (thường là số tiền phạt thực tế)
+      const match = pStr.match(/\d[\d.,]*/g);
+      if (match) {
+        const rawNum = match[match.length - 1];
+        const n = cleanVNNumber(rawNum);
+        const amount = n > 0 ? (n < 1000 ? n * 1000 : n) : 0;
+        if (amount > 0) {
+          disciplinaryDeduction += amount;
+          notes.push(`Phạt: ${vType.name} (${amount.toLocaleString()}đ)`);
+        }
       }
     }
   });
@@ -254,8 +258,14 @@ export const calculateEmployeePayroll = (emp: Employee, selectedMonth: string, p
 
   // 7. OT, Commission, Seniority
   const commPay = Math.round(sales.filter(s => s.employeeId === emp.id && s.date.startsWith(selectedMonth)).reduce((sum, s) => sum + (Number(s.salesAmount) || 0), 0) * ((Number(currentPolicy.commissionRate) || 0) / 100));
-  const otHours = overtime.filter(ot => ot.employeeId === emp.id && ot.date.startsWith(selectedMonth)).reduce((sum, ot) => sum + (Number(ot.hours) || 0), 0) / 60;
-  const otPay = Math.round(otHours * (Number(currentPolicy.otRate) || 0));
+  // hours lưu bằng phút (ví dụ 90 = 1.5 giờ), multiplier là hệ số (1 = thường, 1.5 = lễ, 2 = đặc biệt)
+  const empOtRecords = overtime.filter(ot => ot.employeeId === emp.id && ot.date.startsWith(selectedMonth));
+  const otHours = empOtRecords.reduce((sum, ot) => sum + (Number(ot.hours) || 0), 0) / 60;
+  const otPay = Math.round(empOtRecords.reduce((sum, ot) => {
+    const hours = (Number(ot.hours) || 0) / 60;
+    const multiplier = Number(ot.multiplier) || 1;
+    return sum + hours * multiplier * (Number(currentPolicy.otRate) || 0);
+  }, 0));
   const holidayBonus = Math.round(monthHolidaysCount * (salaryType === 'daily' ? baseSalary : (baseSalary / (daysInMonthTotal || 30))));
   
   if (otPay > 0) notes.push(`Tăng ca: ${otHours.toFixed(1)}h x ${currentPolicy.otRate.toLocaleString()}đ/h.`);
