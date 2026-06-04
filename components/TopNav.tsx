@@ -259,9 +259,14 @@ const TopNav: React.FC<TopNavProps> = ({
                         className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all ${activeThemeId === theme.id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
                       >
                         <div
-                          className={`mt-0.5 w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border ${activeThemeId === theme.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-100 border-slate-200 text-slate-400'}`}
+                          className="mt-0.5 w-8 h-8 rounded-lg shrink-0 overflow-hidden border border-slate-200 flex-col"
+                          style={{ background: theme.previewBg }}
                         >
-                          <Palette className="w-3.5 h-3.5" />
+                          <div className="h-2.5 w-full" style={{ background: theme.previewAccent }} />
+                          <div className="px-1 pt-1 space-y-0.5">
+                            <div className="h-1 rounded-sm" style={{ background: theme.previewAccent, opacity: 0.7 }} />
+                            <div className="h-1 rounded-sm w-3/4" style={{ background: theme.previewAccent, opacity: 0.4 }} />
+                          </div>
                         </div>
                         <div className="flex-1 min-w-0">
                           <p

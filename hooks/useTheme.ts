@@ -4,7 +4,7 @@ import { APP_THEMES, DEFAULT_THEME, AppThemeId } from '../constants/themes';
 const STORAGE_KEY = 'cfo-brain-theme';
 
 const isAppThemeId = (value: string | null): value is AppThemeId =>
-  value === 'classic' || value === 'codex';
+  value === 'classic' || value === 'codex' || value === 'prestige';
 
 export const useTheme = () => {
   const [themeId, setThemeId] = useState<AppThemeId>(() => {
@@ -24,7 +24,10 @@ export const useTheme = () => {
   );
 
   const toggleTheme = useCallback(() => {
-    setThemeId(current => current === 'classic' ? 'codex' : 'classic');
+    setThemeId(current => {
+      const idx = APP_THEMES.findIndex(t => t.id === current);
+      return APP_THEMES[(idx + 1) % APP_THEMES.length].id;
+    });
   }, []);
 
   return {
