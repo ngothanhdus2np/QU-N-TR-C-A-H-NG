@@ -30,6 +30,8 @@ interface Props {
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onAnalyze: () => void;
+  onToggleStatus: () => void;
 }
 
 const FieldRow: React.FC<{ label: string; value?: string | number | null }> = ({
@@ -37,7 +39,7 @@ const FieldRow: React.FC<{ label: string; value?: string | number | null }> = ({
   value,
 }) => (
   <div className="py-3 border-b border-slate-100">
-    <p className="text-[11px] text-slate-400 mb-0.5">{label}</p>
+    <p className="text-xs text-slate-400 mb-0.5">{label}</p>
     <p className={`text-[14px] ${value ? 'text-slate-800' : 'text-slate-400'}`}>
       {value || 'Chưa có'}
     </p>
@@ -53,6 +55,8 @@ const CustomerDetailPage: React.FC<Props> = ({
   onClose,
   onEdit,
   onDelete,
+  onAnalyze,
+  onToggleStatus,
 }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
 
@@ -67,7 +71,7 @@ const CustomerDetailPage: React.FC<Props> = ({
   const netSpent = orderStats ? orderStats.sold - orderStats.returned : customer.totalSpent;
 
   return (
-    <div className="bg-white border-t-2 border-blue-400 shadow-lg animate-in slide-in-from-top-4 duration-300">
+    <div className="bg-white animate-in slide-in-from-top-2 duration-200">
       {/* Tabs + close */}
       <div className="border-b border-slate-200 bg-white rounded-t-lg">
         <div className="flex items-center px-4">
@@ -75,9 +79,9 @@ const CustomerDetailPage: React.FC<Props> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-[13px] font-normal border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-4 py-3 text-sm font-normal border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-indigo-600 text-blue-600'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -101,7 +105,14 @@ const CustomerDetailPage: React.FC<Props> = ({
 
       {/* Tab content */}
       <div className="max-h-[600px] overflow-auto bg-slate-50">
-        {activeTab === 'info' && <InfoTab customer={customer} customerCode={customerCode} />}
+        {activeTab === 'info' && (
+          <InfoTab
+            customer={customer}
+            customerCode={customerCode}
+            onAnalyze={onAnalyze}
+            onEdit={onEdit}
+          />
+        )}
         {activeTab === 'addresses' && <InvoiceInfoTab customer={customer} />}
         {activeTab === 'orders' && <OrdersTab orders={customerOrders} />}
         {activeTab === 'debt' && (
@@ -114,7 +125,7 @@ const CustomerDetailPage: React.FC<Props> = ({
       <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between">
         <button
           onClick={onDelete}
-          className="flex items-center gap-1.5 text-[13px] text-slate-500 hover:text-rose-600 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-rose-600 transition-colors"
         >
           <Trash2 className="w-4 h-4" />
           Xóa
@@ -122,14 +133,17 @@ const CustomerDetailPage: React.FC<Props> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={onEdit}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-[13px] rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
           >
             <Edit2 className="w-3.5 h-3.5" />
             Chỉnh sửa
           </button>
-          <button className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-[13px] text-slate-600 rounded-lg hover:bg-slate-50 transition-colors">
+          <button
+            onClick={onToggleStatus}
+            className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-sm text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+          >
             <Lock className="w-3.5 h-3.5" />
-            Ngừng hoạt động
+            {customer.status === 'inactive' ? 'Mở hoạt động' : 'Ngừng hoạt động'}
           </button>
         </div>
       </div>
@@ -138,9 +152,16 @@ const CustomerDetailPage: React.FC<Props> = ({
 };
 
 /* ── Tab: Thông tin ─────────────────────────────────────────────── */
-const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
+const InfoTab: React.FC<{
+  customer: POSCustomer;
+  customerCode: string;
+  onAnalyze: () => void;
+  onEdit: () => void;
+}> = ({
   customer,
   customerCode,
+  onAnalyze,
+  onEdit,
 }) => (
   <div className="p-6 space-y-5">
     {/* Profile header */}
@@ -155,15 +176,18 @@ const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
             <h2 className="text-[18px] font-bold text-slate-900">{customer.name}</h2>
-            <span className="text-[13px] text-slate-400 font-mono">{customerCode}</span>
+            <span className="text-sm text-slate-400 font-mono">{customerCode}</span>
           </div>
-          <div className="flex items-center gap-3 text-[12px] text-slate-500 mb-3 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-slate-500 mb-3 flex-wrap">
             <span>
-              Người tạo: <span className="text-slate-700">—</span>
+              Người tạo: <span className="text-slate-700">{customer.createdBy || '—'}</span>
             </span>
             <span className="text-slate-300">|</span>
             <span>
-              Ngày tạo: <span className="text-slate-700">—</span>
+              Ngày tạo:{' '}
+              <span className="text-slate-700">
+                {customer.createdAt ? fmtDate(customer.createdAt) : '—'}
+              </span>
             </span>
             <span className="text-slate-300">|</span>
             <span>
@@ -173,14 +197,17 @@ const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
               </span>
             </span>
           </div>
-          <button className="flex items-center gap-1 text-[13px] text-blue-600 hover:underline">
+          <button
+            onClick={onAnalyze}
+            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          >
             <TrendingUp className="w-3.5 h-3.5" />
             Xem phân tích
           </button>
         </div>
 
         <div className="text-right shrink-0">
-          <p className="text-[12px] text-slate-400">Chi nhánh trung tâm</p>
+          <p className="text-xs text-slate-400">Chi nhánh trung tâm</p>
         </div>
       </div>
     </div>
@@ -189,8 +216,11 @@ const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
     <div className="bg-white rounded-xl border border-slate-200 p-6">
       <div className="grid grid-cols-3 gap-x-10">
         <FieldRow label="Điện thoại" value={customer.phone} />
-        <FieldRow label="Sinh nhật" value={null} />
-        <FieldRow label="Giới tính" value={null} />
+        <FieldRow label="Sinh nhật" value={customer.birthday ? fmtDate(customer.birthday) : null} />
+        <FieldRow
+          label="Giới tính"
+          value={customer.gender === 'male' ? 'Nam' : customer.gender === 'female' ? 'Nữ' : null}
+        />
         <FieldRow label="Email" value={customer.email} />
         <FieldRow label="Facebook" value={null} />
         <div />
@@ -199,7 +229,10 @@ const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
     </div>
 
     {/* Notes */}
-    <button className="flex items-center gap-2 text-[13px] text-slate-400 hover:text-slate-600 transition-colors">
+    <button
+      onClick={onEdit}
+      className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+    >
       <FileText className="w-4 h-4" />
       {customer.notes || 'Chưa có ghi chú'}
     </button>
@@ -208,11 +241,13 @@ const InfoTab: React.FC<{ customer: POSCustomer; customerCode: string }> = ({
 
 /* ── Tab: Thông tin xuất hóa đơn ────────────────────────────────── */
 const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
-  const [type, setType] = useState<'individual' | 'organization'>('individual');
+  const [type, setType] = useState<'individual' | 'organization'>(
+    customer.customerType === 'company' ? 'organization' : 'individual'
+  );
   const [form, setForm] = useState({
     buyerName: customer.name || '',
-    taxCode: '',
-    companyName: '',
+    taxCode: customer.taxCode || '',
+    companyName: customer.companyName || '',
     address: customer.address || '',
     city: '',
     ward: '',
@@ -225,13 +260,22 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
     bankAccount: '',
   });
   const upd = (k: keyof typeof form, v: string) => setForm(p => ({ ...p, [k]: v }));
+  const lookupTaxCode = () => {
+    const taxCode = form.taxCode.trim();
+    if (!taxCode) {
+      window.alert('Vui lòng nhập mã số thuế trước khi tra cứu.');
+      return;
+    }
+    const query = encodeURIComponent(`mã số thuế ${taxCode}`);
+    window.open(`https://www.google.com/search?q=${query}`, '_blank', 'noopener,noreferrer');
+  };
 
   const inputCls =
-    'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] text-slate-700 placeholder-slate-300 focus:outline-none focus:border-blue-400';
+    'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:border-blue-400';
 
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div>
-      <p className="text-[12px] text-slate-600 mb-1">{label}</p>
+      <p className="text-xs text-slate-600 mb-1">{label}</p>
       {children}
     </div>
   );
@@ -240,7 +284,7 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
     <div className="p-5 space-y-4">
       {/* Loại khách hàng */}
       <div className="flex items-center gap-6">
-        <span className="text-[13px] text-slate-600 shrink-0">Loại khách hàng</span>
+        <span className="text-sm text-slate-600 shrink-0">Loại khách hàng</span>
         {(['individual', 'organization'] as const).map(t => (
           <label key={t} className="flex items-center gap-2 cursor-pointer">
             <input
@@ -249,7 +293,7 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
               onChange={() => setType(t)}
               className="w-4 h-4 accent-blue-600"
             />
-            <span className="text-[13px] text-slate-700">
+            <span className="text-sm text-slate-700">
               {t === 'individual' ? 'Cá nhân' : 'Tổ chức/ Hộ kinh doanh'}
             </span>
           </label>
@@ -275,7 +319,10 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
                   value={form.taxCode}
                   onChange={e => upd('taxCode', e.target.value)}
                 />
-                <button className="px-3 py-2 bg-blue-600 text-white text-[12px] rounded-lg hover:bg-blue-700 whitespace-nowrap shrink-0">
+                <button
+                  onClick={lookupTaxCode}
+                  className="px-3 py-2 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 whitespace-nowrap shrink-0"
+                >
                   Tra cứu MST
                 </button>
               </div>
@@ -337,7 +384,10 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
                   value={form.taxCode}
                   onChange={e => upd('taxCode', e.target.value)}
                 />
-                <button className="px-3 py-2 bg-blue-600 text-white text-[12px] rounded-lg hover:bg-blue-700 whitespace-nowrap shrink-0">
+                <button
+                  onClick={lookupTaxCode}
+                  className="px-3 py-2 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 whitespace-nowrap shrink-0"
+                >
                   Tra cứu MST
                 </button>
               </div>
@@ -457,7 +507,7 @@ const OrdersTab: React.FC<{ orders: POSOrder[] }> = ({ orders }) => {
       <div className="p-4">
         <div className="bg-white rounded-xl border border-slate-200 py-5 px-4 text-center flex items-center gap-3 justify-center">
           <FileText className="w-5 h-5 text-slate-300 shrink-0" />
-          <span className="text-[13px] text-slate-500">Chưa có lịch sử giao dịch</span>
+          <span className="text-sm text-slate-500">Chưa có lịch sử giao dịch</span>
         </div>
       </div>
     );
@@ -466,7 +516,7 @@ const OrdersTab: React.FC<{ orders: POSOrder[] }> = ({ orders }) => {
   return (
     <div className="p-6">
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Mã đơn</th>
@@ -484,7 +534,7 @@ const OrdersTab: React.FC<{ orders: POSOrder[] }> = ({ orders }) => {
                 <td className="px-4 py-3 text-slate-600">{fmtDate(order.date)}</td>
                 <td className="px-4 py-3">
                   <span
-                    className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${
+                    className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
                       order.isReturn
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-emerald-100 text-emerald-700'
@@ -519,7 +569,7 @@ const DebtTab: React.FC<{ records: CustomerDebtRecord[]; currentDebt: number }> 
   <div className="p-6 space-y-4">
     {/* Summary */}
     <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-      <span className="text-[13px] text-slate-600">Nợ hiện tại</span>
+      <span className="text-sm text-slate-600">Nợ hiện tại</span>
       <span
         className={`text-[18px] font-bold tabular-nums ${currentDebt > 0 ? 'text-rose-600' : 'text-slate-500'}`}
       >
@@ -530,11 +580,11 @@ const DebtTab: React.FC<{ records: CustomerDebtRecord[]; currentDebt: number }> 
     {records.length === 0 ? (
       <div className="bg-white rounded-xl border border-slate-200 py-5 px-4 text-center flex items-center gap-3 justify-center">
         <Phone className="w-5 h-5 text-slate-300 shrink-0" />
-        <span className="text-[13px] text-slate-500">Chưa có lịch sử công nợ</span>
+        <span className="text-sm text-slate-500">Chưa có lịch sử công nợ</span>
       </div>
     ) : (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Ngày</th>
@@ -549,7 +599,7 @@ const DebtTab: React.FC<{ records: CustomerDebtRecord[]; currentDebt: number }> 
                 <td className="px-4 py-3 text-slate-600">{fmtDate(rec.date)}</td>
                 <td className="px-4 py-3">
                   <span
-                    className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${
+                    className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
                       rec.type === 'debt'
                         ? 'bg-rose-100 text-rose-700'
                         : 'bg-emerald-100 text-emerald-700'
@@ -580,12 +630,12 @@ const DebtTab: React.FC<{ records: CustomerDebtRecord[]; currentDebt: number }> 
 const PointsTab: React.FC<{ points: number }> = ({ points }) => (
   <div className="p-4 space-y-2">
     <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-      <span className="text-[13px] text-slate-600">Điểm hiện tại</span>
+      <span className="text-sm text-slate-600">Điểm hiện tại</span>
       <span className="text-[16px] font-bold tabular-nums text-amber-600">{fmt(points)}</span>
     </div>
     <div className="bg-white rounded-xl border border-slate-200 py-5 px-4 flex items-center gap-3 justify-center">
       <Mail className="w-5 h-5 text-slate-300 shrink-0" />
-      <span className="text-[13px] text-slate-500">Chưa có lịch sử tích điểm</span>
+      <span className="text-sm text-slate-500">Chưa có lịch sử tích điểm</span>
     </div>
   </div>
 );

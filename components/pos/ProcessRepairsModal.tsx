@@ -56,7 +56,7 @@ export default function ProcessRepairsModal({ tickets = [], onClose }: ProcessRe
   }, [tickets, searchCode, searchCustomer, searchDevice, dateFrom, dateTo]);
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[200] flex items-center justify-center p-6">
+    <div className="fixed inset-0 bg-black/40 z-modal flex items-center justify-center p-6">
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden"
         style={{ maxHeight: '82vh' }}
@@ -164,14 +164,14 @@ export default function ProcessRepairsModal({ tickets = [], onClose }: ProcessRe
                         <div className="font-mono text-indigo-600 text-xs font-semibold">
                           {ticket.code}
                         </div>
-                        <div className="text-slate-400 text-[11px] mt-0.5">{createdDate}</div>
+                        <div className="text-slate-400 text-xs mt-0.5">{createdDate}</div>
                       </div>
                       <div className="px-4 py-3">
                         <div className="text-slate-700 text-xs truncate">
                           {ticket.deviceName || <span className="text-slate-400 italic">—</span>}
                         </div>
                         {ticket.customerName && (
-                          <div className="text-slate-400 text-[11px] mt-0.5">
+                          <div className="text-slate-400 text-xs mt-0.5">
                             {ticket.customerName}
                             {ticket.customerPhone ? ` · ${ticket.customerPhone}` : ''}
                           </div>
@@ -180,7 +180,7 @@ export default function ProcessRepairsModal({ tickets = [], onClose }: ProcessRe
                       <div className="px-4 py-3 text-slate-600 text-xs">{returnDateDisplay}</div>
                       <div className="px-4 py-3">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${status.className}`}
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${status.className}`}
                         >
                           {status.label}
                         </span>

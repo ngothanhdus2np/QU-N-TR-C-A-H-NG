@@ -14,7 +14,7 @@ export const DashboardEodBanner: React.FC<DashboardEodBannerProps> = ({ report, 
       <FileText className="w-5 h-5 text-white" />
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-[10px] font-normal text-indigo-500 uppercase tracking-widest mb-1">
+      <p className="text-2xs font-normal text-indigo-500 uppercase tracking-widest mb-1">
         Báo cáo hôm qua — {report.date}
       </p>
       <div
@@ -26,7 +26,7 @@ export const DashboardEodBanner: React.FC<DashboardEodBannerProps> = ({ report, 
     </div>
     <button
       onClick={onDismiss}
-      className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-indigo-100 rounded-lg transition-all shrink-0"
+      className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-indigo-100 rounded-lg transition-colors shrink-0"
     >
       <XIcon className="w-4 h-4" />
     </button>

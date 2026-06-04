@@ -2,7 +2,7 @@ import React from 'react';
 import { Star, Edit2, Image as ImageIcon } from 'lucide-react';
 import { POSProduct } from '../../types';
 
-export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, visibleColumns }: {
+export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, visibleColumns, inGroup }: {
   variant: POSProduct;
   isSelected: boolean;
   isFavorite: boolean;
@@ -11,9 +11,10 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
   onEdit: (p: POSProduct) => void;
   onView: (p: POSProduct) => void;
   visibleColumns: string[];
+  inGroup?: boolean;
 }) => (
-  <tr className="hover:bg-indigo-50/30 group transition-all border-b border-slate-50 last:border-0 cursor-pointer bg-slate-50/30" onClick={() => onView(variant)}>
-    <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+  <tr className={`hover:bg-indigo-50/30 group transition-colors border-b border-slate-50 last:border-0 cursor-pointer ${inGroup ? 'bg-indigo-50/40' : 'bg-slate-50/30'}`} onClick={() => onView(variant)}>
+    <td className={`px-4 py-3 w-10 ${inGroup ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isSelected} onChange={() => onSelect(variant.id)} />
     </td>
     <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
@@ -29,7 +30,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
       </td>
     )}
     <td className="px-4 py-3">
-      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-[10px] border border-slate-200 tracking-tight whitespace-nowrap">{variant.sku}</span>
+      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-2xs border border-slate-200 tracking-tight whitespace-nowrap">{variant.sku}</span>
     </td>
     <td className="px-4 py-3 text-slate-700 text-sm min-w-[200px]">
       <div className="flex items-center gap-2 pl-8"><span>{variant.name}</span></div>
@@ -41,7 +42,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     {visibleColumns.includes('brand') && <td className="px-4 py-3 text-xs text-slate-500 font-normal whitespace-nowrap">{variant.brand || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('location') && (
       <td className="px-4 py-3 whitespace-nowrap">
-        {variant.location ? <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-normal text-[10px] uppercase tracking-tight">{variant.location}</span> : <span className="text-slate-300 text-xs">—</span>}
+        {variant.location ? <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-normal text-2xs uppercase tracking-tight">{variant.location}</span> : <span className="text-slate-300 text-xs">—</span>}
       </td>
     )}
     {visibleColumns.includes('stock') && (
@@ -59,20 +60,20 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     {visibleColumns.includes('directSale') && <td className="px-4 py-3 text-center">{variant.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('status') && (
       <td className="px-4 py-3 text-center">
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-normal ${variant.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{variant.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
+        <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${variant.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{variant.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
       </td>
     )}
     {visibleColumns.includes('warranty') && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{variant.warranty || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('createdAt') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.createdAt ? new Date(variant.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
-    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-      <button onClick={() => onEdit(variant)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+    <td className={`px-3 py-3 ${inGroup ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => onEdit(variant)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
         <Edit2 className="h-3.5 w-3.5" />
       </button>
     </td>
   </tr>
 ));
 
-export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, onToggleExpand, visibleColumns }: {
+export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, isExpanded, onToggleExpand, visibleColumns, variants }: {
   product: POSProduct;
   isSelected: boolean;
   isFavorite: boolean;
@@ -83,14 +84,23 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   isExpanded?: boolean;
   onToggleExpand?: (id: string) => void;
   visibleColumns: string[];
+  variants?: POSProduct[];
 }) => {
   const isParent = product.isParent && product.variantCount && product.variantCount > 0;
+
+  const skuRange = (() => {
+    if (!isParent || !variants || variants.length === 0) return null;
+    const skus = variants.map(v => v.sku).filter(Boolean) as string[];
+    if (skus.length === 0) return null;
+    if (skus.length === 1) return skus[0];
+    return `${skus[0]} — ${skus[skus.length - 1]}`;
+  })();
   const handleRowClick = () => {
     if (isParent && onToggleExpand) { onToggleExpand(product.id); } else { onView(product); }
   };
   return (
-    <tr className="hover:bg-slate-50/70 group transition-all border-b border-slate-50 last:border-0 cursor-pointer" onClick={handleRowClick}>
-      <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+    <tr className={`hover:bg-slate-50/70 group transition-colors border-b border-slate-50 last:border-0 cursor-pointer ${isExpanded ? 'border-t-2 border-indigo-200 bg-indigo-50/60' : ''}`} onClick={handleRowClick}>
+      <td className={`px-4 py-3 w-10 ${isExpanded ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
         <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isSelected} onChange={() => onSelect(product.id)} />
       </td>
       <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
@@ -106,12 +116,21 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
         </td>
       )}
       <td className="px-4 py-3">
-        {!isParent && product.sku ? <span className="text-sm text-slate-600 whitespace-nowrap">{product.sku}</span> : <span className="text-slate-300 text-sm">—</span>}
+        {isParent
+          ? (isExpanded
+              ? null
+              : skuRange
+                ? <span className="text-xs text-slate-400 font-mono whitespace-nowrap">{skuRange}</span>
+                : <span className="text-slate-300 text-sm">—</span>)
+          : (product.sku
+              ? <span className="text-sm text-slate-600 whitespace-nowrap">{product.sku}</span>
+              : <span className="text-slate-300 text-sm">—</span>)
+        }
       </td>
       <td className="px-4 py-3 text-slate-900 text-sm min-w-[200px]">
         <div className="flex items-center gap-2">
           <span>{product.name}</span>
-          {isParent && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-normal">({product.variantCount})</span>}
+          {isParent && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-2xs font-normal">({product.variantCount})</span>}
         </div>
       </td>
       {visibleColumns.includes('category') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.categoryId || <span className="text-slate-300">—</span>}</td>}
@@ -139,13 +158,13 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       {visibleColumns.includes('directSale') && <td className="px-4 py-3 text-center">{product.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('status') && (
         <td className="px-4 py-3 text-center">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-normal ${product.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{product.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${product.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{product.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
         </td>
       )}
       {visibleColumns.includes('warranty') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.warranty || <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('createdAt') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{product.createdAt ? new Date(product.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
-      <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-        <button onClick={() => onEdit(product)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+      <td className={`px-3 py-3 ${isExpanded ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <button onClick={() => onEdit(product)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
           <Edit2 className="h-3.5 w-3.5" />
         </button>
       </td>

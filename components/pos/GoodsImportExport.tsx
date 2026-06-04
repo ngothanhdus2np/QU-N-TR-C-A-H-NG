@@ -39,12 +39,12 @@ export const GoodsImportExport: React.FC<GoodsImportExportProps> = ({
   onImportChange,
 }) => (
   <>
-    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-normal text-[10px] uppercase tracking-wide hover:bg-slate-50 transition-all shadow-sm">
+    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-normal text-2xs uppercase tracking-wide hover:bg-slate-50 transition-colors shadow-sm">
       <Upload className="h-3.5 w-3.5" /> Import file
     </button>
     <button
       onClick={() => exportToExcel(toGoodsExportRows(products), 'HangHoa')}
-      className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-emerald-600 rounded-xl font-normal text-[10px] uppercase tracking-wide hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm"
+      className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-emerald-600 rounded-xl font-normal text-2xs uppercase tracking-wide hover:bg-emerald-50 hover:border-emerald-200 transition-colors shadow-sm"
     >
       <FileDown className="h-3.5 w-3.5" /> Xuất Excel
     </button>
@@ -52,13 +52,13 @@ export const GoodsImportExport: React.FC<GoodsImportExportProps> = ({
     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={onImportChange} />
 
     {importStatus && (
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
           <div className="flex items-center gap-3">
             {importStatus.status === 'running' && (
               <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin shrink-0" />
             )}
-            <h3 className="font-black text-slate-800 text-sm uppercase tracking-wide">
+            <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">
               {importStatus.status === 'running' ? 'Đang Import...' : importStatus.status === 'done' ? 'Hoàn thành' : 'Lỗi Import'}
             </h3>
           </div>

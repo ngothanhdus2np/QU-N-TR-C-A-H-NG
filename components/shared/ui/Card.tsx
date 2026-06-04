@@ -3,7 +3,7 @@ import React from 'react';
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
-  shadow?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+  shadow?: 'none' | 'card' | 'panel' | 'dropdown' | 'modal';
   rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   border?: boolean;
 }
@@ -18,10 +18,10 @@ const paddingStyles: Record<NonNullable<CardProps['padding']>, string> = {
 
 const shadowStyles: Record<NonNullable<CardProps['shadow']>, string> = {
   none: '',
-  sm: 'shadow-sm',
-  md: 'shadow-md',
-  lg: 'shadow-lg',
-  xl: 'shadow-xl',
+  card: 'shadow-card',
+  panel: 'shadow-panel',
+  dropdown: 'shadow-dropdown',
+  modal: 'shadow-modal',
 };
 
 const roundedStyles: Record<NonNullable<CardProps['rounded']>, string> = {
@@ -39,7 +39,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     {
       children,
       padding = 'md',
-      shadow = 'md',
+      shadow = 'card',
       rounded = 'xl',
       border = true,
       className = '',

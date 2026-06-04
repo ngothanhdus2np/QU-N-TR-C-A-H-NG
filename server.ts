@@ -111,11 +111,11 @@ async function startServer() {
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002"],
           fontSrc: ["'self'", "data:"],
-          objectSrc: ["'none'"],
+          objectSrc: ["'self'", "blob:"],
           mediaSrc: ["'self'"],
-          frameSrc: ["'none'"],
+          frameSrc: ["'self'", "blob:"],
         }
       },
       hsts: {
@@ -203,11 +203,43 @@ async function startServer() {
     const requireAuth = (req: Request, res: Response, next: NextFunction) => {
       const apiKey = req.headers['x-api-key'] as string;
       const internalKey = process.env.INTERNAL_API_KEY;
-      
-      // SECURITY FIX (2026-05-18): Removed loopback address bypass
-      // Previous code allowed all requests from 127.0.0.1, which bypasses auth
-      // when deployed behind reverse proxy (Nginx/Cloudflare Tunnel).
-      // Now ONLY valid API key grants access.
+      const requestOrigin = req.headers.origin;
+      const requestReferer = req.headers.referer;
+      const refererOrigin = (() => {
+        if (!requestReferer) return null;
+        try {
+          return new URL(requestReferer).origin;
+        } catch {
+          return null;
+        }
+      })();
+
+      // SECURITY FIX (2026-05-20): Fix spoofable browser bypass in dev mode
+      // Checking req.socket.remoteAddress to ensure the connection originates from localhost (direct local connection).
+      // Also ensuring no proxy forwarding headers (X-Forwarded-For, X-Forwarded-Host) are present, which prevents
+      // bypassing auth when accessed through external tunnels like Cloudflare Tunnel or ngrok.
+      const remoteIp = req.socket.remoteAddress;
+      const isLocalhost =
+        remoteIp === '127.0.0.1' ||
+        remoteIp === '::1' ||
+        remoteIp === '::ffff:127.0.0.1';
+
+      const hasForwardedHeader = !!(
+        req.headers['x-forwarded-for'] ||
+        req.headers['x-forwarded-host'] ||
+        req.headers['x-forwarded-proto']
+      );
+
+      const isTrustedDevBrowserRequest =
+        !IS_PROD &&
+        isLocalhost &&
+        !hasForwardedHeader &&
+        ((typeof requestOrigin === 'string' && allowedOrigins.includes(requestOrigin)) ||
+          (typeof refererOrigin === 'string' && allowedOrigins.includes(refererOrigin)));
+
+      if (isTrustedDevBrowserRequest) {
+        return next();
+      }
       
       if (!internalKey) {
         console.error('[AUTH] INTERNAL_API_KEY not configured - all requests will be rejected');

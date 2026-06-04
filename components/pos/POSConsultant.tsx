@@ -18,7 +18,7 @@ const ProductMemoCard = React.memo(({ product, onAdd }: { product: POSProduct; o
         {product.salePrice.toLocaleString('vi-VN')}
       </div>
       {product.isParent && product.variantCount && product.variantCount > 0 && (
-        <div className="absolute top-2 right-2 px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-normal rounded-full shadow-lg">
+        <div className="absolute top-2 right-2 px-2 py-0.5 bg-indigo-600 text-white text-2xs font-normal rounded-full shadow-lg">
           {product.variantCount} biến thể
         </div>
       )}
@@ -196,7 +196,7 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
                 <span className="text-[9px] font-normal text-slate-400 uppercase tracking-wider">(Click để ẩn)</span>
               )}
               {viewMode === 'variants' && selectedParent && (
-                <span className="text-[10px] font-normal text-slate-500">({variantProducts.length} biến thể)</span>
+                <span className="text-2xs font-normal text-slate-500">({variantProducts.length} biến thể)</span>
               )}
             </div>
 

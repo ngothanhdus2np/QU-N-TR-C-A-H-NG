@@ -1,4 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -41,18 +50,17 @@ import {
   Trash2,
   Upload,
   UploadCloud,
+  User,
   Users,
   WifiOff,
   X,
   XCircle,
   CornerDownLeft,
+  Crown,
+  Gem,
+  Star,
+  Info,
 } from 'lucide-react';
-import PaymentsTab from './tabs/PaymentsTab';
-import AppearanceTab from './tabs/AppearanceTab';
-import GoodsTab from './tabs/GoodsTab';
-import PrintTemplatesTab from './tabs/PrintTemplatesTab';
-import MigrationTab from './tabs/MigrationTab';
-import DOMPurify from 'dompurify';
 import { AppThemeId } from '../../constants/themes';
 import {
   DEFAULT_POS_INVENTORY_SETTINGS,
@@ -60,6 +68,7 @@ import {
 } from '../../constants/defaultData';
 import { uploadImage } from '../../services/marketingStorageService';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../src/lib';
+import { useToast } from '../ui/Toast';
 import type {
   AlertConfig,
   BrandProfile,
@@ -71,10 +80,17 @@ import type {
 } from '../../types';
 import { DEFAULT_POS_KEYBOARD_SHORTCUTS } from '../../types';
 
+const PaymentsTab = lazy(() => import('./tabs/PaymentsTab'));
+const AppearanceTab = lazy(() => import('./tabs/AppearanceTab'));
+const GoodsTab = lazy(() => import('./tabs/GoodsTab'));
+const PrintTemplatesTab = lazy(() => import('./tabs/PrintTemplatesTab'));
+const MigrationTab = lazy(() => import('./tabs/MigrationTab'));
+
 type SettingsTab =
   | 'store'
   | 'pos'
   | 'goods'
+  | 'customers'
   | 'payments'
   | 'printTemplates'
   | 'appearance'
@@ -97,6 +113,7 @@ interface SettingsCenterProps {
   pendingCount?: number;
   offlinePendingCount?: number;
   onRefresh: () => void;
+  onImportRefresh?: () => void;
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
   brandProfile: BrandProfile;
   onUpdateBrand: (profile: BrandProfile) => void;
@@ -125,6 +142,11 @@ const SETTINGS_PAGES: Record<
     label: 'Hàng hóa',
     description: 'Mã vạch, thuộc tính, tồn kho và bảo hành',
     icon: Package,
+  },
+  customers: {
+    label: 'Khách hàng',
+    description: 'Nhóm khách hàng, tiêu chí phân hạng và ngưỡng',
+    icon: Users,
   },
   payments: {
     label: 'Thanh toán POS',
@@ -159,7 +181,7 @@ const SETTINGS_PAGES: Record<
 const SETTINGS_GROUPS: { title: string; items: SettingsTab[] }[] = [
   { title: 'Cửa hàng', items: ['store', 'appearance'] },
   { title: 'Bán hàng', items: ['pos', 'payments', 'printTemplates'] },
-  { title: 'Quản lý', items: ['goods'] },
+  { title: 'Quản lý', items: ['goods', 'customers'] },
   { title: 'Tiện ích', items: ['notifications', 'integrations'] },
   { title: 'Dữ liệu', items: ['sync', 'security', 'migration'] },
 ];
@@ -175,6 +197,7 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
     { id: 'goods-stock', label: 'Giá vốn, tồn kho' },
     { id: 'goods-other', label: 'Khác' },
   ],
+  customers: [{ id: 'customer-tiers', label: 'Phân hạng khách hàng' }],
   payments: [{ id: 'payment-accounts', label: 'Tài khoản thu chi' }],
   printTemplates: [
     { id: 'print-template-editor', label: 'Mẫu hóa đơn' },
@@ -209,6 +232,69 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
 const getPageMeta = (tab: SettingsTab) => SETTINGS_PAGES[tab] || SETTINGS_PAGES.store;
 
 const POS_KB_STORAGE_KEY = 'pos_keyboard_shortcuts';
+const CUSTOMER_TIER_STORAGE_KEY = 'customer_tier_settings';
+
+type TierKey = 'Silver' | 'Gold' | 'Diamond';
+type TierConfig = { minSpend: number; minOrders: number };
+type CustomerTierMap = Record<TierKey, TierConfig>;
+
+const DEFAULT_TIER_SETTINGS: CustomerTierMap = {
+  Silver: { minSpend: 5, minOrders: 5 },
+  Gold: { minSpend: 20, minOrders: 20 },
+  Diamond: { minSpend: 100, minOrders: 50 },
+};
+
+const TIER_UI: {
+  key: TierKey | 'Standard';
+  icon: React.ElementType;
+  label: string;
+  subtitle: string;
+  iconBg: string;
+  iconColor: string;
+  border: string;
+  isBase: boolean;
+}[] = [
+  {
+    key: 'Standard',
+    icon: User,
+    label: 'Standard',
+    subtitle: 'Mặc định — khách mới hoặc chưa đạt ngưỡng',
+    iconBg: 'bg-slate-100',
+    iconColor: 'text-slate-500',
+    border: 'border-slate-200',
+    isBase: true,
+  },
+  {
+    key: 'Silver',
+    icon: Star,
+    label: 'Silver',
+    subtitle: 'Hạng Bạc',
+    iconBg: 'bg-slate-200',
+    iconColor: 'text-slate-600',
+    border: 'border-slate-300',
+    isBase: false,
+  },
+  {
+    key: 'Gold',
+    icon: Crown,
+    label: 'Gold',
+    subtitle: 'Hạng Vàng',
+    iconBg: 'bg-yellow-100',
+    iconColor: 'text-yellow-600',
+    border: 'border-yellow-200',
+    isBase: false,
+  },
+  {
+    key: 'Diamond',
+    icon: Gem,
+    label: 'Diamond',
+    subtitle: 'Hạng Kim Cương',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    border: 'border-blue-200',
+    isBase: false,
+  },
+];
 
 const KEY_DISPLAY: Record<string, string> = {
   ArrowUp: '↑',
@@ -270,7 +356,7 @@ const SettingLine: React.FC<{
 
 const TogglePill: React.FC<{ enabled: boolean }> = ({ enabled }) => (
   <span
-    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
   >
     <span
       className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`}
@@ -298,6 +384,12 @@ const RightAnchor: React.FC<{ activeTab: SettingsTab }> = ({ activeTab }) => {
     </aside>
   );
 };
+
+const SettingsTabLoader = () => (
+  <div className="rounded-xl border border-slate-100 bg-white p-8 text-center text-sm text-slate-500">
+    Đang mở cài đặt...
+  </div>
+);
 
 const MobileSettingsNav: React.FC<{
   activeTab: SettingsTab;
@@ -337,7 +429,7 @@ const SettingsSidebar: React.FC<{
     <nav className="space-y-4">
       {SETTINGS_GROUPS.map(group => (
         <div key={group.title}>
-          <div className="px-3 pb-1 text-[11px] font-normal uppercase tracking-wider text-slate-400">
+          <div className="px-3 pb-1 text-xs font-normal uppercase tracking-wider text-slate-400">
             {group.title}
           </div>
           <div className="space-y-1">
@@ -448,6 +540,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   pendingCount = 0,
   offlinePendingCount = 0,
   onRefresh,
+  onImportRefresh,
   onDrainOfflineQueue,
   brandProfile,
   onUpdateBrand,
@@ -457,10 +550,10 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   onUpdateInventorySettings,
   products = [],
 }) => {
+  const { showToast } = useToast();
   const logoUploadRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<SettingsTab>('store');
-  const [visitedTabs, setVisitedTabs] = useState<Set<SettingsTab>>(() => new Set(['store']));
 
   const handleSetActiveTab = useCallback((tab: SettingsTab) => {
     startTransition(() => setActiveTab(tab));
@@ -502,6 +595,15 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     }
   });
 
+  const [tierSettings, setTierSettings] = useState<CustomerTierMap>(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOMER_TIER_STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as CustomerTierMap;
+    } catch {}
+    return { ...DEFAULT_TIER_SETTINGS };
+  });
+  const [tierSaveStatus, setTierSaveStatus] = useState<'idle' | 'saved'>('idle');
+
   const [kbShortcuts, setKbShortcuts] = useState<POSKeyboardShortcut[]>(() => {
     try {
       const saved = localStorage.getItem(POS_KB_STORAGE_KEY);
@@ -532,13 +634,6 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     () => normalizePOSPaymentSettings(paymentSettings),
     [paymentSettings]
   );
-
-  useEffect(() => {
-    setVisitedTabs(prev => {
-      if (prev.has(activeTab)) return prev;
-      return new Set([...prev, activeTab]);
-    });
-  }, [activeTab]);
 
   useEffect(() => {
     setInventoryForm({
@@ -692,7 +787,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               blob
             );
             if (publicUrl) onUpdateBrand({ ...brandProfile, logo: publicUrl });
-            else window.alert('Lỗi tải ảnh lên Cloud!');
+            else showToast('Lỗi tải ảnh lên Cloud!', 'error');
             setLogoUploading(false);
           },
           'image/jpeg',
@@ -1326,7 +1421,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-normal text-amber-700 hover:bg-amber-50 disabled:opacity-50"
             >
               <Upload className="h-4 w-4" />
-              Đẩy đơn offline
+              Đẩy thao tác offline
             </button>
           )}
         </div>
@@ -1382,10 +1477,123 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     </div>
   );
 
+  const saveTierSettings = () => {
+    localStorage.setItem(CUSTOMER_TIER_STORAGE_KEY, JSON.stringify(tierSettings));
+    setTierSaveStatus('saved');
+    setTimeout(() => setTierSaveStatus('idle'), 2000);
+  };
+
+  const renderCustomersTab = () => (
+    <div className="space-y-4">
+      <Section
+        id="customer-tiers"
+        title="Phân hạng khách hàng"
+        description="Ngưỡng tối thiểu để khách được xếp vào từng nhóm. Thỏa một trong hai điều kiện là đủ điều kiện lên hạng. Việc gán thủ công trong form khách hàng vẫn được ưu tiên."
+        icon={Users}
+      >
+        <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+          <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+          <p className="text-xs text-blue-700 leading-relaxed">
+            Tiêu chí bên dưới là tham chiếu để nhân viên biết khi nào nên nâng hạng khách. Hệ thống chưa tự động tính — gán nhóm thủ công trong form khách hàng.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {TIER_UI.map(tier => {
+            const TierIcon = tier.icon;
+            const cfg = tier.isBase ? null : tierSettings[tier.key as TierKey];
+            return (
+              <div
+                key={tier.key}
+                className={`rounded-xl border-2 ${tier.border} bg-white p-4 space-y-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-xl ${tier.iconBg} ${tier.iconColor} flex items-center justify-center shrink-0`}>
+                    <TierIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{tier.label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{tier.subtitle}</p>
+                  </div>
+                </div>
+
+                {tier.isBase ? (
+                  <p className="text-xs text-slate-400 italic">
+                    Không có ngưỡng — áp dụng mặc định cho tất cả khách mới.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-normal uppercase tracking-wider text-slate-400">
+                      Thỏa 1 trong 2 điều kiện
+                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-600">Tổng chi tiêu tối thiểu</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          value={cfg!.minSpend}
+                          onChange={e =>
+                            setTierSettings(prev => ({
+                              ...prev,
+                              [tier.key]: { ...prev[tier.key as TierKey], minSpend: Number(e.target.value) },
+                            }))
+                          }
+                          className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm text-right font-normal outline-none focus:border-indigo-300"
+                        />
+                        <span className="text-xs text-slate-500 shrink-0">triệu đ</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-600">Số đơn hàng tối thiểu</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          value={cfg!.minOrders}
+                          onChange={e =>
+                            setTierSettings(prev => ({
+                              ...prev,
+                              [tier.key]: { ...prev[tier.key as TierKey], minOrders: Number(e.target.value) },
+                            }))
+                          }
+                          className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm text-right font-normal outline-none focus:border-indigo-300"
+                        />
+                        <span className="text-xs text-slate-500 shrink-0">đơn</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={saveTierSettings}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-normal text-white hover:bg-indigo-700"
+          >
+            <Save className="h-4 w-4" />
+            {tierSaveStatus === 'saved' ? 'Đã lưu!' : 'Lưu cài đặt'}
+          </button>
+          {tierSaveStatus === 'saved' && (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Đã lưu vào thiết bị này
+            </span>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+
   // Inline-only tabs (cheap to remount)
   const renderInlineTab = () => {
     if (activeTab === 'store') return renderStoreTab();
     if (activeTab === 'pos') return renderPosTab();
+    if (activeTab === 'customers') return renderCustomersTab();
     if (activeTab === 'notifications') return renderNotificationsTab();
     if (activeTab === 'integrations') return renderIntegrationsTab();
     if (activeTab === 'security') return renderSecurityTab();
@@ -1402,9 +1610,11 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 
   const ActiveIcon = activeTabMeta.icon;
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-950/45 p-3 backdrop-blur-sm md:p-6">
-      <div className="mx-auto flex h-full max-h-[900px] w-full max-w-[1500px] overflow-hidden rounded-xl bg-slate-100 shadow-2xl">
+    <div className="fixed inset-0 z-modal bg-slate-950/35 px-4 pt-4 pb-0 md:px-8 md:pt-8">
+      <div className="mx-auto flex h-full w-full overflow-hidden rounded-xl bg-slate-100 shadow-xl">
         <SettingsSidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -1438,9 +1648,9 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                 {/* Inline tabs — conditionally rendered (cheap) */}
                 {!isComponentTab(activeTab) && renderInlineTab()}
 
-                {/* Component tabs — kept mounted after first visit to avoid expensive remount */}
-                {visitedTabs.has('goods') && (
-                  <div style={{ display: activeTab === 'goods' ? undefined : 'none' }}>
+                {/* Heavy tabs are mounted only while active to avoid background work */}
+                <Suspense fallback={<SettingsTabLoader />}>
+                  {activeTab === 'goods' && (
                     <GoodsTab
                       products={products}
                       alertConfig={alertConfig}
@@ -1450,31 +1660,23 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                       onSetActiveTab={handleGoodsSetActiveTab}
                       onRefresh={onRefresh}
                     />
-                  </div>
-                )}
-                {visitedTabs.has('payments') && (
-                  <div style={{ display: activeTab === 'payments' ? undefined : 'none' }}>
+                  )}
+                  {activeTab === 'payments' && (
                     <PaymentsTab
                       settings={normalizedPaymentSettings}
                       onSave={onUpdatePaymentSettings}
                     />
-                  </div>
-                )}
-                {visitedTabs.has('printTemplates') && (
-                  <div style={{ display: activeTab === 'printTemplates' ? undefined : 'none' }}>
+                  )}
+                  {activeTab === 'printTemplates' && (
                     <PrintTemplatesTab brandProfile={brandProfile} />
-                  </div>
-                )}
-                {visitedTabs.has('appearance') && (
-                  <div style={{ display: activeTab === 'appearance' ? undefined : 'none' }}>
+                  )}
+                  {activeTab === 'appearance' && (
                     <AppearanceTab activeThemeId={activeThemeId} onThemeChange={onThemeChange} />
-                  </div>
-                )}
-                {visitedTabs.has('migration') && (
-                  <div style={{ display: activeTab === 'migration' ? undefined : 'none' }}>
-                    <MigrationTab />
-                  </div>
-                )}
+                  )}
+                  {activeTab === 'migration' && (
+                    <MigrationTab onRefresh={onImportRefresh ?? onRefresh} />
+                  )}
+                </Suspense>
               </div>
               {activeTab !== 'printTemplates' && <RightAnchor activeTab={activeTab} />}
             </div>

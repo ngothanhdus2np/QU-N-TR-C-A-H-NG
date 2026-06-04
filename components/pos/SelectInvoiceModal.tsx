@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Printer, Undo2, X } from 'lucide-react';
 import { POSCustomer, POSOrder } from '../../types';
+import { FilterDateRange } from '../shared';
 
 interface SelectInvoiceModalProps {
   orders: POSOrder[];
@@ -17,7 +18,7 @@ function printOrder(order: POSOrder) {
         <title>In Hóa Đơn - ${order.orderCode}</title>
         <style>
           @page { size: 80mm auto; margin: 0; }
-          body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; color: #000; line-height: 1.4; font-size: 12px; }
+          body { margin: 0; padding: 0; background: white; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #000; line-height: 1.4; font-size: 12px; letter-spacing: 0; }
           .receipt { width: 80mm; padding: 5mm; box-sizing: border-box; }
           .center { text-align: center; }
           .dashed { border-bottom: 2px dashed #000; margin: 10px 0; }
@@ -167,11 +168,11 @@ export default function SelectInvoiceModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[160] flex items-center justify-center p-6">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-6">
       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl overflow-hidden animate-in fade-in zoom-in-95 duration-500 flex flex-col h-[85vh]">
         {/* Header */}
         <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center shrink-0">
-          <h3 className="font-black text-xl text-slate-900 uppercase tracking-tight">
+          <h3 className="font-semibold text-xl text-slate-900 uppercase tracking-tight">
             Chọn hóa đơn
           </h3>
           <button
@@ -186,7 +187,7 @@ export default function SelectInvoiceModal({
           {/* Sidebar */}
           <div className="w-[300px] border-r border-slate-100 p-6 space-y-8 overflow-y-auto no-scrollbar shrink-0 bg-slate-50/50">
             <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+              <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-widest px-2">
                 Tìm kiếm
               </h4>
               <div className="space-y-2">
@@ -214,23 +215,15 @@ export default function SelectInvoiceModal({
             </section>
 
             <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+              <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-widest px-2">
                 Thời gian
               </h4>
-              <div className="space-y-2">
-                <input
-                  type="date"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
-                  value={search.fromDate}
-                  onChange={e => setField('fromDate', e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
-                  value={search.toDate}
-                  onChange={e => setField('toDate', e.target.value)}
-                />
-              </div>
+              <FilterDateRange
+                startDate={search.fromDate}
+                endDate={search.toDate}
+                onStartDateChange={date => setField('fromDate', date)}
+                onEndDateChange={date => setField('toDate', date)}
+              />
             </section>
           </div>
 
@@ -268,7 +261,7 @@ export default function SelectInvoiceModal({
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] font-normal uppercase text-slate-600 hover:bg-slate-950 hover:text-white hover:border-slate-950 transition-all shadow-sm"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-normal uppercase text-slate-600 hover:bg-slate-950 hover:text-white hover:border-slate-950 transition-all shadow-sm"
                           onClick={() => printOrder(inv)}
                         >
                           <Printer className="h-3 w-3" />
@@ -335,7 +328,7 @@ export default function SelectInvoiceModal({
                   onClick={() => setPage(totalPages)}
                 />
               </div>
-              <div className="text-[11px] font-normal text-slate-400">
+              <div className="text-xs font-normal text-slate-400">
                 Hiển thị {filtered.length} hóa đơn
               </div>
             </div>

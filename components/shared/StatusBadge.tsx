@@ -28,7 +28,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   return (
     <span
-      className={`px-2 py-1 rounded-full text-[10px] font-normal uppercase ${config.bg} ${config.text}`}
+      className={`px-2 py-1 rounded-full text-2xs font-normal uppercase whitespace-nowrap ${config.bg} ${config.text}`}
     >
       {config.label}
     </span>

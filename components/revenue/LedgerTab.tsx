@@ -53,8 +53,8 @@ const LedgerTab: React.FC<Props> = ({
   <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
     <div className="grid grid-cols-1 gap-6">
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl">
-        <h3 className="text-xs font-black text-slate-900 mb-6 flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-lg text-white">
+        <h3 className="text-xs font-semibold text-slate-900 mb-6 flex items-center gap-3">
+          <div className="p-2 bg-indigo-600 rounded-lg text-white">
             <Plus className="w-3.5 h-3.5" />
           </div>{' '}
           NHẬP NHANH DOANH THU
@@ -67,7 +67,7 @@ const LedgerTab: React.FC<Props> = ({
                 required
                 value={formData.date}
                 onChange={e => setFormData({ ...formData, date: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="Tiền hàng" icon={DollarSign} color="text-blue-600">
@@ -77,7 +77,7 @@ const LedgerTab: React.FC<Props> = ({
                 required
                 value={formData.totalGrossRevenue}
                 onChange={e => setFormData({ ...formData, totalGrossRevenue: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="Giảm giá" icon={Tag} color="text-rose-500">
@@ -86,7 +86,7 @@ const LedgerTab: React.FC<Props> = ({
                 placeholder="0"
                 value={formData.discount}
                 onChange={e => setFormData({ ...formData, discount: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
           </div>
@@ -97,7 +97,7 @@ const LedgerTab: React.FC<Props> = ({
                 placeholder="0"
                 value={formData.returnsValue}
                 onChange={e => setFormData({ ...formData, returnsValue: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="Doanh thu khác" icon={HandCoins} color="text-indigo-500">
@@ -106,7 +106,7 @@ const LedgerTab: React.FC<Props> = ({
                 placeholder="0"
                 value={formData.revenueOther}
                 onChange={e => setFormData({ ...formData, revenueOther: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="Giá vốn" icon={ShoppingCart} color="text-rose-600">
@@ -116,14 +116,14 @@ const LedgerTab: React.FC<Props> = ({
                 required
                 value={formData.totalCogs}
                 onChange={e => setFormData({ ...formData, totalCogs: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
           </div>
           <button
             type="submit"
             disabled={isSaving}
-            className={`w-full py-3.5 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-black text-white'}`}
+            className={`w-full py-3.5 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-colors shadow-xl flex items-center justify-center gap-2 ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-black text-white'}`}
           >
             {isSaving ? (
               <>
@@ -144,7 +144,7 @@ const LedgerTab: React.FC<Props> = ({
           <div className="p-2.5 bg-white border border-slate-100 rounded-xl text-slate-400 shadow-sm">
             <FileSpreadsheet className="w-5 h-5" />
           </div>
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+          <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-tight">
             Sổ cái Doanh thu Đã lọc
           </h3>
         </div>
@@ -165,7 +165,7 @@ const LedgerTab: React.FC<Props> = ({
                 isShopee ? 'DoanhThu_Shopee' : 'DoanhThu_CuaHang'
               )
             }
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-emerald-600 rounded-xl font-normal text-[9px] uppercase tracking-widest hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-emerald-600 rounded-xl font-normal text-[9px] uppercase tracking-widest hover:bg-emerald-50 hover:border-emerald-200 transition-colors shadow-sm"
           >
             <Download className="w-3.5 h-3.5" /> Xuất Excel
           </button>
@@ -178,27 +178,27 @@ const LedgerTab: React.FC<Props> = ({
       <div className="overflow-x-auto overflow-y-auto flex-1 no-scrollbar scroll-smooth">
         <table className="w-full text-left border-collapse table-fixed min-w-[1200px] relative">
           <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
-            <tr className="text-[9px] font-black text-slate-400 uppercase tracking-tighter bg-slate-50 border-b border-slate-100">
+            <tr className="text-[9px] font-semibold text-slate-400 uppercase tracking-tighter bg-slate-50 border-b border-slate-100">
               <th className="px-6 py-6 w-[120px] bg-slate-50/30">Thời gian</th>
               <th className="px-1 py-6 text-right text-blue-600">Tổng tiền hàng</th>
               <th className="px-1 py-6 text-right text-rose-500">Giảm giá</th>
               <th className="px-1 py-6 text-right text-amber-600">Giá trị trả</th>
-              <th className="px-1 py-6 text-right font-black bg-blue-50/50 text-blue-800">
+              <th className="px-1 py-6 text-right font-semibold bg-blue-50/50 text-blue-800">
                 Doanh thu
               </th>
               <th className="px-1 py-6 text-right text-indigo-500">Doanh thu khác</th>
               <th className="px-1 py-6 text-right text-rose-600">Tổng giá vốn</th>
-              <th className="px-1 py-6 text-right font-black bg-emerald-50 text-emerald-800">
+              <th className="px-1 py-6 text-right font-semibold bg-emerald-50 text-emerald-800">
                 Lợi nhuận gộp
               </th>
               <th className="px-1 py-6 text-center w-[60px] bg-slate-50/30">Xóa</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 tabular-nums text-[11px] font-normal">
+          <tbody className="divide-y divide-slate-50 tabular-nums text-xs font-normal">
             {filteredListByRange.map(item => (
               <tr
                 key={item.id}
-                className="group hover:bg-slate-50/80 transition-all odd:bg-white even:bg-slate-50/30"
+                className="group hover:bg-slate-50/80 transition-colors odd:bg-white even:bg-slate-50/30"
               >
                 <td className="px-6 py-5 text-slate-900 bg-slate-50/20">
                   {item.date ? item.date.split('-').reverse().join('/') : 'N/A'}
@@ -232,7 +232,7 @@ const LedgerTab: React.FC<Props> = ({
                         item.id
                       )
                     }
-                    className="p-2 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                    className="p-2 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

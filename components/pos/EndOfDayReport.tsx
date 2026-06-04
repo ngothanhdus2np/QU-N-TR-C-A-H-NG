@@ -1,21 +1,36 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, Printer, ZoomIn, ZoomOut, ChevronRight, ChevronDown } from 'lucide-react';
-import { POSOrder } from '../../types';
+import { X, Printer, ChevronRight, ChevronDown } from 'lucide-react';
+import { Employee, POSOrder } from '../../types';
+import { calculateStaffSalesForDate } from '../../src/lib/posSalesAttribution';
 
 interface EndOfDayReportProps {
   orders: POSOrder[];
+  employees?: Employee[];
   storeName?: string;
   onClose: () => void;
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN');
+const fmtTime = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+};
+const fmtCustomer = (name?: string) => name?.trim() || '';
+type ReportFocus = 'general' | 'detail';
 
-const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CFO Brain Store', onClose }) => {
+const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
+  orders,
+  employees = [],
+  storeName = 'CFO Brain Store',
+  onClose,
+}) => {
   const today = new Date().toLocaleDateString('en-CA');
   const [selectedDate, setSelectedDate] = useState(today);
+  const [reportFocus, setReportFocus] = useState<ReportFocus>('detail');
   const [paperSize, setPaperSize] = useState<'A4' | 'A5'>('A4');
-  const [zoom, setZoom] = useState(90);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const filteredOrders = useMemo(() =>
@@ -23,24 +38,180 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
     [orders, selectedDate]
   );
 
-  const salesOrders = useMemo(() => filteredOrders.filter(o => !o.isReturn), [filteredOrders]);
-  const returnOrders = useMemo(() => filteredOrders.filter(o => o.isReturn === true), [filteredOrders]);
+  const {
+    salesOrders,
+    returnOrders,
+    salesSummary,
+    returnSummary,
+    salesDiscount,
+    returnRefundTotal,
+    returnTraHang,
+    totalAllOrders,
+    allQty,
+  } = useMemo(() => {
+    const salesOrders: POSOrder[] = [];
+    const returnOrders: POSOrder[] = [];
+    let salesQty = 0, salesRevenue = 0, salesActual = 0, salesDiscount = 0;
+    let returnQty = 0, returnRevenue = 0, returnActual = 0;
+    let returnRefundTotal = 0, returnTraHang = 0;
+    let totalAllOrders = 0, allQty = 0;
 
-  const salesSummary = useMemo(() => ({
-    count: salesOrders.length,
-    qty: salesOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0),
-    revenue: salesOrders.reduce((s, o) => s + o.totalAmount, 0),
-    actual: salesOrders.reduce((s, o) => s + o.finalAmount, 0),
-  }), [salesOrders]);
+    for (const o of filteredOrders) {
+      const qty = o.items.reduce((q, i) => q + i.quantity, 0);
+      allQty += qty;
+      totalAllOrders += Math.abs(o.totalAmount);
+      if (o.isReturn) {
+        returnOrders.push(o);
+        returnQty += qty;
+        returnRevenue += o.totalAmount;
+        returnActual += o.finalAmount;
+        returnRefundTotal += o.refundAmount ?? 0;
+        returnTraHang += o.refundAmount || Math.abs(o.totalAmount);
+      } else {
+        salesOrders.push(o);
+        salesQty += qty;
+        salesRevenue += o.totalAmount;
+        salesActual += o.finalAmount;
+        salesDiscount += Math.abs(o.discount || 0);
+      }
+    }
 
-  const returnSummary = useMemo(() => ({
-    count: returnOrders.length,
-    qty: returnOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0),
-    revenue: returnOrders.reduce((s, o) => s + o.totalAmount, 0),
-    actual: returnOrders.reduce((s, o) => s + o.finalAmount, 0),
-  }), [returnOrders]);
+    return {
+      salesOrders,
+      returnOrders,
+      salesSummary: { count: salesOrders.length, qty: salesQty, revenue: salesRevenue, actual: salesActual },
+      returnSummary: { count: returnOrders.length, qty: returnQty, revenue: returnRevenue, actual: returnActual },
+      salesDiscount,
+      returnRefundTotal,
+      returnTraHang,
+      totalAllOrders,
+      allQty,
+    };
+  }, [filteredOrders]);
 
-  const netActual = salesSummary.actual - returnSummary.actual;
+  const staffSalesSummary = useMemo(
+    () => calculateStaffSalesForDate(filteredOrders, selectedDate, employees),
+    [employees, filteredOrders, selectedDate]
+  );
+  // Doanh thu = Tổng tiền hàng - Giảm giá
+  const doanhThuAll = totalAllOrders - salesDiscount;
+  // Thực thu cuối ngày = Doanh thu - Ghi nợ
+  const netActual = doanhThuAll - returnRefundTotal;
+
+  // Nhóm tất cả đơn theo PTTT (dùng cho sub-group Chi tiết)
+  const ordersByMethod = useMemo(() => {
+    const map = new Map<string, POSOrder[]>();
+    filteredOrders.forEach(o => {
+      const m = o.paymentMethod || 'Cash';
+      if (!map.has(m)) map.set(m, []);
+      map.get(m)!.push(o);
+    });
+    const order = ['Cash', 'Bank', 'Momo', 'Other'];
+    const sorted = new Map<string, POSOrder[]>();
+    order.forEach(m => { if (map.has(m)) sorted.set(m, map.get(m)!); });
+    map.forEach((v, k) => { if (!sorted.has(k)) sorted.set(k, v); });
+    return sorted;
+  }, [filteredOrders]);
+
+  const staffNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    employees?.forEach(e => m.set(e.id, e.name || ''));
+    return m;
+  }, [employees]);
+
+  const methodDisplayName = (m: string) =>
+    ({ Cash: 'TM', Bank: 'CK', Momo: 'Ví', Other: 'Khác' } as Record<string, string>)[m] || m;
+
+  // Pre-compute group summaries theo PTTT — tránh tính lại mỗi lần expand
+  const methodSummaries = useMemo(() => {
+    const result = new Map<string, {
+      qty: number; totienHang: number; traHang: number; doanhThu: number; giamGia: number; thucThu: number;
+    }>();
+    ordersByMethod.forEach((methodOrders, method) => {
+      const sales      = methodOrders.filter(o => !o.isReturn);
+      const returns    = methodOrders.filter(o => !!o.isReturn);
+      const qty        = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
+      // Tổng tiền hàng = bán + trả (tất cả dương)
+      const totienHang = methodOrders.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
+      const traHang    = returns.reduce((s, o) => s + (o.refundAmount || Math.abs(o.totalAmount)), 0);
+      const doanhThu   = sales.reduce((s, o) => s + o.totalAmount, 0); // Doanh thu chỉ từ bán
+      const giamGia    = sales.reduce((s, o) => s + Math.abs(o.discount || 0), 0);
+      const thucThu    = doanhThu - giamGia;
+      result.set(method, { qty, totienHang, traHang, doanhThu, giamGia, thucThu });
+    });
+    return result;
+  }, [ordersByMethod]);
+
+  // Pre-compute per-order display data — tránh fmtTime + staffName lookup mỗi render
+  const orderDisplayMap = useMemo(() => {
+    const m = new Map<string, { time: string; staffName: string; qty: number; disc: number }>();
+    filteredOrders.forEach(o => {
+      m.set(o.id, {
+        time:      fmtTime(o.date),
+        staffName: o.staffName || staffNameMap.get(o.staffId) || '',
+        qty:       o.items.reduce((s, i) => s + i.quantity, 0),
+        disc:      Math.abs(o.discount || 0),
+      });
+    });
+    return m;
+  }, [filteredOrders, staffNameMap]);
+
+  // Doanh thu = chỉ đơn bán (trả hàng nằm trong Tổng tiền hàng, không tách cột)
+  const newDoanhThu = salesSummary.revenue;
+  // Thực thu = Doanh thu - Giảm giá
+  const newThucthu  = newDoanhThu - salesDiscount;
+
+  // Thực thu tổng ngày = Thực thu bán - Trả hàng
+  const overallThucthu = newThucthu - returnTraHang;
+  // grossRevenue giữ để không break print HTML cũ
+  const grossRevenue = totalAllOrders - salesDiscount;
+
+  const generalSummary = useMemo(() => {
+    const base = {
+      cash: 0,
+      bank: 0,
+      card: 0,
+      wallet: 0,
+      points: 0,
+      voucher: 0,
+    };
+    const counts = { ...base };
+    const payments = salesOrders.reduce((acc, order) => {
+      const amount = Number(order.finalAmount) || 0;
+      const method = order.paymentMethod;
+      if (method === 'Cash') acc.cash += amount;
+      else if (method === 'Bank') acc.bank += amount;
+      else if (method === 'Momo') acc.wallet += amount;
+      else acc.card += amount;
+      return acc;
+    }, { ...base });
+
+    salesOrders.forEach(order => {
+      const method = order.paymentMethod;
+      if (method === 'Cash') counts.cash += 1;
+      else if (method === 'Bank') counts.bank += 1;
+      else if (method === 'Momo') counts.wallet += 1;
+      else counts.card += 1;
+    });
+
+    const uniqueProducts = new Set<string>();
+    const productQty = salesOrders.reduce((sum, order) => {
+      order.items.forEach(item => uniqueProducts.add(item.productId || item.sku || item.name));
+      return sum + order.items.reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0);
+    }, 0);
+
+    const paymentTotal = payments.cash + payments.bank + payments.card + payments.wallet + payments.points + payments.voucher;
+
+    return {
+      payments,
+      counts,
+      paymentTotal,
+      salesValue: salesOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0),
+      invoiceCount: salesOrders.length,
+      uniqueProductCount: uniqueProducts.size,
+      productQty,
+    };
+  }, [salesOrders]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
@@ -50,44 +221,237 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
     });
   };
 
-  const nowStr = new Date().toLocaleString('vi-VN', {
+  const nowStr = useMemo(() => new Date().toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
-  });
-  const dateStr = new Date(selectedDate + 'T00:00:00').toLocaleDateString('vi-VN');
-  const paperWidth = paperSize === 'A4' ? 794 : 559;
+  }), []);
+  const dateStr = useMemo(() => new Date(selectedDate + 'T00:00:00').toLocaleDateString('vi-VN'), [selectedDate]);
+
 
   const handlePrint = () => {
-    const salesRows = salesOrders.map(o => `
-      <tr>
-        <td style="border:1px solid #ccc;padding:5px 8px;padding-left:28px;font-family:monospace;color:#4f46e5">${o.orderCode}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;color:#64748b">${new Date(o.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">${o.items.reduce((s, i) => s + i.quantity, 0)}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">${fmt(o.totalAmount)}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;font-weight:600">${fmt(o.finalAmount)}</td>
-      </tr>`).join('');
 
-    const returnRows = returnOrders.map(o => `
-      <tr>
-        <td style="border:1px solid #ccc;padding:5px 8px;padding-left:28px;font-family:monospace;color:#e11d48">${o.orderCode}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;color:#64748b">${new Date(o.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">${o.items.reduce((s, i) => s + i.quantity, 0)}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;color:#e11d48">-${fmt(o.totalAmount)}</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right">0</td>
-        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;font-weight:600;color:#e11d48">-${fmt(o.finalAmount)}</td>
-      </tr>`).join('');
+    const generalTables = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <colgroup>
+          <col style="width:18%"/><col style="width:6%"/>
+          <col style="width:8%"/><col style="width:8%"/>
+          <col style="width:7%"/><col style="width:7%"/>
+          <col style="width:7%"/><col style="width:7%"/>
+          <col style="width:8%"/><col style="width:10%"/>
+          <col style="width:14%"/>
+        </colgroup>
+        <thead>
+          <tr style="background:#93c5d8">
+            <th style="text-align:left;padding:5px 8px;border:1px solid #ccc">Chỉ tiêu</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">SL</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Tiền mặt</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">CK</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Thẻ</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Ví</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Điểm</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Voucher</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Tổng</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Thừa TK</th>
+            <th style="text-align:right;padding:5px 8px;border:1px solid #ccc">Thực thu</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#f5f0dc">
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${filteredOrders.length}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.cash)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.bank)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.card)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.wallet)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(totalAllOrders)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;color:#2563eb;font-weight:600">${fmt(overallThucthu)}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 8px;border:1px solid #ccc;color:#2563eb;font-weight:600">Hóa đơn</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${salesSummary.count}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.cash)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.bank)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.card)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(generalSummary.payments.wallet)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${fmt(salesSummary.revenue)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;font-weight:600">${fmt(newThucthu)}</td>
+          </tr>
+          ${returnSummary.count > 0 ? `
+          <tr>
+            <td style="padding:5px 8px;border:1px solid #ccc;color:#e11d48;font-weight:600">Trả hàng</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${returnSummary.count}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;color:#e11d48">${fmt(returnTraHang)}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;color:#e11d48">-${fmt(returnTraHang)}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding:5px 8px;border:1px solid #ccc;color:#94a3b8">Dịch vụ</td>
+            ${Array(10).fill('<td style="text-align:right;padding:5px 8px;border:1px solid #ccc">0</td>').join('')}
+          </tr>
+          ${staffSalesSummary.length > 0 ? `
+          <tr style="background:#e2e8f0">
+            <td colspan="11" style="padding:5px 8px;border:1px solid #ccc;font-weight:600;color:#475569">Doanh số nhân viên</td>
+          </tr>
+          ${staffSalesSummary.map(row => `
+          <tr>
+            <td style="padding:5px 8px 5px 20px;border:1px solid #ccc">${row.employeeName}</td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc">${row.orderCount}</td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;color:#2563eb">${fmt(row.salesAmount)}</td>
+            <td style="padding:5px 8px;border:1px solid #ccc"></td>
+            <td style="text-align:right;padding:5px 8px;border:1px solid #ccc;color:#2563eb;font-weight:600">${fmt(row.salesAmount)}</td>
+          </tr>`).join('')}` : ''}
+        </tbody>
+      </table>
+    `;
+
+    const grpCell = (val: string, color = '', indent = 0) =>
+      `<td style="border:1px solid #ccc;padding:5px ${6 + indent}px;font-weight:600${color ? `;color:${color}` : ''}">${val}</td>`;
+    const grpR = (val: string, color = '') =>
+      `<td style="border:1px solid #ccc;padding:5px 6px;text-align:right;font-weight:600${color ? `;color:${color}` : ''}">${val}</td>`;
+    const dtd = (val: string, color = '', indent = 0) =>
+      `<td style="border-bottom:1px solid #e2e8f0;padding:4px ${6 + indent}px${color ? `;color:${color}` : ''}">${val}</td>`;
+    const dtdR = (val: string, color = '') =>
+      `<td style="border-bottom:1px solid #e2e8f0;padding:4px 6px;text-align:right${color ? `;color:${color}` : ''}">${val}</td>`;
+    const th14 = (label: string, align = 'right') =>
+      `<th style="text-align:${align};padding:5px 6px;border:1px solid #94a3b8;font-size:10px">${label}</th>`;
+
+    const printMethodRows = Array.from(ordersByMethod.entries()).map(([method, methodOrders]) => {
+      const mSales    = methodOrders.filter(o => !o.isReturn);
+      const mReturns  = methodOrders.filter(o => !!o.isReturn);
+      const mQty      = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
+      const mTienHang = mSales.reduce((s, o) => s + o.totalAmount, 0)
+                      - mReturns.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
+      const mTraHang  = mReturns.reduce((s, o) => s + (o.refundAmount || Math.abs(o.totalAmount)), 0);
+      const mDoanhThu = mTienHang;
+      const mGiamGia  = mSales.reduce((s, o) => s + Math.abs(o.discount || 0), 0);
+      const mThucThu  = mDoanhThu - mGiamGia;
+      const mName     = methodDisplayName(method);
+
+      const orderRows = methodOrders.map(order => {
+        const disc      = Math.abs(order.discount || 0);
+        const isRet     = !!order.isReturn;
+        const retAmt    = order.refundAmount || Math.abs(order.totalAmount);
+        const staffName = order.staffName || staffNameMap.get(order.staffId) || '';
+        const time      = fmtTime(order.date);
+        const tienHang  = isRet ? 0 : Math.abs(order.totalAmount);
+        return `<tr>
+          ${dtd(`<span style="padding-left:36px;font-family:monospace;color:${isRet ? '#e11d48' : '#4f46e5'}">${order.orderCode}</span>`)}
+          ${dtd(fmtCustomer(order.customerName))}
+          ${dtd(staffName)}
+          ${dtd(`<span style="color:#94a3b8">${time}</span>`)}
+          ${dtdR(String(order.items.reduce((s, i) => s + i.quantity, 0)))}
+          ${dtdR(isRet ? fmt(retAmt) : fmt(tienHang), isRet ? '#e11d48' : '')}
+          ${dtdR('0')}
+          ${dtdR(isRet ? '0' : fmt(tienHang))}
+          ${dtdR(disc > 0 ? `-${fmt(disc)}` : '', '#e11d48')}
+          ${dtdR('0')}${dtdR('0')}
+          ${dtdR(isRet ? '' : fmt(order.finalAmount))}
+        </tr>`;
+      }).join('');
+
+      return `
+        <tr style="background:#f0f4f8">
+          ${grpCell(mName, '', 20)}${grpCell('')}${grpCell('')}${grpCell('')}
+          ${grpR(String(mQty))}${grpR(fmt(mTienHang))}
+          ${grpR('0')}${grpR(fmt(mDoanhThu))}
+          ${grpR(mGiamGia > 0 ? `-${fmt(mGiamGia)}` : '0', mGiamGia > 0 ? '#e11d48' : '')}
+          ${grpR('0')}${grpR('0')}
+          ${grpR(fmt(mThucThu))}
+        </tr>
+        ${orderRows}`;
+    }).join('');
+
+    const printReturnRows = returnOrders.map(order => {
+      const retAmt    = order.refundAmount || Math.abs(order.totalAmount);
+      const staffName = order.staffName || staffNameMap.get(order.staffId) || '';
+      const time      = fmtTime(order.date);
+      return `<tr>
+        ${dtd(`<span style="padding-left:20px;font-family:monospace;color:#e11d48">${order.orderCode}</span>`)}
+        ${dtd(fmtCustomer(order.customerName))}
+        ${dtd(staffName)}
+        ${dtd(`<span style="color:#94a3b8">${time}</span>`)}
+        ${dtdR(String(order.items.reduce((s, i) => s + i.quantity, 0)))}
+        ${dtdR(fmt(retAmt), '#e11d48')}
+        ${dtdR('0')}${dtdR('0')}
+        ${dtdR('0')}${dtdR('0')}${dtdR('0')}
+        ${dtdR(`-${fmt(retAmt)}`, '#e11d48')}
+      </tr>`;
+    }).join('');
+
+    const detailTables = filteredOrders.length === 0
+      ? `<table style="width:100%;border-collapse:collapse;font-size:11px"><tbody>
+          <tr><td colspan="14" style="text-align:center;padding:20px;color:#94a3b8;font-style:italic">Không có giao dịch trong ngày ${dateStr}</td></tr>
+         </tbody></table>`
+      : `<table style="width:100%;border-collapse:collapse;font-size:10.5px">
+          <colgroup>
+            <col style="width:13%"/><col style="width:9%"/>
+            <col style="width:8%"/><col style="width:6%"/>
+            <col style="width:4%"/><col style="width:11%"/>
+            <col style="width:5%"/><col style="width:11%"/>
+            <col style="width:8%"/><col style="width:4%"/>
+            <col style="width:7%"/><col style="width:9%"/>
+          </colgroup>
+          <thead>
+            <tr style="background:#93c5d8">
+              ${th14('Mã chứng từ','left')}${th14('Khách hàng','left')}
+              ${th14('Nhân viên','left')}${th14('Thời gian','left')}
+              ${th14('SL')}${th14('Tổng tiền hàng')}${th14('Dịch vụ')}
+              ${th14('Doanh thu')}${th14('Giảm giá')}${th14('VAT')}${th14('Tiền trả khách')}
+              ${th14('Thực thu')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background:#f5f0dc">
+              ${grpCell(`Hóa đơn: ${filteredOrders.length}`, '#1e293b')}
+              ${grpCell('')}${grpCell('')}${grpCell('')}
+              ${grpR(String(allQty))}${grpR(fmt(totalAllOrders))}
+              ${grpR('0')}${grpR(fmt(newDoanhThu))}
+              ${grpR(salesDiscount > 0 ? `-${fmt(salesDiscount)}` : '0', salesDiscount > 0 ? '#e11d48' : '')}
+              ${grpR('0')}${grpR('0')}
+              ${grpR(fmt(newThucthu), '#2563eb')}
+            </tr>
+            ${printMethodRows}
+            ${returnSummary.count > 0 ? `
+            <tr style="background:#f5f0dc">
+              ${grpCell(`Trả hàng: ${returnSummary.count}`, '#e11d48')}
+              ${grpCell('')}${grpCell('')}${grpCell('')}
+              ${grpR(String(returnSummary.qty))}
+              ${grpR(fmt(returnTraHang), '#e11d48')}
+              ${grpR('0')}${grpR('0')}
+              ${grpR('0')}${grpR('0')}${grpR('0')}
+              ${grpR(`-${fmt(returnTraHang)}`, '#e11d48')}
+            </tr>
+            ${printReturnRows}` : ''}
+          </tbody>
+        </table>
+        <div style="margin-top:14px;border:1px solid #e2e8f0;border-radius:4px;padding:10px 14px;background:#f8fafc;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div><div style="font-size:10px;color:#64748b;margin-bottom:2px">Doanh thu bán hàng</div><div style="font-weight:700">${fmt(newThucthu)}đ</div></div>
+          <div><div style="font-size:10px;color:#64748b;margin-bottom:2px">Trả hàng</div><div style="font-weight:700;color:#e11d48">${returnTraHang > 0 ? `-${fmt(returnTraHang)}đ` : '0'}</div></div>
+          <div><div style="font-size:10px;color:#64748b;margin-bottom:2px">Thực thu cuối ngày</div><div style="font-weight:700;font-size:13px;color:#4338ca">${fmt(overallThucthu)}đ</div></div>
+        </div>`;
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
     <title>Báo cáo cuối ngày - ${storeName}</title>
     <style>
-      body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 0; }
+      body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: #1e293b; margin: 0; letter-spacing: 0; }
       @page { size: ${paperSize}; margin: 15mm 10mm; }
       h1 { font-size: 15px; font-weight: bold; text-align: center; margin: 0 0 4px; }
       .center { text-align: center; }
@@ -95,8 +459,13 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
       .created { font-size: 10px; color: #94a3b8; margin-bottom: 12px; }
       table { width: 100%; border-collapse: collapse; font-size: 11px; }
       th { background-color: #93c5d8; border: 1px solid #94a3b8; padding: 6px 8px; font-weight: 700; }
+      td { border-bottom: 1px solid #cbd5e1; padding: 8px; text-align: right; }
+      td:first-child { text-align: left; }
       .group-row { background-color: #f5f0dc; }
       .group-row td { border: 1px solid #94a3b8; padding: 6px 8px; font-weight: 700; }
+      .report-section { margin-top: 18px; }
+      h2 { font-size: 13px; margin: 0 0 8px; }
+      .blue, .blue-label { color: #2563eb; font-weight: 700; }
       .summary { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 4px; padding: 12px 16px; background: #f8fafc; }
       .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
       .summary-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
@@ -111,53 +480,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
       Ngày thanh toán: ${dateStr}<br/>
       Chi nhánh: ${storeName}
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align:left">Mã giao dịch</th>
-          <th style="text-align:left">Thời gian</th>
-          <th style="text-align:right">SL</th>
-          <th style="text-align:right">Doanh thu</th>
-          <th style="text-align:right">Thu khác</th>
-          <th style="text-align:right">VAT</th>
-          <th style="text-align:right">Làm tròn</th>
-          <th style="text-align:right">Phí trả hàng</th>
-          <th style="text-align:right">Thực thu</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${salesSummary.count > 0 ? `
-        <tr class="group-row">
-          <td>▶ Hóa đơn: ${salesSummary.count}</td>
-          <td></td>
-          <td style="text-align:right">${salesSummary.qty}</td>
-          <td style="text-align:right">${fmt(salesSummary.revenue)}</td>
-          <td style="text-align:right">0</td><td style="text-align:right">0</td>
-          <td style="text-align:right">0</td><td style="text-align:right">0</td>
-          <td style="text-align:right">${fmt(salesSummary.actual)}</td>
-        </tr>${salesRows}` : ''}
-        ${returnSummary.count > 0 ? `
-        <tr class="group-row">
-          <td>▶ Trả hàng: ${returnSummary.count}</td>
-          <td></td>
-          <td style="text-align:right">${returnSummary.qty}</td>
-          <td style="text-align:right;color:#e11d48">-${fmt(returnSummary.revenue)}</td>
-          <td style="text-align:right">0</td><td style="text-align:right">0</td>
-          <td style="text-align:right">0</td><td style="text-align:right">0</td>
-          <td style="text-align:right;color:#e11d48">-${fmt(returnSummary.actual)}</td>
-        </tr>${returnRows}` : ''}
-        ${salesSummary.count === 0 && returnSummary.count === 0 ?
-          `<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8;font-style:italic">Không có giao dịch trong ngày ${dateStr}</td></tr>` : ''}
-      </tbody>
-    </table>
-    ${(salesSummary.count > 0 || returnSummary.count > 0) ? `
-    <div class="summary">
-      <div class="summary-grid">
-        <div><div class="summary-label">Tổng đơn bán</div><div class="summary-val">${salesSummary.count} đơn</div></div>
-        <div><div class="summary-label">Tổng đơn trả</div><div class="summary-val rose">${returnSummary.count} đơn</div></div>
-        <div><div class="summary-label">Thực thu cuối ngày</div><div class="summary-val net">${fmt(netActual)}đ</div></div>
-      </div>
-    </div>` : ''}
+    ${reportFocus === 'general' ? generalTables : detailTables}
     <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),500);}</script>
     </body></html>`;
 
@@ -173,14 +496,49 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
   const tdRStyle = "border border-slate-200 px-3 py-1.5 text-xs text-right";
   const grpTdStyle = "border border-slate-300 px-3 py-2 font-normal text-xs";
   const grpTdRStyle = "border border-slate-300 px-3 py-2 font-normal text-xs text-right";
+  const staffSalesSection = (
+    <section>
+      <h2 className="mb-2 text-sm font-bold text-slate-800">Doanh số nhân viên</h2>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr style={{ backgroundColor: '#93c5d8' }}>
+            <th className={thStyle}>Nhân viên</th>
+            <th className={thRStyle}>Số đơn</th>
+            <th className={thRStyle}>SL sản phẩm</th>
+            <th className={thRStyle}>Doanh số ghi nhận</th>
+          </tr>
+        </thead>
+        <tbody>
+          {staffSalesSummary.length > 0 ? (
+            staffSalesSummary.map(row => (
+              <tr key={row.employeeId}>
+                <td className={`${tdStyle} font-semibold text-slate-700`}>{row.employeeName}</td>
+                <td className={tdRStyle}>{row.orderCount}</td>
+                <td className={tdRStyle}>{fmt(row.quantity)}</td>
+                <td className={`${tdRStyle} font-semibold text-blue-600`}>
+                  {fmt(row.salesAmount)}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={4} className={`${tdStyle} text-center text-slate-400`}>
+                Chưa có doanh số nhân viên trong ngày này
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
 
   return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
-      <div className="bg-slate-300 rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-6">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
 
-      {/* Filter bar */}
+      {/* Hàng 1: title + controls + nút in + đóng */}
       <div className="bg-white border-b border-slate-200 h-12 flex items-center px-4 gap-3 shrink-0 shadow-sm">
-        <span className="font-normal text-slate-800 text-sm mr-3">Báo cáo cuối ngày</span>
+        <span className="font-normal text-slate-800 text-sm mr-1">Báo cáo cuối ngày</span>
 
         <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
           <input
@@ -203,34 +561,6 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
         <div className="flex-1" />
 
         <button
-          onClick={onClose}
-          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-white border-b border-slate-200 h-10 flex items-center px-4 gap-2 shrink-0">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setZoom(z => Math.max(50, z - 10))}
-            className="p-1.5 hover:bg-slate-100 rounded text-slate-500 transition-colors"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-xs font-normal text-slate-600 w-10 text-center tabular-nums">{zoom}%</span>
-          <button
-            onClick={() => setZoom(z => Math.min(150, z + 10))}
-            className="p-1.5 hover:bg-slate-100 rounded text-slate-500 transition-colors"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="h-5 w-px bg-slate-200 mx-1" />
-
-        <button
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-normal uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all"
         >
@@ -238,169 +568,329 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({ orders, storeName = 'CF
           In báo cáo
         </button>
 
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Hàng 2: tab Tổng quát / Chi tiết — căn giữa */}
+      <div className="bg-white border-b border-slate-200 h-10 flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+          {([
+            ['general', 'Tổng quát'],
+            ['detail', 'Chi tiết'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setReportFocus(value)}
+              className={`rounded-md px-5 py-1 text-xs transition-colors ${
+                reportFocus === value
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:bg-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Preview area */}
-      <div className="flex-1 overflow-auto py-6 px-4 flex justify-center">
-        <div
-          style={{
-            width: `${paperWidth}px`,
-            transform: `scale(${zoom / 100})`,
-            transformOrigin: 'top center',
-            marginBottom: zoom < 100 ? `${(zoom / 100 - 1) * paperWidth * 1.414}px` : '24px'
-          }}
-          className="bg-white shadow-2xl border border-slate-200"
-        >
-          <div className="p-10 text-slate-900">
+      <div className="flex-1 overflow-auto px-6 py-4">
+          <div className="text-slate-900">
 
             {/* Creation time */}
-            <div className="text-[10px] text-slate-400 mb-3">Ngày lập: {nowStr}</div>
+            <div className="text-2xs text-slate-400 mb-3">Ngày lập: {nowStr}</div>
 
             {/* Title */}
             <h1 className="text-base font-bold text-center mb-1">Báo cáo cuối ngày về bán hàng</h1>
-            <div className="text-center text-[11px] text-slate-500 space-y-0.5 mb-5">
+            <div className="text-center text-xs text-slate-500 space-y-0.5 mb-5">
               <p>Ngày bán: &nbsp;{dateStr}</p>
               <p>Ngày thanh toán: {dateStr}</p>
               <p>Chi nhánh: {storeName}</p>
             </div>
 
-            {/* Table */}
-            <table className="w-full border-collapse">
+            {reportFocus === 'general' ? (
+              <table className="w-full border-collapse text-xs">
+                <colgroup>
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ backgroundColor: '#93c5d8' }}>
+                    <th className={thStyle}>Chỉ tiêu</th>
+                    <th className={thRStyle}>SL</th>
+                    <th className={thRStyle}>Tiền mặt</th>
+                    <th className={thRStyle}>CK</th>
+                    <th className={thRStyle}>Thẻ</th>
+                    <th className={thRStyle}>Ví</th>
+                    <th className={thRStyle}>Điểm</th>
+                    <th className={thRStyle}>Voucher</th>
+                    <th className={thRStyle}>Tổng</th>
+                    <th className={thRStyle}>Thừa TK</th>
+                    <th className={thRStyle}>Thực thu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Dòng tổng */}
+                  <tr style={{ backgroundColor: '#f5f0dc' }}>
+                    <td className={grpTdStyle}></td>
+                    <td className={grpTdRStyle}>{filteredOrders.length}</td>
+                    <td className={grpTdRStyle}>{fmt(generalSummary.payments.cash)}</td>
+                    <td className={grpTdRStyle}>{fmt(generalSummary.payments.bank)}</td>
+                    <td className={grpTdRStyle}>{fmt(generalSummary.payments.card)}</td>
+                    <td className={grpTdRStyle}>{fmt(generalSummary.payments.wallet)}</td>
+                    <td className={grpTdRStyle}>0</td>
+                    <td className={grpTdRStyle}>0</td>
+                    <td className={grpTdRStyle}>{fmt(totalAllOrders)}</td>
+                    <td className={grpTdRStyle}>0</td>
+                    <td className={`${grpTdRStyle} text-blue-600`}>{fmt(overallThucthu)}</td>
+                  </tr>
+
+                  {/* Hóa đơn */}
+                  <tr>
+                    <td className={`${tdStyle} font-bold text-blue-600`}>Hóa đơn</td>
+                    <td className={tdRStyle}>{salesSummary.count}</td>
+                    <td className={tdRStyle}>{fmt(generalSummary.payments.cash)}</td>
+                    <td className={tdRStyle}>{fmt(generalSummary.payments.bank)}</td>
+                    <td className={tdRStyle}>{fmt(generalSummary.payments.card)}</td>
+                    <td className={tdRStyle}>{fmt(generalSummary.payments.wallet)}</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>{fmt(salesSummary.revenue)}</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={`${tdRStyle} font-bold`}>{fmt(newThucthu)}</td>
+                  </tr>
+
+                  {/* Trả hàng */}
+                  {returnSummary.count > 0 && (
+                    <tr>
+                      <td className={`${tdStyle} font-bold text-rose-500`}>Trả hàng</td>
+                      <td className={tdRStyle}>{returnSummary.count}</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={`${tdRStyle} text-rose-500`}>{fmt(returnTraHang)}</td>
+                      <td className={tdRStyle}>0</td>
+                      <td className={tdRStyle}></td>
+                    </tr>
+                  )}
+
+                  {/* Dịch vụ */}
+                  <tr>
+                    <td className={`${tdStyle} text-slate-400`}>Dịch vụ</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                    <td className={tdRStyle}>0</td>
+                  </tr>
+
+                  {/* Section nhân viên */}
+                  {staffSalesSummary.length > 0 && (
+                    <>
+                      <tr style={{ backgroundColor: '#e2e8f0' }}>
+                        <td colSpan={11} className="border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600">
+                          Doanh số nhân viên
+                        </td>
+                      </tr>
+                      {staffSalesSummary.map(row => (
+                        <tr key={row.employeeId}>
+                          <td className={`${tdStyle} pl-5 text-slate-700`}>{row.employeeName}</td>
+                          <td className={tdRStyle}>{row.orderCount}</td>
+                          <td className={tdRStyle}></td>
+                          <td className={tdRStyle}></td>
+                          <td className={tdRStyle}></td>
+                          <td className={tdRStyle}></td>
+                          <td className={tdRStyle}></td>
+                          <td className={tdRStyle}></td>
+                          <td className={`${tdRStyle} text-blue-600`}>{fmt(row.salesAmount)}</td>
+                          <td className={tdRStyle}></td>
+                          <td className={`${tdRStyle} font-bold text-blue-600`}>{fmt(row.salesAmount)}</td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <>
+            {/* Table Chi tiết — 12 cột */}
+            <table className="w-full border-collapse text-xs">
+              <colgroup>
+                <col style={{ width: '13%' }} /><col style={{ width: '9%' }} />
+                <col style={{ width: '8%' }} /><col style={{ width: '6%' }} />
+                <col style={{ width: '4%' }} /><col style={{ width: '10%' }} />
+                <col style={{ width: '5%' }} /><col style={{ width: '10%' }} />
+                <col style={{ width: '7%' }} /><col style={{ width: '4%' }} />
+                <col style={{ width: '7%' }} /><col style={{ width: '9%' }} />
+              </colgroup>
               <thead>
                 <tr style={{ backgroundColor: '#93c5d8' }}>
-                  <th className={thStyle}>Mã giao dịch</th>
+                  <th className={thStyle}>Mã chứng từ</th>
+                  <th className={thStyle}>Khách hàng</th>
+                  <th className={thStyle}>Nhân viên</th>
                   <th className={thStyle}>Thời gian</th>
                   <th className={thRStyle}>SL</th>
+                  <th className={thRStyle}>Tổng tiền hàng</th>
+                  <th className={thRStyle}>Dịch vụ</th>
                   <th className={thRStyle}>Doanh thu</th>
-                  <th className={thRStyle}>Thu khác</th>
+                  <th className={thRStyle}>Giảm giá</th>
                   <th className={thRStyle}>VAT</th>
-                  <th className={thRStyle}>Làm tròn</th>
-                  <th className={thRStyle}>Phí trả hàng</th>
+                  <th className={thRStyle}>Tiền trả khách</th>
                   <th className={thRStyle}>Thực thu</th>
                 </tr>
               </thead>
               <tbody>
-
-                {/* Sales group */}
-                {salesSummary.count > 0 && (
+                {/* ── Level 1: Hóa đơn (tất cả) ── */}
+                {filteredOrders.length > 0 && (
                   <>
-                    <tr
-                      style={{ backgroundColor: '#f5f0dc' }}
-                      className="cursor-pointer hover:brightness-95 transition-all"
-                      onClick={() => toggleGroup('sales')}
-                    >
-                      <td className={grpTdStyle}>
+                    <tr style={{ backgroundColor: '#f5f0dc' }} className="cursor-pointer hover:brightness-95"
+                        onClick={() => toggleGroup('invoice')}>
+                      <td className={grpTdStyle} colSpan={4}>
                         <span className="inline-flex items-center gap-1">
-                          {expandedGroups.has('sales')
-                            ? <ChevronDown className="w-3 h-3 shrink-0" />
-                            : <ChevronRight className="w-3 h-3 shrink-0" />}
-                          Hóa đơn: {salesSummary.count}
+                          {expandedGroups.has('invoice') ? <ChevronDown className="w-3 h-3 shrink-0"/> : <ChevronRight className="w-3 h-3 shrink-0"/>}
+                          Hóa đơn: {filteredOrders.length}
                         </span>
                       </td>
-                      <td className={grpTdStyle}></td>
-                      <td className={grpTdRStyle}>{salesSummary.qty}</td>
-                      <td className={grpTdRStyle}>{fmt(salesSummary.revenue)}</td>
+                      <td className={grpTdRStyle}>{allQty}</td>
+                      <td className={grpTdRStyle}>{fmt(totalAllOrders)}</td>
+                      <td className={grpTdRStyle}>0</td>
+                      <td className={grpTdRStyle}>{fmt(newDoanhThu)}</td>
+                      <td className={`${grpTdRStyle} ${salesDiscount > 0 ? 'text-rose-600' : ''}`}>{salesDiscount > 0 ? `-${fmt(salesDiscount)}` : '0'}</td>
                       <td className={grpTdRStyle}>0</td>
                       <td className={grpTdRStyle}>0</td>
-                      <td className={grpTdRStyle}>0</td>
-                      <td className={grpTdRStyle}>0</td>
-                      <td className={grpTdRStyle}>{fmt(salesSummary.actual)}</td>
+                      <td className={`${grpTdRStyle} text-blue-600`}>{fmt(newThucthu)}</td>
                     </tr>
-                    {expandedGroups.has('sales') && salesOrders.map(order => (
-                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                        <td className={`${tdStyle} pl-8 font-mono text-indigo-600`}>{order.orderCode}</td>
-                        <td className={`${tdStyle} text-slate-400`}>
-                          {new Date(order.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className={tdRStyle}>{order.items.reduce((s, i) => s + i.quantity, 0)}</td>
-                        <td className={tdRStyle}>{fmt(order.totalAmount)}</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={`${tdRStyle} font-normal`}>{fmt(order.finalAmount)}</td>
-                      </tr>
-                    ))}
+
+                    {/* ── Level 2: Sub-group theo PTTT ── */}
+                    {expandedGroups.has('invoice') && Array.from(ordersByMethod.entries()).map(([method, methodOrders]) => {
+                      const ms  = methodSummaries.get(method)!;
+                      const key = `method-${method}`;
+                      return (
+                        <React.Fragment key={method}>
+                          <tr style={{ backgroundColor: '#f0f4f8' }} className="cursor-pointer hover:brightness-95"
+                              onClick={() => toggleGroup(key)}>
+                            <td className={grpTdStyle} colSpan={4} style={{ paddingLeft: '28px' }}>
+                              <span className="inline-flex items-center gap-1">
+                                {expandedGroups.has(key) ? <ChevronDown className="w-3 h-3 shrink-0"/> : <ChevronRight className="w-3 h-3 shrink-0"/>}
+                                {methodDisplayName(method)}
+                              </span>
+                            </td>
+                            <td className={grpTdRStyle}>{ms.qty}</td>
+                            <td className={grpTdRStyle}>{fmt(ms.totienHang)}</td>
+                            <td className={grpTdRStyle}>0</td>
+                            <td className={grpTdRStyle}>{fmt(ms.doanhThu)}</td>
+                            <td className={`${grpTdRStyle} ${ms.giamGia > 0 ? 'text-rose-600' : ''}`}>{ms.giamGia > 0 ? `-${fmt(ms.giamGia)}` : '0'}</td>
+                            <td className={grpTdRStyle}>0</td>
+                            <td className={grpTdRStyle}>0</td>
+                            <td className={grpTdRStyle}>{fmt(ms.thucThu)}</td>
+                          </tr>
+
+                          {/* ── Level 3: Từng đơn ── */}
+                          {expandedGroups.has(key) && methodOrders.map(order => {
+                            const d      = orderDisplayMap.get(order.id)!;
+                            const isRet  = !!order.isReturn;
+                            const retAmt = order.refundAmount || Math.abs(order.totalAmount);
+                            return (
+                              <tr key={order.id} className={isRet ? 'hover:bg-rose-50/40' : 'hover:bg-slate-50'}>
+                                <td className={`${tdStyle} pl-12 font-mono ${isRet ? 'text-rose-500' : 'text-indigo-600'}`}>{order.orderCode}</td>
+                                <td className={`${tdStyle} text-slate-500 truncate`}>{fmtCustomer(order.customerName)}</td>
+                                <td className={`${tdStyle} text-slate-500 truncate`}>{d.staffName}</td>
+                                <td className={`${tdStyle} text-slate-400`}>{d.time}</td>
+                                <td className={tdRStyle}>{d.qty}</td>
+                                <td className={`${tdRStyle} ${isRet ? 'text-rose-500' : ''}`}>{isRet ? fmt(retAmt) : fmt(order.totalAmount)}</td>
+                                <td className={tdRStyle}>0</td>
+                                <td className={`${tdRStyle} ${isRet ? 'text-rose-500' : ''}`}>{isRet ? '0' : fmt(order.totalAmount)}</td>
+                                <td className={`${tdRStyle} ${d.disc > 0 ? 'text-rose-500' : ''}`}>{d.disc > 0 ? `-${fmt(d.disc)}` : ''}</td>
+                                <td className={tdRStyle}>0</td>
+                                <td className={tdRStyle}>0</td>
+                                <td className={tdRStyle}>{isRet ? '' : fmt(order.finalAmount)}</td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
                   </>
                 )}
 
-                {/* Return group */}
+                {/* ── Trả hàng group (riêng biệt) ── */}
                 {returnSummary.count > 0 && (
                   <>
-                    <tr
-                      style={{ backgroundColor: '#f5f0dc' }}
-                      className="cursor-pointer hover:brightness-95 transition-all"
-                      onClick={() => toggleGroup('return')}
-                    >
-                      <td className={grpTdStyle}>
+                    <tr style={{ backgroundColor: '#f5f0dc' }} className="cursor-pointer hover:brightness-95"
+                        onClick={() => toggleGroup('return')}>
+                      <td className={grpTdStyle} colSpan={4}>
                         <span className="inline-flex items-center gap-1">
-                          {expandedGroups.has('return')
-                            ? <ChevronDown className="w-3 h-3 shrink-0" />
-                            : <ChevronRight className="w-3 h-3 shrink-0" />}
+                          {expandedGroups.has('return') ? <ChevronDown className="w-3 h-3 shrink-0"/> : <ChevronRight className="w-3 h-3 shrink-0"/>}
                           Trả hàng: {returnSummary.count}
                         </span>
                       </td>
-                      <td className={grpTdStyle}></td>
                       <td className={grpTdRStyle}>{returnSummary.qty}</td>
-                      <td className={`${grpTdRStyle} text-rose-600`}>-{fmt(returnSummary.revenue)}</td>
+                      <td className={`${grpTdRStyle} text-rose-600`}>{fmt(returnTraHang)}</td>
                       <td className={grpTdRStyle}>0</td>
                       <td className={grpTdRStyle}>0</td>
                       <td className={grpTdRStyle}>0</td>
                       <td className={grpTdRStyle}>0</td>
-                      <td className={`${grpTdRStyle} text-rose-600`}>-{fmt(returnSummary.actual)}</td>
+                      <td className={grpTdRStyle}>0</td>
+                      <td className={grpTdRStyle}></td>
                     </tr>
-                    {expandedGroups.has('return') && returnOrders.map(order => (
-                      <tr key={order.id} className="hover:bg-rose-50/40 transition-colors">
-                        <td className={`${tdStyle} pl-8 font-mono text-rose-500`}>{order.orderCode}</td>
-                        <td className={`${tdStyle} text-slate-400`}>
-                          {new Date(order.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className={tdRStyle}>{order.items.reduce((s, i) => s + i.quantity, 0)}</td>
-                        <td className={`${tdRStyle} text-rose-500`}>-{fmt(order.totalAmount)}</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={tdRStyle}>0</td>
-                        <td className={`${tdRStyle} font-normal text-rose-500`}>-{fmt(order.finalAmount)}</td>
-                      </tr>
-                    ))}
+                    {expandedGroups.has('return') && returnOrders.map(order => {
+                      const d      = orderDisplayMap.get(order.id)!;
+                      const retAmt = order.refundAmount || Math.abs(order.totalAmount);
+                      return (
+                        <tr key={order.id} className="hover:bg-rose-50/40">
+                          <td className={`${tdStyle} pl-8 font-mono text-rose-500`}>{order.orderCode}</td>
+                          <td className={`${tdStyle} text-slate-500 truncate`}>{fmtCustomer(order.customerName)}</td>
+                          <td className={`${tdStyle} text-slate-500 truncate`}>{d.staffName}</td>
+                          <td className={`${tdStyle} text-slate-400`}>{d.time}</td>
+                          <td className={tdRStyle}>{d.qty}</td>
+                          <td className={`${tdRStyle} text-rose-500`}>{fmt(retAmt)}</td>
+                          <td className={tdRStyle}>0</td>
+                          <td className={tdRStyle}>0</td>
+                          <td className={tdRStyle}>0</td>
+                          <td className={tdRStyle}>0</td>
+                          <td className={tdRStyle}>0</td>
+                          <td className={tdRStyle}></td>
+                        </tr>
+                      );
+                    })}
                   </>
                 )}
 
                 {/* Empty state */}
-                {salesSummary.count === 0 && returnSummary.count === 0 && (
+                {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="border border-slate-200 px-3 py-10 text-center text-slate-400 text-xs italic">
+                    <td colSpan={12} className="border border-slate-200 px-3 py-10 text-center text-slate-400 text-xs italic">
                       Không có giao dịch nào trong ngày {dateStr}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-
-            {/* Footer summary */}
-            {(salesSummary.count > 0 || returnSummary.count > 0) && (
-              <div className="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <div className="text-slate-400 font-normal mb-1">Tổng đơn bán</div>
-                    <div className="font-normal text-slate-800 text-sm">{salesSummary.count} đơn</div>
-                    <div className="text-slate-500 font-normal mt-0.5">{fmt(salesSummary.actual)}đ</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-400 font-normal mb-1">Tổng đơn trả</div>
-                    <div className="font-normal text-rose-500 text-sm">{returnSummary.count} đơn</div>
-                    <div className="text-rose-400 font-normal mt-0.5">-{fmt(returnSummary.actual)}đ</div>
-                  </div>
-                  <div className="border-l border-slate-200 pl-4">
-                    <div className="text-slate-400 font-normal mb-1">Thực thu cuối ngày</div>
-                    <div className="font-normal text-indigo-700 text-lg tabular-nums">{fmt(netActual)}đ</div>
-                  </div>
-                </div>
-              </div>
+              </>
             )}
           </div>
-        </div>
       </div>
     </div>
     </div>

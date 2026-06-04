@@ -44,8 +44,8 @@ const DiagnosisTab: React.FC<Props> = ({
 
     <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
       <div className="lg:col-span-6 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl">
-        <h3 className="text-xl font-black text-slate-900 mb-8 uppercase flex items-center gap-4">
-          <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><PieChartIcon className="w-5 h-5" /></div>
+        <h3 className="text-xl font-semibold text-slate-900 mb-8 uppercase flex items-center gap-4">
+          <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg"><PieChartIcon className="w-5 h-5" /></div>
           CẤU TRÚC DÒNG TIỀN DOANH THU
         </h3>
         <div className="h-80">
@@ -65,18 +65,18 @@ const DiagnosisTab: React.FC<Props> = ({
 
       <div className="lg:col-span-4 bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden flex flex-col">
         <div className="absolute top-0 right-0 p-10 opacity-10"><Sparkles className="w-32 h-32" /></div>
-        <h3 className="text-xl font-black uppercase tracking-tight mb-8 flex items-center gap-4 relative z-10">
+        <h3 className="text-xl font-semibold uppercase tracking-tight mb-8 flex items-center gap-4 relative z-10">
           <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg"><Activity className="w-6 h-6" /></div>
           REVENUE AI ADVISOR
         </h3>
         <div className="space-y-6 flex-1 relative z-10">
           <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-start gap-4">
             <div className="p-2 bg-emerald-500/20 text-emerald-500 rounded-xl"><TrendingUp className="w-5 h-5" /></div>
-            <div><h5 className="text-sm font-black text-emerald-400 uppercase">Tối ưu biên gộp</h5><p className="text-[11px] text-slate-300 mt-1 leading-relaxed">Biên lợi nhuận trong khoảng này là {(revenueAnalytics?.margin || 0).toFixed(1)}%.</p></div>
+            <div><h5 className="text-sm font-semibold text-emerald-400 uppercase">Tối ưu biên gộp</h5><p className="text-xs text-slate-300 mt-1 leading-relaxed">Biên lợi nhuận trong khoảng này là {(revenueAnalytics?.margin || 0).toFixed(1)}%.</p></div>
           </div>
         </div>
         <div className="mt-10 pt-8 border-t border-white/10 relative z-10">
-          <button onClick={runRevenueDiagnosis} disabled={isDiagnosing || !revenueAnalytics} className="w-full px-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-3xl font-normal text-[11px] uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
+          <button onClick={runRevenueDiagnosis} disabled={isDiagnosing || !revenueAnalytics} className="w-full px-8 py-5 bg-indigo-600 hover:bg-blue-500 text-white rounded-3xl font-normal text-xs uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
             {isDiagnosing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
             {isDiagnosing ? "Đang giải mã dữ liệu..." : "Bắt đầu Siêu Chẩn Đoán"}
           </button>
@@ -87,7 +87,7 @@ const DiagnosisTab: React.FC<Props> = ({
     {diagnosisResult && (
       <div className="bg-white rounded-[3.5rem] p-12 shadow-2xl border border-slate-100 animate-in slide-in-from-top-4 duration-500">
         <div className="flex items-center justify-between mb-8 border-b border-slate-50 pb-8">
-          <div className="flex items-center gap-4"><div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg"><FileText className="w-6 h-6" /></div><h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">Báo Cáo Chẩn Đoán Doanh Thu</h4></div>
+          <div className="flex items-center gap-4"><div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg"><FileText className="w-6 h-6" /></div><h4 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">Báo Cáo Chẩn Đoán Doanh Thu</h4></div>
           <button onClick={() => setDiagnosisResult(null)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><X className="w-6 h-6" /></button>
         </div>
         <div className="markdown-content text-slate-800" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(diagnosisResult) as string) }} />

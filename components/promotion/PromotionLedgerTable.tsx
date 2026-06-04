@@ -65,14 +65,14 @@ const PromotionLedgerTable: React.FC<PromotionLedgerTableProps> = ({ promotions,
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <div>
-          <h3 className="text-lg font-black text-slate-900">Sổ cái & Hiệu quả Khuyến mãi</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Sổ cái & Hiệu quả Khuyến mãi</h3>
           <p className="text-xs text-slate-500 mt-1">So sánh kết quả thực tế với mục tiêu đề ra</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-[10px] font-normal uppercase tracking-widest text-slate-400">
+          <div className="flex items-center gap-2 text-2xs font-normal uppercase tracking-widest text-slate-400">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Hiệu quả tốt
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-normal uppercase tracking-widest text-slate-400">
+          <div className="flex items-center gap-2 text-2xs font-normal uppercase tracking-widest text-slate-400">
             <div className="w-2 h-2 rounded-full bg-amber-500"></div> Cần tối ưu
           </div>
         </div>
@@ -82,22 +82,22 @@ const PromotionLedgerTable: React.FC<PromotionLedgerTableProps> = ({ promotions,
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-200">
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
                 Chương trình
               </th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">
                 Doanh thu thực tế
               </th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">
                 Doanh thu tăng thêm
               </th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">
                 Chi phí thực tế
               </th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">
                 ROI Thực tế
               </th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-center">
                 Đánh giá
               </th>
             </tr>
@@ -120,7 +120,7 @@ const PromotionLedgerTable: React.FC<PromotionLedgerTableProps> = ({ promotions,
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-normal text-slate-900">{promotion.name}</span>
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-2xs text-slate-500">
                           {new Date(promotion.startDate).toLocaleDateString('vi-VN')} -{' '}
                           {new Date(promotion.endDate).toLocaleDateString('vi-VN')}
                         </span>
@@ -163,19 +163,19 @@ const PromotionLedgerTable: React.FC<PromotionLedgerTableProps> = ({ promotions,
                     </td>
                     <td className="px-6 py-4 text-center">
                       {promotion.status !== 'Completed' && promotion.status !== 'Active' ? (
-                        <span className="text-[10px] font-normal text-slate-400 italic">Chưa diễn ra</span>
+                        <span className="text-2xs font-normal text-slate-400 italic">Chưa diễn ra</span>
                       ) : (
                         <div className="flex justify-center">
                           {isPositive ? (
-                            <div className="flex items-center gap-1 text-emerald-600 font-normal text-[10px] uppercase">
+                            <div className="flex items-center gap-1 text-emerald-600 font-normal text-2xs uppercase">
                               <TrendingUp className="w-3 h-3" /> Hiệu quả cao
                             </div>
                           ) : isWarning ? (
-                            <div className="flex items-center gap-1 text-rose-600 font-normal text-[10px] uppercase">
+                            <div className="flex items-center gap-1 text-rose-600 font-normal text-2xs uppercase">
                               <AlertCircle className="w-3 h-3" /> Cần xem lại
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1 text-amber-600 font-normal text-[10px] uppercase">
+                            <div className="flex items-center gap-1 text-amber-600 font-normal text-2xs uppercase">
                               <Clock className="w-3 h-3" /> Đạt yêu cầu
                             </div>
                           )}

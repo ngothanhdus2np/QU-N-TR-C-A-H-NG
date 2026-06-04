@@ -17,14 +17,14 @@ const LedgerTab: React.FC<Props> = ({
       <div className="flex items-center gap-4">
         <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg"><BookOpen className="w-6 h-6" /></div>
         <div>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Sổ Cái Quỹ Lương Đã Chốt</h3>
+          <h3 className="text-2xl font-semibold text-slate-900 tracking-tight uppercase">Sổ Cái Quỹ Lương Đã Chốt</h3>
           <p className="text-sm text-slate-500 font-normal italic">Lịch sử chi trả lương chính thức tháng {selectedMonth}.</p>
         </div>
       </div>
       {archivedPayrolls.length > 0 && (
         <button
           onClick={() => handleUndoPayroll()}
-          className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-rose-100 text-rose-600 rounded-2xl font-normal text-[10px] uppercase tracking-widest hover:bg-rose-50 transition-all"
+          className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-rose-100 text-rose-600 rounded-2xl font-normal text-2xs uppercase tracking-widest hover:bg-rose-50 transition-colors"
         >
           <RotateCcw className="w-4 h-4" /> Hủy chốt toàn bộ tháng
         </button>
@@ -35,7 +35,7 @@ const LedgerTab: React.FC<Props> = ({
       <div className="overflow-x-auto overflow-y-auto max-h-[650px] no-scrollbar">
         <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
           <thead className="bg-slate-900 text-white sticky top-0 z-30">
-            <tr className="text-[10px] font-black uppercase tracking-widest">
+            <tr className="text-2xs font-semibold uppercase tracking-widest">
               <th className="px-6 py-5 sticky left-0 bg-slate-900 z-40 border-r border-white/10 w-[200px]">Nhân viên</th>
               <th className="px-6 py-5 w-[150px]">Lương CB</th>
               <th className="px-6 py-5 w-[200px]">Phụ Cấp</th>
@@ -45,7 +45,7 @@ const LedgerTab: React.FC<Props> = ({
               <th className="px-6 py-5 text-center w-[150px]">Thao tác</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-[11px] font-normal bg-white">
+          <tbody className="divide-y divide-slate-100 text-xs font-normal bg-white">
             {archivedPayrolls.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-20 text-center opacity-40">
@@ -64,7 +64,7 @@ const LedgerTab: React.FC<Props> = ({
                         <div className="flex items-center gap-1 text-[8px] text-indigo-400 font-normal cursor-help">
                           <Info className="w-2.5 h-2.5" /> XEM LOGIC
                         </div>
-                        <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-slate-900 text-white rounded-xl text-[9px] font-normal leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[99] shadow-2xl border border-white/10">
+                        <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-slate-900 text-white rounded-xl text-[9px] font-normal leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-colors z-dropdown shadow-2xl border border-white/10">
                           {p.calculationNote.split(' | ').map((line, i) => (
                             <div key={i} className="mb-1">• {line}</div>
                           ))}
@@ -91,9 +91,9 @@ const LedgerTab: React.FC<Props> = ({
                     </span>
                   </td>
                   <td className="px-6 py-5 text-center">
-                    <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => handlePrintPayslip(p)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Printer className="w-4 h-4" /></button>
-                      <button onClick={() => handleUndoPayroll(p.employeeId)} className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><RotateCcw className="w-4 h-4" /></button>
+                    <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-colors">
+                      <button onClick={() => handlePrintPayslip(p)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"><Printer className="w-4 h-4" /></button>
+                      <button onClick={() => handleUndoPayroll(p.employeeId)} className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"><RotateCcw className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>

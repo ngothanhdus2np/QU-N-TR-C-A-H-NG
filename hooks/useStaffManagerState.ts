@@ -16,7 +16,7 @@ interface UseStaffManagerStateProps {
 }
 
 export function useStaffManagerState({ requestedTab }: UseStaffManagerStateProps = {}) {
-  const [activeTab, setActiveTab] = useState<'list' | 'performance' | 'ledger'>('performance');
+  const [activeTab, setActiveTab] = useState<'list' | 'performance' | 'ledger'>('list');
 
   const [formData, setFormData] = useState<StaffFormData>({
     name: '',

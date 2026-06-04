@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { AppDataSurgicalUpdate, POSCustomer, POSOrder } from '../../types';
 import { exportToExcel } from '../../services/exportService';
+import { useToast } from '../ui/Toast';
 
 interface CustomerPointsProps {
   customers: POSCustomer[];
@@ -32,6 +33,7 @@ const emptyForm = (): Partial<POSCustomer> => ({
 const CustomerPoints: React.FC<CustomerPointsProps> = ({
   customers, orders = [], onUpdateCustomers, onUpdateSurgical
 }) => {
+  const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('Tất cả');
   const [showAddModal, setShowAddModal]   = useState(false);
@@ -72,7 +74,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
   // ── Handlers ───────────────────────────────────────────────
   const saveCustomer = () => {
     if (!formData.name?.trim() || !formData.phone?.trim()) {
-      alert('Vui lòng nhập tên và số điện thoại!');
+      showToast('Vui lòng nhập tên và số điện thoại!', 'warning');
       return;
     }
     if (editCustomer) {
@@ -124,12 +126,12 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
 
   // ── Sub-components ─────────────────────────────────────────
   const FormModal = ({ title, onClose }: { title: string; onClose: () => void }) => (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-6">
       <div className="bg-white rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.4)] w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-300 border border-slate-200">
         <div className="bg-slate-50 p-10 border-b border-slate-200 flex justify-between items-center">
           <div>
-            <h3 className="font-black text-2xl text-slate-950 uppercase tracking-tighter">{title}</h3>
-            <p className="text-[10px] font-normal text-slate-400 uppercase tracking-[0.3em] mt-2">Hệ thống CRM · CFO Brain</p>
+            <h3 className="font-semibold text-2xl text-slate-950 uppercase tracking-tighter">{title}</h3>
+            <p className="text-2xs font-normal text-slate-400 uppercase tracking-[0.3em] mt-2">Hệ thống CRM · CFO Brain</p>
           </div>
           <button onClick={onClose} className="h-12 w-12 flex items-center justify-center hover:bg-white rounded-2xl text-slate-400 hover:text-rose-500 transition-all border border-transparent hover:border-slate-100">
             <X className="h-6 w-6" />
@@ -138,17 +140,17 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
         <div className="p-10 space-y-6 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-5">
             <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Họ và tên *</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Họ và tên *</label>
               <input placeholder="NGUYỄN VĂN A" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-900 focus:bg-white focus:border-indigo-400 outline-none transition-all uppercase"
                 value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Số điện thoại *</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Số điện thoại *</label>
               <input placeholder="03xxxxxxxx" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-900 focus:bg-white focus:border-indigo-400 outline-none transition-all"
                 value={formData.phone || ''} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Hạng thành viên</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Hạng thành viên</label>
               <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-900 focus:bg-white focus:border-indigo-400 outline-none transition-all"
                 value={formData.tier || 'Standard'} onChange={e => setFormData({ ...formData, tier: e.target.value as POSCustomer['tier'] })}>
                 <option>Standard</option>
@@ -158,26 +160,26 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
               </select>
             </div>
             <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Email</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Email</label>
               <input placeholder="email@example.com" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-600 focus:bg-white focus:border-indigo-400 outline-none transition-all"
                 value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} />
             </div>
             <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Địa chỉ</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Địa chỉ</label>
               <input placeholder="Số nhà, đường, phường/xã..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-600 focus:bg-white focus:border-indigo-400 outline-none transition-all"
                 value={formData.address || ''} onChange={e => setFormData({ ...formData, address: e.target.value })} />
             </div>
             <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-normal text-slate-500 uppercase tracking-widest ml-1">Ghi chú (sở thích, sinh nhật...)</label>
+              <label className="text-2xs font-normal text-slate-500 uppercase tracking-widest ml-1">Ghi chú (sở thích, sinh nhật...)</label>
               <textarea placeholder="VD: Thích giày da, sinh nhật 15/08..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-normal text-slate-600 focus:bg-white focus:border-indigo-400 outline-none transition-all resize-none h-20"
                 value={formData.notes || ''} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
             </div>
           </div>
           <div className="flex gap-4 pt-2 border-t border-slate-100">
-            <button onClick={onClose} className="px-8 py-5 text-slate-400 font-normal text-[11px] uppercase tracking-[0.2em] hover:text-slate-600 transition-colors">
+            <button onClick={onClose} className="px-8 py-5 text-slate-400 font-normal text-xs uppercase tracking-[0.2em] hover:text-slate-600 transition-colors">
               Hủy
             </button>
-            <button onClick={saveCustomer} className="flex-1 py-5 bg-slate-950 text-white rounded-[1.5rem] font-normal text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-slate-900/30 hover:bg-indigo-600 transition-all active:scale-95">
+            <button onClick={saveCustomer} className="flex-1 py-5 bg-slate-950 text-white rounded-[1.5rem] font-normal text-xs uppercase tracking-[0.2em] shadow-2xl shadow-slate-900/30 hover:bg-indigo-600 transition-all active:scale-95">
               {editCustomer ? 'Lưu thay đổi' : 'Đăng ký hội viên'}
             </button>
           </div>
@@ -190,7 +192,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
     if (!detailCustomer) return null;
     const c = detailCustomer;
     return (
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-6">
         <div className="bg-white rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.4)] w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300 border border-slate-200 flex flex-col max-h-[90vh]">
           {/* Header */}
           <div className="bg-slate-50 p-8 border-b border-slate-200 flex items-start justify-between shrink-0">
@@ -201,7 +203,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
               <div>
                 <div className="flex items-center gap-3">
                   <h3 className="font-normal text-xl text-slate-950 uppercase tracking-tighter">{c.name}</h3>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-normal uppercase tracking-wider ${TIER_STYLE[c.tier]?.badge}`}>{c.tier}</span>
+                  <span className={`px-3 py-1 rounded-full text-2xs font-normal uppercase tracking-wider ${TIER_STYLE[c.tier]?.badge}`}>{c.tier}</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-400 text-xs font-normal mt-1">
                   <Phone className="h-3 w-3 text-emerald-500" />{c.phone}
@@ -217,7 +219,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
           <div className="flex border-b border-slate-100 px-8 shrink-0">
             {(['info', 'history'] as const).map(tab => (
               <button key={tab} onClick={() => setDetailTab(tab)}
-                className={`px-6 py-4 text-[10px] font-normal uppercase tracking-widest border-b-2 transition-all ${detailTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                className={`px-6 py-4 text-2xs font-normal uppercase tracking-widest border-b-2 transition-all ${detailTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
                 {tab === 'info' ? 'Thông tin' : `Lịch sử (${customerOrders.length})`}
               </button>
             ))}
@@ -262,7 +264,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                     </div>
                   )}
                   {c.lastVisit && (
-                    <div className="text-[10px] font-normal text-slate-400 uppercase tracking-widest pt-2">
+                    <div className="text-2xs font-normal text-slate-400 uppercase tracking-widest pt-2">
                       Lần cuối mua: {new Date(c.lastVisit).toLocaleDateString('vi-VN')}
                     </div>
                   )}
@@ -271,11 +273,11 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                 {/* Actions */}
                 <div className="flex gap-3 pt-2 border-t border-slate-100">
                   <button onClick={() => { openEdit(c); setDetailCustomer(null); }}
-                    className="flex items-center gap-2 px-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-normal uppercase tracking-widest text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all">
+                    className="flex items-center gap-2 px-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-normal uppercase tracking-widest text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all">
                     <Edit2 className="h-4 w-4" /> Sửa thông tin
                   </button>
                   <button onClick={() => setConfirmDeleteId(c.id)}
-                    className="flex items-center gap-2 px-6 py-3 bg-rose-50 border border-rose-100 rounded-2xl text-[11px] font-normal uppercase tracking-widest text-rose-500 hover:bg-rose-100 transition-all">
+                    className="flex items-center gap-2 px-6 py-3 bg-rose-50 border border-rose-100 rounded-2xl text-xs font-normal uppercase tracking-widest text-rose-500 hover:bg-rose-100 transition-all">
                     <Trash2 className="h-4 w-4" /> Xóa hội viên
                   </button>
                 </div>
@@ -287,7 +289,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                 {customerOrders.length === 0 ? (
                   <div className="py-16 text-center text-slate-300 flex flex-col items-center gap-3">
                     <ShoppingBag className="h-12 w-12 opacity-30" />
-                    <p className="text-[11px] font-normal uppercase tracking-widest">Chưa có đơn hàng nào</p>
+                    <p className="text-xs font-normal uppercase tracking-widest">Chưa có đơn hàng nào</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -295,14 +297,14 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                       <div key={o.id} className="bg-slate-50 rounded-2xl p-5 flex items-center justify-between gap-4 border border-slate-100">
                         <div className="space-y-1">
                           <div className="font-normal text-slate-900 text-sm">{o.orderCode}</div>
-                          <div className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+                          <div className="text-2xs font-normal text-slate-400 uppercase tracking-widest">
                             {new Date(o.date).toLocaleDateString('vi-VN')} · {o.items.length} sản phẩm · {o.paymentMethod}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="font-normal text-indigo-600 tabular-nums">{fmt(o.finalAmount)}<span className="text-[10px] ml-0.5">đ</span></div>
+                          <div className="font-normal text-indigo-600 tabular-nums">{fmt(o.finalAmount)}<span className="text-2xs ml-0.5">đ</span></div>
                           {o.pointsEarned > 0 && (
-                            <div className="text-[10px] font-normal text-amber-500 flex items-center gap-1 justify-end">
+                            <div className="text-2xs font-normal text-amber-500 flex items-center gap-1 justify-end">
                               <Star className="h-3 w-3 fill-amber-400" />+{o.pointsEarned}
                             </div>
                           )}
@@ -334,7 +336,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
           <div key={s.label} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-1">
             <div className="text-[9px] font-normal uppercase tracking-[0.2em] text-slate-400">{s.label}</div>
             <div className={`font-normal text-xl tabular-nums ${s.color}`}>{s.value}</div>
-            <div className="text-[10px] text-slate-400 font-normal">{s.sub}</div>
+            <div className="text-2xs text-slate-400 font-normal">{s.sub}</div>
           </div>
         ))}
       </div>
@@ -351,7 +353,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
           <div className="flex gap-2 flex-wrap">
             {TIERS.map(t => (
               <button key={t} onClick={() => setTierFilter(t)}
-                className={`px-4 py-2 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${tierFilter === t ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                className={`px-4 py-2 rounded-xl text-2xs font-normal uppercase tracking-widest transition-all ${tierFilter === t ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                 {t === 'Tất cả' ? `${t} (${customers.length})` : `${t} (${stats.tierCount[t as keyof typeof stats.tierCount] ?? 0})`}
               </button>
             ))}
@@ -397,7 +399,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
             const style = TIER_STYLE[c.tier];
             return (
               <div key={c.id} className={`bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-200 flex flex-col relative overflow-hidden group hover:shadow-2xl transition-all border-b-4 ${style.accent}`}>
-                <div className={`absolute top-0 right-0 px-5 py-2 rounded-bl-[1.5rem] text-[10px] font-normal uppercase tracking-[0.15em] ${style.badge}`}>
+                <div className={`absolute top-0 right-0 px-5 py-2 rounded-bl-[1.5rem] text-2xs font-normal uppercase tracking-[0.15em] ${style.badge}`}>
                   {c.tier}
                 </div>
 
@@ -412,7 +414,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                       {c.phone}
                     </div>
                     {c.notes && (
-                      <p className="text-[10px] text-slate-400 font-normal mt-1 truncate">{c.notes}</p>
+                      <p className="text-2xs text-slate-400 font-normal mt-1 truncate">{c.notes}</p>
                     )}
                   </div>
                 </div>
@@ -427,18 +429,18 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                   </div>
                   <div className="text-right space-y-0.5">
                     <div className="text-[9px] font-normal text-slate-400 uppercase tracking-[0.2em]">Chi tiêu</div>
-                    <div className="font-normal text-indigo-600 tabular-nums">{fmt(c.totalSpent)}<span className="text-[10px] ml-0.5">đ</span></div>
+                    <div className="font-normal text-indigo-600 tabular-nums">{fmt(c.totalSpent)}<span className="text-2xs ml-0.5">đ</span></div>
                   </div>
                 </div>
 
                 {/* Action buttons */}
                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
                   <button onClick={() => openDetail(c)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 rounded-xl text-[10px] font-normal uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-all">
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 rounded-xl text-2xs font-normal uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-all">
                     <Eye className="h-3.5 w-3.5" /> Chi tiết
                   </button>
                   <button onClick={() => openEdit(c)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-normal uppercase tracking-widest text-slate-500 hover:text-slate-700 transition-all">
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl text-2xs font-normal uppercase tracking-widest text-slate-500 hover:text-slate-700 transition-all">
                     <Edit2 className="h-3.5 w-3.5" /> Sửa
                   </button>
                   <button onClick={() => setConfirmDeleteId(c.id)}
@@ -465,18 +467,18 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
 
       {/* Confirm delete */}
       {confirmDeleteId && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[110] flex items-center justify-center p-6">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-6">
           <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center animate-in fade-in zoom-in-95 duration-200 space-y-6">
             <div className="w-16 h-16 rounded-[1.5rem] bg-rose-50 flex items-center justify-center mx-auto">
               <AlertCircle className="h-8 w-8 text-rose-500" />
             </div>
             <div>
-              <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">Xác nhận xóa?</h4>
+              <h4 className="font-semibold text-xl text-slate-900 uppercase tracking-tight">Xác nhận xóa?</h4>
               <p className="text-sm text-slate-500 font-normal mt-2">Hành động này không thể hoàn tác. Lịch sử đơn hàng vẫn được giữ lại.</p>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-normal text-[11px] uppercase tracking-widest text-slate-600 hover:bg-slate-200 transition-all">Hủy</button>
-              <button onClick={() => deleteCustomer(confirmDeleteId)} className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-normal text-[11px] uppercase tracking-widest hover:bg-rose-600 transition-all active:scale-95">Xóa</button>
+              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-normal text-xs uppercase tracking-widest text-slate-600 hover:bg-slate-200 transition-all">Hủy</button>
+              <button onClick={() => deleteCustomer(confirmDeleteId)} className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-normal text-xs uppercase tracking-widest hover:bg-rose-600 transition-all active:scale-95">Xóa</button>
             </div>
           </div>
         </div>

@@ -69,14 +69,17 @@ export interface DashboardDetailedExpense {
 
 export interface KnowledgeBaseArticle {
   id: string;
-  category: 'Nhân sự' | 'Vận hành' | 'Bán hàng' | 'Tài chính' | 'Khác';
+  category: 'Nhân sự' | 'Vận hành' | 'Bán hàng' | 'Tài chính' | 'Biểu mẫu' | 'Khác';
   title: string;
   content: string; // Hỗ trợ Markdown
+  summary?: string;
   updatedAt: string;
   sourceFileName?: string;
   sourceFileData?: string; // Legacy base64 data of original file
   sourceFilePath?: string;
   sourceFileUrl?: string;
+  sourcePreviewUrl?: string;
+  sourcePageImages?: string[];
   sourceFileType?: string;
   sourceFileSize?: number;
 }
@@ -170,6 +173,7 @@ export interface Employee {
   idNumber?: string;
   bankAccount?: string;
   emergencyContact?: string;
+  carryForwardDebt?: number; // Nợ lương chuyển sang kỳ tiếp theo
 }
 
 export interface AttendanceRecord {
@@ -299,6 +303,8 @@ export interface PayrollRecord {
   isOfficial: boolean;
   hasTetCommitment: boolean;
   calculationNote?: string;
+  carryForwardDeduction?: number; // Khấu trừ nợ kỳ trước trong kỳ này
+  carryForwardDebtOut?: number; // Nợ chuyển sang kỳ tiếp theo sau kỳ này
 }
 
 export type PayrollSubTab =
@@ -337,7 +343,7 @@ export interface StaffPerformanceRecord {
   month: string;
   totalSales: number;
   totalIncome: number;
-  roi: number; // Doanh thu / Thu nhập
+  roi: number; // Doanh thu / (thực nhận + tạm ứng)
   rank?: number;
 }
 
@@ -420,6 +426,17 @@ export interface AppData {
   // Nhà cung cấp
   suppliers: Supplier[];
   supplierDebts: SupplierDebtRecord[];
+  // VAT Coverage
+  vatGroups?: VatGroup[];
+  skuVatGroupMappings?: SkuVatGroupMapping[];
+  supplierAliases?: SupplierAlias[];
+  vatGroupKeywords?: VatGroupKeyword[];
+  vatDocuments?: VatDocument[];
+  vatDocumentItems?: VatDocumentItem[];
+  vatAllocations?: VatAllocation[];
+  vatAllocationEvents?: VatAllocationEvent[];
+  taxFilingPeriods?: TaxFilingPeriod[];
+  openingStockItems?: OpeningStockItem[];
 }
 
 export type AppDataListKey = {
@@ -505,7 +522,15 @@ export interface POSOrderItem {
   price: number;
   discount: number;
   total: number;
+  importPrice?: number;
+  salespersonId?: string;
+  salespersonName?: string;
+  lineType?: 'sale' | 'return' | 'exchange';
+  maxQuantity?: number;
 }
+
+export type POSOrderChannel = 'direct' | 'online' | 'marketplace' | 'other';
+export type POSOrderStatus = 'completed' | 'pending' | 'cancelled' | 'draft';
 
 export interface POSOrder {
   id: string;
@@ -519,9 +544,18 @@ export interface POSOrder {
   finalAmount: number;
   paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
   staffId: string;
+  staffName?: string;
+  createdBy?: string;
+  channel?: POSOrderChannel;
+  channelName?: string;
+  priceBookId?: string;
+  priceBookName?: string;
+  status?: POSOrderStatus;
   notes?: string;
   pointsEarned: number;
   isReturn?: boolean;
+  refundAmount?: number; // Tiền trả lại khách (> 0 = shop hoàn tiền, 0 = đổi hàng)
+  splitPayments?: { cash?: number; bank?: number; card?: number; momo?: number }; // Phân bổ từng PTTT khi chia nhiều
 }
 
 export type POSPaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other';
@@ -560,10 +594,13 @@ export interface POSPaymentSettings {
   wallet: POSPaymentChannelSettings;
   bankAccounts: POSPaymentAccount[];
   walletAccounts: POSPaymentAccount[];
+  /** Số tiền tối thiểu để tích 1 điểm. Mặc định 10.000đ/điểm. */
+  pointsRate?: number;
 }
 
 export interface POSInventorySettings {
   allowSellOutOfStock: boolean;
+  maxQtyWarning?: number; // Ngưỡng cảnh báo số lượng lớn khi nhập POS (mặc định 10000)
 }
 
 export type POSKeyboardAction =
@@ -706,6 +743,15 @@ export interface POSCustomer {
   lastVisit?: string;
   tier: 'Standard' | 'Silver' | 'Gold' | 'Diamond';
   debtAmount?: number;
+  status?: 'active' | 'inactive';
+  customerType?: 'individual' | 'company';
+  gender?: 'male' | 'female';
+  birthday?: string;
+  createdAt?: string;
+  createdBy?: string;
+  taxCode?: string;
+  companyName?: string;
+  facebook?: string;
 }
 
 export interface CustomerDebtRecord {
@@ -764,6 +810,256 @@ export interface InventoryTransaction {
   decreaseCount?: number; // Number of items with stock decrease
 }
 
+export type VatDocumentStatus = 'unallocated' | 'partial' | 'completed' | 'over_allocated' | 'void';
+export type VatMappingStatus = 'suggested' | 'confirmed' | 'needs_confirmation';
+export type VatSupplierMatchStatus = 'matched' | 'needs_confirmation' | 'unmatched';
+export type VatAllocationMethod = 'auto' | 'manual';
+export type VatAllocationStatus = 'active' | 'void';
+export type VatAllocationTargetType = 'purchase_receipt' | 'opening_stock';
+export type TaxFilingPeriodStatus = 'draft' | 'locked' | 'archived';
+export type OpeningStockVatStatus =
+  | 'has_vat'
+  | 'waiting_vat'
+  | 'missing_vat'
+  | 'no_vat'
+  | 'unknown'
+  | 'pending_supplement';
+export type VatReconciliationStage = 'opening_stock' | 'post_filing';
+export type VatRiskStatus =
+  | 'covered'
+  | 'partial'
+  | 'missing'
+  | 'overdue_15'
+  | 'overdue_30'
+  | 'over_allocated'
+  | 'needs_mapping'
+  | 'needs_allocation';
+
+export interface VatGroup {
+  id: string;
+  name: string;
+  description?: string;
+  status?: 'active' | 'inactive';
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SkuVatGroupMapping {
+  id: string;
+  sku: string;
+  productId?: string;
+  productName?: string;
+  vatGroupId: string;
+  confidenceScore?: number;
+  source?: 'manual' | 'keyword' | 'import' | 'auto';
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SupplierAlias {
+  id: string;
+  supplierId: string;
+  aliasName: string;
+  taxCode?: string;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export interface VatGroupKeyword {
+  id: string;
+  vatGroupId: string;
+  keyword: string;
+  normalizedKeyword: string;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export interface VatDocument {
+  id: string;
+  supplierId?: string;
+  supplierNameOnInvoice?: string;
+  supplierTaxCode?: string;
+  supplierMatchConfidence?: number;
+  supplierMatchStatus?: VatSupplierMatchStatus;
+  invoiceNo: string;
+  invoiceDate: string;
+  totalBeforeTax: number;
+  vatAmount: number;
+  totalAmount: number;
+  filePdfUrl?: string;
+  fileXmlUrl?: string;
+  status: VatDocumentStatus;
+  note?: string;
+  voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface VatDocumentItem {
+  id: string;
+  vatDocumentId: string;
+  descriptionOnInvoice: string;
+  suggestedVatGroupId?: string;
+  confirmedVatGroupId?: string;
+  quantity: number;
+  amountBeforeTax: number;
+  vatAmount: number;
+  totalAmount: number;
+  allocatedQuantity: number;
+  allocatedAmount: number;
+  remainingQuantity?: number;
+  remainingAmount?: number;
+  confidenceScore?: number;
+  mappingStatus?: VatMappingStatus;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VatAllocation {
+  id: string;
+  vatDocumentItemId: string;
+  purchaseReceiptId?: string;
+  purchaseReceiptItemId?: string;
+  openingStockItemId?: string;
+  filingPeriodId?: string;
+  targetType?: VatAllocationTargetType;
+  vatGroupId: string;
+  allocatedQuantity: number;
+  allocatedAmount: number;
+  createdAt?: string;
+  createdBy?: string;
+  allocationMethod: VatAllocationMethod;
+  status?: VatAllocationStatus;
+  voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  branchId?: string;
+  tenantId?: string;
+}
+
+export interface TaxFilingPeriod {
+  id: string;
+  name: string;
+  startDate: string;
+  status: TaxFilingPeriodStatus;
+  lockedAt?: string;
+  lockedBy?: string;
+  note?: string;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface OpeningStockItem {
+  id: string;
+  filingPeriodId: string;
+  sku: string;
+  productId?: string;
+  productName: string;
+  productGroupName?: string;
+  vatGroupId?: string;
+  supplierId?: string;
+  supplierName?: string;
+  quantity: number;
+  unitCost: number;
+  totalAmount: number;
+  vatStatus: OpeningStockVatStatus;
+  note?: string;
+  branchId?: string;
+  tenantId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface VatReconciliationRow {
+  id: string;
+  stage: VatReconciliationStage;
+  stageLabel: string;
+  supplierId?: string;
+  supplierName: string;
+  vatGroupId: string;
+  vatGroupName: string;
+  itemCount: number;
+  invoiceCount: number;
+  goodsQuantity: number;
+  goodsAmount: number;
+  validAllocatedAmount: number;
+  overAllocatedAmount: number;
+  missingAmount: number;
+  coveragePercent: number;
+  riskStatus: VatRiskStatus;
+}
+
+export interface VatReconciliationSummary {
+  openingGoodsAmount: number;
+  openingVatCoveredAmount: number;
+  openingVatMissingAmount: number;
+  postFilingGoodsAmount: number;
+  postFilingVatCoveredAmount: number;
+  postFilingVatMissingAmount: number;
+  unallocatedDocumentAmount: number;
+  suppliersNeedVatCount: number;
+  overAllocatedAmount: number;
+}
+
+export interface VatAllocationEvent {
+  id: string;
+  allocationId?: string;
+  vatDocumentId?: string;
+  action: 'created' | 'voided' | 'confirmed_mapping' | 'updated_mapping' | 'document_voided';
+  reason?: string;
+  snapshot?: Record<string, unknown>;
+  createdAt?: string;
+  createdBy?: string;
+  branchId?: string;
+  tenantId?: string;
+}
+
+export interface VatCoverageRow {
+  vatGroupId: string;
+  vatGroupName: string;
+  totalPurchasedQuantity: number;
+  totalPurchasedAmount: number;
+  vatCoveredQuantity: number;
+  vatCoveredAmount: number;
+  missingQuantity: number;
+  missingAmount: number;
+  coveragePercent: number;
+  missingReceiptCount: number;
+  supplierNames: string[];
+  riskStatus: VatRiskStatus;
+}
+
+export interface VatAllocationProposal {
+  id: string;
+  vatDocumentItemId: string;
+  purchaseReceiptId: string;
+  purchaseReceiptItemId?: string;
+  vatGroupId: string;
+  allocatedQuantity: number;
+  allocatedAmount: number;
+  allocationMethod: VatAllocationMethod;
+  warning?: 'over_allocated' | 'supplier_mismatch';
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -773,7 +1069,14 @@ export interface Supplier {
   address?: string;
   group?: string; // Nhóm nhà cung cấp
   status?: 'active' | 'inactive'; // Trạng thái hoạt động
+  isFavorite?: boolean; // Đánh dấu nhà cung cấp quan trọng
   notes?: string;
+  companyName?: string; // Tên công ty xuất hóa đơn
+  taxCode?: string; // Mã số thuế
+  invoiceCompanyName?: string; // Tên đơn vị xuất hóa đơn đã xác nhận từ VAT
+  invoiceTaxCode?: string; // MST xuất hóa đơn đã xác nhận từ VAT
+  invoicePhone?: string; // SĐT đơn vị xuất hóa đơn
+  invoiceAddress?: string; // Địa chỉ đơn vị xuất hóa đơn
   // Computed fields (không lưu DB, tính runtime từ transactions và debts)
   totalPurchase?: number; // Tổng giá trị mua hàng
   currentDebt?: number; // Nợ hiện tại cần trả
@@ -794,6 +1097,11 @@ export interface DailyBreakEvenConfig {
   grossMarginPercent: number; // e.g., 35 for 35%
 }
 
+export interface ShopeeSourceShop {
+  name: string;
+  link: string;
+}
+
 export interface ShopeeSourceItem {
   id: string;
   sku: string;
@@ -801,6 +1109,11 @@ export interface ShopeeSourceItem {
   importPrice: number;
   salePrice: number;
   status: string;
+  starred?: boolean;
+  imageUrl?: string;
+  description?: string;
+  groupId?: string;
+  shops?: ShopeeSourceShop[];
 }
 
 export interface ShopeeCostItem {
@@ -814,13 +1127,7 @@ export interface ShopeeCostConfig {
   fixedCosts: ShopeeCostItem[];
   variableCosts: ShopeeCostItem[];
   targetOrders: number;
-  platformFeePercent: number;
-  paymentFeePercent: number;
-  freeshipExtraPercent: number;
-  affiliateFeePercent: number;
   handlingFeePerOrder: number;
-  taxPercent: number;
-  adsTaxPercent: number;
 }
 
 export interface ShopeeInventoryInRecord {
@@ -830,6 +1137,9 @@ export interface ShopeeInventoryInRecord {
   quantity: number;
   importPrice: number;
   note?: string;
+  purchaseOrderId?: string;
+  purchaseOrderCode?: string;
+  supplierName?: string;
 }
 
 export interface ShopeeInventoryOutRecord {
@@ -847,6 +1157,8 @@ export interface ShopeeInventoryOutRecord {
   freeshipExtra: number;
   affiliateFee: number;
   handlingFee: number;
+  pishipFee: number;
+  vatTax: number;
   adsCost: number;
   adsTax: number;
   personalIncomeTax: number;

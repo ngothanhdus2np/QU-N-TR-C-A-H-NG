@@ -1,16 +1,17 @@
 import React, { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { POSProduct, InventoryTransaction } from '../../types';
+import { POSProduct, InventoryTransaction, POSOrder } from '../../types';
 import { GoodsProductTableHeader } from './GoodsProductTableHeader';
 import { GoodsSortKey, GoodsSortDirection } from './useGoodsFilters';
 import { ProductRow, VariantRow } from './GoodsProductRow';
-import { GoodsProductDetailPanel } from './GoodsProductDetailPanel';
+import { DetailTab, GoodsProductDetailPanel } from './GoodsProductDetailPanel';
 import { Package, Plus } from 'lucide-react';
 
 interface GoodsVirtualizedTableProps {
   currentProducts: POSProduct[];
   variantsByParentId: Map<string, POSProduct[]>;
   transactions?: InventoryTransaction[];
+  orders?: POSOrder[];
   colCount: number;
   selectedIdSet: Set<string>;
   favoriteIdSet: Set<string>;
@@ -50,6 +51,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
   currentProducts,
   variantsByParentId,
   transactions,
+  orders,
   colCount,
   selectedIdSet,
   favoriteIdSet,
@@ -79,6 +81,9 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
   onStopBusiness,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
+  const detailActiveTab: DetailTab = activeFormTab === 'related'
+    ? 'channels'
+    : (activeFormTab as DetailTab);
 
   // Flatten products with their variants into virtual rows
   const virtualRows = useMemo<VirtualRow[]>(() => {
@@ -260,7 +265,8 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                         <GoodsProductDetailPanel
                           product={product}
                           transactions={transactions}
-                          activeTab={activeFormTab as any}
+                          orders={orders}
+                          activeTab={detailActiveTab}
                           onTabChange={tab => onChangeDetailTab(tab)}
                           deleteConfirmText={
                             parentId

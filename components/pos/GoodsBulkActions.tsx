@@ -19,7 +19,7 @@ export const GoodsBulkActions: React.FC<GoodsBulkActionsProps> = ({
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-200 px-6 py-4 flex items-center gap-6 z-50 animate-in slide-in-from-bottom-8">
       <div className="flex items-center gap-3 border-r border-slate-200 pr-6">
-        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-semibold text-sm">
           {selectedCount}
         </div>
         <span className="text-sm font-bold text-slate-600">đã chọn</span>

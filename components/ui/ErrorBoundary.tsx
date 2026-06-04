@@ -34,14 +34,14 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
               <AlertTriangle className="w-7 h-7 text-rose-500" />
             </div>
-            <h3 className="text-base font-black text-slate-900 mb-2">
+            <h3 className="text-base font-semibold text-slate-900 mb-2">
               {this.props.moduleName ? `${this.props.moduleName} gặp lỗi` : 'Module gặp lỗi'}
             </h3>
-            <p className="text-[11px] text-slate-400 font-normal mb-1">
+            <p className="text-xs text-slate-400 font-normal mb-1">
               Phần này không thể hiển thị. Các module khác vẫn hoạt động bình thường.
             </p>
             {this.state.error && (
-              <p className="text-[10px] text-rose-400 font-mono bg-rose-50 rounded-xl px-3 py-2 mt-3 mb-5 text-left break-all">
+              <p className="text-2xs text-rose-400 font-mono bg-rose-50 rounded-xl px-3 py-2 mt-3 mb-5 text-left break-all">
                 {this.state.error.message}
               </p>
             )}

@@ -24,6 +24,7 @@ interface ListPageTableProps<T> {
   stickyHeader?: boolean;
   expandedRowId?: string;
   expandedRowContent?: React.ReactNode;
+  summaryCells?: Record<string, React.ReactNode>;
 }
 
 /**
@@ -43,6 +44,7 @@ export function ListPageTable<T>({
   stickyHeader = true,
   expandedRowId,
   expandedRowContent,
+  summaryCells,
 }: ListPageTableProps<T>) {
   const getValue = (item: T, key: string) => {
     if (item && typeof item === 'object' && key in item) {
@@ -71,7 +73,7 @@ export function ListPageTable<T>({
           {columns.map(col => (
             <th
               key={col.key}
-              className={`px-4 py-3 font-normal text-[11px] uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 ${
+              className={`px-4 py-3 font-normal text-xs uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 ${
                 col.align === 'center'
                   ? 'text-center'
                   : col.align === 'right'
@@ -97,6 +99,24 @@ export function ListPageTable<T>({
         </tr>
       </thead>
       <tbody>
+        {summaryCells && (
+          <tr className="bg-indigo-50/60 border-b border-indigo-100">
+            {columns.map(col => (
+              <td
+                key={col.key}
+                className={`px-4 py-2.5 border-r border-indigo-100 last:border-r-0 ${
+                  col.align === 'center'
+                    ? 'text-center'
+                    : col.align === 'right'
+                      ? 'text-right'
+                      : 'text-left'
+                }`}
+              >
+                {summaryCells[col.key] ?? null}
+              </td>
+            ))}
+          </tr>
+        )}
         {data.length === 0 ? (
           <tr>
             <td colSpan={columns.length} className="py-20 text-center">
@@ -114,6 +134,7 @@ export function ListPageTable<T>({
           data.map((item, index) => {
             const rowKey = keyExtractor(item, index);
             const isExpanded = expandedRowId === rowKey;
+            const colCount = columns.length;
             return (
               <React.Fragment key={rowKey}>
                 <tr
@@ -122,13 +143,13 @@ export function ListPageTable<T>({
                     if (target.closest('button,input,a,select,textarea,label')) return;
                     onRowClick?.(item, index);
                   }}
-                  className={`border-b border-slate-100 transition-colors ${
-                    isExpanded ? 'bg-blue-50 border-blue-200' : ''
+                  className={`transition-colors ${
+                    isExpanded ? 'bg-indigo-50/60' : 'border-b border-slate-100'
                   } ${onRowClick && !isExpanded ? 'cursor-pointer hover:bg-slate-50' : ''} ${
                     rowClassName ? rowClassName(item, index) : ''
                   }`}
                 >
-                  {columns.map(col => (
+                  {columns.map((col, colIndex) => (
                     <td
                       key={col.key}
                       className={`px-4 py-3 border-r border-slate-50 last:border-r-0 ${
@@ -137,7 +158,7 @@ export function ListPageTable<T>({
                           : col.align === 'right'
                             ? 'text-right'
                             : 'text-left'
-                      }`}
+                      } ${isExpanded ? `border-t-2 border-indigo-200 ${colIndex === 0 ? 'border-l-2' : ''} ${colIndex === colCount - 1 ? 'border-r-2' : ''}` : ''}`}
                     >
                       {col.render ? col.render(item, index) : getValue(item, col.key)}
                     </td>
@@ -145,7 +166,7 @@ export function ListPageTable<T>({
                 </tr>
                 {isExpanded && expandedRowContent && (
                   <tr>
-                    <td colSpan={columns.length} className="p-0">
+                    <td colSpan={columns.length} className="p-0 border-l-2 border-r-2 border-b-2 border-indigo-200 shadow-lg">
                       {expandedRowContent}
                     </td>
                   </tr>

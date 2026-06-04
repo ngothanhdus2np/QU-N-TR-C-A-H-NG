@@ -55,6 +55,9 @@ interface POSHeaderToolbarProps {
   onProcessRepairs?: () => void;
   onShowShortcuts?: () => void;
   onShowSelectInvoice?: () => void;
+  onShowReturnInvoice?: () => void;
+  onManualSync?: () => void;
+  onLogout?: () => void;
 }
 
 const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
@@ -90,10 +93,14 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   onProcessRepairs,
   onShowShortcuts,
   onShowSelectInvoice,
+  onShowReturnInvoice,
+  onManualSync,
+  onLogout,
 }) => {
   const [showSortMenu, setShowSortMenu] = React.useState(false);
   const [displayLimit, setDisplayLimit] = React.useState(50);
   const [showMobileQR, setShowMobileQR] = React.useState(false);
+  const [showVisitorStats, setShowVisitorStats] = React.useState(false);
   const mobileUrl = window.location.origin;
   const isLocalhost =
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -113,7 +120,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       className="bg-slate-100 h-14 flex items-center px-4 gap-2 shrink-0 shadow-sm z-50 border-b border-slate-200"
       style={{ display: 'flex', alignItems: 'center', flexShrink: 0, height: '56px' }}
     >
-      <div className="relative w-[500px]">
+      <div className="relative w-[clamp(320px,34vw,500px)] shrink-0">
         <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center text-slate-400">
           <Search className="h-4 w-4" />
         </div>
@@ -186,7 +193,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         </button>
 
         {mode !== 'return' && showSortMenu && (
-          <div className="absolute top-full right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] overflow-hidden z-[70] p-1">
+          <div className="absolute top-full right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] overflow-hidden z-dropdown p-1">
             {sortOptions.map(option => (
               <button
                 key={option.value}
@@ -204,7 +211,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
               >
                 <span>
                   <span className="block text-xs font-normal">{option.label}</span>
-                  <span className="block text-[10px] font-normal text-slate-400">
+                  <span className="block text-2xs font-normal text-slate-400">
                     {option.helper}
                   </span>
                 </span>
@@ -215,7 +222,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         )}
 
         {mode !== 'return' && showProductResults && searchFilteredProducts.length > 0 && (
-          <div className="absolute top-full left-0 w-[500px] mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[60] max-h-[500px] overflow-y-auto">
+          <div className="absolute top-full left-0 w-[500px] mt-2 bg-white border border-slate-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-dropdown max-h-[500px] overflow-y-auto">
             {searchFilteredProducts.slice(0, displayLimit).map((p, idx) => {
               const isParent = p.isParent && p.variantCount && p.variantCount > 0;
               const variantAttrs = p.variantAttributes || {};
@@ -255,12 +262,12 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                           {p.name}
                         </span>
                         {attrBadge && (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-normal rounded shrink-0">
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-2xs font-normal rounded shrink-0">
                             {attrBadge}
                           </span>
                         )}
                         {isParent && (
-                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-normal rounded shrink-0">
+                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-2xs font-normal rounded shrink-0">
                             {p.variantCount} biến thể
                           </span>
                         )}
@@ -269,7 +276,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                         {p.salePrice.toLocaleString()}đ
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
                       <span className="font-mono uppercase">{p.sku}</span>
                       <span className="text-slate-300">|</span>
                       <span className={p.stock > 0 ? 'text-emerald-600' : 'text-rose-600'}>
@@ -305,10 +312,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         )}
       </div>
 
-      <div
-        className="fixed flex items-end self-stretch overflow-hidden h-11 z-40"
-        style={{ top: '12px', right: '480px', left: '522px' }}
-      >
+      <div className="flex h-11 min-w-0 flex-1 items-end self-end overflow-hidden">
         <div
           className="pos-invoice-tab-scroll flex items-end self-stretch min-w-0 w-full overflow-x-auto overflow-y-hidden"
           style={{
@@ -348,13 +352,12 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         </div>
       </div>
 
-      {/* Nút + cố định khi tabs nhiều */}
+      {/* Nút + tách riêng khi tabs nhiều */}
       {tabs.length >= 5 && (
         <div
           onClick={addNewTab}
-          className="fixed h-14 w-16 flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer transition-all"
+          className="relative flex h-11 w-16 shrink-0 self-end items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer transition-all"
           title="Thêm hóa đơn"
-          style={{ top: '0', right: '416px', zIndex: 100 }}
         >
           <Plus className="h-5 w-5" />
           {tabs.length > 5 && (
@@ -366,9 +369,38 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       )}
 
       <div className="flex items-center gap-4 px-2 text-slate-600 ml-auto">
-        <button title="Lượt khách" className="hover:text-indigo-600 transition-colors">
-          <ShoppingBag className="h-4.5 w-4.5" />
-        </button>
+        <div className="relative flex items-center">
+          <button
+            title="Lượt khách"
+            onClick={() => setShowVisitorStats(open => !open)}
+            className={`hover:text-indigo-600 transition-colors ${showVisitorStats ? 'text-indigo-600' : ''}`}
+          >
+            <ShoppingBag className="h-4.5 w-4.5" />
+          </button>
+          {showVisitorStats && (
+            <>
+              <div className="fixed inset-0 z-modal" onClick={() => setShowVisitorStats(false)} />
+              <div className="absolute right-0 top-full mt-3 w-64 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xl z-modal">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Lượt khách phiên hiện tại</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-slate-400">Hóa đơn mở</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">{tabs.length}</p>
+                  </div>
+                  <div className="rounded-xl bg-indigo-50 p-3">
+                    <p className="text-indigo-500">Có hàng</p>
+                    <p className="mt-1 text-lg font-semibold text-indigo-700">
+                      {tabs.filter(tab => tab.cart.length > 0 || (tab.returnCart || []).length > 0).length}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Dùng để kiểm nhanh số phiên bán hàng đang mở trên máy tính tiền.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
         <div className="relative flex items-center">
           <button
             title="Mở POS trên điện thoại"
@@ -379,10 +411,10 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
           </button>
           {showMobileQR && (
             <>
-              <div className="fixed inset-0 z-[100]" onClick={() => setShowMobileQR(false)} />
-              <div className="absolute right-0 top-full mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[101] p-5">
+              <div className="fixed inset-0 z-modal" onClick={() => setShowMobileQR(false)} />
+              <div className="absolute right-0 top-full mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-modal p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-black text-slate-800 text-sm">Mở POS trên điện thoại</h3>
+                  <h3 className="font-semibold text-slate-800 text-sm">Mở POS trên điện thoại</h3>
                 </div>
                 {isLocalhost ? (
                   <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-3">
@@ -419,6 +451,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
         </button>
         <button
           title="Đồng bộ"
+          onClick={onManualSync}
           className={`relative hover:text-indigo-600 transition-colors ${isDraining ? 'text-indigo-600' : ''}`}
         >
           <RefreshCw className={`h-4.5 w-4.5 ${isDraining ? 'animate-spin' : ''}`} />
@@ -449,8 +482,8 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
 
             {showGridMenu && (
               <>
-                <div className="fixed inset-0 z-[100]" onClick={() => setShowGridMenu(false)} />
-                <div className="absolute right-0 top-full mt-2 w-[280px] bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-100 z-[101] overflow-hidden py-2 animate-in fade-in slide-in-from-top-4 duration-200">
+                <div className="fixed inset-0 z-modal" onClick={() => setShowGridMenu(false)} />
+                <div className="absolute right-0 top-full mt-2 w-[280px] bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-100 z-modal overflow-hidden py-2 animate-in fade-in slide-in-from-top-4 duration-200">
                   <GridMenuItem
                     icon={<Activity className="h-4.5 w-4.5" />}
                     label="Xem báo cáo cuối ngày"
@@ -469,6 +502,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                   <GridMenuItem
                     icon={<Undo2 className="h-4.5 w-4.5" />}
                     label="Chọn hóa đơn trả hàng"
+                    onClick={onShowReturnInvoice}
                   />
                   <GridMenuItem
                     icon={<PenTool className="h-4.5 w-4.5" />}
@@ -489,6 +523,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                   <GridMenuItem
                     icon={<LogOut className="h-4.5 w-4.5 text-rose-500" />}
                     label="Đăng xuất"
+                    onClick={onLogout}
                   />
                 </div>
               </>
@@ -516,7 +551,7 @@ const GridMenuItem = ({
     className={`w-full px-6 py-3.5 flex items-center gap-4 transition-all text-left ${active ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
   >
     <span className={active ? 'text-slate-900' : 'text-slate-500'}>{icon}</span>
-    <span className={`text-[13px] font-normal ${active ? 'text-slate-900' : 'text-slate-700'}`}>
+    <span className={`text-sm font-normal ${active ? 'text-slate-900' : 'text-slate-700'}`}>
       {label}
     </span>
   </button>

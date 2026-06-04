@@ -73,7 +73,7 @@ const MarketingSettingsTab: React.FC<MarketingSettingsTabProps> = ({
                       <input
                         value={s.name}
                         onChange={e => setStrategies(prev => prev.map(x => x.id === s.id ? { ...x, name: e.target.value } : x))}
-                        className="w-full font-normal text-[10px] uppercase outline-none border-b border-transparent focus:border-indigo-400 bg-transparent py-0.5 transition-colors"
+                        className="w-full font-normal text-2xs uppercase outline-none border-b border-transparent focus:border-indigo-400 bg-transparent py-0.5 transition-colors"
                         placeholder="Tên tuyến..."
                       />
                       <div className="mt-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -92,7 +92,7 @@ const MarketingSettingsTab: React.FC<MarketingSettingsTabProps> = ({
                           type="number"
                           value={s.percentage}
                           onChange={e => setStrategies(prev => prev.map(x => x.id === s.id ? { ...x, percentage: parseInt(e.target.value) || 0 } : x))}
-                          className="w-8 text-right text-[10px] font-normal outline-none bg-transparent text-indigo-900"
+                          className="w-8 text-right text-2xs font-normal outline-none bg-transparent text-indigo-900"
                         />
                         <span className="ml-0.5 text-[8px] font-normal text-slate-400">%</span>
                       </div>
@@ -122,7 +122,7 @@ const MarketingSettingsTab: React.FC<MarketingSettingsTabProps> = ({
 
         <div className="w-full md:w-[60%] flex flex-col border rounded-[2rem] overflow-hidden bg-slate-50/30">
           <div className="p-3 bg-white border-b flex justify-between items-center">
-            <span className="text-[10px] font-normal uppercase text-red-600">Sản phẩm trọng tâm</span>
+            <span className="text-2xs font-normal uppercase text-red-600">Sản phẩm trọng tâm</span>
             <button
               onClick={() => {
                 const name = window.prompt("Nhập tên sản phẩm trọng tâm mới:");
@@ -162,13 +162,13 @@ const MarketingSettingsTab: React.FC<MarketingSettingsTabProps> = ({
         <div className="flex flex-col gap-2 text-center md:text-left flex-1">
           <div className="flex items-center gap-2 bg-indigo-800 w-fit px-2 py-0.5 rounded-md text-[8px] font-normal uppercase mx-auto md:mx-0"><Sparkles size={12} className="text-yellow-400" /> Phân tích AI</div>
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-black uppercase tracking-tight">Tháng {viewDate.getMonth() + 1} / {viewDate.getFullYear()}</h2>
+            <h2 className="text-xl font-semibold uppercase tracking-tight">Tháng {viewDate.getMonth() + 1} / {viewDate.getFullYear()}</h2>
             <div className="flex gap-2">
               {adviceLoading ? <Loader2 className="animate-spin" size={16} /> : <button onClick={handleRunAdvice} className="bg-white text-indigo-900 px-4 py-1.5 rounded-lg font-normal text-[9px] uppercase shadow-md hover:scale-105 transition-all">Phân tích mới</button>}
               {aiAdvice && <button onClick={onApplyAdvice} className="bg-indigo-700 text-white border border-indigo-500 px-4 py-1.5 rounded-lg font-normal text-[9px] uppercase hover:bg-indigo-600 transition-all">Áp dụng tỉ lệ</button>}
             </div>
           </div>
-          <p className="text-indigo-200 text-[10px] max-w-3xl line-clamp-2 font-normal italic">{aiAdvice?.marketInsight || "Hãy chạy phân tích để nhận lời khuyên thị trường..."}</p>
+          <p className="text-indigo-200 text-2xs max-w-3xl line-clamp-2 font-normal italic">{aiAdvice?.marketInsight || "Hãy chạy phân tích để nhận lời khuyên thị trường..."}</p>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
           {(aiAdvice?.holidays || []).slice(0, 4).map((h, i) => <div key={i} className="bg-white/10 p-2 rounded-lg border border-white/5 text-[8px] font-normal uppercase text-center whitespace-nowrap">{h}</div>)}

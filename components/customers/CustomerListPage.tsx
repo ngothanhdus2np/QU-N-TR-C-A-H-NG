@@ -9,14 +9,13 @@ import {
   Mail,
   MapPin,
   FileText,
-  CalendarDays,
-  ChevronRight,
 } from 'lucide-react';
 import {
   ListPageLayout,
   ListPageTable,
   ListPagePagination,
   FilterSection,
+  FilterDateRange,
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
   type TableColumn,
@@ -38,6 +37,20 @@ const fmt = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 0 
 const parseMoney = (s: string) => {
   const n = parseFloat(s.replace(/\./g, '').replace(/,/g, ''));
   return isNaN(n) ? null : n;
+};
+const toTime = (value?: string) => {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+};
+const inDateRange = (value: string | undefined, from: string, to: string) => {
+  const time = toTime(value);
+  if (time == null) return false;
+  const fromTime = from ? new Date(`${from}T00:00:00`).getTime() : null;
+  const toTimeValue = to ? new Date(`${to}T23:59:59`).getTime() : null;
+  if (fromTime != null && time < fromTime) return false;
+  if (toTimeValue != null && time > toTimeValue) return false;
+  return true;
 };
 
 const TIER_OPTIONS = ['Tất cả các nhóm', 'Standard', 'Silver', 'Gold', 'Diamond'] as const;
@@ -68,7 +81,8 @@ const emptyPOSForm = (): QuickCustomerForm => ({
   birthday: '',
   gender: '',
   address: '',
-  area: '',
+  province: '',
+  district: '',
   ward: '',
   taxCode: '',
   email: '',
@@ -88,10 +102,14 @@ const CustomerListPage: React.FC<Props> = ({
   const [customerType, setCustomerType] = useState<'all' | 'individual' | 'company'>('all');
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [createdDateMode, setCreatedDateMode] = useState<'all' | 'custom'>('all');
-  const [birthdayMode, setBirthdayMode] = useState<'all' | 'custom'>('all');
-  const [lastTxnMode, setLastTxnMode] = useState<'all' | 'custom'>('all');
-  const [spentTimeMode, setSpentTimeMode] = useState<'all' | 'custom'>('all');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
+  const [birthdayFrom, setBirthdayFrom] = useState('');
+  const [birthdayTo, setBirthdayTo] = useState('');
+  const [lastTxnFrom, setLastTxnFrom] = useState('');
+  const [lastTxnTo, setLastTxnTo] = useState('');
+  const [spentFrom, setSpentFrom] = useState('');
+  const [spentTo, setSpentTo] = useState('');
   const [minSpent, setMinSpent] = useState('');
   const [maxSpent, setMaxSpent] = useState('');
   const [minDebt, setMinDebt] = useState('');
@@ -127,12 +145,34 @@ const CustomerListPage: React.FC<Props> = ({
     orders.forEach(o => {
       if (!o.customerId) return;
       const cur = map.get(o.customerId) || { sold: 0, returned: 0 };
-      if (o.isReturn) cur.returned += o.finalAmount;
+      if (o.isReturn) cur.returned += Math.abs(o.finalAmount);
       else cur.sold += o.finalAmount;
       map.set(o.customerId, cur);
     });
     return map;
   }, [orders]);
+
+  const lastTransactionMap = useMemo(() => {
+    const map = new Map<string, string>();
+    orders.forEach(order => {
+      if (!order.customerId) return;
+      const prev = map.get(order.customerId);
+      if (!prev || new Date(order.date).getTime() > new Date(prev).getTime()) {
+        map.set(order.customerId, order.date);
+      }
+    });
+    return map;
+  }, [orders]);
+
+  const spentInRangeMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!spentFrom && !spentTo) return map;
+    orders.forEach(order => {
+      if (!order.customerId || order.isReturn || !inDateRange(order.date, spentFrom, spentTo)) return;
+      map.set(order.customerId, (map.get(order.customerId) || 0) + order.finalAmount);
+    });
+    return map;
+  }, [orders, spentFrom, spentTo]);
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
@@ -147,6 +187,32 @@ const CustomerListPage: React.FC<Props> = ({
       );
     }
     if (groupFilter !== 'Tất cả các nhóm') list = list.filter(c => c.tier === groupFilter);
+    if (customerType !== 'all') {
+      list = list.filter(c => {
+        const type = c.customerType || (c.taxCode || c.companyName ? 'company' : 'individual');
+        return type === customerType;
+      });
+    }
+    if (genderFilter !== 'all') list = list.filter(c => c.gender === genderFilter);
+    if (statusFilter !== 'all') {
+      list = list.filter(c => (c.status || 'active') === statusFilter);
+    }
+    if (createdFrom || createdTo) {
+      list = list.filter(c => inDateRange(c.createdAt, createdFrom, createdTo));
+    }
+    if (birthdayFrom || birthdayTo) {
+      list = list.filter(c => inDateRange(c.birthday, birthdayFrom, birthdayTo));
+    }
+    if (lastTxnFrom || lastTxnTo) {
+      list = list.filter(c => inDateRange(c.lastVisit || lastTransactionMap.get(c.id), lastTxnFrom, lastTxnTo));
+    }
+    if (spentFrom || spentTo) {
+      list = list.filter(c => (spentInRangeMap.get(c.id) || 0) > 0);
+    }
+    if (creatorSearch.trim()) {
+      const q = creatorSearch.toLowerCase();
+      list = list.filter(c => (c.createdBy || '').toLowerCase().includes(q));
+    }
 
     const minS = parseMoney(minSpent);
     const maxS = parseMoney(maxSpent);
@@ -197,6 +263,20 @@ const CustomerListPage: React.FC<Props> = ({
     customers,
     search,
     groupFilter,
+    customerType,
+    genderFilter,
+    statusFilter,
+    createdFrom,
+    createdTo,
+    birthdayFrom,
+    birthdayTo,
+    lastTxnFrom,
+    lastTxnTo,
+    lastTransactionMap,
+    spentFrom,
+    spentTo,
+    spentInRangeMap,
+    creatorSearch,
     minSpent,
     maxSpent,
     minDebt,
@@ -230,9 +310,14 @@ const CustomerListPage: React.FC<Props> = ({
     customerType !== 'all' ||
     genderFilter !== 'all' ||
     statusFilter !== 'all' ||
-    createdDateMode !== 'all' ||
-    birthdayMode !== 'all' ||
-    lastTxnMode !== 'all' ||
+    !!createdFrom ||
+    !!createdTo ||
+    !!birthdayFrom ||
+    !!birthdayTo ||
+    !!lastTxnFrom ||
+    !!lastTxnTo ||
+    !!spentFrom ||
+    !!spentTo ||
     !!minSpent ||
     !!maxSpent ||
     !!minDebt ||
@@ -275,8 +360,14 @@ const CustomerListPage: React.FC<Props> = ({
         debtAmount: 0,
         tier: formData.tier || 'Standard',
         lastVisit: undefined,
+        status: 'active',
+        customerType: 'individual',
+        createdAt: new Date().toISOString(),
       };
       onUpdateCustomers([...customers, newCustomer]);
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+      }
     }
     setFormData(emptyForm());
     setShowAddModal(false);
@@ -284,20 +375,51 @@ const CustomerListPage: React.FC<Props> = ({
 
   const handleSaveFromPOS = () => {
     if (!posForm.name.trim()) return;
-    const addressParts = [posForm.address, posForm.ward, posForm.area].filter(Boolean);
-    const newCustomer: POSCustomer = {
-      id: generateId(),
-      name: posForm.name,
-      phone: posForm.phone,
-      email: posForm.email || undefined,
-      address: addressParts.join(', ') || undefined,
-      notes: posForm.notes || undefined,
-      points: 0,
-      totalSpent: 0,
-      debtAmount: 0,
-      tier: 'Standard',
-    };
-    onUpdateCustomers([...customers, newCustomer]);
+    const addressParts = [posForm.address, posForm.ward, posForm.district, posForm.province].filter(Boolean);
+    if (editCustomer) {
+      const updated: POSCustomer = {
+        ...editCustomer,
+        name: posForm.name,
+        phone: posForm.phone,
+        email: posForm.email || undefined,
+        address: addressParts.join(', ') || undefined,
+        notes: posForm.notes || undefined,
+        customerType: posForm.taxCode ? 'company' : editCustomer.customerType || 'individual',
+        gender: posForm.gender || undefined,
+        birthday: posForm.birthday || undefined,
+        taxCode: posForm.taxCode || undefined,
+        facebook: posForm.facebook || undefined,
+      };
+      onUpdateCustomers(customers.map(c => c.id === editCustomer.id ? updated : c));
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+      }
+      setEditCustomer(null);
+    } else {
+      const newCustomer: POSCustomer = {
+        id: generateId(),
+        name: posForm.name,
+        phone: posForm.phone,
+        email: posForm.email || undefined,
+        address: addressParts.join(', ') || undefined,
+        notes: posForm.notes || undefined,
+        points: 0,
+        totalSpent: 0,
+        debtAmount: 0,
+        tier: 'Standard',
+        status: 'active',
+        customerType: posForm.taxCode ? 'company' : 'individual',
+        gender: posForm.gender || undefined,
+        birthday: posForm.birthday || undefined,
+        taxCode: posForm.taxCode || undefined,
+        facebook: posForm.facebook || undefined,
+        createdAt: new Date().toISOString(),
+      };
+      onUpdateCustomers([...customers, newCustomer]);
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+      }
+    }
     setShowPOSModal(false);
     setPosForm(emptyPOSForm());
   };
@@ -311,6 +433,18 @@ const CustomerListPage: React.FC<Props> = ({
     setDeleteId(null);
   };
 
+  const handleToggleStatus = (customer: POSCustomer) => {
+    const updated: POSCustomer = {
+      ...customer,
+      status: customer.status === 'inactive' ? 'active' : 'inactive',
+    };
+    onUpdateCustomers(customers.map(c => (c.id === customer.id ? updated : c)));
+    if (onUpdateSurgical) {
+      onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+    }
+    setDetailCustomer(updated);
+  };
+
   // Table columns
   const columns: TableColumn<POSCustomer>[] = [
     {
@@ -318,7 +452,7 @@ const CustomerListPage: React.FC<Props> = ({
       label: 'Mã khách hàng',
       width: 'w-[160px]',
       render: c => (
-        <span className="text-blue-600 font-medium text-[13px]">{codeMap.get(c.id) || '—'}</span>
+        <span className="text-blue-600 font-medium text-sm">{codeMap.get(c.id) || '—'}</span>
       ),
     },
     {
@@ -327,10 +461,10 @@ const CustomerListPage: React.FC<Props> = ({
       sortable: true,
       render: c => (
         <div className="flex items-center gap-2">
-          <span className="font-medium text-[13px] text-slate-800">{c.name}</span>
+          <span className="font-medium text-sm text-slate-800">{c.name}</span>
           {c.tier !== 'Standard' && (
             <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${TIER_BADGE[c.tier]}`}
+              className={`text-2xs px-1.5 py-0.5 rounded font-medium shrink-0 ${TIER_BADGE[c.tier]}`}
             >
               {c.tier}
             </span>
@@ -343,7 +477,7 @@ const CustomerListPage: React.FC<Props> = ({
       label: 'Điện thoại',
       width: 'w-[160px]',
       sortable: true,
-      render: c => <span className="text-[13px] text-slate-600">{c.phone || '—'}</span>,
+      render: c => <span className="text-sm text-slate-600">{c.phone || '—'}</span>,
     },
     {
       key: 'debt',
@@ -355,7 +489,7 @@ const CustomerListPage: React.FC<Props> = ({
         const debt = c.debtAmount ?? 0;
         return (
           <span
-            className={`text-[13px] font-medium tabular-nums ${debt > 0 ? 'text-rose-600' : 'text-slate-400'}`}
+            className={`text-sm font-medium tabular-nums ${debt > 0 ? 'text-rose-600' : 'text-slate-400'}`}
           >
             {fmt(debt)}
           </span>
@@ -369,7 +503,7 @@ const CustomerListPage: React.FC<Props> = ({
       align: 'right',
       sortable: true,
       render: c => (
-        <span className="text-[13px] tabular-nums text-slate-700">{fmt(c.totalSpent)}</span>
+        <span className="text-sm tabular-nums text-slate-700">{fmt(c.totalSpent)}</span>
       ),
     },
     {
@@ -381,60 +515,17 @@ const CustomerListPage: React.FC<Props> = ({
       render: c => {
         const st = orderStats.get(c.id);
         const net = st ? st.sold - st.returned : c.totalSpent;
-        return <span className="text-[13px] tabular-nums text-slate-700">{fmt(net)}</span>;
+        return <span className="text-sm tabular-nums text-slate-700">{fmt(net)}</span>;
       },
     },
   ];
 
   const pillClass = (active: boolean) =>
-    `text-[12px] px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+    `text-xs px-3 py-1 rounded-full border transition-colors cursor-pointer ${
       active
-        ? 'bg-blue-600 text-white border-blue-600'
+        ? 'bg-indigo-600 text-white border-indigo-600'
         : 'border-slate-200 text-slate-600 hover:border-blue-300'
     }`;
-
-  const radioRow = (
-    label: string,
-    mode: 'all' | 'custom',
-    setMode: (v: 'all' | 'custom') => void
-  ) => (
-    <div className="space-y-1.5">
-      <button
-        onClick={() => {
-          setMode('all');
-          setPage(1);
-        }}
-        className="w-full flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg hover:bg-slate-50 transition-colors"
-      >
-        <span
-          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-            mode === 'all' ? 'border-blue-600' : 'border-slate-300'
-          }`}
-        >
-          {mode === 'all' && <span className="w-2 h-2 rounded-full bg-blue-600" />}
-        </span>
-        <span className="flex-1 text-left text-[13px] text-slate-700">Toàn thời gian</span>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-      </button>
-      <button
-        onClick={() => {
-          setMode('custom');
-          setPage(1);
-        }}
-        className="w-full flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg hover:bg-slate-50 transition-colors"
-      >
-        <span
-          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-            mode === 'custom' ? 'border-blue-600' : 'border-slate-300'
-          }`}
-        >
-          {mode === 'custom' && <span className="w-2 h-2 rounded-full bg-blue-600" />}
-        </span>
-        <span className="flex-1 text-left text-[13px] text-slate-700">Tùy chỉnh</span>
-        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-      </button>
-    </div>
-  );
 
   const rangeInputs = (
     min: string,
@@ -444,7 +535,7 @@ const CustomerListPage: React.FC<Props> = ({
   ) => (
     <div className="space-y-1.5">
       <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-        <span className="px-3 py-2 text-[12px] font-medium text-slate-700 bg-slate-50 border-r border-slate-200 shrink-0">
+        <span className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 border-r border-slate-200 shrink-0">
           Từ
         </span>
         <input
@@ -455,11 +546,11 @@ const CustomerListPage: React.FC<Props> = ({
             setMin(e.target.value);
             setPage(1);
           }}
-          className="flex-1 px-2.5 py-2 text-[12px] text-slate-700 placeholder-slate-300 focus:outline-none"
+          className="flex-1 px-2.5 py-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none"
         />
       </div>
       <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-        <span className="px-3 py-2 text-[12px] font-medium text-slate-700 bg-slate-50 border-r border-slate-200 shrink-0">
+        <span className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 border-r border-slate-200 shrink-0">
           Tới
         </span>
         <input
@@ -470,10 +561,30 @@ const CustomerListPage: React.FC<Props> = ({
             setMax(e.target.value);
             setPage(1);
           }}
-          className="flex-1 px-2.5 py-2 text-[12px] text-slate-700 placeholder-slate-300 focus:outline-none"
+          className="flex-1 px-2.5 py-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none"
         />
       </div>
     </div>
+  );
+
+  const dateRangeInputs = (
+    from: string,
+    setFrom: (v: string) => void,
+    to: string,
+    setTo: (v: string) => void
+  ) => (
+    <FilterDateRange
+      startDate={from}
+      endDate={to}
+      onStartDateChange={date => {
+        setFrom(date);
+        setPage(1);
+      }}
+      onEndDateChange={date => {
+        setTo(date);
+        setPage(1);
+      }}
+    />
   );
 
   const sidebar = (
@@ -481,7 +592,17 @@ const CustomerListPage: React.FC<Props> = ({
       {/* Nhóm khách hàng */}
       <FilterSection
         title="Nhóm khách hàng"
-        action={<button className="text-[12px] text-blue-600 hover:underline">Tạo mới</button>}
+        action={
+          <button
+            onClick={() => {
+              setFormData(emptyForm());
+              setShowAddModal(true);
+            }}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Tạo mới
+          </button>
+        }
       >
         <select
           value={groupFilter}
@@ -489,7 +610,7 @@ const CustomerListPage: React.FC<Props> = ({
             setGroupFilter(e.target.value);
             setPage(1);
           }}
-          className="w-full text-[13px] border border-slate-200 rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:border-blue-300"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:border-blue-300"
         >
           {TIER_OPTIONS.map(t => (
             <option key={t} value={t}>
@@ -501,7 +622,7 @@ const CustomerListPage: React.FC<Props> = ({
 
       {/* Ngày tạo */}
       <FilterSection title="Ngày tạo">
-        {radioRow('Ngày tạo', createdDateMode, setCreatedDateMode)}
+        {dateRangeInputs(createdFrom, setCreatedFrom, createdTo, setCreatedTo)}
       </FilterSection>
 
       {/* Người tạo */}
@@ -511,7 +632,7 @@ const CustomerListPage: React.FC<Props> = ({
           placeholder="Chọn người tạo"
           value={creatorSearch}
           onChange={e => setCreatorSearch(e.target.value)}
-          className="w-full text-[13px] border border-slate-200 rounded-lg px-3 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-300"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-300"
         />
       </FilterSection>
 
@@ -565,20 +686,20 @@ const CustomerListPage: React.FC<Props> = ({
 
       {/* Sinh nhật */}
       <FilterSection title="Sinh nhật">
-        {radioRow('Sinh nhật', birthdayMode, setBirthdayMode)}
+        {dateRangeInputs(birthdayFrom, setBirthdayFrom, birthdayTo, setBirthdayTo)}
       </FilterSection>
 
       {/* Ngày giao dịch cuối */}
       <FilterSection title="Ngày giao dịch cuối">
-        {radioRow('Ngày giao dịch cuối', lastTxnMode, setLastTxnMode)}
+        {dateRangeInputs(lastTxnFrom, setLastTxnFrom, lastTxnTo, setLastTxnTo)}
       </FilterSection>
 
       {/* Tổng bán */}
       <FilterSection title="Tổng bán">
-        <p className="text-[11px] text-slate-400 mb-1.5">Giá trị</p>
+        <p className="text-xs text-slate-400 mb-1.5">Giá trị</p>
         {rangeInputs(minSpent, setMinSpent, maxSpent, setMaxSpent)}
-        <p className="text-[11px] text-slate-400 mt-3 mb-1.5">Thời gian</p>
-        {radioRow('Tổng bán thời gian', spentTimeMode, setSpentTimeMode)}
+        <p className="text-xs text-slate-400 mt-3 mb-1.5">Thời gian</p>
+        {dateRangeInputs(spentFrom, setSpentFrom, spentTo, setSpentTo)}
       </FilterSection>
 
       {/* Nợ hiện tại */}
@@ -601,7 +722,7 @@ const CustomerListPage: React.FC<Props> = ({
             setDeliveryArea(e.target.value);
             setPage(1);
           }}
-          className="w-full text-[13px] border border-slate-200 rounded-lg px-3 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-300"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-300"
         />
       </FilterSection>
 
@@ -652,7 +773,7 @@ const CustomerListPage: React.FC<Props> = ({
           setPosForm(emptyPOSForm());
           setShowPOSModal(true);
         }}
-        className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+        className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
       >
         <Plus className="w-4 h-4" />
         Khách hàng
@@ -672,10 +793,14 @@ const CustomerListPage: React.FC<Props> = ({
           setCustomerType('all');
           setGenderFilter('all');
           setStatusFilter('all');
-          setCreatedDateMode('all');
-          setBirthdayMode('all');
-          setLastTxnMode('all');
-          setSpentTimeMode('all');
+          setCreatedFrom('');
+          setCreatedTo('');
+          setBirthdayFrom('');
+          setBirthdayTo('');
+          setLastTxnFrom('');
+          setLastTxnTo('');
+          setSpentFrom('');
+          setSpentTo('');
           setMinSpent('');
           setMaxSpent('');
           setMinDebt('');
@@ -703,7 +828,7 @@ const CustomerListPage: React.FC<Props> = ({
       >
         {/* Totals summary row */}
         {filtered.length > 0 && (
-          <div className="flex items-center gap-6 px-5 py-2 bg-white border-b border-slate-100 text-[12px] text-slate-500">
+          <div className="flex items-center gap-6 px-5 py-2 bg-white border-b border-slate-100 text-xs text-slate-500">
             <span className="flex-1 text-slate-700 font-medium">{filtered.length} khách hàng</span>
             <span>
               Nợ:{' '}
@@ -740,14 +865,37 @@ const CustomerListPage: React.FC<Props> = ({
                 orderStats={orderStats.get(detailCustomer.id)}
                 onClose={() => setDetailCustomer(null)}
                 onEdit={() => {
-                  setFormData({ ...detailCustomer });
+                  setPosForm({
+                    code: codeMap.get(detailCustomer.id) || '',
+                    name: detailCustomer.name,
+                    phone: detailCustomer.phone,
+                    email: detailCustomer.email || '',
+                    address: detailCustomer.address || '',
+                    province: '',
+                    district: '',
+                    ward: '',
+                    group: detailCustomer.tier,
+                    birthday: '',
+                    gender: '',
+                    taxCode: '',
+                    facebook: '',
+                    notes: detailCustomer.notes || '',
+                  });
                   setEditCustomer(detailCustomer);
+                  setShowPOSModal(true);
                   setDetailCustomer(null);
                 }}
                 onDelete={() => {
                   setDeleteId(detailCustomer.id);
                   setDetailCustomer(null);
                 }}
+                onAnalyze={() => {
+                  const stats = orderStats.get(detailCustomer.id);
+                  window.alert(
+                    `Phân tích ${detailCustomer.name}\nTổng bán: ${fmt(stats?.sold ?? detailCustomer.totalSpent)}\nTrả hàng: ${fmt(stats?.returned ?? 0)}\nNợ hiện tại: ${fmt(detailCustomer.debtAmount ?? 0)}`
+                  );
+                }}
+                onToggleStatus={() => handleToggleStatus(detailCustomer)}
               />
             ) : null
           }
@@ -757,14 +905,16 @@ const CustomerListPage: React.FC<Props> = ({
         />
       </ListPageLayout>
 
-      {/* POS-style Add Customer Modal */}
+      {/* POS-style Add / Edit Customer Modal */}
       <POSQuickCustomerModal
         isOpen={showPOSModal}
         form={posForm}
         onChange={setPosForm}
+        title={editCustomer ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
         onClose={() => {
           setShowPOSModal(false);
           setPosForm(emptyPOSForm());
+          setEditCustomer(null);
         }}
         onSave={handleSaveFromPOS}
       />
@@ -842,7 +992,7 @@ const CustomerListPage: React.FC<Props> = ({
               <button
                 onClick={handleSave}
                 disabled={!formData.name?.trim()}
-                className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40"
+                className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
               >
                 {editCustomer ? 'Lưu thay đổi' : 'Thêm khách hàng'}
               </button>

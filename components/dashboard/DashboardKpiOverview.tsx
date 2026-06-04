@@ -44,7 +44,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <DollarSign className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               Net Revenue
             </span>
             <div className="flex items-center justify-end text-emerald-500 gap-1 font-normal text-xs mt-1">
@@ -58,7 +58,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Doanh thu
         </h4>
         <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
@@ -76,10 +76,10 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <ShoppingCart className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               COGS Ratio
             </span>
-            <span className="text-[10px] font-normal text-orange-500 uppercase tracking-widest block mt-1">
+            <span className="text-2xs font-normal text-orange-500 uppercase tracking-widest block mt-1">
               {insights.periodRev > 0
                 ? ((insights.totalCogs / insights.periodRev) * 100).toFixed(1)
                 : 0}
@@ -87,7 +87,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </span>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Giá vốn (COGS)
         </h4>
         <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
@@ -110,7 +110,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Gauge className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               Gross Margin
             </span>
             <div className="flex items-center justify-end text-indigo-500 gap-1 font-normal text-xs mt-1">
@@ -123,7 +123,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Lợi nhuận gộp
         </h4>
         <p className="text-4xl font-normal text-indigo-600 tracking-tighter leading-none">
@@ -141,7 +141,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Wallet className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               OPEX Ratio
             </span>
             <div className="flex items-center justify-end text-rose-500 gap-1 font-normal text-xs mt-1">
@@ -154,7 +154,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Chi phí hoạt động
         </h4>
         <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
@@ -172,7 +172,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <Activity className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               EBT Margin
             </span>
             <div className="flex items-center justify-end text-blue-500 gap-1 font-normal text-xs mt-1">
@@ -185,7 +185,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Lợi nhuận trước thuế
         </h4>
         <p className="text-4xl font-normal text-slate-900 tracking-tighter leading-none">
@@ -203,7 +203,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             <ShieldCheck className="w-7 h-7" />
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest block">
+            <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest block">
               Net Profit
             </span>
             <div className="flex items-center justify-end text-teal-500 gap-1 font-normal text-xs mt-1">
@@ -221,7 +221,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <h4 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em] mb-2">
           Lợi nhuận ròng
         </h4>
         <p
@@ -246,7 +246,7 @@ export const DashboardKpiOverview: React.FC<DashboardKpiOverviewProps> = ({
     <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-[0_15px_40px_-20px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">
+          <h3 className="text-2xs font-semibold text-slate-400 uppercase tracking-[0.25em]">
             Báo cáo P&L
           </h3>
           <p className="text-xl font-normal text-slate-900 mt-1">Kết quả Kinh doanh</p>

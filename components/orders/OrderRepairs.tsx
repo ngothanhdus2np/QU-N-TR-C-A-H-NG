@@ -1,16 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Download, ChevronRight, Calendar } from 'lucide-react';
+import { Download } from 'lucide-react';
 import {
   ListPageLayout,
   ListPageToolbar,
   ListPagePagination,
   FilterSection,
+  FilterDateRange,
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
 } from '../shared';
 
 type RepairStatus = 'processing' | 'completed' | 'cancelled';
-type DateMode = 'all' | 'custom';
 
 interface RepairTicket {
   id: string;
@@ -37,7 +37,7 @@ const STATUS_CONFIG: Record<RepairStatus, { label: string; cls: string }> = {
 function StatusBadge({ status }: { status: RepairStatus }) {
   const { label, cls } = STATUS_CONFIG[status];
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold ${cls}`}>
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>
       {label}
     </span>
   );
@@ -65,44 +65,18 @@ function SidebarCheckbox({
   );
 }
 
-function SidebarRadio({
-  label,
-  checked,
-  onChange,
-  icon,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <label className="flex items-center gap-2 py-1 cursor-pointer">
-      <input
-        type="radio"
-        checked={checked}
-        onChange={onChange}
-        className="text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 shrink-0"
-      />
-      <span className="text-sm text-slate-600 flex-1">{label}</span>
-      {icon && <span className="text-slate-400">{icon}</span>}
-    </label>
-  );
-}
-
 export default function OrderRepairs() {
   // Sidebar filters
   const [statusFilter, setStatusFilter] = useState<RepairStatus[]>(['processing', 'completed']);
-  const [dateMode, setDateMode] = useState<DateMode>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [updateMode, setUpdateMode] = useState<DateMode>('all');
   const [updateFrom, setUpdateFrom] = useState('');
   const [updateTo, setUpdateTo] = useState('');
 
   // Toolbar
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'transactions' | 'goods'>('transactions');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,6 +88,12 @@ export default function OrderRepairs() {
   const filteredRepairs = useMemo(() => {
     return allRepairs.filter(r => {
       if (statusFilter.length > 0 && !statusFilter.includes(r.status)) return false;
+      const created = r.createdAt.slice(0, 10);
+      if (dateFrom && created < dateFrom) return false;
+      if (dateTo && created > dateTo) return false;
+      const updated = r.updatedAt.slice(0, 10);
+      if (updateFrom && updated < updateFrom) return false;
+      if (updateTo && updated > updateTo) return false;
       const q = searchTerm.toLowerCase();
       if (
         q &&
@@ -123,21 +103,19 @@ export default function OrderRepairs() {
         return false;
       return true;
     });
-  }, [allRepairs, searchTerm, statusFilter]);
+  }, [allRepairs, dateFrom, dateTo, searchTerm, statusFilter, updateFrom, updateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRepairs.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = filteredRepairs.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const hasActiveFilters =
-    statusFilter.length !== 2 || dateMode === 'custom' || updateMode === 'custom';
+    statusFilter.length !== 2 || !!dateFrom || !!dateTo || !!updateFrom || !!updateTo;
 
   const handleClearFilters = () => {
     setStatusFilter(['processing', 'completed']);
-    setDateMode('all');
     setDateFrom('');
     setDateTo('');
-    setUpdateMode('all');
     setUpdateFrom('');
     setUpdateTo('');
     setCurrentPage(1);
@@ -146,6 +124,53 @@ export default function OrderRepairs() {
   const toggleStatus = (s: RepairStatus) => {
     setStatusFilter(prev => (prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]));
     setCurrentPage(1);
+  };
+
+  const allChecked = paginated.length > 0 && paginated.every(ticket => selectedIds.has(ticket.id));
+  const toggleAll = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allChecked) paginated.forEach(ticket => next.delete(ticket.id));
+      else paginated.forEach(ticket => next.add(ticket.id));
+      return next;
+    });
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleExport = () => {
+    const rowsToExport =
+      selectedIds.size > 0 ? filteredRepairs.filter(ticket => selectedIds.has(ticket.id)) : filteredRepairs;
+    const rows = [
+      ['Mã yêu cầu', 'Thời gian', 'Cập nhật', 'Khách hàng', 'SĐT', 'Thiết bị', 'Mô tả', 'Khách cần trả', 'Khách đã trả', 'Trạng thái'].join(','),
+      ...rowsToExport.map(ticket =>
+        [
+          ticket.code,
+          ticket.createdAt,
+          ticket.updatedAt,
+          ticket.customerName || 'Khách lẻ',
+          ticket.customerPhone || '',
+          ticket.deviceName || '',
+          ticket.issue || '',
+          ticket.feeTotal,
+          ticket.feePaid,
+          STATUS_CONFIG[ticket.status].label,
+        ].join(',')
+      ),
+    ].join('\n');
+    const blob = new Blob(['﻿' + rows], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = selectedIds.size > 0 ? 'sua-chua-da-chon.csv' : 'sua-chua.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -172,90 +197,34 @@ export default function OrderRepairs() {
 
       {/* Thời gian */}
       <FilterSection title="Thời gian">
-        <SidebarRadio
-          label="Toàn thời gian"
-          checked={dateMode === 'all'}
-          onChange={() => {
-            setDateMode('all');
+        <FilterDateRange
+          startDate={dateFrom}
+          endDate={dateTo}
+          onStartDateChange={date => {
+            setDateFrom(date);
             setCurrentPage(1);
           }}
-          icon={<ChevronRight className="w-3.5 h-3.5" />}
-        />
-        <SidebarRadio
-          label="Tùy chỉnh"
-          checked={dateMode === 'custom'}
-          onChange={() => {
-            setDateMode('custom');
+          onEndDateChange={date => {
+            setDateTo(date);
             setCurrentPage(1);
           }}
-          icon={<Calendar className="w-3.5 h-3.5" />}
         />
-        {dateMode === 'custom' && (
-          <div className="mt-2 space-y-2">
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => {
-                setDateFrom(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => {
-                setDateTo(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all"
-            />
-          </div>
-        )}
       </FilterSection>
 
       {/* Ngày cập nhật */}
       <FilterSection title="Ngày cập nhật">
-        <SidebarRadio
-          label="Toàn thời gian"
-          checked={updateMode === 'all'}
-          onChange={() => {
-            setUpdateMode('all');
+        <FilterDateRange
+          startDate={updateFrom}
+          endDate={updateTo}
+          onStartDateChange={date => {
+            setUpdateFrom(date);
             setCurrentPage(1);
           }}
-          icon={<ChevronRight className="w-3.5 h-3.5" />}
-        />
-        <SidebarRadio
-          label="Tùy chỉnh"
-          checked={updateMode === 'custom'}
-          onChange={() => {
-            setUpdateMode('custom');
+          onEndDateChange={date => {
+            setUpdateTo(date);
             setCurrentPage(1);
           }}
-          icon={<Calendar className="w-3.5 h-3.5" />}
         />
-        {updateMode === 'custom' && (
-          <div className="mt-2 space-y-2">
-            <input
-              type="date"
-              value={updateFrom}
-              onChange={e => {
-                setUpdateFrom(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all"
-            />
-            <input
-              type="date"
-              value={updateTo}
-              onChange={e => {
-                setUpdateTo(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-400 transition-all"
-            />
-          </div>
-        )}
       </FilterSection>
     </>
   );
@@ -270,9 +239,12 @@ export default function OrderRepairs() {
       }}
       searchPlaceholder="Theo mã yêu cầu..."
       rightActions={
-        <button className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
+        >
           <Download className="h-4 w-4" />
-          Xuất file
+          {selectedIds.size > 0 ? `Xuất ${selectedIds.size} dòng` : 'Xuất file'}
         </button>
       }
     />
@@ -334,28 +306,30 @@ export default function OrderRepairs() {
               <th className="w-10 px-4 py-2.5">
                 <input
                   type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                 Mã yêu cầu
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                 Thời gian
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wide">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Khách hàng
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wide">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Thiết bị / Mô tả
               </th>
-              <th className="px-4 py-2.5 text-right text-[11px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                 Khách cần trả
               </th>
-              <th className="px-4 py-2.5 text-right text-[11px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                 Khách đã trả
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                 Trạng thái
               </th>
             </tr>
@@ -390,6 +364,8 @@ export default function OrderRepairs() {
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelection(r.id)}
                       className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />
                   </td>
@@ -404,13 +380,13 @@ export default function OrderRepairs() {
                       {r.customerName || 'Khách lẻ'}
                     </p>
                     {r.customerPhone && (
-                      <p className="text-[11px] text-slate-400">{r.customerPhone}</p>
+                      <p className="text-xs text-slate-400">{r.customerPhone}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 font-medium max-w-[200px] truncate">
                     {r.deviceName || '—'}
                   </td>
-                  <td className="px-4 py-3 text-right text-xs font-black text-slate-900 whitespace-nowrap">
+                  <td className="px-4 py-3 text-right text-xs font-semibold text-slate-900 whitespace-nowrap">
                     {r.feeTotal.toLocaleString('vi-VN')}đ
                   </td>
                   <td className="px-4 py-3 text-right text-xs font-bold text-green-700 whitespace-nowrap">

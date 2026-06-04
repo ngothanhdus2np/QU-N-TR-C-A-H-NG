@@ -38,7 +38,7 @@ interface GoodsKhoHistoryProps {
 export const GoodsKhoHistory: React.FC<GoodsKhoHistoryProps> = ({ transactions }) => (
   <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
     <table className="w-full text-sm">
-      <thead className="bg-[#fff9f0] border-b font-black uppercase text-[10px]">
+      <thead className="bg-[#fff9f0] border-b font-semibold uppercase text-2xs">
         <tr>
           <th className="p-4 text-left">Mã phiếu</th>
           <th className="p-4 text-left">Ngày</th>
@@ -171,6 +171,23 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
       });
     });
   }, [activeProducts, selectedCategories]);
+
+  React.useEffect(() => {
+    if (auditMode !== 'actual' || selectedCategories.length === 0) return;
+    setAuditItems(prev => {
+      const previousById = new Map(prev.map(item => [item.productId, item]));
+      return searchableProducts.map(product => {
+        const existing = previousById.get(product.id);
+        return {
+          productId: product.id,
+          currentStock: product.stock,
+          actualStock: existing?.actualStock ?? 0,
+          note: existing?.note ?? '',
+        };
+      });
+    });
+  }, [auditMode, searchableProducts, selectedCategories.length, setAuditItems]);
+
   const mismatchCount = auditItems.filter(i => i.actualStock !== i.currentStock).length;
   const matchedCount = auditItems.length - mismatchCount;
   const totalActualQty = auditItems.reduce((sum, item) => sum + item.actualStock, 0);
@@ -245,13 +262,19 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
           },
         ];
       }
-      if (existingIndex !== -1) return prev;
+      if (existingIndex !== -1) {
+        return prev.map((item, index) =>
+          index === existingIndex
+            ? { ...item, actualStock: item.actualStock + 1, damagedQty: undefined }
+            : item
+        );
+      }
       return [
         ...prev,
         {
           productId: product.id,
           currentStock: product.stock,
-          actualStock: product.stock,
+          actualStock: selectedCategories.length > 0 ? 1 : product.stock,
           note: '',
         },
       ];
@@ -280,7 +303,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
-                <h3 className="text-xl font-black tracking-tight text-slate-900">
+                <h3 className="text-xl font-semibold tracking-tight text-slate-900">
                   {labels.title ||
                     (auditMode === 'damaged' ? 'Phiếu trừ hàng lỗi/hư' : 'Phiếu kiểm kho')}
                 </h3>
@@ -302,6 +325,8 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                 placeholder={
                   auditMode === 'damaged'
                     ? 'Quét mã hàng lỗi/hư để trừ tồn'
+                    : selectedCategories.length > 0
+                      ? 'Quét mã hàng trong nhóm để cộng vào SL thực tế'
                     : 'Tìm hàng hóa theo mã hoặc tên'
                 }
                 value={auditSearchTerm}
@@ -337,7 +362,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
 
           <div className="min-h-[560px] overflow-x-auto">
             <table className="w-full min-w-[1020px] text-sm">
-              <thead className="bg-slate-50 text-xs font-black text-slate-700">
+              <thead className="bg-slate-50 text-xs font-semibold text-slate-700">
                 <tr>
                   <th className="w-16 border-b border-slate-200 px-4 py-3 text-center">STT</th>
                   <th className="w-36 border-b border-slate-200 px-4 py-3 text-left">Mã hàng</th>
@@ -501,7 +526,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                 </p>
                 <p className="mt-2 max-w-md text-sm font-normal text-slate-400">
                   {selectedCategories.length > 0
-                    ? 'Ô tìm kiếm hiện chỉ tìm trong nhóm hàng đã chọn.'
+                    ? 'Tất cả hàng trong nhóm đã chọn sẽ hiện trong bảng. Quét mã để cộng số lượng thực tế, hoặc nhập tay vào cột Thực tế.'
                     : auditMode === 'damaged'
                       ? 'Quét từng mã hàng lỗi/hư. Mỗi lần quét sẽ trừ 1 khỏi tồn kho thực tế.'
                       : 'Chọn nhóm hàng để giới hạn phạm vi tìm kiếm, hoặc gõ mã hàng để tìm nhanh.'}
@@ -646,7 +671,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
               className="flex h-14 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-normal text-white shadow-md shadow-emerald-100 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Check className="h-4 w-4" />
-              Hoàn thành
+              {auditMode === 'actual' ? 'Cân bằng kho' : 'Hoàn thành'}
             </button>
           </div>
         </aside>

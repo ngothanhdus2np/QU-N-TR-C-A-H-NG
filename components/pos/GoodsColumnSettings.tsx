@@ -45,7 +45,7 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
         }
         setIsOpen(true);
       }}
-      className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl font-normal text-[10px] uppercase tracking-wide transition-all shadow-sm ${isOpen ? 'bg-indigo-50 border-indigo-400 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+      className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl font-normal text-2xs uppercase tracking-wide transition-colors shadow-sm ${isOpen ? 'bg-indigo-50 border-indigo-400 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
     >
       <Grid3X3 className="h-3.5 w-3.5" />
     </button>
@@ -57,10 +57,10 @@ export const GoodsColumnSettings: React.FC<GoodsColumnSettingsProps> = ({
         className="bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 overflow-hidden"
       >
         <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-[10px] font-normal uppercase tracking-widest text-slate-600">Chọn cột hiển thị</span>
+          <span className="text-2xs font-normal uppercase tracking-widest text-slate-600">Chọn cột hiển thị</span>
           <button
             onClick={() => setVisibleColumns(defaultVisibleColumns)}
-            className="text-[10px] text-indigo-600 font-normal hover:underline"
+            className="text-2xs text-indigo-600 font-normal hover:underline"
           >
             Đặt lại mặc định
           </button>

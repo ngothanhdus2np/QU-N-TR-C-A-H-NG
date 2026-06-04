@@ -40,7 +40,7 @@ export const ListPageToolbar: React.FC<ListPageToolbarProps> = ({
         {/* Search */}
         <div className="flex-1 max-w-md">
           <div
-            className={`flex items-center bg-white border ${searchFocused ? 'border-indigo-500 shadow-[0_0_0_2px_rgba(99,102,241,0.1)]' : 'border-slate-200'} rounded-xl px-3 py-2 transition-all`}
+            className={`flex items-center bg-white border ${searchFocused ? 'border-indigo-500 shadow-[0_0_0_2px_rgba(99,102,241,0.1)]' : 'border-slate-200'} rounded-xl px-3 py-2 transition-colors`}
           >
             <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
             <input

@@ -37,10 +37,10 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
     <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm flex flex-col gap-8">
       <div className="flex justify-between items-center">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 bg-indigo-50 w-fit px-3 py-1 rounded-full text-[10px] font-normal text-indigo-600 uppercase tracking-wider">
+          <div className="flex items-center gap-2 bg-indigo-50 w-fit px-3 py-1 rounded-full text-2xs font-normal text-indigo-600 uppercase tracking-wider">
             <Target size={12} /> Mục tiêu lợi nhuận
           </div>
-          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Điểm hòa vốn hàng ngày</h2>
+          <h2 className="text-2xl font-semibold text-slate-900 uppercase tracking-tight">Điểm hòa vốn hàng ngày</h2>
           {autoCalculated && (
             <div className="flex items-center gap-1.5 text-[9px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 mt-1 w-fit">
               <Sparkles className="w-3 h-3" /> DỮ LIỆU TỰ ĐỘNG THEO CHI PHÍ THÁNG
@@ -58,7 +58,7 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
       {isEditing && (
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col md:flex-row gap-6 items-end animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex-1 space-y-2">
-            <label className="text-[10px] font-normal text-slate-400 uppercase ml-2">Tổng chi phí cố định / tháng</label>
+            <label className="text-2xs font-normal text-slate-400 uppercase ml-2">Tổng chi phí cố định / tháng</label>
             <div className="relative">
               <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
               <input 
@@ -71,7 +71,7 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
             </div>
           </div>
           <div className="flex-1 space-y-2">
-            <label className="text-[10px] font-normal text-slate-400 uppercase ml-2">Tỷ lệ lợi nhuận gộp (%)</label>
+            <label className="text-2xs font-normal text-slate-400 uppercase ml-2">Tỷ lệ lợi nhuận gộp (%)</label>
             <div className="relative">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-normal text-sm">%</div>
               <input 
@@ -94,31 +94,31 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Hòa vốn ngày</span>
+          <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest">Hòa vốn ngày</span>
           <div className="text-2xl font-normal text-slate-900">
             {stats.dailyBreakEvenRevenue.toLocaleString('vi-VN')} <span className="text-xs text-slate-400">đ</span>
           </div>
-          <p className="text-[10px] text-slate-400 font-normal">Cần đạt để bù đắp {stats.dailyFixedCost.toLocaleString('vi-VN')}đ chi phí</p>
+          <p className="text-2xs text-slate-400 font-normal">Cần đạt để bù đắp {stats.dailyFixedCost.toLocaleString('vi-VN')}đ chi phí</p>
         </div>
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Doanh thu ngày chọn</span>
+          <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest">Doanh thu ngày chọn</span>
           <div className="text-2xl font-normal text-indigo-600">
             {stats.currentRevenue.toLocaleString('vi-VN')} <span className="text-xs text-slate-400">đ</span>
           </div>
           <div className="flex items-center gap-2">
             {stats.isProfitable ? (
-              <div className="flex items-center gap-1 text-emerald-600 text-[10px] font-normal uppercase">
+              <div className="flex items-center gap-1 text-emerald-600 text-2xs font-normal uppercase">
                 <TrendingUp size={12} /> Đã có lãi
               </div>
             ) : (
-              <div className="flex items-center gap-1 text-amber-600 text-[10px] font-normal uppercase">
+              <div className="flex items-center gap-1 text-amber-600 text-2xs font-normal uppercase">
                 <TrendingDown size={12} /> Chưa hòa vốn
               </div>
             )}
           </div>
         </div>
         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Ngày hòa vốn tháng</span>
+          <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest">Ngày hòa vốn tháng</span>
           <div className="text-2xl font-normal text-slate-900">
             {stats.breakEvenDay ? `Ngày ${stats.breakEvenDay}` : 'Chưa đạt'}
           </div>
@@ -137,7 +137,7 @@ const DailyBreakEven: React.FC<DailyBreakEvenProps> = ({ revenue, config, onUpda
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Xu hướng doanh thu & lợi nhuận trong tháng</h3>
+        <h3 className="text-2xs font-semibold text-slate-400 uppercase tracking-widest ml-2">Xu hướng doanh thu & lợi nhuận trong tháng</h3>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>

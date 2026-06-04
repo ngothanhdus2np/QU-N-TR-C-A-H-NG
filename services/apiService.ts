@@ -1,5 +1,5 @@
 import { supabaseAdmin as supabase } from './supabase';
-import { AppData, InventoryTransaction } from '../types';
+import { AppData, InventoryTransaction, POSOrder } from '../types';
 import { buildVariantProductName, isUUID } from '../src/lib';
 
 export const TABLE_MAP: Record<string, string> = {
@@ -27,6 +27,7 @@ export const TABLE_MAP: Record<string, string> = {
   posProducts: 'pos_products',
   posOrders: 'pos_orders',
   posCustomers: 'pos_customers',
+  customerDebtHistory: 'customer_debt_history',
   inventoryTransactions: 'inventory_transactions',
   suppliers: 'suppliers',
   supplierDebts: 'supplier_debts',
@@ -99,7 +100,15 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       discount: n(item.discount),
       final_amount: n(item.finalAmount),
       payment_method: item.paymentMethod,
-      staff_id: item.staffId,
+      staff_id: item.staffId || null,
+      staff_name: item.staffName || null,
+      created_by: item.createdBy || item.staffId || null,
+      channel: item.channel || 'direct',
+      channel_name: item.channelName || 'Bán trực tiếp',
+      price_book_id: item.priceBookId || null,
+      price_book_name: item.priceBookName || null,
+      status: item.status || 'completed',
+      is_return: !!item.isReturn,
       notes: item.notes,
       points_earned: n(item.pointsEarned),
     };
@@ -228,6 +237,8 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       is_official: !!item.isOfficial,
       has_tet_commitment: !!item.hasTetCommitment,
       calculation_note: item.calculationNote || null,
+      carry_forward_deduction: Math.round(n(item.carryForwardDeduction)),
+      carry_forward_debt_out: Math.round(n(item.carryForwardDebtOut)),
     };
   if (key === 'staffPerformance')
     return {
@@ -259,6 +270,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       photo_url: item.photoUrl || item.photo_url,
       blood_type: item.bloodType,
       email: item.email,
+      carry_forward_debt: Math.round(n(item.carryForwardDebt)),
     };
   }
   if (key === 'expenses')
@@ -349,6 +361,11 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       import_price: n(item.importPrice),
       sale_price: n(item.salePrice),
       status: item.status,
+      group_id: item.groupId ?? null,
+      starred: item.starred ?? false,
+      image_url: item.imageUrl ?? null,
+      description: item.description ?? null,
+      shops: item.shops ?? null,
     };
   if (key === 'shopeeInventoryIn')
     return {
@@ -370,6 +387,12 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       supplier_group: item.group || null,
       status: item.status || 'active',
       notes: item.notes || null,
+      company_name: item.companyName || null,
+      tax_code: item.taxCode || null,
+      invoice_company_name: item.invoiceCompanyName || null,
+      invoice_tax_code: item.invoiceTaxCode || null,
+      invoice_phone: item.invoicePhone || null,
+      invoice_address: item.invoiceAddress || null,
     };
   if (key === 'supplierDebts')
     return {
@@ -401,6 +424,17 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       net_profit: n(item.netProfit),
       address: item.address,
       shipping_unit: item.shippingUnit,
+      product_name: item.productName || null,
+    };
+  if (key === 'customerDebtHistory')
+    return {
+      id: item.id,
+      customer_id: item.customerId,
+      date: item.date,
+      order_id: item.orderId || null,
+      type: item.type,
+      amount: Math.round(n(item.amount)),
+      note: item.note || null,
     };
   if (key === 'cashflow')
     return {
@@ -428,22 +462,87 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
   return item;
 };
 
-// Giới hạn mặc định cho time-series tables — đủ cho 2 năm hoạt động
+// Giới hạn mặc định cho các bảng time-series nhỏ. Các bảng import lớn dùng fetchAllRows.
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_META_LIMIT = 5000;
 const SUPABASE_PAGE_SIZE = 1000;
+const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
+  'id',
+  'sku',
+  'name',
+  'category_id',
+  'category_path',
+  'import_price',
+  'sale_price',
+  'stock',
+  'expected_out_of_stock',
+  'min_stock',
+  'max_stock',
+  'unit',
+  'base_unit_code',
+  'conversion_value',
+  'brand',
+  'barcode',
+  'attributes_text',
+  'variant_attributes',
+  'allow_points',
+  'weight',
+  'weight_unit',
+  'location',
+  'related_sku',
+  'created_at',
+  'customer_orders',
+  'direct_sale',
+  'product_type',
+  'status',
+  'parent_id',
+  'is_parent',
+  'variant_count',
+].join(',');
 
-const fetchAllRows = async (tableName: string, orderColumn = 'id') => {
+const fetchAllRows = async (
+  tableName: string,
+  orderColumn = 'id',
+  neqFilters?: Record<string, unknown>,
+  columns = '*'
+) => {
   const allRows: any[] = [];
   let offset = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    let q: any = supabase
       .from(tableName)
-      .select('*')
+      .select(columns)
       .order(orderColumn, { ascending: true })
       .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
 
+    if (neqFilters) {
+      for (const [col, val] of Object.entries(neqFilters)) {
+        q = q.neq(col, val);
+      }
+    }
+
+    const { data, error } = await q;
+
+    if (error) return { data: allRows, error };
+    const page = data || [];
+    allRows.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows, error: null };
+    offset += SUPABASE_PAGE_SIZE;
+  }
+};
+
+const fetchPosOrdersFromYear = async (year: number) => {
+  const fromDate = `${year}-01-01`;
+  const allRows: any[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('pos_orders')
+      .select('*')
+      .gte('date', fromDate)
+      .order('date', { ascending: false })
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
     if (error) return { data: allRows, error };
     const page = data || [];
     allRows.push(...page);
@@ -465,7 +564,92 @@ const postDataRoute = async (path: string, body: Record<string, unknown>) => {
   return data;
 };
 
+type PosOrderPageFilters = {
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  typeFilter?: string[];
+  paymentFilter?: string[];
+};
+
+const inferIsReturnOrder = (orderCode: string, finalAmount: number, explicit?: boolean) =>
+  explicit === true || /^TH/i.test(orderCode || '') || finalAmount < 0;
+
+const mapPosOrderRow = (o: any): POSOrder => ({
+  id: o.id,
+  orderCode: o.order_code || o.orderCode || '',
+  date: o.date,
+  customerId: o.customer_id || o.customerId,
+  customerName: o.customer_name || o.customerName,
+  items: o.items || [],
+  totalAmount: Number(o.total_amount || o.totalAmount || 0),
+  discount: Number(o.discount || 0),
+  finalAmount: Number(o.final_amount || o.finalAmount || 0),
+  paymentMethod: o.payment_method || o.paymentMethod || 'Cash',
+  staffId: o.staff_id || o.staffId || '',
+  createdBy: o.created_by || o.createdBy || o.staff_id || o.staffId,
+  channel: o.channel || 'direct',
+  channelName: o.channel_name || o.channelName || 'Bán trực tiếp',
+  priceBookId: o.price_book_id || o.priceBookId || undefined,
+  priceBookName: o.price_book_name || o.priceBookName || undefined,
+  status: o.status || o.orderStatus || 'completed',
+  notes: o.notes,
+  pointsEarned: Number(o.points_earned || o.pointsEarned || 0),
+  isReturn: inferIsReturnOrder(
+    o.order_code || o.orderCode || '',
+    Number(o.final_amount || o.finalAmount || 0),
+    o.is_return ?? o.isReturn
+  ),
+});
+
+const MISSING_POS_ORDER_COLUMN_RE =
+  /Could not find the '([^']+)' column of 'pos_orders' in the schema cache/;
+
+const buildPosOrdersPageQuery = (
+  page: number,
+  pageSize: number,
+  filters: PosOrderPageFilters,
+  ignoredColumns = new Set<string>()
+) => {
+  const from = Math.max(0, (page - 1) * pageSize);
+  const to = from + pageSize - 1;
+  let query: any = supabase
+    .from('pos_orders')
+    .select('*', { count: 'exact' })
+    .order('date', { ascending: false })
+    .range(from, to);
+
+  const search = filters.search?.trim();
+  if (search) {
+    const safeSearch = search.replace(/[%_,]/g, '\\$&');
+    const searchColumns = [
+      !ignoredColumns.has('order_code') && `order_code.ilike.%${safeSearch}%`,
+      !ignoredColumns.has('customer_name') && `customer_name.ilike.%${safeSearch}%`,
+    ].filter(Boolean);
+    if (searchColumns.length > 0) query = query.or(searchColumns.join(','));
+  }
+  if (filters.startDate) query = query.gte('date', `${filters.startDate}T00:00:00`);
+  if (filters.endDate) query = query.lte('date', `${filters.endDate}T23:59:59`);
+  if (filters.typeFilter?.length === 1 && !ignoredColumns.has('is_return')) {
+    query = query.eq('is_return', filters.typeFilter[0] === 'return');
+  }
+  if (
+    filters.paymentFilter &&
+    filters.paymentFilter.length > 0 &&
+    !ignoredColumns.has('payment_method')
+  ) {
+    query = query.in('payment_method', filters.paymentFilter);
+  }
+
+  return query;
+};
+
 export const apiService = {
+  // Fetch riêng shopee_inventory_out (lazy, không block main sync timeout)
+  async fetchShopeeInventoryOut() {
+    return fetchAllRows('shopee_inventory_out', 'date');
+  },
+
   // Lấy một trang dữ liệu từ bất kỳ bảng nào (dùng cho lazy load / load thêm)
   async fetchTablePage(tableName: string, limit = 100, offset = 0) {
     const { data, error, count } = await supabase
@@ -477,8 +661,41 @@ export const apiService = {
     return { data: data ?? [], total: count ?? 0 };
   },
 
-  async fetchAllData() {
+  async fetchPosOrdersPage(
+    page: number,
+    pageSize: number,
+    filters: PosOrderPageFilters = {}
+  ) {
+    const ignoredColumns = new Set<string>();
+    let result = await buildPosOrdersPageQuery(page, pageSize, filters, ignoredColumns);
+    let { data, error, count } = result;
+
+    while (error) {
+      const missingColumn = error.message.match(MISSING_POS_ORDER_COLUMN_RE)?.[1];
+      if (
+        !missingColumn ||
+        !['customer_name', 'is_return', 'payment_method'].includes(missingColumn) ||
+        ignoredColumns.has(missingColumn)
+      ) {
+        break;
+      }
+      ignoredColumns.add(missingColumn);
+      result = await buildPosOrdersPageQuery(page, pageSize, filters, ignoredColumns);
+      data = result.data;
+      error = result.error;
+      count = result.count;
+    }
+
+    if (error) throw new Error(`Lỗi tải hóa đơn: ${error.message}`);
+    return {
+      data: (data ?? []).map(mapPosOrderRow),
+      total: count ?? 0,
+    };
+  },
+
+  async fetchAllData(options: { skipPosProducts?: boolean } = {}) {
     try {
+      const skippedResult = { data: [], error: null };
       const [
         employees,
         policies,
@@ -513,11 +730,7 @@ export const apiService = {
       ] = await Promise.all([
         supabase.from('employees').select('*').limit(500),
         supabase.from('salary_policies').select('*'),
-        supabase
-          .from('revenue_records')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(DEFAULT_LIMIT),
+        fetchAllRows('revenue_records', 'date'),
         supabase
           .from('expense_records')
           .select('*')
@@ -561,11 +774,7 @@ export const apiService = {
         supabase.from('knowledge_base').select('*').limit(DEFAULT_META_LIMIT),
         supabase.from('system_configs').select('*').limit(DEFAULT_META_LIMIT),
         supabase.from('product_groups').select('*').limit(DEFAULT_META_LIMIT),
-        supabase
-          .from('product_group_revenue')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(DEFAULT_LIMIT),
+        supabase.from('product_group_revenue').select('*').order('date', { ascending: false }).limit(DEFAULT_LIMIT),
         supabase.from('promotions').select('*').limit(DEFAULT_META_LIMIT),
         supabase.from('brand_profile').select('*').limit(1),
         supabase
@@ -584,17 +793,12 @@ export const apiService = {
           .select('*')
           .order('date', { ascending: false })
           .limit(DEFAULT_LIMIT),
-        supabase
-          .from('shopee_inventory_out')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(DEFAULT_LIMIT),
-        fetchAllRows('pos_products'),
-        supabase
-          .from('pos_orders')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(DEFAULT_LIMIT),
+        // shopee_inventory_out được fetch riêng sau (lazy) để tránh làm chậm Promise.all chính
+        Promise.resolve({ data: [] as any[], error: null }),
+        options.skipPosProducts
+          ? skippedResult
+          : fetchAllRows('pos_products', 'id', undefined, POS_PRODUCT_BOOTSTRAP_COLUMNS),
+        fetchPosOrdersFromYear(new Date().getFullYear()),
         supabase.from('pos_customers').select('*').limit(2000),
         supabase
           .from('inventory_transactions')
@@ -710,7 +914,20 @@ export const apiService = {
     if (!tableName) {
       throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    await postDataRoute('/api/data/clear', { key });
+    const { data: { session } } = await supabase.auth.getSession();
+    const jwt = session?.access_token;
+    const res = await fetch('/api/data/clear', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      },
+      body: JSON.stringify({ key }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || `Yêu cầu xóa dữ liệu thất bại (${res.status})`);
+    }
     return { success: true, key, message: `Đã xóa toàn bộ dữ liệu từ ${tableName}` };
   },
 

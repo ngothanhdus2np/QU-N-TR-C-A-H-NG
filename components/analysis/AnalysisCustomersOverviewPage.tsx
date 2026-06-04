@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { AppData } from '../../types';
+import { AiInsightPanel } from '../shared';
+import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
 
 interface Props {
   data: AppData;
@@ -95,11 +97,11 @@ const PieCard: React.FC<PieCardProps> = ({
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ background: seg.color }}
                   />
-                  <span className="text-[13px] text-slate-600">{seg.name}</span>
+                  <span className="text-sm text-slate-600">{seg.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[12px] text-slate-400 w-10 text-right">{pct}%</span>
-                  <span className="text-[13px] font-medium text-slate-700 w-24 text-right">
+                  <span className="text-xs text-slate-400 w-10 text-right">{pct}%</span>
+                  <span className="text-sm font-medium text-slate-700 w-24 text-right">
                     {formatValue(seg.value)}
                   </span>
                 </div>
@@ -156,6 +158,9 @@ const AnalysisCustomersOverviewPage: React.FC<Props> = ({ data }) => {
   const { start: defStart, end: defEnd } = defaultRange();
   const [startDate, setStartDate] = useState(defStart);
   const [endDate, setEndDate] = useState(defEnd);
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
 
   const stats = useMemo(() => {
     const orders = (data.posOrders || []).filter(
@@ -232,6 +237,36 @@ const AnalysisCustomersOverviewPage: React.FC<Props> = ({ data }) => {
     };
   }, [data.posOrders, startDate, endDate]);
 
+  const handleAiRun = async () => {
+    const contextData = {
+      period: `${startDate} đến ${endDate}`,
+      totalCustomers: stats.totalCustomers,
+      totalRevenue: stats.totalRevenue,
+      returning: { count: stats.cuCount, revenue: stats.cuRevenue },
+      new: { count: stats.moiCount, revenue: stats.moiRevenue },
+      walk_in: { count: stats.leCount, revenue: stats.leRevenue },
+    };
+    const hash = hashData(contextData);
+    const cached = getCachedAiResult('customers-overview', hash);
+    if (cached) { setAiResult(cached); setFromCache(true); return; }
+    setAiLoading(true); setFromCache(false);
+    try {
+      const res = await fetch('/api/ai/customers-overview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contextData),
+      });
+      const json = await res.json();
+      const result = json.result || json.error || 'Không có kết quả';
+      setAiResult(result);
+      setCachedAiResult('customers-overview', hash, result);
+    } catch {
+      setAiResult('Lỗi kết nối đến AI.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const pieDataCount: PieSegment[] = [
     { name: 'Khách cũ', value: stats.cuCount, color: SEG_COLORS.cu },
     { name: 'Khách mới', value: stats.moiCount, color: SEG_COLORS.moi },
@@ -299,6 +334,8 @@ const AnalysisCustomersOverviewPage: React.FC<Props> = ({ data }) => {
             formatTooltip={v => fmtBig(v)}
           />
         </div>
+
+        <AiInsightPanel isLoading={aiLoading} result={aiResult} onRun={handleAiRun} fromCache={fromCache} />
       </div>
     </div>
   );

@@ -9,12 +9,21 @@
 
 ### Kiểm tra kỹ thuật
 
-- [x] ~~Chạy `npx tsc --noEmit`~~ — TypeScript clean ✅ *(2026-05-17)*
+- [x] ~~Chạy `npx tsc --noEmit`~~ — TypeScript clean (1 lỗi pre-existing ở GoodsInventory.tsx không liên quan) ✅ *(2026-05-18)*
+- [x] ~~**Audit & fix toàn bộ tiểu mục Báo cáo**~~ — 9 trang báo cáo, 11 file ✅ *(2026-05-18)*
+- [x] ~~**Audit UI trống / nút không phản hồi toàn app**~~ — fix AnalysisContainer 2 case, 2 form tab, copy button, 13 files alert→toast ✅ *(2026-05-19)*
+- [x] ~~**Audit & fix toàn bộ 8 trang Phân tích**~~ — 13 bugs: payroll missing, shopeeRevenue excluded, lineTotal calc, Cell vs rect, stock velocity, date filters, staff name resolution ✅ *(2026-05-22)*
 - [x] ~~Chạy `npm test`~~ — 162 tests pass ✅ *(2026-05-16)*
 - [x] ~~Fix 4 TypeScript lint debt errors~~ — đã fix showToast type errors ✅ *(2026-05-16)*
 - [x] ~~Implement virtualization cho 12,739+ SKU~~ — đã implement @tanstack/react-virtual ✅ *(2026-05-16)*
 
+- [x] ~~**Mở rộng AI CFO — thêm 4 tools mới**~~ — query_pos_orders, get_product_details, get_customer_stats, get_product_group_revenue + domain customers ✅ *(2026-05-22)*
+
+- [x] ~~**Hệ thống nợ lương chuyển kỳ (carry-forward debt)**~~ — tích hợp đầy đủ: tính toán, hiển thị, in phiếu, nút tính lại lịch sử ✅ *(2026-05-26)*
+
 > **Note**: Đã hoàn thành tất cả P0 tasks! 🎉
+
+> **Việc cần làm trên Supabase dashboard**: chạy 3 lệnh ALTER TABLE trong `supabase_setup.sql` (phần cuối file, section "Carry-forward debt system") để thêm cột vào database thực.
 
 ---
 
@@ -278,6 +287,30 @@ npm test           # 43 tests phải pass
 
 ---
 
+## ✅ UI Refactor — Design System — HOÀN THÀNH 2026-06-04
+
+- [x] ~~**Phase 1 — Foundation**: tailwind.config tokens, primary color unification~~ ✅ *(2026-06-04)*
+  - `tailwind.config.js`: fontSize.2xs, colors (primary/muted/highlight), boxShadow (card/panel/dropdown/modal), zIndex (dropdown/sticky/overlay/modal/toast/tooltip)
+  - 26 file: `bg-blue-600/700` → `bg-indigo-600/700` (thống nhất primary = indigo)
+  - `Button`, `Modal`, `Badge` trong `shared/ui/`: fix variant sai, z-index token, shadow token
+- [x] ~~**Phase 2 — Consistency**: typography, z-index, font-weight toàn app~~ ✅ *(2026-06-04)*
+  - 1,131 arbitrary font sizes (`text-[10-13px]`) → `text-2xs/xs/sm`
+  - 88 z-indexes loạn (`z-[100..10000]`) → `z-modal/z-toast/z-dropdown`
+  - 401 `font-black` → `font-semibold` (labels không cần weight 900)
+  - `Card.tsx`: shadow prop dùng tokens mới
+- [x] ~~**Phase 3 — Polish**: EmptyState, Skeleton, micro-interactions~~ ✅ *(2026-06-04)*
+  - Tạo `EmptyState` (compact/default, icon/title/description/action)
+  - Tạo `Skeleton` + `TableSkeleton` + `CardSkeleton` + `SidebarSkeleton` (CSS animate-pulse)
+  - 130 `transition-all` → `transition-colors` (43 file không có transform)
+  - `shared/ui/index.ts`: export đủ 7 component (Button/Card/Input/Badge/Modal/EmptyState/Skeleton)
+
+> **Việc còn lại sau 3 phase** (ưu tiên thấp, không block):
+> - Thay ~320 `transition-all` còn lại trong file có transform (case-by-case)
+> - Migrate các modal tự viết sang `Modal` component chuẩn
+> - Migrate các empty state inline sang `EmptyState` component
+
+---
+
 ## 🔵 P2 — Ưu tiên thấp / Phase tiếp theo
 
 > **Note:** Layout Components proposal đã bị reject. Lý do: Refactor 20+ pages chỉ để tiết kiệm code là rủi ro cao/lợi ích thấp. Không fix bug, không thêm tính năng. Thời gian nên dùng cho những thứ user thực sự thấy.
@@ -306,6 +339,115 @@ npm test           # 43 tests phải pass
 - [ ] `types.ts` (791 dòng) — xem xét tách theo domain (pos, payroll, inventory...)
 - [ ] `services/apiService.ts` (755 dòng) — xem xét tách theo module
 - [ ] `hooks/useAppData.ts` (707 dòng) — đã có task type hóa ở P1
+
+---
+
+## 🔧 Shopee Monitor — Backfill dữ liệu phí đơn hàng cũ vào SQLite
+
+> **Mục đích:** Các đơn hàng cũ trong SQLite chỉ có `total_fee` tổng gộp, thiếu 6 cột phí riêng lẻ vừa thêm (`commission_fee`, `service_fee`, `transaction_fee`, `piship_fee`, `vat_tax`, `pit_tax`). Script này gọi lại Shopee API để fill đầy đủ.
+
+- [ ] **Tạo script `/Users/apple/shopee-monitor/scripts/backfill.js`**
+
+### Điều kiện trước khi chạy
+
+1. `shopee-bot` phải đang chạy (`pm2 status` → shopee-bot = online)
+2. Trình duyệt Playwright đã đăng nhập Shopee Seller Center (còn session)
+
+### Kế hoạch implement chi tiết
+
+**Bước 1 — Kết nối vào browser đang chạy của shopee-bot:**
+
+shopee-bot khởi động Playwright với `--remote-debugging-port`. Cần tìm port này (hoặc hardcode) và dùng `chromium.connectOverCDP()`:
+
+```js
+const { chromium } = require('playwright');
+const browser = await chromium.connectOverCDP('http://localhost:9222');
+const context = browser.contexts()[0];
+const page = context.pages()[0];
+```
+
+> Nếu shopee-bot chưa expose CDP port, cần thêm `args: ['--remote-debugging-port=9222']` vào Playwright launch options trong `monitor.js`.
+
+**Bước 2 — Đọc danh sách order_sn cần backfill:**
+
+```js
+const db = require('../src/db');
+// Lấy các đơn chưa có commission_fee (= chưa backfill)
+const orders = db.db.prepare(`
+    SELECT o.order_sn FROM orders o
+    LEFT JOIN order_details d ON o.order_sn = d.order_sn
+    WHERE d.commission_fee IS NULL OR d.commission_fee = 0
+    ORDER BY o.created_at DESC
+`).all();
+```
+
+**Bước 3 — Gọi API income cho từng đơn (reuse logic từ monitor.js):**
+
+```js
+async function fetchOrderIncome(page, orderSn) {
+    const result = await page.evaluate(async (sn) => {
+        const url = `https://seller.shopee.vn/api/order/get_order_income_components/?order_sn=${sn}`;
+        const r = await fetch(url, { credentials: 'include' });
+        return r.json();
+    }, orderSn);
+    return result;
+}
+```
+
+Parse response giống hệt logic trong `monitor.js` (hàm `parseBreakdown` / `getSub` / `get`).
+
+**Bước 4 — UPDATE từng đơn vào SQLite:**
+
+```js
+const updateFees = db.db.prepare(`
+    UPDATE order_details SET
+        commission_fee  = ?,
+        service_fee     = ?,
+        transaction_fee = ?,
+        piship_fee      = ?,
+        vat_tax         = ?,
+        pit_tax         = ?
+    WHERE order_sn = ?
+`);
+```
+
+**Bước 5 — Loop với delay để tránh rate limit:**
+
+```js
+for (const { order_sn } of orders) {
+    try {
+        const data = await fetchOrderIncome(page, order_sn);
+        // parse fees từ data...
+        updateFees.run(commissionFee, serviceFee, transactionFee, pishipFee, vatTax, pitTax, order_sn);
+        console.log(`✅ ${order_sn}`);
+    } catch (e) {
+        console.log(`❌ ${order_sn}: ${e.message}`);
+    }
+    await new Promise(r => setTimeout(r, 1500)); // 1.5s delay
+}
+```
+
+**Chạy script:**
+
+```bash
+cd /Users/apple/shopee-monitor
+node scripts/backfill.js
+```
+
+### Rủi ro cần xử lý
+
+| Vấn đề | Xử lý |
+|---|---|
+| shopee-bot chưa expose CDP port | Thêm `--remote-debugging-port=9222` vào launch options |
+| `get_order_income_components` trả empty cho đơn chưa complete | Bỏ qua (try/catch), chỉ update khi có data |
+| Session hết hạn giữa chừng | Script sẽ nhận lỗi 401/redirect — dừng và báo |
+| Nhiều đơn (1000+) | Delay 1.5s → ~25 phút/1000 đơn, có thể để chạy ngầm |
+
+### Lưu ý thêm
+
+- Sau khi backfill xong → confirm PiShip field name thực tế từ log (field_name trong API response)
+- Nếu cần xem log realtime: `pm2 logs shopee-shop1`
+- Script có thể chạy nhiều lần an toàn (chỉ update đơn chưa có fee)
 
 ---
 

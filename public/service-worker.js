@@ -1,9 +1,10 @@
 // CFO Brain 4.0 - Service Worker
-// Version: 1.0.0
+// Version: 1.0.2
 
-const CACHE_NAME = 'cfo-brain-v1.0.0';
+const CACHE_NAME = 'cfo-brain-v1.0.2';
 const RUNTIME_CACHE = 'cfo-brain-runtime';
 const IMAGE_CACHE = 'cfo-brain-images';
+const MAX_IMAGE_CACHE_BYTES = 1_500_000;
 
 // Files to cache immediately on install
 const PRECACHE_URLS = [
@@ -71,13 +72,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip API calls (always fetch fresh)
+  // Skip data API calls entirely. Caching large JSON snapshots can stall the app/browser.
+  if (url.pathname.startsWith('/api/data/')) {
+    return;
+  }
+
+  // API calls: fetch fresh; only cache lightweight GET responses for offline fallback.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful API responses for offline fallback
-          if (response.ok) {
+          const contentLength = Number(response.headers.get('content-length') || 0);
+          const canCache =
+            request.method === 'GET' &&
+            response.ok &&
+            (contentLength === 0 || contentLength < 200_000);
+
+          if (canCache) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
               cache.put(request, responseClone);
@@ -95,6 +106,12 @@ self.addEventListener('fetch', (event) => {
 
   // Handle images separately
   if (request.destination === 'image') {
+    // Document preview pages are already static local files and can be large.
+    // Let the browser HTTP cache handle them; Cache Storage cloning can stall the tab over time.
+    if (url.pathname.startsWith('/knowledge-page-images/')) {
+      return;
+    }
+
     event.respondWith(
       caches.open(IMAGE_CACHE)
         .then((cache) => {
@@ -106,7 +123,12 @@ self.addEventListener('fetch', (event) => {
               
               return fetch(request)
                 .then((response) => {
-                  if (response.ok) {
+                  const contentLength = Number(response.headers.get('content-length') || 0);
+                  const canCache =
+                    response.ok &&
+                    (contentLength === 0 || contentLength <= MAX_IMAGE_CACHE_BYTES);
+
+                  if (canCache) {
                     cache.put(request, response.clone());
                   }
                   return response;

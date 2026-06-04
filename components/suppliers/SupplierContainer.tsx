@@ -7,6 +7,7 @@ import { Supplier, AppData, AppDataSurgicalUpdate } from '../../types';
 import { generateId } from '../../src/lib';
 import { useToast } from '../ui/Toast';
 import { exportToExcel } from '../../services/exportService';
+import { Modal } from '../shared/ui/Modal';
 
 interface SupplierContainerProps {
   data: AppData;
@@ -31,38 +32,101 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    supplierId: string;
+    supplierName: string;
+    warning?: string;
+  } | null>(null);
   const supplierFileInputRef = useRef<HTMLInputElement>(null);
 
   const rawSuppliers = data.suppliers || [];
   const supplierDebts = data.supplierDebts || [];
   const inventoryTransactions = data.inventoryTransactions || [];
 
+  const normalizeSupplierKey = (value?: string | null) => value?.trim().toLowerCase() || '';
+  const normalizeSupplierCode = (value?: string | null) => value?.trim().toUpperCase() || '';
+  const stripComputedFields = (supplier: Supplier): Supplier => {
+    const { totalPurchase: _totalPurchase, currentDebt: _currentDebt, ...cleanData } = supplier;
+    return cleanData;
+  };
+
+  const getNextSupplierCode = (reservedCodes: Set<string> = new Set()) => {
+    const existingCodes = rawSuppliers
+      .map(s => s.code)
+      .filter(Boolean)
+      .filter(code => /^NCC\d+$/i.test(code!))
+      .map(code => parseInt(code!.replace(/NCC/i, ''), 10))
+      .filter(num => !isNaN(num));
+
+    let nextNum = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1;
+    let nextCode = `NCC${String(nextNum).padStart(4, '0')}`;
+    while (reservedCodes.has(normalizeSupplierCode(nextCode))) {
+      nextNum += 1;
+      nextCode = `NCC${String(nextNum).padStart(4, '0')}`;
+    }
+    reservedCodes.add(normalizeSupplierCode(nextCode));
+    return nextCode;
+  };
+
+  const supplierGroupOptions = useMemo(
+    () => Array.from(new Set(rawSuppliers.map(s => s.group?.trim()).filter(Boolean) as string[])),
+    [rawSuppliers]
+  );
+
+  const supplierAreaOptions = useMemo(() => {
+    const cities = new Set<string>();
+    const wards = new Set<string>();
+    rawSuppliers.forEach(supplier => {
+      const parts = (supplier.address || '')
+        .split(',')
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length >= 2) wards.add(parts[parts.length - 2]);
+      if (parts.length >= 1) cities.add(parts[parts.length - 1]);
+    });
+    return { cities: Array.from(cities), wards: Array.from(wards) };
+  }, [rawSuppliers]);
+  const transactionBelongsToSupplier = (
+    transaction: (typeof inventoryTransactions)[number],
+    supplier: Supplier
+  ) => {
+    if (transaction.supplierId) return transaction.supplierId === supplier.id;
+    const supplierText = normalizeSupplierKey(transaction.supplierName);
+    return (
+      supplierText !== '' &&
+      (supplierText === normalizeSupplierKey(supplier.name) ||
+        supplierText === normalizeSupplierKey(supplier.code))
+    );
+  };
+  const debtBelongsToSupplier = (
+    debt: (typeof supplierDebts)[number],
+    supplier: Supplier
+  ) => {
+    if (debt.supplierId) return debt.supplierId === supplier.id;
+    const supplierText = normalizeSupplierKey(debt.supplierName);
+    return supplierText !== '' && supplierText === normalizeSupplierKey(supplier.name);
+  };
+
   // Compute totalPurchase and currentDebt for each supplier
   const suppliersWithComputed = useMemo(() => {
-    const totalPurchaseBySupplier = new Map<string, number>();
-    inventoryTransactions.forEach(transaction => {
-      if (transaction.type !== 'Import' || !transaction.supplierId) return;
-      totalPurchaseBySupplier.set(
-        transaction.supplierId,
-        (totalPurchaseBySupplier.get(transaction.supplierId) || 0) +
-          (transaction.totalAmount || 0)
-      );
-    });
-
-    const currentDebtBySupplier = new Map<string, number>();
-    supplierDebts.forEach(debt => {
-      currentDebtBySupplier.set(
-        debt.supplierId,
-        (currentDebtBySupplier.get(debt.supplierId) || 0) +
-          (debt.type === 'purchase' ? debt.amount : -debt.amount)
-      );
-    });
-
     return rawSuppliers.map(supplier => {
+      const totalPurchase = inventoryTransactions
+        .filter(
+          transaction =>
+            transaction.type === 'Import' && transactionBelongsToSupplier(transaction, supplier)
+        )
+        .reduce((sum, transaction) => sum + (transaction.totalAmount || 0), 0);
+      const currentDebt = supplierDebts
+        .filter(debt => debtBelongsToSupplier(debt, supplier))
+        .reduce(
+          (sum, debt) => sum + (debt.type === 'purchase' ? debt.amount : -debt.amount),
+          0
+        );
+
       return {
         ...supplier,
-        totalPurchase: totalPurchaseBySupplier.get(supplier.id) || 0,
-        currentDebt: currentDebtBySupplier.get(supplier.id) || 0,
+        totalPurchase,
+        currentDebt,
       };
     });
   }, [rawSuppliers, supplierDebts, inventoryTransactions]);
@@ -83,22 +147,30 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       const isEdit = editingSupplier !== null;
       const supplierId = isEdit ? editingSupplier.id : generateId();
 
-      // Strip computed fields before saving
-      const { totalPurchase: _totalPurchase, currentDebt: _currentDebt, ...cleanData } = supplierData;
+      const cleanData = stripComputedFields(supplierData);
 
       // Auto-generate supplier code if not provided
       let supplierCode = cleanData.code?.trim();
-      if (!supplierCode) {
-        // Generate NCC0001, NCC0002, etc.
-        const existingCodes = rawSuppliers
-          .map(s => s.code)
-          .filter(Boolean)
-          .filter(code => /^NCC\d+$/.test(code!))
-          .map(code => parseInt(code!.replace('NCC', ''), 10))
-          .filter(num => !isNaN(num));
-        
-        const maxNum = existingCodes.length > 0 ? Math.max(...existingCodes) : 0;
-        supplierCode = `NCC${String(maxNum + 1).padStart(4, '0')}`;
+      if (!supplierCode) supplierCode = getNextSupplierCode();
+
+      const duplicatedCode = rawSuppliers.find(
+        supplier =>
+          supplier.id !== supplierId &&
+          normalizeSupplierCode(supplier.code) === normalizeSupplierCode(supplierCode)
+      );
+      if (duplicatedCode) {
+        showToast(`Mã NCC "${supplierCode}" đã tồn tại ở ${duplicatedCode.name}`, 'warning');
+        return;
+      }
+
+      const duplicatedName = rawSuppliers.find(
+        supplier =>
+          supplier.id !== supplierId &&
+          normalizeSupplierKey(supplier.name) === normalizeSupplierKey(cleanData.name)
+      );
+      if (duplicatedName) {
+        showToast(`Tên nhà cung cấp "${cleanData.name}" đã tồn tại`, 'warning');
+        return;
       }
 
       const supplier: Supplier = {
@@ -106,6 +178,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         id: supplierId,
         code: supplierCode,
       };
+
+      setShowSupplierForm(false);
+      setEditingSupplier(null);
+      showToast(isEdit ? 'Đã cập nhật nhà cung cấp' : 'Đã thêm nhà cung cấp mới', 'success');
 
       if (onUpdateSurgical) {
         await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
@@ -115,13 +191,6 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
           : [...rawSuppliers, supplier];
         await onUpdateData('suppliers', updatedSuppliers);
       }
-
-      setShowSupplierForm(false);
-      setEditingSupplier(null);
-      showToast(
-        isEdit ? 'Đã cập nhật nhà cung cấp' : 'Đã thêm nhà cung cấp mới',
-        'success'
-      );
     } catch (err) {
       console.error('[SupplierContainer] Save failed', err);
       showToast('Lưu thất bại. Vui lòng thử lại.', 'error');
@@ -129,56 +198,103 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   };
 
   const handleViewDetail = (supplier: Supplier) => {
-    // Find the supplier with computed fields
     const supplierWithComputed = suppliersWithComputed.find(s => s.id === supplier.id);
-    setViewingSupplier(supplierWithComputed || supplier);
+    setViewingSupplier(prev =>
+      prev?.id === supplier.id ? null : supplierWithComputed || supplier
+    );
   };
 
-  const handleDeleteSupplier = async (id: string) => {
+  const handleDeleteSupplier = (id: string) => {
+    const supplier = rawSuppliers.find(s => s.id === id);
+    if (!supplier) return;
+
+    const hasDebts = supplierDebts.some(d => d.supplierId === id);
+    const hasPurchases = inventoryTransactions.some(
+      t => t.type === 'Import' && t.supplierId === id
+    );
+
+    let warning: string | undefined;
+    if (hasDebts || hasPurchases) {
+      const parts: string[] = [];
+      if (hasDebts) parts.push('dữ liệu công nợ');
+      if (hasPurchases) parts.push('phiếu nhập hàng');
+      warning = `Nhà cung cấp này có ${parts.join(' và ')}. Xóa sẽ không xóa được lịch sử.`;
+    }
+
+    setDeleteDialog({ supplierId: id, supplierName: supplier.name, warning });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog) return;
+    const { supplierId } = deleteDialog;
+    setDeleteDialog(null);
+
     try {
-      const supplier = rawSuppliers.find(s => s.id === id);
-      if (!supplier) return;
-
-      // Check if supplier has debts
-      const hasDebts = supplierDebts.some(d => d.supplierId === id);
-      
-      // Check if supplier has purchase transactions
-      const hasPurchases = inventoryTransactions.some(
-        t => t.type === 'Import' && t.supplierId === id
-      );
-
-      if (hasDebts || hasPurchases) {
-        const message = [];
-        if (hasDebts) message.push('dữ liệu công nợ');
-        if (hasPurchases) message.push('phiếu nhập hàng');
-        
-        if (
-          !confirm(
-            `Nhà cung cấp này có ${message.join(' và ')}. Xóa sẽ không xóa được lịch sử. Tiếp tục?`
-          )
-        ) {
-          return;
-        }
-      }
-
-      if (!confirm(`Xác nhận xóa nhà cung cấp "${supplier.name}"?`)) {
-        return;
-      }
-
       if (onUpdateSurgical) {
-        await onUpdateSurgical([{ key: 'suppliers', item: { id }, isDelete: true }]);
+        await onUpdateSurgical([{ key: 'suppliers', item: { id: supplierId }, isDelete: true }]);
       } else {
-        await onUpdateData('suppliers', rawSuppliers.filter(s => s.id !== id));
+        await onUpdateData(
+          'suppliers',
+          rawSuppliers.filter(s => s.id !== supplierId)
+        );
       }
 
-      // Close detail view if viewing deleted supplier
-      if (viewingSupplier?.id === id) {
+      if (viewingSupplier?.id === supplierId) {
         setViewingSupplier(null);
       }
 
       showToast('Đã xóa nhà cung cấp', 'success');
     } catch (err) {
       console.error('[SupplierContainer] Delete failed', err);
+      showToast('Xóa thất bại. Vui lòng thử lại.', 'error');
+    }
+  };
+
+  const handleBulkDeleteSuppliers = async (ids: string[]) => {
+    try {
+      const selected = rawSuppliers.filter(supplier => ids.includes(supplier.id));
+      const unsafeSuppliers = selected.filter(supplier => {
+        const hasDebts = supplierDebts.some(
+          debt =>
+            debt.supplierId === supplier.id ||
+            normalizeSupplierKey(debt.supplierName) === normalizeSupplierKey(supplier.name)
+        );
+        const hasPurchases = inventoryTransactions.some(
+          transaction =>
+            (transaction.type === 'Import' || transaction.type === 'PurchaseReturn') &&
+            transactionBelongsToSupplier(transaction, supplier)
+        );
+        return hasDebts || hasPurchases;
+      });
+
+      if (unsafeSuppliers.length > 0) {
+        const names = unsafeSuppliers.slice(0, 5).map(supplier => supplier.name).join(', ');
+        const more =
+          unsafeSuppliers.length > 5 ? ` và ${unsafeSuppliers.length - 5} NCC khác` : '';
+        const confirmed = window.confirm(
+          `Có ${unsafeSuppliers.length} nhà cung cấp đang có công nợ hoặc phiếu nhập/trả hàng: ${names}${more}. Xóa sẽ không xóa lịch sử phát sinh. Bạn vẫn muốn xóa?`
+        );
+        if (!confirmed) return;
+      }
+
+      if (onUpdateSurgical) {
+        await onUpdateSurgical(
+          ids.map(id => ({ key: 'suppliers', item: { id }, isDelete: true }))
+        );
+      } else {
+        await onUpdateData(
+          'suppliers',
+          rawSuppliers.filter(s => !ids.includes(s.id))
+        );
+      }
+
+      if (viewingSupplier && ids.includes(viewingSupplier.id)) {
+        setViewingSupplier(null);
+      }
+
+      showToast(`Đã xóa ${ids.length} nhà cung cấp`, 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Bulk delete failed', err);
       showToast('Xóa thất bại. Vui lòng thử lại.', 'error');
     }
   };
@@ -191,6 +307,60 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   const handleEditFromDetail = () => {
     if (!viewingSupplier) return;
     handleEditSupplier(viewingSupplier);
+  };
+
+  const handleToggleStatus = async (supplier: Supplier) => {
+    try {
+      const newStatus: Supplier['status'] = supplier.status === 'inactive' ? 'active' : 'inactive';
+      const cleanData = stripComputedFields(supplier);
+      const updatedSupplier: Supplier = { ...cleanData, status: newStatus };
+
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'suppliers', item: updatedSupplier }]);
+      } else {
+        await onUpdateData(
+          'suppliers',
+          rawSuppliers.map(s => (s.id === supplier.id ? updatedSupplier : s))
+        );
+      }
+
+      setViewingSupplier(prev => (prev ? { ...prev, status: newStatus } : prev));
+      showToast(
+        newStatus === 'inactive' ? 'Đã ngừng hoạt động nhà cung cấp' : 'Đã kích hoạt nhà cung cấp',
+        'success'
+      );
+    } catch (err) {
+      console.error('[SupplierContainer] Toggle status failed', err);
+      showToast('Cập nhật trạng thái thất bại. Vui lòng thử lại.', 'error');
+    }
+  };
+
+  const handleToggleFavorite = async (supplier: Supplier) => {
+    try {
+      const cleanData = stripComputedFields(supplier);
+      const updatedSupplier: Supplier = { ...cleanData, isFavorite: !supplier.isFavorite };
+
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'suppliers', item: updatedSupplier }]);
+      } else {
+        await onUpdateData(
+          'suppliers',
+          rawSuppliers.map(item => (item.id === supplier.id ? updatedSupplier : item))
+        );
+      }
+
+      setViewingSupplier(prev =>
+        prev?.id === supplier.id ? { ...prev, isFavorite: updatedSupplier.isFavorite } : prev
+      );
+      showToast(
+        updatedSupplier.isFavorite ? 'Đã đánh dấu nhà cung cấp' : 'Đã bỏ đánh dấu nhà cung cấp',
+        'success'
+      );
+    } catch (err) {
+      console.error('[SupplierContainer] Toggle favorite failed', err);
+      showToast('Cập nhật đánh dấu thất bại. Vui lòng thử lại.', 'error');
+      throw err;
+    }
   };
 
   const handleImportFile = () => {
@@ -206,10 +376,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       suppliersToExport.map(supplier => ({
         'Mã NCC': supplier.code || supplier.id,
         'Tên NCC': supplier.name,
-        'Nhóm': supplier.group || '',
+        Nhóm: supplier.group || '',
         'Trạng thái': supplier.status || 'active',
         'Điện thoại': supplier.phone || '',
-        'Email': supplier.email || '',
+        Email: supplier.email || '',
         'Địa chỉ': supplier.address || '',
         'Tổng mua': supplier.totalPurchase || 0,
         'Nợ hiện tại': supplier.currentDebt || 0,
@@ -237,24 +407,78 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         return key ? row[key] : '';
       };
 
-      const existingByName = new Map(rawSuppliers.map(supplier => [supplier.name.trim().toLowerCase(), supplier]));
+      const existingByName = new Map(
+        rawSuppliers.map(supplier => [supplier.name.trim().toLowerCase(), supplier])
+      );
+      const existingByCode = new Map(
+        rawSuppliers
+          .filter(supplier => supplier.code)
+          .map(supplier => [normalizeSupplierCode(supplier.code), supplier])
+      );
+      const usedCodes = new Set(existingByCode.keys());
+      const seenImportCodes = new Set<string>();
       const imported: Supplier[] = [];
+      const skippedRows: string[] = [];
 
-      rows.forEach(row => {
-        const name = String(getCell(row, ['Tên NCC', 'Tên nhà cung cấp', 'Nhà cung cấp', 'Name']) || '').trim();
+      rows.forEach((row, index) => {
+        const name = String(
+          getCell(row, ['Tên NCC', 'Tên nhà cung cấp', 'Nhà cung cấp', 'Name']) || ''
+        ).trim();
         if (!name) return;
-        const existing = existingByName.get(name.toLowerCase());
+
+        const rawCode = String(
+          getCell(row, ['Mã NCC', 'Mã nhà cung cấp', 'Code']) || ''
+        ).trim();
+        const normalizedCode = normalizeSupplierCode(rawCode);
+        if (normalizedCode && seenImportCodes.has(normalizedCode)) {
+          skippedRows.push(`Dòng ${index + 2}: trùng mã ${rawCode} trong file`);
+          return;
+        }
+        if (normalizedCode) seenImportCodes.add(normalizedCode);
+
+        const existingByImportedCode = normalizedCode ? existingByCode.get(normalizedCode) : undefined;
+        const existing = existingByImportedCode || existingByName.get(name.toLowerCase());
+        if (
+          existingByImportedCode &&
+          normalizeSupplierKey(existingByImportedCode.name) !== normalizeSupplierKey(name) &&
+          !window.confirm(`Mã ${rawCode} đang thuộc NCC "${existingByImportedCode.name}". Ghi đè bằng tên "${name}"?`)
+        ) {
+          skippedRows.push(`Dòng ${index + 2}: bỏ qua mã ${rawCode}`);
+          return;
+        }
+
+        const code = rawCode || existing?.code || getNextSupplierCode(usedCodes);
+        usedCodes.add(normalizeSupplierCode(code));
         imported.push({
           ...(existing || {}),
           id: existing?.id || generateId(),
           name,
-          code: String(getCell(row, ['Mã NCC', 'Mã nhà cung cấp', 'Code']) || existing?.code || '').trim() || undefined,
-          group: String(getCell(row, ['Nhóm', 'Group']) || existing?.group || '').trim() || undefined,
-          phone: String(getCell(row, ['Điện thoại', 'SĐT', 'Phone']) || existing?.phone || '').trim() || undefined,
+          code,
+          group:
+            String(getCell(row, ['Nhóm', 'Group']) || existing?.group || '').trim() || undefined,
+          phone:
+            String(getCell(row, ['Điện thoại', 'SĐT', 'Phone']) || existing?.phone || '').trim() ||
+            undefined,
           email: String(getCell(row, ['Email']) || existing?.email || '').trim() || undefined,
-          address: String(getCell(row, ['Địa chỉ', 'Address']) || existing?.address || '').trim() || undefined,
-          notes: String(getCell(row, ['Ghi chú', 'Notes']) || existing?.notes || '').trim() || undefined,
-          status: (String(getCell(row, ['Trạng thái', 'Status']) || existing?.status || 'active').trim() as Supplier['status']) || 'active',
+          address:
+            String(getCell(row, ['Địa chỉ', 'Address']) || existing?.address || '').trim() ||
+            undefined,
+          notes:
+            String(getCell(row, ['Ghi chú', 'Notes']) || existing?.notes || '').trim() || undefined,
+          companyName:
+            String(
+              getCell(row, ['Công ty xuất hóa đơn', 'Tên công ty', 'Company']) ||
+                existing?.companyName ||
+                ''
+            ).trim() || undefined,
+          taxCode:
+            String(getCell(row, ['Mã số thuế', 'MST', 'Tax Code']) || existing?.taxCode || '').trim() ||
+            undefined,
+          isFavorite: existing?.isFavorite || false,
+          status:
+            (String(
+              getCell(row, ['Trạng thái', 'Status']) || existing?.status || 'active'
+            ).trim() as Supplier['status']) || 'active',
         });
       });
 
@@ -267,8 +491,15 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       imported.forEach(supplier => byId.set(supplier.id, supplier));
       const nextSuppliers = Array.from(byId.values());
 
-      await onUpdateData('suppliers', nextSuppliers);
-      showToast(`Đã import ${imported.length} nhà cung cấp`, 'success');
+      if (onUpdateSurgical) {
+        await onUpdateSurgical(imported.map(supplier => ({ key: 'suppliers', item: supplier })));
+      } else {
+        await onUpdateData('suppliers', nextSuppliers);
+      }
+      showToast(
+        `Đã import ${imported.length} nhà cung cấp${skippedRows.length ? `, bỏ qua ${skippedRows.length} dòng lỗi` : ''}`,
+        skippedRows.length ? 'warning' : 'success'
+      );
     } catch (err) {
       console.error('[SupplierContainer] Import suppliers failed', err);
       showToast('Import nhà cung cấp thất bại. Vui lòng kiểm tra file Excel.', 'error');
@@ -277,55 +508,94 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     }
   };
 
-  // If viewing detail
-  if (viewingSupplier) {
-    return (
-      <SupplierDetailView
-        supplier={viewingSupplier}
-        supplierDebts={supplierDebts}
-        purchaseTransactions={inventoryTransactions.filter(t => t.type === 'Import')}
-        onEdit={handleEditFromDetail}
-        onDelete={handleDeleteFromDetail}
-        onClose={() => setViewingSupplier(null)}
-      />
-    );
-  }
-
-  // If showing form
-  if (showSupplierForm) {
-    return (
-      <SupplierForm
-        supplier={editingSupplier}
-        onSave={handleSaveSupplier}
-        onCancel={() => {
-          setShowSupplierForm(false);
-          setEditingSupplier(null);
-        }}
-      />
-    );
-  }
-
-  // Default: show list
-  return (
-    <div className="h-full flex flex-col">
-      <input
-        ref={supplierFileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={handleSupplierFileImport}
-      />
-      <div className="flex-1 min-h-0">
-        <SupplierListPage
-          suppliers={suppliersWithComputed}
-          onCreateSupplier={handleCreateSupplier}
-          onViewDetail={handleViewDetail}
-          onDeleteSupplier={handleDeleteSupplier}
-          onImportFile={handleImportFile}
-          onExportSuppliers={handleExportSuppliers}
-        />
+  const deleteModal = (
+    <Modal
+      isOpen={!!deleteDialog}
+      onClose={() => setDeleteDialog(null)}
+      title="Xác nhận xóa nhà cung cấp"
+      size="sm"
+    >
+      {deleteDialog?.warning && (
+        <div className="mb-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+          <span className="mt-0.5 shrink-0">⚠️</span>
+          <span>{deleteDialog.warning}</span>
+        </div>
+      )}
+      <p className="text-slate-700">
+        Bạn có chắc muốn xóa nhà cung cấp{' '}
+        <span className="font-semibold">"{deleteDialog?.supplierName}"</span>?
+      </p>
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          onClick={() => setDeleteDialog(null)}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Hủy
+        </button>
+        <button
+          onClick={handleConfirmDelete}
+          className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+        >
+          Xóa
+        </button>
       </div>
-    </div>
+    </Modal>
+  );
+
+  return (
+    <>
+      <div className="h-full flex flex-col">
+        <input
+          ref={supplierFileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          className="hidden"
+          onChange={handleSupplierFileImport}
+        />
+        <div className="flex-1 min-h-0">
+          <SupplierListPage
+            suppliers={suppliersWithComputed}
+            viewingSupplier={viewingSupplier}
+            onCreateSupplier={handleCreateSupplier}
+            onViewDetail={handleViewDetail}
+            onDeleteSupplier={handleDeleteSupplier}
+            onBulkDeleteSuppliers={handleBulkDeleteSuppliers}
+            onImportFile={handleImportFile}
+            onExportSuppliers={handleExportSuppliers}
+            onToggleFavorite={handleToggleFavorite}
+            expandedRowContent={
+              viewingSupplier ? (
+                <SupplierDetailView
+                  supplier={viewingSupplier}
+                  supplierDebts={supplierDebts}
+                  purchaseTransactions={inventoryTransactions.filter(
+                    t => t.type === 'Import' || t.type === 'PurchaseReturn'
+                  )}
+                  onEdit={handleEditFromDetail}
+                  onDelete={handleDeleteFromDetail}
+                  onClose={() => setViewingSupplier(null)}
+                  onToggleStatus={handleToggleStatus}
+                />
+              ) : null
+            }
+          />
+        </div>
+      </div>
+      {showSupplierForm && (
+        <SupplierForm
+          supplier={editingSupplier}
+          groupOptions={supplierGroupOptions}
+          cityOptions={supplierAreaOptions.cities}
+          wardOptions={supplierAreaOptions.wards}
+          onSave={handleSaveSupplier}
+          onCancel={() => {
+            setShowSupplierForm(false);
+            setEditingSupplier(null);
+          }}
+        />
+      )}
+      {deleteModal}
+    </>
   );
 };
 

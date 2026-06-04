@@ -138,7 +138,7 @@ export const getNextSKUNumber = (products: POSProduct[]): number => {
     return 1;
   }
 
-  return Math.max(...skuNumbers) + 1;
+  return skuNumbers.reduce((max, n) => (n > max ? n : max), 0) + 1;
 };
 
 export const resolveProductSku = (

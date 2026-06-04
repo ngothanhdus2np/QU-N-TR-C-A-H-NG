@@ -33,10 +33,10 @@ export const DashboardTrendsPanel: React.FC<DashboardTrendsPanelProps> = ({
     <div className="bg-white rounded-[3rem] p-10 border border-slate-200 shadow-xl">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+          <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">
             Xu hướng Tài chính
           </h3>
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mt-1">
             Biến động Doanh thu & Lợi nhuận qua các tháng
           </p>
         </div>
@@ -128,10 +128,10 @@ export const DashboardTrendsPanel: React.FC<DashboardTrendsPanelProps> = ({
         <div className="mt-12 pt-12 border-t border-slate-100 animate-in slide-in-from-top-4 duration-500">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+              <h4 className="text-lg font-semibold text-slate-800 uppercase tracking-tight">
                 Chi tiết tháng {selectedTrendMonth.split('-')[1]}/{selectedTrendMonth.split('-')[0]}
               </h4>
-              <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
+              <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mt-1">
                 Biến động chi tiết theo từng ngày
               </p>
             </div>

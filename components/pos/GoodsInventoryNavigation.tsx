@@ -26,7 +26,7 @@ export const GoodsInventoryTabBar: React.FC<GoodsInventoryTabBarProps> = ({
   <div className="flex bg-white rounded-2xl shadow-sm border border-slate-200 p-1.5 w-fit shrink-0 gap-1">
     <button
       onClick={() => setActiveTab('goods')}
-      className={`px-6 py-2.5 rounded-xl text-[11px] font-normal uppercase tracking-widest transition-all ${activeTab === 'goods' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'goods' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
     >
       Danh mục hàng
     </button>
@@ -35,13 +35,13 @@ export const GoodsInventoryTabBar: React.FC<GoodsInventoryTabBarProps> = ({
         setActiveTab('purchase');
         setShowPurchaseForm(false);
       }}
-      className={`px-6 py-2.5 rounded-xl text-[11px] font-normal uppercase tracking-widest transition-all ${activeTab === 'purchase' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'purchase' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
     >
       Nhập hàng (F2)
     </button>
     <button
       onClick={() => setActiveTab('kho')}
-      className={`px-6 py-2.5 rounded-xl text-[11px] font-normal uppercase tracking-widest transition-all ${activeTab === 'kho' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'kho' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
     >
       Số dư tồn kho
     </button>
@@ -71,7 +71,7 @@ export const GoodsInventorySecondaryToolbar: React.FC<GoodsInventorySecondaryToo
       {activeTab === 'purchase' && !showPurchaseForm && (
         <button
           onClick={() => setShowPurchaseForm(true)}
-          className="flex-1 md:flex-none px-8 py-3.5 bg-emerald-600 text-white rounded-2xl font-normal text-[11px] uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-950 transition-all"
+          className="flex-1 md:flex-none px-8 py-3.5 bg-emerald-600 text-white rounded-2xl font-normal text-xs uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-950 transition-all"
         >
           + Phiếu nhập hàng
         </button>
@@ -80,13 +80,13 @@ export const GoodsInventorySecondaryToolbar: React.FC<GoodsInventorySecondaryToo
         <>
           <button
             onClick={() => onStartAudit('actual')}
-            className="flex-1 md:flex-none px-8 py-3.5 bg-indigo-600 text-white rounded-2xl font-normal text-[11px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-950 transition-all"
+            className="flex-1 md:flex-none px-8 py-3.5 bg-indigo-600 text-white rounded-2xl font-normal text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-950 transition-all"
           >
             + Phiếu kiểm kho
           </button>
           <button
             onClick={() => onStartAudit('damaged')}
-            className="flex-1 md:flex-none px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-normal text-[11px] uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-slate-950 transition-all"
+            className="flex-1 md:flex-none px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-normal text-xs uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-slate-950 transition-all"
           >
             + Phiếu trừ hàng lỗi/hư
           </button>

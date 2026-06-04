@@ -1,5 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { AppData } from '../../types';
+import { AiInsightPanel } from '../shared';
+import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
 
 interface Props {
   data: AppData;
@@ -14,8 +16,9 @@ const fmtBig = (n: number) => {
 
 const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
   const today = new Date().toLocaleDateString('sv-SE');
-  const in7days = new Date(Date.now() + 7 * 86400_000).toLocaleDateString('sv-SE');
-  const in30days = new Date(Date.now() + 30 * 86400_000).toLocaleDateString('sv-SE');
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
 
   const stats = useMemo(() => {
     const products = (data.posProducts || []).filter(p => p.status === 'Active');
@@ -24,42 +27,60 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
     const totalUnits = products.reduce((s, p) => s + p.stock, 0);
     const totalValue = products.reduce((s, p) => s + p.stock * p.importPrice, 0);
 
+    // Tốc độ bán 30 ngày qua — cần cho tính ngày hết hàng
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toLocaleDateString('sv-SE');
+    const soldQtyMap = new Map<string, number>();
+    (data.posOrders || [])
+      .filter(o => !o.isReturn && o.status !== 'cancelled' && o.date >= thirtyDaysAgo)
+      .forEach(o => {
+        (o.items || []).forEach((i: any) => {
+          const pid = i.productId || i.id;
+          if (pid) soldQtyMap.set(pid, (soldQtyMap.get(pid) || 0) + (i.qty ?? i.quantity ?? 1));
+        });
+      });
+
     // Hết hàng hôm nay
     const outToday = products.filter(p => p.stock === 0).length;
 
-    // Hết hàng trong 7 ngày (dùng expectedOutOfStock nếu có)
-    const out7 = products.filter(
-      p => p.stock > 0 && p.expectedOutOfStock && p.expectedOutOfStock <= in7days
-    ).length;
+    // Hết hàng trong 7/30 ngày dựa trên tốc độ bán thực tế
+    const out7 = products.filter(p => {
+      if (p.stock <= 0) return false;
+      const sold = soldQtyMap.get(p.id) || 0;
+      if (sold === 0) return false;
+      return (p.stock / (sold / 30)) <= 7;
+    }).length;
 
-    // Hết hàng trong 30 ngày
-    const out30 = products.filter(
-      p => p.stock > 0 && p.expectedOutOfStock && p.expectedOutOfStock <= in30days
-    ).length;
+    const out30 = products.filter(p => {
+      if (p.stock <= 0) return false;
+      const sold = soldQtyMap.get(p.id) || 0;
+      if (sold === 0) return false;
+      return (p.stock / (sold / 30)) <= 30;
+    }).length;
 
     // Không bán được: stock > 0, chưa có đơn nào trong 30 ngày qua
-    const soldIds = new Set(
-      (data.posOrders || [])
-        .filter(
-          o =>
-            !o.isReturn &&
-            o.date >= new Date(Date.now() - 30 * 86400_000).toLocaleDateString('sv-SE')
-        )
-        .flatMap(o => o.items.map(i => i.productId))
-    );
+    const soldIds = new Set(soldQtyMap.keys());
     const deadStock = products.filter(p => p.stock > 0 && !soldIds.has(p.id));
     const deadStockCount = deadStock.length;
     const deadStockValue = deadStock.reduce((s, p) => s + p.stock * p.importPrice, 0);
 
-    // Tồn kho cao vượt mức: stock > maxStock
-    const overStock = products.filter(p => p.maxStock != null && p.stock > (p.maxStock ?? 0));
+    // Tồn kho cao: dùng maxStock nếu có, không thì dùng 2 tháng tốc độ bán làm ngưỡng
+    const overStock = products.filter(p => {
+      if (p.maxStock != null) return p.stock > p.maxStock;
+      const sold = soldQtyMap.get(p.id) || 0;
+      if (sold === 0) return false;
+      return p.stock > (sold / 30) * 60;
+    });
     const overStockCount = overStock.length;
     const overStockValue = overStock.reduce((s, p) => s + p.stock * p.importPrice, 0);
 
-    // Top nhóm theo tồn kho (dùng categoryPath)
+    // Top nhóm theo tồn kho — fallback nhiều cấp nếu categoryPath rỗng
     const groupMap = new Map<string, { qty: number; value: number }>();
     products.forEach(p => {
-      const group = p.categoryPath?.split(' > ')[0] || 'Khác';
+      const group =
+        p.categoryPath?.split(' > ')[0] ||
+        (p as any).category ||
+        (p as any).categoryName ||
+        'Chưa phân loại';
       const prev = groupMap.get(group) ?? { qty: 0, value: 0 };
       groupMap.set(group, {
         qty: prev.qty + p.stock,
@@ -86,6 +107,41 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
     };
   }, [data.posProducts, data.posOrders]);
 
+  const handleAiRun = async () => {
+    const contextData = {
+      inStockCount: stats.inStockCount,
+      totalUnits: stats.totalUnits,
+      totalValue: stats.totalValue,
+      outToday: stats.outToday,
+      out7: stats.out7,
+      out30: stats.out30,
+      deadStockCount: stats.deadStockCount,
+      deadStockValue: stats.deadStockValue,
+      overStockCount: stats.overStockCount,
+      overStockValue: stats.overStockValue,
+      topGroups: stats.topGroups,
+    };
+    const hash = hashData(contextData);
+    const cached = getCachedAiResult('goods-stock', hash);
+    if (cached) { setAiResult(cached); setFromCache(true); return; }
+    setAiLoading(true); setFromCache(false);
+    try {
+      const res = await fetch('/api/ai/goods-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contextData),
+      });
+      const json = await res.json();
+      const result = json.result || json.error || 'Không có kết quả';
+      setAiResult(result);
+      setCachedAiResult('goods-stock', hash, result);
+    } catch {
+      setAiResult('Lỗi kết nối đến AI.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
       {/* Title bar */}
@@ -105,7 +161,7 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
               key={card.label}
               className="bg-white rounded-xl border border-slate-100 shadow-sm px-6 py-5"
             >
-              <p className="text-[11px] text-slate-500 mb-1">{card.label}</p>
+              <p className="text-xs text-slate-500 mb-1">{card.label}</p>
               <p className="text-3xl font-bold text-slate-800">{card.value}</p>
             </div>
           ))}
@@ -120,7 +176,7 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
             <div className="px-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
-                <span className="text-[12px] text-slate-600">Hết hàng hôm nay</span>
+                <span className="text-xs text-slate-600">Hết hàng hôm nay</span>
               </div>
               <p className="text-2xl font-bold text-slate-800 mt-1">
                 {fmt(stats.outToday)}
@@ -130,7 +186,7 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
             <div className="px-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0" />
-                <span className="text-[12px] text-slate-600">Hết hàng trong 7 ngày tới</span>
+                <span className="text-xs text-slate-600">Hết hàng trong 7 ngày tới</span>
               </div>
               <p className="text-2xl font-bold text-slate-800 mt-1">
                 {fmt(stats.out7)}
@@ -140,7 +196,7 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
             <div className="px-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
-                <span className="text-[12px] text-slate-600">Hết hàng trong 30 ngày tới</span>
+                <span className="text-xs text-slate-600">Hết hàng trong 30 ngày tới</span>
               </div>
               <p className="text-2xl font-bold text-slate-800 mt-1">
                 {fmt(stats.out30)}
@@ -159,19 +215,19 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
             <div className="p-5">
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
-                <span className="text-[13px] text-slate-600 font-medium">Không bán được</span>
+                <span className="text-sm text-slate-600 font-medium">Không bán được</span>
               </div>
               <p className="text-3xl font-bold text-slate-800">
                 {fmt(stats.deadStockCount)}
                 <span className="text-sm font-normal text-slate-500 ml-1">hàng hóa</span>
               </p>
-              <p className="text-[12px] text-slate-500 mt-1">Dự kiến giá trị hàng lưu kho</p>
+              <p className="text-xs text-slate-500 mt-1">Dự kiến giá trị hàng lưu kho</p>
               <p className="text-sm font-semibold text-slate-700">{fmtBig(stats.deadStockValue)}</p>
             </div>
             <div className="p-5">
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-pink-400 shrink-0" />
-                <span className="text-[13px] text-slate-600 font-medium">
+                <span className="text-sm text-slate-600 font-medium">
                   Tồn kho cao vượt mức tiêu thụ
                 </span>
               </div>
@@ -179,7 +235,7 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
                 {fmt(stats.overStockCount)}
                 <span className="text-sm font-normal text-slate-500 ml-1">hàng hóa</span>
               </p>
-              <p className="text-[12px] text-slate-500 mt-1">Dự kiến giá trị hàng lưu kho</p>
+              <p className="text-xs text-slate-500 mt-1">Dự kiến giá trị hàng lưu kho</p>
               <p className="text-sm font-semibold text-slate-700">{fmtBig(stats.overStockValue)}</p>
             </div>
           </div>
@@ -193,13 +249,13 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-slate-500">
                   Tên nhóm hàng
                 </th>
-                <th className="text-right px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-slate-500">
                   Tồn kho
                 </th>
-                <th className="text-right px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-slate-500">
                   Giá trị tồn kho
                 </th>
               </tr>
@@ -217,11 +273,11 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
                     key={i}
                     className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-5 py-3 text-[13px] text-slate-700 font-medium">{g.name}</td>
-                    <td className="px-5 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 font-medium">{g.name}</td>
+                    <td className="px-5 py-3 text-sm text-slate-700 text-right">
                       {fmt(g.qty)}
                     </td>
-                    <td className="px-5 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 text-right">
                       {fmt(g.value)}
                     </td>
                   </tr>
@@ -230,6 +286,8 @@ const AnalysisGoodsStockPage: React.FC<Props> = ({ data }) => {
             </tbody>
           </table>
         </div>
+
+        <AiInsightPanel isLoading={aiLoading} result={aiResult} onRun={handleAiRun} fromCache={fromCache} />
       </div>
     </div>
   );

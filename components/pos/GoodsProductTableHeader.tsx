@@ -27,89 +27,89 @@ export const GoodsProductTableHeader: React.FC<GoodsProductTableHeaderProps> = (
       </th>
       <th className="px-2 py-3 w-8"></th>
       {visibleColumns.includes('image') && <th className="px-2 py-3 w-20"></th>}
-      <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+      <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
         Mã hàng
       </th>
-      <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">
+      <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">
         Tên hàng
       </th>
       {visibleColumns.includes('category') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Nhóm hàng
         </th>
       )}
       {visibleColumns.includes('productType') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Loại hàng
         </th>
       )}
       {visibleColumns.includes('salePrice') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Giá bán
         </th>
       )}
       {visibleColumns.includes('importPrice') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Giá vốn
         </th>
       )}
       {visibleColumns.includes('brand') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap w-[100px]">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[100px]">
           Thương hiệu
         </th>
       )}
       {visibleColumns.includes('location') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap w-[80px]">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[80px]">
           Vị trí
         </th>
       )}
       {visibleColumns.includes('stock') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Tồn kho
         </th>
       )}
       {visibleColumns.includes('customerOrders') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           KH đặt
         </th>
       )}
       {visibleColumns.includes('minStock') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           ĐM ít nhất
         </th>
       )}
       {visibleColumns.includes('maxStock') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           ĐM nhiều nhất
         </th>
       )}
       {visibleColumns.includes('weight') && (
-        <th className="px-4 py-3 text-right font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Trọng lượng
         </th>
       )}
       {visibleColumns.includes('allowPoints') && (
-        <th className="px-4 py-3 text-center font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-center font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Tích điểm
         </th>
       )}
       {visibleColumns.includes('directSale') && (
-        <th className="px-4 py-3 text-center font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-center font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Bán TT
         </th>
       )}
       {visibleColumns.includes('status') && (
-        <th className="px-4 py-3 text-center font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-center font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Trạng thái
         </th>
       )}
       {visibleColumns.includes('warranty') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Bảo hành
         </th>
       )}
       {visibleColumns.includes('createdAt') && (
-        <th className="px-4 py-3 text-left font-black text-[10px] uppercase tracking-widest text-slate-500 whitespace-nowrap">
+        <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
           Thời gian tạo
         </th>
       )}

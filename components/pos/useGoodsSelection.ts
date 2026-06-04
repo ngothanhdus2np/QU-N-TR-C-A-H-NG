@@ -1,6 +1,8 @@
 import React from 'react';
 import { AppDataSurgicalUpdate, POSProduct } from '../../types';
 
+const GOODS_FAVORITES_STORAGE_KEY = 'goodsFavoriteIds';
+
 type OpenConfirm = (config: {
   title: string;
   message: string;
@@ -30,6 +32,20 @@ export const useGoodsSelection = ({
   const [favoriteIds, setFavoriteIds] = React.useState<string[]>([]);
   const [expandedParents, setExpandedParents] = React.useState<Set<string>>(new Set());
 
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(GOODS_FAVORITES_STORAGE_KEY);
+      if (raw) setFavoriteIds(JSON.parse(raw));
+    } catch {
+      setFavoriteIds([]);
+    }
+  }, []);
+
+  const persistFavoriteIds = React.useCallback((next: string[]) => {
+    setFavoriteIds(next);
+    localStorage.setItem(GOODS_FAVORITES_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
   const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const toggleSelectAll = () => {
@@ -45,7 +61,10 @@ export const useGoodsSelection = ({
   }, []);
 
   const toggleFavorite = (id: string) => {
-    setFavoriteIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    const next = favoriteIds.includes(id)
+      ? favoriteIds.filter(item => item !== id)
+      : [...favoriteIds, id];
+    persistFavoriteIds(next);
   };
 
   const toggleExpandedParent = (id: string) => {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { lazy, Suspense, useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Cloud,
@@ -17,7 +17,6 @@ import {
   ChevronDown,
   Palette,
 } from 'lucide-react';
-import SettingsCenter from './settings/SettingsCenter';
 import type { AppThemeId } from '../constants/themes';
 import { APP_THEMES } from '../constants/themes';
 import type {
@@ -27,6 +26,8 @@ import type {
   POSPaymentSettings,
   POSProduct,
 } from '../types';
+
+const SettingsCenter = lazy(() => import('./settings/SettingsCenter'));
 
 interface NavItem {
   id: string;
@@ -50,6 +51,7 @@ interface TopNavProps {
   syncErrors: string[] | null;
   lastSyncTime: string | null;
   onRefresh: () => void;
+  onImportRefresh?: () => void;
   alerts?: AppAlert[];
   pendingCount?: number;
   offlinePendingCount?: number;
@@ -80,6 +82,7 @@ const TopNav: React.FC<TopNavProps> = ({
   syncErrors,
   lastSyncTime,
   onRefresh,
+  onImportRefresh,
   alerts = [],
   pendingCount = 0,
   offlinePendingCount = 0,
@@ -183,7 +186,7 @@ const TopNav: React.FC<TopNavProps> = ({
               <CloudOff className="w-3.5 h-3.5 text-rose-500" />
             )}
             <span
-              className={`text-[10px] font-normal uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
+              className={`text-2xs font-normal uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
             >
               {isSyncing ? 'Syncing' : isCloudConnected ? 'Online' : 'Offline'}
             </span>
@@ -207,8 +210,8 @@ const TopNav: React.FC<TopNavProps> = ({
             <button
               onClick={() => onDrainOfflineQueue?.()}
               disabled={isSyncing}
-              title={`${offlinePendingCount} đơn hàng chờ sync — Bấm để đồng bộ ngay`}
-              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-normal uppercase tracking-wider transition-all shadow-sm shadow-amber-200 animate-pulse"
+              title={`${offlinePendingCount} thao tác chờ đồng bộ — Bấm để đồng bộ ngay`}
+              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-2xs font-normal uppercase tracking-wider transition-all shadow-sm shadow-amber-200 animate-pulse"
             >
               <WifiOff className="w-3 h-3" />
               {offlinePendingCount} offline
@@ -219,7 +222,10 @@ const TopNav: React.FC<TopNavProps> = ({
           {/* Refresh */}
           <button
             onClick={onRefresh}
-            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all"
+            disabled={isSyncing}
+            title="Tải lại từ database và đẩy dữ liệu local còn thiếu lên cloud"
+            aria-label="Tải lại dữ liệu và đồng bộ database"
+            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} />
           </button>
@@ -235,8 +241,8 @@ const TopNav: React.FC<TopNavProps> = ({
             </button>
             {showThemePicker && (
               <>
-                <div className="fixed inset-0 z-[200]" onClick={() => setShowThemePicker(false)} />
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[201] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="fixed inset-0 z-modal" onClick={() => setShowThemePicker(false)} />
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-modal overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="px-4 py-3 border-b border-slate-50">
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                       Giao diện
@@ -310,7 +316,7 @@ const TopNav: React.FC<TopNavProps> = ({
                   className="absolute right-0 mt-2 w-96 bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-slate-100 overflow-hidden z-50"
                 >
                   <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <h3 className="font-black text-slate-800 uppercase text-[10px] tracking-widest">
+                    <h3 className="font-semibold text-slate-800 uppercase text-2xs tracking-widest">
                       Thông báo hệ thống
                     </h3>
                     {totalBadge > 0 && (
@@ -332,7 +338,7 @@ const TopNav: React.FC<TopNavProps> = ({
                       <>
                         {alerts.length > 0 && (
                           <div className="space-y-2">
-                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
+                            <h4 className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest px-2">
                               Cảnh báo AI
                             </h4>
                             {alerts.map(alert => {
@@ -362,7 +368,7 @@ const TopNav: React.FC<TopNavProps> = ({
                         {errorCount > 0 &&
                           Object.entries(categorizedErrors).map(([cat, errs]) => (
                             <div key={cat} className="space-y-2">
-                              <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">
+                              <h4 className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest px-2">
                                 {cat}
                               </h4>
                               {(errs as string[]).map((err, i) => (
@@ -410,8 +416,31 @@ const TopNav: React.FC<TopNavProps> = ({
             sections.map(section => {
               const isActive = section === activeSection;
               const itemMap = Object.fromEntries(section.items.map(i => [i.id, i]));
+              const isSingleItem = section.items.length === 1;
 
               const isOpen = openSection === section.title;
+
+              // Single-item section: navigate directly, no dropdown
+              if (isSingleItem) {
+                return (
+                  <button
+                    key={section.title}
+                    onClick={() => {
+                      justNavigated.current = true;
+                      setOpenSection(null);
+                      onSelect(section.items[0].id);
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
+                      isActive
+                        ? 'bg-indigo-800 text-white'
+                        : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {section.title}
+                  </button>
+                );
+              }
+
               return (
                 <div
                   key={section.title}
@@ -421,7 +450,7 @@ const TopNav: React.FC<TopNavProps> = ({
                 >
                   <button
                     onClick={() => toggleDropdown(section.title)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-normal uppercase tracking-wider whitespace-nowrap transition-all ${
                       isActive
                         ? 'bg-indigo-800 text-white'
                         : 'text-indigo-200 hover:bg-white/10 hover:text-white'
@@ -436,17 +465,30 @@ const TopNav: React.FC<TopNavProps> = ({
                   <div
                     onMouseEnter={cancelClose}
                     onMouseLeave={closeDropdown}
-                    className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
+                    className={`absolute left-0 top-full pt-1 transition-all duration-150 z-50 ${section.groups?.length === 3 ? 'min-w-[580px]' : section.groups ? 'min-w-[380px]' : 'min-w-[220px]'} ${isOpen ? 'opacity-100 pointer-events-auto translate-y-0' : 'opacity-0 pointer-events-none translate-y-1'}`}
                   >
                     <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
                       {section.groups ? (
-                        /* 2-column layout with group headers */
-                        <div className="grid grid-cols-2 divide-x divide-slate-100">
-                          {section.groups.map(group => (
-                            <div key={group.header} className="py-2">
-                              <div className="px-4 pb-1 pt-2 text-[10px] font-normal text-slate-400 uppercase tracking-widest">
-                                {group.header}
-                              </div>
+                        <div className={`grid ${section.groups.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                          {section.groups.map((group, groupIndex) => {
+                            const isLast = groupIndex === section.groups!.length - 1;
+                            const isThickDivider = section.groups!.length === 3 && groupIndex === 0;
+                            const isThinDivider = section.groups!.length === 3 && groupIndex === 1;
+                            const borderClass = isLast || isThinDivider
+                              ? ''
+                              : isThickDivider
+                                ? 'border-r-2 border-slate-300'
+                                : 'border-r border-slate-100';
+                            return (
+                            <div key={group.header || `group-${groupIndex}`} className={`py-2 ${borderClass}`}>
+                              {group.header ? (
+                                <div className="px-4 pb-1 pt-2 text-2xs font-normal text-slate-400 uppercase tracking-widest">
+                                  {group.header}
+                                </div>
+                              ) : (
+                                <div className="px-4 pb-1 pt-2 text-2xs leading-none select-none">&nbsp;</div>
+                              )}
+                              <div className={isThinDivider ? 'border-r border-slate-100' : ''}>
                               {group.itemIds.map(itemId => {
                                 const item = itemMap[itemId];
                                 if (!item) return null;
@@ -459,7 +501,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                       onSelect(item.id);
                                       setOpenSection(null);
                                     }}
-                                    className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
+                                    className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-normal text-left transition-colors whitespace-nowrap ${
                                       isItemActive
                                         ? 'bg-indigo-50 text-indigo-600'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
@@ -475,8 +517,10 @@ const TopNav: React.FC<TopNavProps> = ({
                                   </button>
                                 );
                               })}
+                              </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         /* Single-column layout */
@@ -491,7 +535,7 @@ const TopNav: React.FC<TopNavProps> = ({
                                   onSelect(item.id);
                                   setOpenSection(null);
                                 }}
-                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[12px] font-normal text-left transition-colors whitespace-nowrap ${
+                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-normal text-left transition-colors whitespace-nowrap ${
                                   isItemActive
                                     ? 'bg-indigo-50 text-indigo-600'
                                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
@@ -522,35 +566,48 @@ const TopNav: React.FC<TopNavProps> = ({
             justNavigated.current = true;
             onSelect('pos');
           }}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-600 rounded-lg text-[11px] font-normal uppercase tracking-wider whitespace-nowrap transition-all hover:bg-indigo-50 shadow-sm shrink-0 ml-2"
+          className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-600 rounded-lg text-xs font-normal uppercase tracking-wider whitespace-nowrap transition-all hover:bg-indigo-50 shadow-sm shrink-0 ml-2"
         >
           <ShoppingCart className="w-3.5 h-3.5" />
           Bán hàng
         </button>
       </div>
 
-      <SettingsCenter
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onNavigate={onSelect}
-        activeThemeId={activeThemeId}
-        onThemeChange={onThemeChange}
-        isCloudConnected={isCloudConnected}
-        isSyncing={isSyncing}
-        syncErrors={syncErrors}
-        lastSyncTime={lastSyncTime}
-        pendingCount={pendingCount}
-        offlinePendingCount={offlinePendingCount}
-        onRefresh={onRefresh}
-        onDrainOfflineQueue={onDrainOfflineQueue}
-        brandProfile={brandProfile}
-        onUpdateBrand={onUpdateBrand}
-        products={products}
-        paymentSettings={paymentSettings}
-        onUpdatePaymentSettings={onUpdatePaymentSettings}
-        inventorySettings={inventorySettings}
-        onUpdateInventorySettings={onUpdateInventorySettings}
-      />
+      {isSettingsOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/35 p-6">
+              <div className="rounded-xl bg-white px-5 py-3 text-sm text-slate-600 shadow-xl">
+                Đang mở cài đặt...
+              </div>
+            </div>
+          }
+        >
+          <SettingsCenter
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onNavigate={onSelect}
+            activeThemeId={activeThemeId}
+            onThemeChange={onThemeChange}
+            isCloudConnected={isCloudConnected}
+            isSyncing={isSyncing}
+            syncErrors={syncErrors}
+            lastSyncTime={lastSyncTime}
+            pendingCount={pendingCount}
+            offlinePendingCount={offlinePendingCount}
+            onRefresh={onRefresh}
+            onImportRefresh={onImportRefresh}
+            onDrainOfflineQueue={onDrainOfflineQueue}
+            brandProfile={brandProfile}
+            onUpdateBrand={onUpdateBrand}
+            products={products}
+            paymentSettings={paymentSettings}
+            onUpdatePaymentSettings={onUpdatePaymentSettings}
+            inventorySettings={inventorySettings}
+            onUpdateInventorySettings={onUpdateInventorySettings}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

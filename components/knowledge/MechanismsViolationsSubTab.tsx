@@ -42,11 +42,11 @@ const MechanismsViolationsSubTab: React.FC<MechanismsViolationsSubTabProps> = ({
             <Gavel className="w-6 h-6" />
           </div>
           <div>
-            <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+            <h4 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">
               Ma trận Kỷ luật & Khấu trừ
             </h4>
             {hasUnsaved && (
-              <span className="flex items-center gap-1.5 text-rose-500 font-normal text-[10px] uppercase mt-1 animate-pulse">
+              <span className="flex items-center gap-1.5 text-rose-500 font-normal text-2xs uppercase mt-1 animate-pulse">
                 <AlertTriangle className="w-3 h-3" /> Có thay đổi chưa lưu
               </span>
             )}
@@ -55,14 +55,14 @@ const MechanismsViolationsSubTab: React.FC<MechanismsViolationsSubTabProps> = ({
         <div className="flex gap-3">
           <button
             onClick={handleAddLocalViolation}
-            className="px-6 py-3 bg-slate-100 text-slate-900 rounded-xl font-normal text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all"
+            className="px-6 py-3 bg-slate-100 text-slate-900 rounded-xl font-normal text-2xs uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-colors"
           >
             <Plus className="w-4 h-4" /> Thêm lỗi mới
           </button>
           <button
             onClick={onSave}
             disabled={!hasUnsaved}
-            className={`px-8 py-3 rounded-xl font-normal text-[10px] uppercase tracking-widest shadow-lg flex items-center gap-2 transition-all ${hasUnsaved ? 'bg-indigo-600 text-white hover:bg-black' : 'bg-slate-50 text-slate-300 cursor-not-allowed'}`}
+            className={`px-8 py-3 rounded-xl font-normal text-2xs uppercase tracking-widest shadow-lg flex items-center gap-2 transition-colors ${hasUnsaved ? 'bg-indigo-600 text-white hover:bg-black' : 'bg-slate-50 text-slate-300 cursor-not-allowed'}`}
           >
             <Save className="w-4 h-4" /> Lưu cấu hình
           </button>
@@ -71,7 +71,7 @@ const MechanismsViolationsSubTab: React.FC<MechanismsViolationsSubTabProps> = ({
       <div className="overflow-x-auto rounded-3xl border border-slate-100">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
+            <tr className="bg-slate-900 text-white text-2xs font-semibold uppercase tracking-widest">
               <th className="px-6 py-5">Lỗi vi phạm</th>
               <th className="px-6 py-5">Lần 1</th>
               <th className="px-6 py-5">Lần 2</th>
@@ -125,7 +125,7 @@ const MechanismsViolationsSubTab: React.FC<MechanismsViolationsSubTabProps> = ({
                 <td className="px-6 py-4 text-center align-top">
                   <button
                     onClick={() => handleRemoveLocalViolation(v.id)}
-                    className="p-2 text-slate-300 hover:text-rose-500 transition-all"
+                    className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

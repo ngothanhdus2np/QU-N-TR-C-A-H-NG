@@ -5,6 +5,7 @@ import { AppData } from '../types';
 
 interface UseOfflineSyncReturn {
   offlinePendingCount: number;
+  offlineOrderPendingCount: number;
   enqueueOp: (op: Omit<PendingOp, 'id' | 'timestamp' | 'retries'>) => Promise<void>;
   drainQueue: () => Promise<{ synced: number; failed: number }>;
   isDraining: boolean;
@@ -21,15 +22,18 @@ async function isServerReachable(): Promise<boolean> {
 
 export function useOfflineSync(): UseOfflineSyncReturn {
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
+  const [offlineOrderPendingCount, setOfflineOrderPendingCount] = useState(0);
   const [isDraining, setIsDraining] = useState(false);
   const isDrainingRef = useRef(false);
 
-  useEffect(() => {
-    posOfflineQueue.init().then(() => {
-      posOfflineQueue.count().then(c => setOfflinePendingCount(c));
-    }).catch(err => {
-      console.error('[OfflineSync] IndexedDB không khởi tạo được:', err);
-    });
+  const refreshPendingCounts = useCallback(async () => {
+    const [total, orders] = await Promise.all([
+      posOfflineQueue.count(),
+      posOfflineQueue.countByDataKey('posOrders'),
+    ]);
+    setOfflinePendingCount(total);
+    setOfflineOrderPendingCount(orders);
+    return { total, orders };
   }, []);
 
   const drainQueue = useCallback(async (): Promise<{ synced: number; failed: number }> => {
@@ -81,24 +85,36 @@ export function useOfflineSync(): UseOfflineSyncReturn {
         }
       }
     } finally {
-      const remaining = await posOfflineQueue.count();
-      setOfflinePendingCount(remaining);
+      await refreshPendingCounts();
       isDrainingRef.current = false;
       setIsDraining(false);
     }
 
     return { synced, failed };
-  }, []);
+  }, [refreshPendingCounts]);
+
+  useEffect(() => {
+    posOfflineQueue.init().then(() => {
+      return posOfflineQueue.compactItemOps();
+    }).then(() => {
+      refreshPendingCounts().then(async ({ total }) => {
+        if (total === 0) return;
+        const reachable = await isServerReachable();
+        if (reachable) await drainQueue();
+      });
+    }).catch(err => {
+      console.error('[OfflineSync] IndexedDB không khởi tạo được:', err);
+    });
+  }, [drainQueue, refreshPendingCounts]);
 
   const enqueueOp = useCallback(async (op: Omit<PendingOp, 'id' | 'timestamp' | 'retries'>) => {
     try {
       await posOfflineQueue.enqueue(op);
-      const count = await posOfflineQueue.count();
-      setOfflinePendingCount(count);
+      await refreshPendingCounts();
     } catch (err) {
       console.error('[OfflineSync] Không thể enqueue vào IndexedDB:', err);
     }
-  }, []);
+  }, [refreshPendingCounts]);
 
   useEffect(() => {
     const handleOnline = async () => {
@@ -113,5 +129,17 @@ export function useOfflineSync(): UseOfflineSyncReturn {
     return () => window.removeEventListener('online', handleOnline);
   }, [drainQueue]);
 
-  return { offlinePendingCount, enqueueOp, drainQueue, isDraining };
+  useEffect(() => {
+    if (offlinePendingCount === 0) return;
+
+    const id = window.setInterval(async () => {
+      if (isDrainingRef.current) return;
+      const reachable = await isServerReachable();
+      if (reachable) await drainQueue();
+    }, 30_000);
+
+    return () => window.clearInterval(id);
+  }, [drainQueue, offlinePendingCount]);
+
+  return { offlinePendingCount, offlineOrderPendingCount, enqueueOp, drainQueue, isDraining };
 }

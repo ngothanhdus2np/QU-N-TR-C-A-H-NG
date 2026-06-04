@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { GiftTier, PromotionPlan } from '../../types';
+import { SingleDatePicker } from '../shared';
 
 interface PromotionSetupPanelProps {
   promotions: PromotionPlan[];
@@ -91,24 +92,25 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
   removeGiftTier,
 }) => (
   <>
+    <>
     <div className="flex justify-between items-center mb-6">
-      <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+      <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
         <Calendar className="text-indigo-600 w-6 h-6" /> Kế Hoạch Khuyến Mãi Năm
       </h2>
     </div>
 
     <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-10">
       <div className="flex justify-between items-start mb-6">
-        <h3 className="text-lg font-black text-slate-900">{editingId ? 'Chỉnh Sửa Chương Trình' : 'Thêm Chương Trình Mới'}</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{editingId ? 'Chỉnh Sửa Chương Trình' : 'Thêm Chương Trình Mới'}</h3>
         {suggestedTarget > 0 && (
           <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3">
             <div className="flex flex-col">
-              <span className="text-[10px] font-normal text-indigo-400 uppercase tracking-widest">Gợi ý từ năm ngoái</span>
+              <span className="text-2xs font-normal text-indigo-400 uppercase tracking-widest">Gợi ý từ năm ngoái</span>
               <span className="text-sm font-normal text-indigo-700">{suggestedTarget.toLocaleString()}đ</span>
             </div>
             <button
               onClick={handleApplySuggestion}
-              className="bg-indigo-600 text-white text-[10px] font-normal px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors uppercase"
+              className="bg-indigo-600 text-white text-2xs font-normal px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors uppercase"
             >
               Áp dụng
             </button>
@@ -131,20 +133,16 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-normal text-slate-500 uppercase mb-1 tracking-widest">Ngày bắt đầu *</label>
-              <input
-                type="date"
-                className="input-field"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+              <SingleDatePicker
+                value={formData.startDate || ''}
+                onChange={(date) => setFormData({ ...formData, startDate: date })}
               />
             </div>
             <div>
               <label className="block text-xs font-normal text-slate-500 uppercase mb-1 tracking-widest">Ngày kết thúc *</label>
-              <input
-                type="date"
-                className="input-field"
-                value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+              <SingleDatePicker
+                value={formData.endDate || ''}
+                onChange={(date) => setFormData({ ...formData, endDate: date })}
               />
             </div>
           </div>
@@ -173,7 +171,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
                 <DollarSign className="absolute right-3 top-2.5 w-4 h-4 text-slate-300" />
               </div>
               {formData.targetRevenue && formData.budget ? (
-                <p className={`text-[10px] mt-1 font-normal ${formData.budget / formData.targetRevenue >= 0.05 && formData.budget / formData.targetRevenue <= 0.1 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                <p className={`text-2xs mt-1 font-normal ${formData.budget / formData.targetRevenue >= 0.05 && formData.budget / formData.targetRevenue <= 0.1 ? 'text-emerald-500' : 'text-amber-500'}`}>
                   Tỷ lệ: {((formData.budget / formData.targetRevenue) * 100).toFixed(1)}% (Chuẩn: 5-10%)
                 </p>
               ) : null}
@@ -210,7 +208,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
 
       {(formData.status === 'Active' || formData.status === 'Completed') && (
         <div className="mb-8 p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
-          <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <h4 className="text-sm font-semibold text-emerald-900 uppercase tracking-widest flex items-center gap-2 mb-4">
             <BarChart3 className="w-4 h-4 text-emerald-600" /> Kết quả thực tế (Tùy chọn ghi đè)
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -241,7 +239,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
       {formData.type === 'Gift' && (
         <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-200">
           <div className="flex justify-between items-center mb-4">
-            <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-widest flex items-center gap-2">
               <Gift className="w-4 h-4 text-indigo-600" /> Danh sách mốc quà tặng
             </h4>
             <button
@@ -256,7 +254,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
             {formData.giftTiers?.map((tier) => (
               <div key={tier.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
-                  <label className="block text-[10px] font-normal text-slate-400 uppercase mb-1 tracking-widest">Mốc hóa đơn (đ)</label>
+                  <label className="block text-2xs font-normal text-slate-400 uppercase mb-1 tracking-widest">Mốc hóa đơn (đ)</label>
                   <input
                     type="text"
                     className="input-field"
@@ -265,7 +263,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-normal text-slate-400 uppercase mb-1 tracking-widest">Tên quà tặng</label>
+                  <label className="block text-2xs font-normal text-slate-400 uppercase mb-1 tracking-widest">Tên quà tặng</label>
                   <input
                     type="text"
                     className="input-field"
@@ -275,7 +273,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-normal text-slate-400 uppercase mb-1 tracking-widest">Giá trị quà gợi ý</label>
+                  <label className="block text-2xs font-normal text-slate-400 uppercase mb-1 tracking-widest">Giá trị quà gợi ý</label>
                   <div className="input-field bg-slate-50 text-slate-500 font-normal flex items-center h-[38px]">
                     {tier.minInvoiceValue > 0
                       ? `${Math.round(tier.minInvoiceValue * 0.05).toLocaleString()} - ${Math.round(tier.minInvoiceValue * 0.1).toLocaleString()}đ`
@@ -283,7 +281,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-normal text-slate-400 uppercase mb-1 tracking-widest">Giá trị quà (đ)</label>
+                  <label className="block text-2xs font-normal text-slate-400 uppercase mb-1 tracking-widest">Giá trị quà (đ)</label>
                   <input
                     type="text"
                     className="input-field"
@@ -350,19 +348,20 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
         </div>
       </div>
     </div>
+    </>
 
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Chương Trình</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Thời Gian</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Loại & Trạng Thái</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ngân Sách</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Mục Tiêu</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">ROI</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Thao Tác</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">Chương Trình</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">Thời Gian</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">Loại & Trạng Thái</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">Ngân Sách</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">Mục Tiêu</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">ROI</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-center">Thao Tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -380,7 +379,7 @@ const PromotionSetupPanel: React.FC<PromotionSetupPanelProps> = ({
                       <span className="text-sm font-normal text-slate-900">{p.name}</span>
                       <div className="flex items-center gap-1 mt-1">
                         <Info className="w-3 h-3 text-slate-400" />
-                        <span className="text-[10px] text-slate-500 line-clamp-1">{p.description || 'Không có mô tả'}</span>
+                        <span className="text-2xs text-slate-500 line-clamp-1">{p.description || 'Không có mô tả'}</span>
                       </div>
                       {p.giftTiers && p.giftTiers.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">

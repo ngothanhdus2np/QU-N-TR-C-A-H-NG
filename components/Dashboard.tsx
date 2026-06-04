@@ -583,7 +583,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-8 shadow-inner">
           <Briefcase className="w-10 h-10 text-slate-300" />
         </div>
-        <h3 className="text-3xl font-black text-slate-800 mb-4 uppercase tracking-tight">
+        <h3 className="text-3xl font-semibold text-slate-800 mb-4 uppercase tracking-tight">
           Hệ Thống Đang Sẵn Sàng
         </h3>
         <p className="text-slate-400 max-w-md mx-auto font-normal">
@@ -631,7 +631,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         >
           <button
             onClick={() => setActiveSubTab('kpi')}
-            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-2xs uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'kpi'
@@ -643,7 +643,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('trends')}
-            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-2xs uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'trends'
@@ -655,7 +655,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('structure')}
-            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-2xs uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'structure'
@@ -667,7 +667,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveSubTab('ai')}
-            className={`flex items-center gap-3 rounded-[2rem] font-normal text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
+            className={`flex items-center gap-3 rounded-[2rem] font-normal text-2xs uppercase tracking-[0.2em] transition-all duration-300 ${
               isShrunk ? 'px-6 py-2' : 'px-10 py-3'
             } ${
               activeSubTab === 'ai'

@@ -1,15 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
 import type { AppData } from '../../types';
+import { AiInsightPanel } from '../shared';
+import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
 
 interface Props {
   data: AppData;
@@ -95,6 +98,9 @@ function classifySegment(frequency: number, recency: number): SegmentKey {
 
 const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
   const today = new Date().toLocaleDateString('sv-SE');
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
 
   const { segmentMap, segmentRevenue, segmentReturn, segmentCount, totalCustomers } =
     useMemo(() => {
@@ -136,7 +142,7 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
         const month = o.date.slice(0, 7);
 
         if (o.isReturn) {
-          c.returnValue += o.finalAmount;
+          c.returnValue += Math.abs(o.finalAmount);
         } else {
           c.frequency++;
           c.monetary += o.finalAmount;
@@ -207,6 +213,38 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
       };
     }, [data.posOrders, today]);
 
+  const handleAiRun = async () => {
+    const contextData = {
+      totalCustomers,
+      segments: SEGMENTS.map(s => ({
+        key: s.key,
+        label: s.label,
+        count: segmentCount.get(s.key) || 0,
+        revenue: segmentRevenue.get(s.key) || 0,
+        returnValue: segmentReturn.get(s.key) || 0,
+      })),
+    };
+    const hash = hashData(contextData);
+    const cached = getCachedAiResult('customers-classify', hash);
+    if (cached) { setAiResult(cached); setFromCache(true); return; }
+    setAiLoading(true); setFromCache(false);
+    try {
+      const res = await fetch('/api/ai/customers-classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contextData),
+      });
+      const json = await res.json();
+      const result = json.result || json.error || 'Không có kết quả';
+      setAiResult(result);
+      setCachedAiResult('customers-classify', hash, result);
+    } catch {
+      setAiResult('Lỗi kết nối đến AI.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // Treemap data — compute % for display
   const treemapData = SEGMENTS.map(s => ({
     ...s,
@@ -235,7 +273,7 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0">
         <div>
           <h1 className="text-base font-semibold text-slate-800">Phân loại khách hàng</h1>
-          <p className="text-[12px] text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             Dữ liệu được tổng hợp trên danh sách khách hàng và các giao dịch từ tất cả thời gian
           </p>
         </div>
@@ -261,8 +299,8 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
                     minWidth: 80,
                   }}
                 >
-                  <span className="text-white text-[10px] leading-tight">{first.label}</span>
-                  <span className="text-white text-[12px] font-bold">{first.pct.toFixed(1)}%</span>
+                  <span className="text-white text-2xs leading-tight">{first.label}</span>
+                  <span className="text-white text-xs font-bold">{first.pct.toFixed(1)}%</span>
                 </div>
               )}
               {/* Right column */}
@@ -272,8 +310,8 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
                     className="rounded-lg flex flex-col justify-end p-3"
                     style={{ background: second.color, flex: second.pct }}
                   >
-                    <span className="text-white text-[10px] leading-tight">{second.label}</span>
-                    <span className="text-white text-[12px] font-bold">
+                    <span className="text-white text-2xs leading-tight">{second.label}</span>
+                    <span className="text-white text-xs font-bold">
                       {second.pct.toFixed(1)}%
                     </span>
                   </div>
@@ -294,7 +332,7 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
                             <span className="text-white text-[9px] leading-tight truncate">
                               {seg.label}
                             </span>
-                            <span className="text-white text-[10px] font-bold">
+                            <span className="text-white text-2xs font-bold">
                               {seg.pct.toFixed(1)}%
                             </span>
                           </>
@@ -321,9 +359,9 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ background: seg.color }}
                       />
-                      <span className="text-[13px] text-slate-700 font-medium">{seg.label}</span>
+                      <span className="text-sm text-slate-700 font-medium">{seg.label}</span>
                     </div>
-                    <span className="text-[13px] text-slate-800 font-semibold w-6 text-center shrink-0">
+                    <span className="text-sm text-slate-800 font-semibold w-6 text-center shrink-0">
                       {count}
                     </span>
                     {/* Sparkline */}
@@ -343,7 +381,7 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <p className="text-[11px] text-slate-500 flex-1 leading-relaxed">
+                    <p className="text-xs text-slate-500 flex-1 leading-relaxed">
                       {seg.description}
                     </p>
                   </div>
@@ -358,6 +396,8 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
           <HBarCard title="Doanh thu" data={revenueBarData} formatValue={fmtBig} unit="đ" />
           <HBarCard title="Trả hàng" data={returnBarData} formatValue={fmtBig} unit="đ" />
         </div>
+
+        <AiInsightPanel isLoading={aiLoading} result={aiResult} onRun={handleAiRun} fromCache={fromCache} />
       </div>
     </div>
   );
@@ -414,7 +454,7 @@ const HBarCard: React.FC<HBarCardProps> = ({ title, data, formatValue }) => {
             />
             <Bar dataKey="value" radius={[0, 3, 3, 0]}>
               {data.map((entry, i) => (
-                <rect key={i} fill={entry.color} />
+                <Cell key={i} fill={entry.color} />
               ))}
             </Bar>
           </BarChart>

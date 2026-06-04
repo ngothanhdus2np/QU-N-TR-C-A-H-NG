@@ -81,7 +81,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
-          <h2 className="font-black text-slate-800 text-lg">Thanh toán</h2>
+          <h2 className="font-semibold text-slate-800 text-lg">Thanh toán</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-xl hover:bg-slate-100 active:bg-slate-200"
@@ -108,7 +108,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
                 <span className="text-emerald-600 font-semibold">-{fmt(totalDiscount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-black text-base pt-2 border-t border-slate-200">
+            <div className="flex justify-between font-semibold text-base pt-2 border-t border-slate-200">
               <span className="text-slate-800">Cần trả</span>
               <span className="text-indigo-600">{fmt(netPayable)}</span>
             </div>
@@ -268,7 +268,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
           <button
             onClick={onConfirm}
             disabled={isCheckoutLocked || cart.length === 0}
-            className="w-full py-4 bg-indigo-600 text-white font-black text-base rounded-2xl disabled:opacity-50 active:bg-indigo-700 transition-colors"
+            className="w-full py-4 bg-indigo-600 text-white font-semibold text-base rounded-2xl disabled:opacity-50 active:bg-indigo-700 transition-colors"
           >
             {isCheckoutLocked ? 'Đang xử lý...' : `Xác nhận · ${fmt(netPayable)}`}
           </button>

@@ -8,7 +8,11 @@ import {
   ViolationOccurrence,
   ViolationType,
 } from '../../types';
-import { calculateSeniority, determineCurrentPolicy } from '../../src/lib';
+import {
+  calculateSeniority,
+  determineCurrentPolicy,
+  shouldCutAttendanceAllowanceByLeave,
+} from '../../src/lib';
 
 interface PayrollPrintPreviewModalProps {
   payroll: PayrollRecord;
@@ -61,7 +65,8 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
       return pStr.includes(keyword);
     });
 
-  const isAttendanceCut = checkPenalty('chuyên cần');
+  const isAttendanceCut =
+    checkPenalty('chuyên cần') || shouldCutAttendanceAllowanceByLeave(monthAttendance);
   const isCleaningCut = checkPenalty('vệ sinh');
   const isCSKHCut = checkPenalty('cskh');
   const isDinnerCut = checkPenalty('ăn tối');
@@ -77,11 +82,11 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
   const otHours = Number((otMinutes / 60).toFixed(1));
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <div>
-            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+            <h3 className="text-lg font-semibold text-slate-800 uppercase tracking-tight">
               Xem trước Phiếu lương
             </h3>
             <p className="text-xs text-slate-500 font-normal uppercase">
@@ -99,15 +104,15 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
         <div className="flex-1 overflow-y-auto p-8 bg-slate-100/50 flex justify-center">
           <div
             style={{ width: '80mm' }}
-            className="bg-white shadow-xl p-5 font-mono text-[11px] text-black leading-tight border border-slate-200"
+            className="bg-white shadow-xl p-5 font-mono text-xs text-black leading-tight border border-slate-200"
           >
             <div className="text-center border-b border-dashed border-black pb-3 mb-3">
-              <h1 className="text-[14px] font-black m-0">PHÚC SANG</h1>
-              <p className="text-[10px] my-0.5">PHIẾU THANH TOÁN LƯƠNG</p>
-              <p className="text-[12px] font-normal my-0.5">Tháng: {payroll.month}</p>
+              <h1 className="text-[14px] font-semibold m-0">PHÚC SANG</h1>
+              <p className="text-2xs my-0.5">PHIẾU THANH TOÁN LƯƠNG</p>
+              <p className="text-xs font-normal my-0.5">Tháng: {payroll.month}</p>
             </div>
 
-            <div className="mb-3 text-[10px]">
+            <div className="mb-3 text-2xs">
               <p className="my-0.5">
                 <b>NV:</b> {payroll.employeeName}
               </p>
@@ -133,7 +138,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
                 <span>{(payroll.allowance || 0).toLocaleString()}</span>
               </div>
 
-              <div className="pl-3 space-y-0.5 text-[10px]">
+              <div className="pl-3 space-y-0.5 text-2xs">
                 {currentPolicy?.attendanceAllowance! > 0 && (
                   <div
                     className={`flex justify-between ${isAttendanceCut ? 'line-through opacity-50' : ''}`}
@@ -260,7 +265,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
                       ).toLocaleString()}
                     </span>
                   </div>
-                  <div className="pl-3 space-y-0.5 text-[10px]">
+                  <div className="pl-3 space-y-0.5 text-2xs">
                     {payroll.fine > 0 && (
                       <div className="flex justify-between">
                         <span>- Vi phạm/Vắng:</span>
@@ -299,13 +304,13 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
         <div className="p-6 border-t border-slate-100 bg-white flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-4 px-6 rounded-2xl font-normal text-slate-600 hover:bg-slate-50 transition-all border border-slate-200"
+            className="flex-1 py-4 px-6 rounded-2xl font-normal text-slate-600 hover:bg-slate-50 transition-colors border border-slate-200"
           >
             Hủy bỏ
           </button>
           <button
             onClick={onConfirmPrint}
-            className="flex-[2] py-4 px-6 rounded-2xl font-normal text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+            className="flex-[2] py-4 px-6 rounded-2xl font-normal text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-colors flex items-center justify-center gap-2"
           >
             <Printer className="w-5 h-5" />
             Xác nhận In Phiếu

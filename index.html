@@ -58,16 +58,16 @@
         --slate-900: #0f172a;
       }
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         background-color: var(--slate-50);
         color: var(--slate-900);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        letter-spacing: -0.015em;
+        letter-spacing: 0;
       }
       
       h1, h2, h3, h4, h5, h6, button, b, strong, .font-semibold, .font-bold, .font-black {
-        letter-spacing: -0.025em;
+        letter-spacing: 0;
       }
       .no-scrollbar::-webkit-scrollbar {
         display: none;
@@ -220,7 +220,7 @@
       html[data-theme="codex"] body {
         background-color: var(--app-bg);
         color: var(--text);
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 15px;
         letter-spacing: 0;
       }
@@ -431,57 +431,155 @@
         border-radius: 2rem;
       }
 
-      /* Markdown Styling for AI responses */
-      .markdown-content h1, .markdown-content h2 {
-        font-weight: 900;
-        color: var(--slate-900);
-        margin-top: 2.5rem;
-        margin-bottom: 1rem;
-        text-transform: uppercase;
-        letter-spacing: -0.05em;
-        font-size: 1.5rem;
+      /* Markdown Styling for AI responses and A4 documents */
+      .markdown-content h1 {
+        font-size: 1.65rem !important;
+        font-weight: 800 !important;
+        color: var(--slate-900) !important;
+        margin-top: 1.75rem !important;
+        margin-bottom: 0.75rem !important;
+        line-height: 1.35 !important;
+        text-transform: none !important;
+      }
+      .markdown-content h2 {
+        font-size: 1.3rem !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 0.6rem !important;
+        line-height: 1.4 !important;
+        text-transform: none !important;
       }
       .markdown-content h3 { 
-        font-size: 1.125rem; 
-        color: var(--primary); 
-        font-weight: 900;
-        margin-top: 2rem;
-        margin-bottom: 0.75rem;
-        text-transform: uppercase;
+        font-size: 1.1rem !important; 
+        color: var(--primary) !important; 
+        font-weight: 700 !important;
+        margin-top: 1.25rem !important;
+        margin-bottom: 0.5rem !important;
+        line-height: 1.4 !important;
+        text-transform: none !important;
       }
-      .markdown-content p { margin-bottom: 1rem; line-height: 1.7; color: #475569; font-weight: 500; }
-      .markdown-content strong { font-weight: 800; color: var(--slate-900); }
-      
+      .markdown-content p { 
+        margin-bottom: 0.85rem !important; 
+        line-height: 1.6 !important; 
+        color: #334155 !important; 
+        font-weight: 500 !important; 
+      }
+      .markdown-content strong { 
+        font-weight: 750 !important; 
+        color: var(--slate-900) !important; 
+      }
+
+      /* Bullet and Number Lists (Override Tailwind resets) */
+      .markdown-content ul {
+        list-style-type: disc !important;
+        padding-left: 1.75rem !important;
+        margin-top: 0.4rem !important;
+        margin-bottom: 0.85rem !important;
+      }
+      .markdown-content ol {
+        list-style-type: decimal !important;
+        padding-left: 1.75rem !important;
+        margin-top: 0.4rem !important;
+        margin-bottom: 0.85rem !important;
+      }
+      .markdown-content li {
+        margin-bottom: 0.25rem !important;
+        line-height: 1.55 !important;
+        color: #334155 !important;
+        font-weight: 500 !important;
+        display: list-item !important;
+      }
+      .markdown-content ul ul {
+        list-style-type: circle !important;
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.4rem !important;
+        padding-left: 1.5rem !important;
+      }
+      .markdown-content ol ol {
+        list-style-type: lower-alpha !important;
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.4rem !important;
+        padding-left: 1.5rem !important;
+      }
+
+      /* Text alignments */
+      .markdown-content .text-center {
+        text-align: center !important;
+        display: block !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+      .markdown-content .text-right {
+        text-align: right !important;
+        display: block !important;
+      }
+      .markdown-content .text-left {
+        text-align: left !important;
+        display: block !important;
+      }
+
+      /* Realistic grid tables exactly like MS Word */
       .markdown-content table { 
-        width: 100%; 
-        border-collapse: separate; 
-        border-spacing: 0;
-        margin: 2rem 0; 
-        font-size: 0.875rem; 
-        background: white;
-        border-radius: 1.5rem;
-        overflow: hidden;
-        border: 1px solid var(--slate-100);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        width: 100% !important; 
+        border-collapse: collapse !important; 
+        margin: 1.5rem 0 !important; 
+        font-size: 13.5px !important; 
+        background: white !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
       }
       .markdown-content th { 
-        background: var(--slate-50); 
-        padding: 1rem; 
-        text-align: left; 
-        font-weight: 900; 
-        text-transform: uppercase; 
-        letter-spacing: 0.05em;
-        color: #64748b;
-        border-bottom: 1px solid var(--slate-100);
+        background: #f8fafc !important; 
+        padding: 8px 12px !important; 
+        text-align: left !important; 
+        font-weight: 700 !important; 
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
       }
       .markdown-content td { 
-        padding: 1rem; 
-        border-bottom: 1px solid var(--slate-50); 
-        color: #334155;
-        font-weight: 600;
+        padding: 8px 12px !important; 
+        border: 1px solid #cbd5e1 !important; 
+        color: #334155 !important;
+        font-weight: 500 !important;
       }
-      .markdown-content tr:last-child td { border-bottom: none; }
-      .markdown-content tr:hover { background: var(--slate-50)/50; }
+      .markdown-content tr:nth-child(even) {
+        background-color: #f8fafc !important;
+      }
+      .markdown-content tr:hover { 
+        background: #f1f5f9 !important; 
+      }
+
+      /* A4 Paper Visual Styling */
+      .a4-container {
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+      }
+      .a4-page {
+        position: relative !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(226, 232, 240, 0.8) !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+      }
+      .a4-page:hover {
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.13), 0 10px 10px -5px rgba(0, 0, 0, 0.08) !important;
+      }
+      .a4-header-line {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 4px !important;
+        background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%) !important;
+      }
+      .a4-watermark {
+        user-select: none !important;
+        pointer-events: none !important;
+        color: rgba(241, 245, 249, 0.6) !important;
+        font-size: 8rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.1em !important;
+      }
 
       /* Print Styles */
       @media print {

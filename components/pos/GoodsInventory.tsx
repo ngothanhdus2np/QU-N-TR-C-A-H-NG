@@ -5,6 +5,8 @@ import {
   POSProduct,
   InventoryTransaction,
   ProductGroup,
+  Supplier,
+  POSOrder,
 } from '../../types';
 import { exportToExcel } from '../../services/exportService';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
@@ -28,11 +30,17 @@ import { useGoodsSelection } from './useGoodsSelection';
 import { useGoodsProductEditor } from './useGoodsProductEditor';
 import { GoodsPriceSetupModal } from './GoodsPriceSetupModal';
 import { GoodsWarrantyMaintenancePage } from './GoodsWarrantyMaintenancePage';
+import { GroupTreePicker } from './GroupTreePicker';
+import { GoodsGridView } from './GoodsGridView';
+import { GoodsGridVariantPopup } from './GoodsGridVariantPopup';
+import { GoodsGridDetailModal } from './GoodsGridDetailModal';
 
 interface GoodsInventoryProps {
   products: POSProduct[];
   transactions: InventoryTransaction[];
+  orders?: POSOrder[];
   productGroups: ProductGroup[];
+  suppliers?: Supplier[];
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
@@ -41,6 +49,7 @@ interface GoodsInventoryProps {
 }
 
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
+const VIEW_MODE_STORAGE_KEY = 'goods_view_mode';
 const PAGE_SIZE_OPTIONS = [30, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 type ProductFormTab = 'info' | 'desc' | 'warranty' | 'units' | 'related' | 'channels';
@@ -79,7 +88,7 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
         <title>In tem mã hàng</title>
         <style>
           * { box-sizing: border-box; }
-          body { margin: 0; padding: 10mm; font-family: Arial, sans-serif; color: #0f172a; }
+          body { margin: 0; padding: 10mm; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; letter-spacing: 0; }
           .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
           .label {
             height: 30mm;
@@ -132,7 +141,9 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
 const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   products,
   transactions,
+  orders = [],
   productGroups,
+  suppliers = [],
   onUpdateProducts,
   onUpdateSurgical,
   onPushBatch,
@@ -157,6 +168,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const openInputModal = (config: Omit<typeof inputModal, 'isOpen'>) =>
     setInputModal({ ...config, isOpen: true });
   const closeInputModal = () => setInputModal(prev => ({ ...prev, isOpen: false }));
+  const [changeGroupModal, setChangeGroupModal] = useState<{ isOpen: boolean; selectedGroupId: string }>({ isOpen: false, selectedGroupId: '' });
+  const [createGroupModal, setCreateGroupModal] = useState<{ isOpen: boolean; name: string; parentId: string }>({ isOpen: false, name: '', parentId: '' });
+
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -210,7 +224,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     setInvoiceStatus,
     invoiceFile,
     setInvoiceFile,
-  } = useGoodsPurchase({ products, onUpdateProducts, onAddTransaction, showToast });
+  } = useGoodsPurchase({ products, onUpdateProducts, onUpdateSurgical, onAddTransaction, showToast });
   const {
     auditSearchTerm,
     setAuditSearchTerm,
@@ -218,7 +232,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     setAuditItems,
     handleConfirmAudit,
     cancelAudit,
-  } = useGoodsAudit({ products, onUpdateProducts, onAddTransaction, showToast, setActiveTab });
+  } = useGoodsAudit({ products, onUpdateProducts, onUpdateSurgical, onAddTransaction, showToast, setActiveTab });
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -230,6 +244,29 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       return DEFAULT_PAGE_SIZE;
     }
   });
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      return saved === 'grid' ? 'grid' : 'table';
+    } catch {
+      return 'table';
+    }
+  });
+
+  const handleViewModeChange = useCallback((mode: 'table' | 'grid') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const [variantPickerProduct, setVariantPickerProduct] = useState<POSProduct | null>(null);
+  const [gridDetailProduct, setGridDetailProduct] = useState<POSProduct | null>(null);
+  const [gridDetailSiblings, setGridDetailSiblings] = useState<POSProduct[]>([]);
+  const [gridCardWidth, setGridCardWidth] = useState(160);
+
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock' | 'low_stock'>(
@@ -237,7 +274,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   );
   const [filterLocation, setFilterLocation] = useState('');
   const [filterAttrs, setFilterAttrs] = useState<string[]>([]);
-  const [filterSupplier, setFilterSupplier] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<GoodsSortKey>('sku');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
 
@@ -367,6 +404,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     uniqueCategories,
     uniqueBrands,
     uniqueLocations,
+    uniqueSuppliers,
     attrValuesByName,
     categoryCounts,
     filteredProducts,
@@ -376,12 +414,15 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     variantsByParentId,
   } = useGoodsFilters({
     products,
+    transactions,
+    suppliers,
     debouncedSearchTerm,
     filterCategories,
     filterBrand,
     filterStock,
     filterLocation,
     filterAttrs,
+    filterSupplier,
     sortKey,
     sortDirection,
     currentPage,
@@ -527,6 +568,63 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     setSelectedIds,
   ]);
 
+  const handleBulkStopBusiness = useCallback(() => {
+    if (selectedProducts.length === 0) return;
+    openConfirm({
+      title: 'Ngừng kinh doanh hàng loạt',
+      message: `Xác nhận ngừng kinh doanh ${selectedProducts.length} mặt hàng đã chọn?`,
+      variant: 'warning',
+      confirmLabel: 'Ngừng KD',
+      onConfirm: () => {
+        const selectedIdSet = new Set(selectedProducts.map(p => p.id));
+        onUpdateProducts(
+          products.map(p => (selectedIdSet.has(p.id) ? { ...p, status: 'Inactive' } : p))
+        );
+        setSelectedIds([]);
+        showToast(`Đã ngừng kinh doanh ${selectedProducts.length} mặt hàng.`);
+        closeConfirm();
+      },
+    });
+  }, [selectedProducts, products, onUpdateProducts, openConfirm, closeConfirm, showToast, setSelectedIds]);
+
+  const handleBulkChangeGroup = useCallback(() => {
+    setChangeGroupModal({ isOpen: true, selectedGroupId: '' });
+  }, []);
+
+  const handleConfirmChangeGroup = useCallback(() => {
+    if (!changeGroupModal.selectedGroupId) {
+      showToast('Vui lòng chọn nhóm hàng.', 'error');
+      return;
+    }
+    const selectedIdSet = new Set(selectedProducts.map(p => p.id));
+    onUpdateProducts(
+      products.map(p =>
+        selectedIdSet.has(p.id) ? { ...p, categoryId: changeGroupModal.selectedGroupId } : p
+      )
+    );
+    setSelectedIds([]);
+    setChangeGroupModal({ isOpen: false, selectedGroupId: '' });
+    showToast(`Đã chuyển ${selectedProducts.length} sản phẩm sang nhóm "${changeGroupModal.selectedGroupId}".`);
+  }, [changeGroupModal, selectedProducts, products, onUpdateProducts, setSelectedIds, showToast]);
+
+  const handleCreateGroup = useCallback(async () => {
+    const trimmed = createGroupModal.name.trim();
+    if (!trimmed) {
+      showToast('Vui lòng nhập tên nhóm hàng.', 'error');
+      return;
+    }
+    const fullName = createGroupModal.parentId ? `${createGroupModal.parentId} >> ${trimmed}` : trimmed;
+    const newGroup: ProductGroup = { id: crypto.randomUUID(), name: fullName };
+    await onPushBatch?.('productGroups', [newGroup]);
+    setCreateGroupModal({ isOpen: false, name: '', parentId: '' });
+    setChangeGroupModal(prev => ({ ...prev, selectedGroupId: newGroup.name }));
+    showToast(`Đã tạo nhóm hàng "${fullName}".`);
+  }, [createGroupModal, onPushBatch, showToast]);
+
+  const handleGoToWarranty = useCallback(() => {
+    setActiveTab('warranty');
+  }, [setActiveTab]);
+
   const handleToggleView = useCallback(
     (prod: POSProduct) => {
       if (viewingProduct?.id === prod.id) {
@@ -538,6 +636,26 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     },
     [viewingProduct?.id]
   );
+
+  const handleGridCardClick = useCallback(
+    (prod: POSProduct) => {
+      if (prod.isParent && prod.variantCount && prod.variantCount > 0) {
+        setVariantPickerProduct(prod);
+      } else {
+        setGridDetailProduct(prod);
+      }
+    },
+    []
+  );
+
+  const handleGridVariantSelect = useCallback((variant: POSProduct) => {
+    const siblings = products.filter(
+      p => p.parentId === variantPickerProduct?.id && p.status === 'Active'
+    );
+    setVariantPickerProduct(null);
+    setGridDetailSiblings(siblings);
+    setGridDetailProduct(variant);
+  }, [products, variantPickerProduct?.id]);
 
   const handleChangeDetailTab = useCallback((tab: ProductFormTab) => {
     setActiveFormTab(tab);
@@ -591,6 +709,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         return (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="flex-1 min-h-0 overflow-auto overscroll-contain no-scrollbar">
+              {viewMode === 'grid' ? (
+                <GoodsGridView
+                  products={currentProducts}
+                  viewingProductId={gridDetailProduct?.id}
+                  onToggleView={handleGridCardClick}
+                  onCardWidthChange={setGridCardWidth}
+                />
+              ) : (
               <table className="w-full text-sm">
                 <GoodsProductTableHeader
                   visibleColumns={visibleColumns}
@@ -605,6 +731,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                 <GoodsProductTableBody
                   currentProducts={currentProducts}
                   variantsByParentId={variantsByParentId}
+                  transactions={transactions}
+                  orders={orders}
                   colCount={colCount}
                   selectedIdSet={selectedIdSet}
                   favoriteIdSet={favoriteIdSet}
@@ -629,6 +757,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   onStopBusiness={handleStopBusiness}
                 />
               </table>
+              )}
             </div>
             <GoodsPagination
               currentPage={currentPage}
@@ -647,6 +776,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             showPurchaseForm={showPurchaseForm}
             setShowPurchaseForm={setShowPurchaseForm}
             purchaseItems={purchaseItems}
+            suppliers={suppliers}
             purchaseSupplier={purchaseSupplier}
             setPurchaseSupplier={setPurchaseSupplier}
             purchaseNote={purchaseNote}
@@ -714,6 +844,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             onBack={() => setActiveTab('goods')}
             onSave={() => handleSaveProduct(false)}
             onAddConversionUnit={addConversionUnit}
+            allProducts={products}
           />
         );
       default:
@@ -721,8 +852,10 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     }
   };
 
+  const isFixedShellTab = activeTab === 'pricing' || activeTab === 'warranty';
+
   return (
-    <div className={activeTab === 'goods' ? 'flex flex-col h-full' : 'space-y-6'}>
+    <div className={activeTab === 'goods' || isFixedShellTab ? 'flex h-full min-h-0 flex-col' : 'space-y-6'}>
       <GoodsInventoryFeedback
         toast={toast}
         inputModal={inputModal}
@@ -761,11 +894,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           setFilterStock={setFilterStock}
           filterSupplier={filterSupplier}
           setFilterSupplier={setFilterSupplier}
+          productGroups={productGroups}
           uniqueCategories={uniqueCategories}
           categoryCounts={categoryCounts}
           attrValuesByName={attrValuesByName}
           uniqueLocations={uniqueLocations}
           uniqueBrands={uniqueBrands}
+          uniqueSuppliers={uniqueSuppliers}
           lowStockCount={lowStockProducts.length}
           selectedCount={selectedIds.length}
           onClearSelection={() => setSelectedIds([])}
@@ -773,7 +908,12 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           onPrintSelectedLabels={handlePrintSelectedLabels}
           onPurchaseSelected={handlePurchaseSelected}
           onBulkDelete={handleBulkDelete}
+          onBulkStopBusiness={handleBulkStopBusiness}
+          onBulkChangeGroup={handleBulkChangeGroup}
+          onGoToWarranty={handleGoToWarranty}
           onResetPage={() => setCurrentPage(1)}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
         >
           {renderMainContent()}
         </GoodsProductsWorkspace>
@@ -792,7 +932,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                 setShowPurchaseForm={setShowPurchaseForm}
               />
             )}
-          {renderMainContent()}
+          {isFixedShellTab ? (
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {renderMainContent()}
+            </div>
+          ) : (
+            renderMainContent()
+          )}
         </>
       )}
 
@@ -879,6 +1025,147 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         onCloseAddMoreVariants={closeAddMoreVariantsModal}
         onSaveMoreVariants={handleSaveMoreVariants}
       />
+    {changeGroupModal.isOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-[480px] p-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-slate-900">Chuyển nhóm hàng</h2>
+            <button
+              onClick={() => setChangeGroupModal({ isOpen: false, selectedGroupId: '' })}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <span className="text-xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="flex items-center gap-3 py-4 border-t border-b border-slate-100">
+            <label className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 w-32 shrink-0">
+              Nhóm hàng
+              <span
+                title="Chọn nhóm hàng mới cho tất cả sản phẩm đã chọn"
+                className="text-slate-400 cursor-help text-xs border border-slate-300 rounded-full w-4 h-4 flex items-center justify-center leading-none"
+              >
+                i
+              </span>
+            </label>
+            <GroupTreePicker
+              productGroups={productGroups}
+              products={products}
+              value={changeGroupModal.selectedGroupId}
+              onChange={id => setChangeGroupModal(prev => ({ ...prev, selectedGroupId: id }))}
+            />
+            <button
+              onClick={() => setCreateGroupModal({ isOpen: true, name: '', parentId: '' })}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 transition-colors text-lg font-bold shrink-0"
+              title="Tạo nhóm hàng mới"
+            >
+              +
+            </button>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              onClick={() => setChangeGroupModal({ isOpen: false, selectedGroupId: '' })}
+              className="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Bỏ qua
+            </button>
+            <button
+              onClick={handleConfirmChangeGroup}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200"
+            >
+              Lưu
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {createGroupModal.isOpen && (
+      <div className="fixed inset-0 z-dropdown flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-[500px]">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <h2 className="text-base font-semibold text-slate-900">Tạo nhóm hàng</h2>
+            <button
+              onClick={() => setCreateGroupModal({ isOpen: false, name: '', parentId: '' })}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <span className="text-xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="px-6 py-5 space-y-5">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Tên nhóm</label>
+              <input
+                type="text"
+                autoFocus
+                value={createGroupModal.name}
+                onChange={e => setCreateGroupModal(prev => ({ ...prev, name: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreateGroup(); }}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Nhóm cha</label>
+              <GroupTreePicker
+                productGroups={productGroups}
+                products={products}
+                value={createGroupModal.parentId}
+                onChange={id => setCreateGroupModal(prev => ({ ...prev, parentId: id }))}
+                placeholder="Chọn nhóm hàng"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+            <button
+              onClick={() => setCreateGroupModal({ isOpen: false, name: '', parentId: '' })}
+              className="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Bỏ qua
+            </button>
+            <button
+              onClick={handleCreateGroup}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200"
+            >
+              Lưu
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {variantPickerProduct && (
+      <GoodsGridVariantPopup
+        parent={variantPickerProduct}
+        variants={products.filter(p => p.parentId === variantPickerProduct.id && p.status === 'Active')}
+        cardWidth={gridCardWidth}
+        onSelectVariant={handleGridVariantSelect}
+        onClose={() => setVariantPickerProduct(null)}
+      />
+    )}
+
+    {gridDetailProduct && (
+      <GoodsGridDetailModal
+        product={gridDetailProduct}
+        siblings={gridDetailSiblings.length > 1 ? gridDetailSiblings : undefined}
+        transactions={transactions}
+        orders={orders}
+        onClose={() => { setGridDetailProduct(null); setGridDetailSiblings([]); }}
+        onEdit={prod => {
+          setGridDetailProduct(null);
+          setGridDetailSiblings([]);
+          openProductEditor(prod);
+        }}
+        onDelete={id => {
+          onUpdateProducts(products.filter(p => p.id !== id));
+          setGridDetailProduct(null);
+          setGridDetailSiblings([]);
+        }}
+        onStopBusiness={handleStopBusiness}
+        onPrintLabel={handlePrintLabel}
+        onAddSameType={handleAddSameType}
+        onPurchaseProduct={handlePurchaseProduct}
+        onAddUnit={handleAddUnitInView}
+        onAddAttribute={handleAddAttributeInView}
+      />
+    )}
     </div>
   );
 };

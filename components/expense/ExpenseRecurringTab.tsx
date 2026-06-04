@@ -29,7 +29,7 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
 }) => (
   <div className="space-y-10 animate-in slide-in-from-bottom-4 duration-500">
     <div className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl">
-      <h3 className="text-xl font-black text-slate-900 mb-8 uppercase flex items-center gap-4">
+      <h3 className="text-xl font-semibold text-slate-900 mb-8 uppercase flex items-center gap-4">
         <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-lg"><Bell className="w-5 h-5" /></div>
         CHI PHÍ CẦN XÁC NHẬN TRONG THÁNG
       </h3>
@@ -41,16 +41,16 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <span className="px-3 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-normal uppercase">Ngày {recurring.dayOfMonth} hàng tháng</span>
-                  <h4 className="text-sm font-black text-slate-900 mt-2 uppercase">{recurring.name}</h4>
+                  <h4 className="text-sm font-semibold text-slate-900 mt-2 uppercase">{recurring.name}</h4>
                 </div>
               </div>
               <div className="space-y-1 mb-6">
-                <p className="text-[10px] font-normal text-slate-500 uppercase">Danh mục: {recurring.category}</p>
+                <p className="text-2xs font-normal text-slate-500 uppercase">Danh mục: {recurring.category}</p>
                 <p className="text-lg font-normal text-slate-900 tabular-nums">{formatNumber(recurring.amount)}đ</p>
               </div>
               <button
                 onClick={() => onPostRecurring(recurring)}
-                className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-normal uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-3 bg-slate-900 text-white rounded-xl text-2xs font-normal uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" /> Xác nhận & Ghi sổ
               </button>
@@ -66,7 +66,7 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-1 bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl h-fit">
-        <h3 className="text-sm font-black text-slate-900 mb-8 uppercase flex items-center gap-3">
+        <h3 className="text-sm font-semibold text-slate-900 mb-8 uppercase flex items-center gap-3">
           <div className="p-2 bg-indigo-600 text-white rounded-lg"><Plus className="w-4 h-4" /></div>
           THÊM MẪU CHI PHÍ ĐỊNH KỲ
         </h3>
@@ -100,7 +100,7 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
           </div>
           <button
             onClick={onAddRecurring}
-            className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-normal uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"
+            className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-2xs font-normal uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" /> Lưu mẫu định kỳ
           </button>
@@ -108,7 +108,7 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
       </div>
 
       <div className="lg:col-span-2 bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl">
-        <h3 className="text-sm font-black text-slate-900 mb-8 uppercase flex items-center gap-3">
+        <h3 className="text-sm font-semibold text-slate-900 mb-8 uppercase flex items-center gap-3">
           <div className="p-2 bg-slate-800 text-white rounded-lg"><ListChecks className="w-4 h-4" /></div>
           DANH SÁCH MẪU CHI PHÍ ĐỊNH KỲ
         </h3>
@@ -121,8 +121,8 @@ export const ExpenseRecurringTab: React.FC<ExpenseRecurringTabProps> = ({
                     <span className="text-sm font-normal">{recurring.dayOfMonth}</span>
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-slate-900 uppercase">{recurring.name}</h4>
-                    <p className="text-[10px] font-normal text-slate-400 uppercase">{recurring.category} • {formatNumber(recurring.amount)}đ</p>
+                    <h4 className="text-sm font-semibold text-slate-900 uppercase">{recurring.name}</h4>
+                    <p className="text-2xs font-normal text-slate-400 uppercase">{recurring.category} • {formatNumber(recurring.amount)}đ</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

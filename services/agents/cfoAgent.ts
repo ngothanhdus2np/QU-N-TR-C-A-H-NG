@@ -78,6 +78,57 @@ export const CFO_TOOLS = [
       },
     },
   },
+  {
+    name: 'query_pos_orders',
+    description: 'Tổng hợp đơn hàng POS trong khoảng thời gian: tổng doanh thu, số hóa đơn, doanh thu thuần (trừ trả hàng), phương thức thanh toán, giá trị đơn trung bình, top sản phẩm bán chạy. Dùng khi hỏi về doanh số theo tuần/tháng, so sánh kỳ, hàng bán chạy nhất.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        startDate: { type: 'string', description: 'Ngày bắt đầu (YYYY-MM-DD).' },
+        endDate: { type: 'string', description: 'Ngày kết thúc (YYYY-MM-DD).' },
+        topN: { type: 'number', description: 'Số sản phẩm top muốn lấy (mặc định 10).' },
+      },
+      required: ['startDate', 'endDate'],
+    },
+  },
+  {
+    name: 'get_product_details',
+    description: 'Tìm kiếm và lấy danh sách sản phẩm với thông tin đầy đủ: tên, SKU, giá bán, giá nhập, tồn kho, đơn vị. Dùng khi hỏi về sản phẩm cụ thể, giá cả, hàng hóa trong kho.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Từ khóa tìm kiếm (tên hoặc SKU). Bỏ trống để lấy toàn bộ.' },
+        stockFilter: {
+          type: 'string',
+          description: 'Lọc theo tình trạng tồn kho.',
+          enum: ['all', 'in_stock', 'out_of_stock', 'low_stock'],
+        },
+        activeOnly: { type: 'boolean', description: 'Chỉ lấy sản phẩm đang hoạt động. Mặc định true.' },
+      },
+    },
+  },
+  {
+    name: 'get_customer_stats',
+    description: 'Thống kê khách hàng: tổng số, phân loại theo hạng (Standard/Silver/Gold/Diamond), tổng điểm tích lũy, tổng công nợ khách hàng, danh sách top khách theo doanh thu. Dùng khi hỏi về khách hàng VIP, chương trình tích điểm, công nợ khách.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topN: { type: 'number', description: 'Số khách VIP muốn xem (mặc định 10).' },
+      },
+    },
+  },
+  {
+    name: 'get_product_group_revenue',
+    description: 'Doanh thu và đóng góp % theo nhóm hàng trong khoảng thời gian. Dùng khi hỏi về nhóm hàng bán chạy nhất, so sánh danh mục, phân tích cơ cấu doanh thu theo nhóm.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        startDate: { type: 'string', description: 'Ngày bắt đầu (YYYY-MM-DD).' },
+        endDate: { type: 'string', description: 'Ngày kết thúc (YYYY-MM-DD).' },
+      },
+      required: ['startDate', 'endDate'],
+    },
+  },
 ];
 
 // Mỗi domain có system prompt riêng — inject vào /api/ai/chat khi có domain routing (Bước 2)
@@ -94,14 +145,19 @@ TOOLS ƯU TIÊN: Luôn gọi get_metadata trước, sau đó query_ledgers với
 LƯU Ý BẮT BUỘC: Kiểm tra kỹ trường 'status' và 'resignedDate' — tuyệt đối không tính nhân viên đã nghỉ vào định biên hoặc quỹ lương.`,
 
   sales: `BẠN LÀ: Sales Agent — Chuyên gia phân tích doanh thu đa kênh.
-NHIỆM VỤ: So sánh doanh thu cửa hàng vs Shopee, xu hướng theo thời gian, xác định ngày/tuần bứt phá.
-TOOLS ƯU TIÊN: query_ledgers với ledgerType='revenue' cho cửa hàng, ledgerType='shopee_revenue' cho Shopee — luôn truy vấn cả hai kênh để so sánh.
-PHONG CÁCH: Bảng so sánh song song hai kênh, % đóng góp, chỉ ra ngày/tuần tốt nhất và nguyên nhân có thể.`,
+NHIỆM VỤ: So sánh doanh thu cửa hàng vs Shopee, xu hướng theo thời gian, xác định ngày/tuần bứt phá, phân tích nhóm hàng.
+TOOLS ƯU TIÊN: query_pos_orders để phân tích POS chi tiết theo kỳ, get_product_group_revenue cho đóng góp nhóm hàng, query_ledgers (revenue/shopee_revenue) để so sánh kênh.
+PHONG CÁCH: Bảng so sánh song song các kênh/nhóm, % đóng góp, chỉ ra sản phẩm/nhóm đang tăng trưởng và đề xuất tối ưu.`,
 
   inventory: `BẠN LÀ: Inventory Agent — Chuyên gia quản lý kho hàng và tối ưu tồn kho.
-NHIỆM VỤ: Kiểm tra tồn kho theo thực tế, cảnh báo hàng sắp hết, đề xuất ưu tiên nhập hàng.
-TOOLS ƯU TIÊN: get_metadata (danh mục hàng hóa, SOP), query_ledgers để xem lịch sử bán và xác định hàng bán chạy.
+NHIỆM VỤ: Kiểm tra tồn kho theo thực tế, cảnh báo hàng sắp hết, tìm kiếm thông tin sản phẩm, đề xuất ưu tiên nhập hàng.
+TOOLS ƯU TIÊN: get_inventory_alerts cho danh sách cảnh báo, get_product_details để tra cứu chi tiết sản phẩm cụ thể, get_supplier_debt_summary để biết NCC nào đang có công nợ.
 PHONG CÁCH: Danh sách ưu tiên cao → thấp, hành động cụ thể (nhập bao nhiêu, từ NCC nào).`,
+
+  customers: `BẠN LÀ: Customer Agent — Chuyên gia phân tích khách hàng và chương trình tích điểm.
+NHIỆM VỤ: Phân tích tệp khách hàng, phân loại theo hạng VIP, xác định khách hàng trung thành, theo dõi công nợ khách.
+TOOLS ƯU TIÊN: get_customer_stats để xem tổng quan tệp khách, query_pos_orders để xem tần suất mua hàng theo kỳ.
+PHONG CÁCH: Bảng phân loại theo hạng, top khách VIP, đề xuất chiến lược giữ chân khách hàng cụ thể.`,
 
   marketing: `BẠN LÀ: Marketing Agent — Chuyên gia marketing và đo lường hiệu quả khuyến mãi.
 NHIỆM VỤ: Phân tích ROI từng chương trình khuyến mãi, hiệu quả nội dung Fanpage, đề xuất chiến lược tháng tới.

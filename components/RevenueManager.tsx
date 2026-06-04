@@ -13,7 +13,6 @@ import {
 } from '../types';
 import TimeFilter from './TimeFilter';
 import DiagnosisTab from './revenue/DiagnosisTab';
-import MatrixTab from './revenue/MatrixTab';
 import SourceTab from './revenue/SourceTab';
 import CostsTab from './revenue/CostsTab';
 import InventoryInTab from './revenue/InventoryInTab';
@@ -29,6 +28,7 @@ interface Props {
   list: RevenueRecord[];
   productGroups: ProductGroup[];
   groupRevenue: ProductGroupRevenue[];
+  suppliers?: import('../types').Supplier[];
   onUpdate: (newList: RevenueRecord[], idToRemove?: string) => Promise<void>;
   onUpdateGroupRevenue: (newList: ProductGroupRevenue[]) => Promise<void>;
   onUpdateGroups: (newList: ProductGroup[]) => Promise<void>;
@@ -46,6 +46,20 @@ interface Props {
   onUpdateShopeeInventoryOut?: (newList: ShopeeInventoryOutRecord[]) => Promise<void>;
   onUpdateDailyAdsConfig?: (config: Record<string, number>) => Promise<void>;
 
+  inventoryOutFilterPlatforms?: string[];
+  inventoryOutFilterStatuses?: string[];
+  inventoryOutFilterShippingUnits?: string[];
+
+  initialSubTab?: RevenueSubTab;
+  activeSubTab?: RevenueSubTab;
+  onChangeSubTab?: (tab: RevenueSubTab) => void;
+  hiddenSubTabs?: RevenueSubTab[];
+  diagnosisLabel?: string;
+  hideSubTabNav?: boolean;
+  hideTimeFilter?: boolean;
+  onInventoryInFormToggle?: (open: boolean) => void;
+  shopFilter?: number | null;
+  onShopFilterChange?: (shop: number) => void;
   diagnosisRange: DiagnosisRange;
   setDiagnosisRange: (range: DiagnosisRange) => void;
   diagStartDate: string;
@@ -66,9 +80,25 @@ const RevenueManager: React.FC<Props> = ({
   shopeeInventoryIn = [],
   shopeeInventoryOut = [],
   dailyAdsConfig = {},
+  suppliers = [],
+  onUpdateShopeeSource,
   onUpdateShopeeCosts,
+  onUpdateShopeeInventoryIn,
   onUpdateShopeeInventoryOut,
   onUpdateDailyAdsConfig,
+  inventoryOutFilterPlatforms = [],
+  inventoryOutFilterStatuses = [],
+  inventoryOutFilterShippingUnits = [],
+  initialSubTab = 'diagnosis',
+  activeSubTab: controlledSubTab,
+  onChangeSubTab,
+  hiddenSubTabs = [],
+  diagnosisLabel,
+  hideSubTabNav = false,
+  hideTimeFilter = false,
+  onInventoryInFormToggle,
+  shopFilter,
+  onShopFilterChange,
   diagnosisRange,
   setDiagnosisRange,
   diagStartDate,
@@ -76,7 +106,9 @@ const RevenueManager: React.FC<Props> = ({
   diagEndDate,
   setDiagEndDate,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<RevenueSubTab>('diagnosis');
+  const [internalSubTab, setInternalSubTab] = useState<RevenueSubTab>(initialSubTab);
+  const activeSubTab = controlledSubTab ?? internalSubTab;
+  const setActiveSubTab = onChangeSubTab ?? setInternalSubTab;
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnosisResult, setDiagnosisResult] = useState<string | null>(null);
 
@@ -201,69 +233,6 @@ const RevenueManager: React.FC<Props> = ({
     [list, timeContext]
   );
 
-  // --- MA TRẬN TÀI CHÍNH ---
-  const years = useMemo(() => {
-    const ySet = new Set<string>();
-    list.forEach(r => {
-      if (r.date) {
-        const parts = r.date.split('-');
-        if (parts.length > 0) ySet.add(parts[0]);
-      }
-    });
-    return Array.from(ySet).sort((a, b) => b.localeCompare(a));
-  }, [list]);
-
-  const financialMetrics = [
-    { key: 'totalGrossRevenue', label: 'Tổng tiền hàng' },
-    { key: 'discount', label: 'Giảm giá' },
-    { key: 'revenueOther', label: 'Doanh thu khác' },
-    { key: 'returnsValue', label: 'Giá trị trả hàng' },
-    { key: 'netRevenue', label: 'Doanh thu thuần' },
-    { key: 'totalCogs', label: 'Tổng giá vốn' },
-    { key: 'grossProfit', label: 'Lợi nhuận gộp' },
-  ];
-
-  const financialMatrixData = useMemo(() => {
-    return financialMetrics.map(metric => {
-      const yearValues: Record<string, number> = {};
-      years.forEach(y => {
-        const sParts = timeContext.start.split('-');
-        const eParts = timeContext.end.split('-');
-        const startOfTarget = `${y}-${sParts[1]}-${sParts[2]}`;
-        const endOfTarget = `${y}-${eParts[1]}-${eParts[2]}`;
-        const sum = list
-          .filter(r => r.date >= startOfTarget && r.date <= endOfTarget)
-          .reduce(
-            (acc, curr) => acc + ((curr[metric.key as keyof RevenueRecord] as number) || 0),
-            0
-          );
-        yearValues[y] = sum;
-      });
-      return { ...metric, yearValues };
-    });
-  }, [list, years, timeContext]);
-
-  const maxFinancialValue = useMemo(() => {
-    let max = 0;
-    financialMatrixData.forEach(row => {
-      Object.values(row.yearValues).forEach(v => {
-        const val = v as number;
-        if (val > max) max = val;
-      });
-    });
-    return max || 1;
-  }, [financialMatrixData]);
-
-  const getHeatmapColor = (value: number) => {
-    if (value <= 0) return 'transparent';
-    const intensity = value / maxFinancialValue;
-    if (intensity > 0.8) return 'bg-emerald-500 text-white font-normal';
-    if (intensity > 0.5) return 'bg-emerald-400 text-white font-normal';
-    if (intensity > 0.3) return 'bg-emerald-200 text-emerald-900 font-normal';
-    if (intensity > 0.1) return 'bg-emerald-100 text-emerald-800 font-normal';
-    return 'bg-emerald-50 text-emerald-700 font-normal';
-  };
-
   // --- PHÂN TÍCH DOANH THU ---
   const revenueAnalytics = useMemo(() => {
     if (filteredListByRange.length === 0) return null;
@@ -347,21 +316,33 @@ const RevenueManager: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-8 pb-20 max-w-full animate-in fade-in duration-500">
-      <TimeFilter
-        diagnosisRange={diagnosisRange}
-        setDiagnosisRange={setDiagnosisRange}
-        diagStartDate={diagStartDate}
-        setDiagStartDate={setDiagStartDate}
-        diagEndDate={diagEndDate}
-        setDiagEndDate={setDiagEndDate}
-      />
+    <div
+      className={
+        hideSubTabNav && hideTimeFilter
+          ? 'h-full min-h-0 max-w-full overflow-auto animate-in fade-in duration-500'
+          : 'space-y-8 pb-20 max-w-full animate-in fade-in duration-500'
+      }
+    >
+      {!hideTimeFilter && (
+        <TimeFilter
+          diagnosisRange={diagnosisRange}
+          setDiagnosisRange={setDiagnosisRange}
+          diagStartDate={diagStartDate}
+          setDiagStartDate={setDiagStartDate}
+          diagEndDate={diagEndDate}
+          setDiagEndDate={setDiagEndDate}
+        />
+      )}
 
-      <RevenueSubTabNav
-        activeSubTab={activeSubTab}
-        isShopee={isShopee}
-        onChangeSubTab={setActiveSubTab}
-      />
+      {!hideSubTabNav && (
+        <RevenueSubTabNav
+          activeSubTab={activeSubTab}
+          isShopee={isShopee}
+          hiddenSubTabs={hiddenSubTabs}
+          diagnosisLabel={diagnosisLabel}
+          onChangeSubTab={setActiveSubTab}
+        />
+      )}
 
       {activeSubTab === 'diagnosis' && (
         <DiagnosisTab
@@ -375,39 +356,37 @@ const RevenueManager: React.FC<Props> = ({
         />
       )}
 
-      {activeSubTab === 'matrix' && !isShopee && (
-        <MatrixTab
-          isShopee={!!isShopee}
-          productGroups={productGroups}
-          groupRevenue={groupRevenue}
-          timeContext={timeContext}
-          years={years}
-          financialMatrixData={financialMatrixData}
-          getHeatmapColor={getHeatmapColor}
-          formatNumber={formatNumber}
-        />
-      )}
-
       {isShopee && activeSubTab === 'source' && (
-        <SourceTab shopeeSourceData={shopeeSourceData} formatNumber={formatNumber} />
+        <SourceTab
+          shopeeSourceData={shopeeSourceData}
+          shopeeInventoryIn={shopeeInventoryIn}
+          shopeeInventoryOut={shopeeInventoryOut}
+          formatNumber={formatNumber}
+          onUpdate={onUpdateShopeeSource}
+          shopFilter={shopFilter}
+          onShopFilterChange={onShopFilterChange}
+        />
       )}
 
       {isShopee && activeSubTab === 'costs' && (
-        <CostsTab
-          shopeeCosts={shopeeCosts}
-          totalFixedCosts={shopee.totalFixedCosts}
-          totalVariableCosts={shopee.totalVariableCosts}
-          fixedCostPerOrder={shopee.fixedCostPerOrder}
-          formatNumber={formatNumber}
-          handleUpdateShopeeCostConfig={shopee.handleUpdateShopeeCostConfig}
-          handleAddShopeeCostItem={shopee.handleAddShopeeCostItem}
-          handleUpdateShopeeCostItem={shopee.handleUpdateShopeeCostItem}
-          handleRemoveShopeeCostItem={shopee.handleRemoveShopeeCostItem}
-        />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 h-full overflow-auto">
+          <CostsTab
+            shopeeCosts={shopeeCosts}
+            shopeeInventoryOut={shopeeInventoryOut}
+            totalFixedCosts={shopee.totalFixedCosts}
+            totalVariableCosts={shopee.totalVariableCosts}
+            fixedCostPerOrder={shopee.fixedCostPerOrder}
+            formatNumber={formatNumber}
+            handleUpdateShopeeCostConfig={shopee.handleUpdateShopeeCostConfig}
+            handleAddShopeeCostItem={shopee.handleAddShopeeCostItem}
+            handleUpdateShopeeCostItem={shopee.handleUpdateShopeeCostItem}
+            handleRemoveShopeeCostItem={shopee.handleRemoveShopeeCostItem}
+          />
+        </div>
       )}
 
       {isShopee && activeSubTab === 'inventory_in' && (
-        <InventoryInTab shopeeInventoryIn={shopeeInventoryIn} formatNumber={formatNumber} />
+        <InventoryInTab shopeeInventoryIn={shopeeInventoryIn} shopeeSourceData={shopeeSourceData} suppliers={suppliers} formatNumber={formatNumber} onUpdate={onUpdateShopeeInventoryIn} onUpdateSourceData={onUpdateShopeeSource} onFormToggle={onInventoryInFormToggle} />
       )}
 
       {isShopee && activeSubTab === 'inventory_out' && (
@@ -438,6 +417,9 @@ const RevenueManager: React.FC<Props> = ({
           dynamicTitle={dynamicTitle}
           shopeeTotals={shopee.shopeeTotals}
           onUpdateShopeeCosts={onUpdateShopeeCosts}
+          filterPlatforms={inventoryOutFilterPlatforms}
+          filterStatuses={inventoryOutFilterStatuses}
+          filterShippingUnits={inventoryOutFilterShippingUnits}
         />
       )}
 

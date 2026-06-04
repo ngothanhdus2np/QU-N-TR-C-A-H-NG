@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
 import type { AppData, DiagnosisRange } from '../../types';
 import { calculateTimeContext } from '../../src/lib';
+import { AiInsightPanel } from '../shared';
+import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
 
 interface Props {
   data: AppData;
@@ -45,38 +47,50 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
 
   const [startDate, setStartDate] = useState(firstOfMonth);
   const [endDate, setEndDate] = useState(today);
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
   const [groupTab, setGroupTab] = useState<SpeedTab>('fast');
   const [groupMetric, setGroupMetric] = useState<GroupMetric>('qty');
   const [productTab, setProductTab] = useState<SpeedTab>('fast');
   const [productMetric, setProductMetric] = useState<GroupMetric>('qty');
 
-  // --- Compute from productGroupRevenue ---
   const groupStats = useMemo(() => {
-    const recs = (data.productGroupRevenue || []).filter(
-      r => r.date >= startDate && r.date <= endDate
-    );
-    const map = new Map<
-      string,
-      { name: string; qty: number; retQty: number; revenue: number; profit: number }
-    >();
-    recs.forEach(r => {
-      const prev = map.get(r.groupId) ?? {
-        name: r.groupName,
-        qty: 0,
-        retQty: 0,
-        revenue: 0,
-        profit: 0,
-      };
-      map.set(r.groupId, {
-        name: r.groupName,
-        qty: prev.qty + (r.quantity ?? 0),
-        retQty: prev.retQty + (r.returnsQuantity ?? 0),
-        revenue: prev.revenue + (r.netRevenue ?? r.amount),
-        profit: prev.profit + ((r.netRevenue ?? r.amount) - (r.cogs ?? 0)),
+    const productMap = new Map((data.posProducts || []).map(p => [p.id, p]));
+
+    const splitPath = (s: string) =>
+      String(s).split(/\s*(?:>>|>|\/)\s*/g).map(p => p.trim()).filter(Boolean);
+    const getGroupName = (catPath: string) => {
+      const parts = splitPath(catPath);
+      return parts.length > 0 ? parts[0] : 'Chưa phân loại';
+    };
+
+    const map = new Map<string, { name: string; qty: number; retQty: number; revenue: number; profit: number }>();
+
+    (data.posOrders || []).forEach(o => {
+      if (o.date < startDate || o.date > endDate) return;
+      o.items.forEach(item => {
+        const prod = productMap.get(item.productId);
+        const groupName = getGroupName(prod?.categoryPath || prod?.categoryId || '');
+        const importPrice = prod?.importPrice ?? 0;
+        const gp = (item.price - importPrice) * item.quantity - item.discount;
+        const prev = map.get(groupName) ?? { name: groupName, qty: 0, retQty: 0, revenue: 0, profit: 0 };
+        if (o.isReturn) {
+          map.set(groupName, { ...prev, retQty: prev.retQty + item.quantity });
+        } else {
+          map.set(groupName, {
+            name: groupName,
+            qty: prev.qty + item.quantity,
+            retQty: prev.retQty,
+            revenue: prev.revenue + item.total,
+            profit: prev.profit + gp,
+          });
+        }
       });
     });
+
     return Array.from(map.values());
-  }, [data.productGroupRevenue, startDate, endDate]);
+  }, [data.posOrders, data.posProducts, startDate, endDate]);
 
   // --- Compute from posOrders ---
   const { productStats, cards, dailyRevenue } = useMemo(() => {
@@ -195,6 +209,36 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
     },
   ];
 
+  const handleAiRun = async () => {
+    const contextData = {
+      period: `${startDate} đến ${endDate}`,
+      uniqueSkus: cards.uniqueSkus,
+      totalQty: cards.totalQty,
+      topFastGroups: [...groupStats].sort((a, b) => b.qty - a.qty).slice(0, 5).map(g => ({ name: g.name, qty: g.qty, revenue: g.revenue })),
+      topSlowGroups: [...groupStats].sort((a, b) => a.qty - b.qty).slice(0, 5).map(g => ({ name: g.name, qty: g.qty, revenue: g.revenue })),
+      topFastProducts: [...productStats].sort((a, b) => b.soldQty - a.soldQty).slice(0, 5).map(p => ({ name: p.name, soldQty: p.soldQty, revenue: p.revenue })),
+    };
+    const hash = hashData(contextData);
+    const cached = getCachedAiResult('goods-overview', hash);
+    if (cached) { setAiResult(cached); setFromCache(true); return; }
+    setAiLoading(true); setFromCache(false);
+    try {
+      const res = await fetch('/api/ai/goods-overview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contextData),
+      });
+      const json = await res.json();
+      const result = json.result || json.error || 'Không có kết quả';
+      setAiResult(result);
+      setCachedAiResult('goods-overview', hash, result);
+    } catch {
+      setAiResult('Lỗi kết nối đến AI.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
       {/* Title bar */}
@@ -205,14 +249,14 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
             type="date"
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
-            className="text-[13px] border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
           <span className="text-slate-400 text-sm">-</span>
           <input
             type="date"
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
-            className="text-[13px] border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>
       </div>
@@ -225,7 +269,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
               key={card.label}
               className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 pt-4 pb-2"
             >
-              <p className="text-[11px] text-slate-500 mb-1">{card.label}</p>
+              <p className="text-xs text-slate-500 mb-1">{card.label}</p>
               <p className="text-2xl font-bold text-slate-800">{card.value}</p>
               {card.sparkValues.length > 1 && (
                 <MiniSparkline values={card.sparkValues} color={card.color} />
@@ -237,7 +281,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
         {/* Top nhóm hàng */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-            <span className="text-sm font-semibold text-slate-700">Top 10% nhóm hàng</span>
+            <span className="text-sm font-semibold text-slate-700">Top 10 nhóm hàng</span>
           </div>
 
           <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-50">
@@ -245,8 +289,8 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
               <button
                 key={t}
                 onClick={() => setGroupTab(t)}
-                className={`px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
-                  groupTab === t ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  groupTab === t ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 {t === 'fast' ? 'Bán chạy' : 'Bán chậm'}
@@ -257,9 +301,9 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
                 <button
                   key={m.id}
                   onClick={() => setGroupMetric(m.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
                     groupMetric === m.id
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-indigo-600 text-white'
                       : 'text-slate-500 border border-slate-200 hover:bg-slate-50'
                   }`}
                 >
@@ -272,19 +316,19 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-slate-500">
                   Tên nhóm hàng
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Số lượng bán
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Số lượng trả
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Doanh thu thuần
                 </th>
-                <th className="text-right px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-slate-500">
                   Lợi nhuận gộp
                 </th>
               </tr>
@@ -302,17 +346,17 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
                     key={i}
                     className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-5 py-3 text-[13px] text-slate-700 font-medium">{g.name}</td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 font-medium">{g.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700 text-right">
                       {g.qty.toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-500 text-right">
+                    <td className="px-4 py-3 text-sm text-slate-500 text-right">
                       {g.retQty.toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-4 py-3 text-sm text-slate-700 text-right">
                       {fmt(g.revenue)}
                     </td>
-                    <td className="px-5 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 text-right">
                       {fmt(g.profit)}
                     </td>
                   </tr>
@@ -322,10 +366,12 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
           </table>
         </div>
 
+        <AiInsightPanel isLoading={aiLoading} result={aiResult} onRun={handleAiRun} fromCache={fromCache} />
+
         {/* Top hàng hóa */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-            <span className="text-sm font-semibold text-slate-700">Top 10% hàng hóa</span>
+            <span className="text-sm font-semibold text-slate-700">Top 10 hàng hóa</span>
           </div>
 
           <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-50">
@@ -333,8 +379,8 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
               <button
                 key={t}
                 onClick={() => setProductTab(t)}
-                className={`px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
-                  productTab === t ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  productTab === t ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 {t === 'fast' ? 'Bán chạy' : 'Bán chậm'}
@@ -345,9 +391,9 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
                 <button
                   key={m.id}
                   onClick={() => setProductMetric(m.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
                     productMetric === m.id
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-indigo-600 text-white'
                       : 'text-slate-500 border border-slate-200 hover:bg-slate-50'
                   }`}
                 >
@@ -360,19 +406,19 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-slate-500">
                   Tên hàng
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Số lượng bán
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Số lượng trả
                 </th>
-                <th className="text-right px-4 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">
                   Doanh thu thuần
                 </th>
-                <th className="text-right px-5 py-2.5 text-[12px] font-medium text-slate-500">
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-slate-500">
                   Lợi nhuận gộp
                 </th>
               </tr>
@@ -390,17 +436,17 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
                     key={i}
                     className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-5 py-3 text-[13px] text-slate-700 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700 text-right">
                       {p.soldQty.toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-500 text-right">
+                    <td className="px-4 py-3 text-sm text-slate-500 text-right">
                       {p.retQty.toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-4 py-3 text-sm text-slate-700 text-right">
                       {fmt(p.revenue)}
                     </td>
-                    <td className="px-5 py-3 text-[13px] text-slate-700 text-right">
+                    <td className="px-5 py-3 text-sm text-slate-700 text-right">
                       {fmt(p.profit)}
                     </td>
                   </tr>

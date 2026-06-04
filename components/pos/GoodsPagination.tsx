@@ -49,7 +49,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           <button
             onClick={() => setCurrentPage(1)}
             disabled={isFirstPage}
-            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Trang đầu"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -57,7 +57,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           <button
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             disabled={isFirstPage}
-            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Trang trước"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -68,7 +68,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={isLastPage}
-            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Trang sau"
           >
             <ChevronRight className="h-4 w-4" />
@@ -76,7 +76,7 @@ export const GoodsPagination: React.FC<GoodsPaginationProps> = ({
           <button
             onClick={() => setCurrentPage(totalPages)}
             disabled={isLastPage}
-            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Trang cuối"
           >
             <ChevronsRight className="h-4 w-4" />

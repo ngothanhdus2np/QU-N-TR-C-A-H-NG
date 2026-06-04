@@ -17,7 +17,7 @@ export default function ProcessOrdersModal({
   onClose,
 }: ProcessOrdersModalProps) {
   return (
-    <div className="fixed inset-0 bg-black/40 z-[200] flex items-center justify-center p-6">
+    <div className="fixed inset-0 bg-black/40 z-modal flex items-center justify-center p-6">
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden"
         style={{ height: '85vh' }}

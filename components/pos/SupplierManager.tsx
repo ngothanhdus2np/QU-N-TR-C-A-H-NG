@@ -4,6 +4,7 @@ import { Truck, Plus, Pencil, Trash2, X, Save, CreditCard, TrendingDown, Chevron
 import { AppDataSurgicalUpdate, Supplier, SupplierDebtRecord } from '../../types';
 import { generateId } from '../../src/lib';
 import { exportToExcel } from '../../services/exportService';
+import { useToast } from '../ui/Toast';
 
 interface Props {
   suppliers: Supplier[];
@@ -22,6 +23,7 @@ const emptyDebt = (supplierId = '', supplierName = ''): Omit<SupplierDebtRecord,
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
 const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSuppliers, onUpdateSurgical }) => {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'list' | 'debt'>('list');
 
   // Supplier form
@@ -76,7 +78,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
   };
 
   const saveSupplier = async () => {
-    if (!supplierForm.name.trim()) return alert('Vui lòng nhập tên nhà cung cấp');
+    if (!supplierForm.name.trim()) { showToast('Vui lòng nhập tên nhà cung cấp', 'warning'); return; }
     const item: Supplier = { ...supplierForm, id: editingSupplierId || generateId() };
     await onUpdateSurgical([{ key: 'suppliers', item }]);
     const updated = editingSupplierId
@@ -102,8 +104,8 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
   };
 
   const saveDebt = async () => {
-    if (!debtForm.supplierId) return alert('Vui lòng chọn nhà cung cấp');
-    if (!debtForm.amount || debtForm.amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
+    if (!debtForm.supplierId) { showToast('Vui lòng chọn nhà cung cấp', 'warning'); return; }
+    if (!debtForm.amount || debtForm.amount <= 0) { showToast('Vui lòng nhập số tiền hợp lệ', 'warning'); return; }
     const item: SupplierDebtRecord = { ...debtForm, id: generateId() };
     await onUpdateSurgical([{ key: 'supplierDebts', item }]);
     setShowDebtForm(false);
@@ -121,7 +123,7 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+          <h2 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
             <Truck className="w-6 h-6 text-indigo-600" /> Nhà Cung Cấp
           </h2>
           <p className="text-sm text-slate-500 mt-1">Quản lý danh sách nhà cung cấp và theo dõi công nợ</p>
@@ -313,10 +315,10 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
       {/* ── Modal: Supplier Form ── */}
       {showSupplierForm && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-slate-800">{editingSupplierId ? 'Sửa NCC' : 'Thêm NCC mới'}</h3>
+              <h3 className="text-lg font-semibold text-slate-800">{editingSupplierId ? 'Sửa NCC' : 'Thêm NCC mới'}</h3>
               <button onClick={() => setShowSupplierForm(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
                 <X className="w-5 h-5 text-slate-400" />
               </button>
@@ -355,10 +357,10 @@ const SupplierManager: React.FC<Props> = ({ suppliers, supplierDebts, onUpdateSu
 
       {/* ── Modal: Debt Form ── */}
       {showDebtForm && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-slate-800">Ghi nhận giao dịch</h3>
+              <h3 className="text-lg font-semibold text-slate-800">Ghi nhận giao dịch</h3>
               <button onClick={() => setShowDebtForm(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
                 <X className="w-5 h-5 text-slate-400" />
               </button>

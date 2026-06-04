@@ -11,12 +11,12 @@ interface POSReceiptModalProps {
 }
 
 const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, onClose, onPrint, onFinish }) => (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-4">
     <div className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-500 flex flex-col max-h-[90vh]">
       <div className="bg-slate-50 p-6 border-b border-slate-200 flex justify-between items-center shrink-0">
         <div>
-          <h3 className="font-black text-lg text-slate-900 uppercase tracking-tight">Hóa đơn thanh toán</h3>
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-[0.2em] mt-1">{order.orderCode} • {new Date(order.date).toLocaleString('vi-VN')}</p>
+          <h3 className="font-semibold text-lg text-slate-900 uppercase tracking-tight">Hóa đơn thanh toán</h3>
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-[0.2em] mt-1">{order.orderCode} • {new Date(order.date).toLocaleString('vi-VN')}</p>
         </div>
         <button onClick={onClose} className="h-10 w-10 flex items-center justify-center hover:bg-white rounded-2xl hover:text-rose-500 transition-all shadow-sm border border-transparent hover:border-slate-100">
           <X className="h-5 w-5" />
@@ -26,7 +26,7 @@ const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, 
       <div className="flex-1 overflow-y-auto p-8 no-scrollbar print-area">
         {/* Receipt Header */}
         <div className="text-center mb-8 border-b-2 border-dashed border-slate-200 pb-6">
-          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">CFO BRAIN PROFESSIONAL</h1>
+          <h1 className="text-2xl font-semibold text-slate-900 uppercase tracking-tighter">CFO BRAIN PROFESSIONAL</h1>
           <p className="text-xs font-normal text-slate-500 mt-2">123 Đường Công Nghệ, Quận 1, TP. HCM</p>
           <p className="text-xs font-normal text-slate-500">Hotline: 1900 1234</p>
         </div>
@@ -47,9 +47,9 @@ const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, 
         <table className="w-full text-xs mb-8">
           <thead className="border-b border-slate-100">
             <tr>
-              <th className="py-2 font-black text-slate-400 uppercase text-left">Mặt hàng</th>
-              <th className="py-2 font-black text-slate-400 uppercase text-center w-12">SL</th>
-              <th className="py-2 font-black text-slate-400 uppercase text-right w-24">Thành tiền</th>
+              <th className="py-2 font-semibold text-slate-400 uppercase text-left">Mặt hàng</th>
+              <th className="py-2 font-semibold text-slate-400 uppercase text-center w-12">SL</th>
+              <th className="py-2 font-semibold text-slate-400 uppercase text-right w-24">Thành tiền</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -57,7 +57,7 @@ const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, 
               <tr key={idx}>
                 <td className="py-3">
                   <div className="font-normal text-slate-800 uppercase">{item.name}</div>
-                  <div className="text-[10px] text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
+                  <div className="text-2xs text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
                 </td>
                 <td className="py-3 text-center font-normal text-slate-800">{item.quantity}</td>
                 <td className="py-3 text-right font-normal text-indigo-600">{item.total.toLocaleString()}đ</td>
@@ -100,21 +100,21 @@ const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, 
 
         {/* Footer Note */}
         <div className="text-center mt-12 mb-4 italic">
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Cảm ơn quý khách và hẹn gặp lại!</p>
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest">Cảm ơn quý khách và hẹn gặp lại!</p>
         </div>
       </div>
 
       <div className="p-8 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-4 shrink-0">
         <button
           onClick={onPrint}
-          className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-4 rounded-[1.5rem] font-normal uppercase text-[10px] tracking-[0.2em] shadow-sm hover:border-indigo-400 hover:text-indigo-600 active:scale-95 transition-all"
+          className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-4 rounded-[1.5rem] font-normal uppercase text-2xs tracking-[0.2em] shadow-sm hover:border-indigo-400 hover:text-indigo-600 active:scale-95 transition-all"
         >
           <Printer className="h-4 w-4" />
           In hóa đơn
         </button>
         <button
           onClick={onFinish}
-          className="bg-slate-950 text-white py-4 rounded-[1.5rem] font-normal uppercase text-[10px] tracking-[0.2em] shadow-2xl shadow-slate-950/20 active:scale-95 transition-all hover:bg-indigo-600"
+          className="bg-slate-950 text-white py-4 rounded-[1.5rem] font-normal uppercase text-2xs tracking-[0.2em] shadow-2xl shadow-slate-950/20 active:scale-95 transition-all hover:bg-indigo-600"
         >
           Hoàn tất
         </button>

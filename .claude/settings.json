@@ -1,7 +1,7 @@
 {
   "env": {
     "MAX_THINKING_TOKENS": "10000",
-    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50"
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
   },
   "permissions": {
     "allow": [
@@ -34,10 +34,19 @@
       "Bash(git checkout *)",
       "Bash(git commit -m ' *)",
       "Bash(lsof -ti:3000,24678)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(grep \"\\\\.tsx$\")",
+      "Bash(curl -s \"https://provinces.open-api.vn/api/p/\")",
+      "Bash(curl -sL \"https://provinces.open-api.vn/api/p/\")",
+      "Bash(node -e \"const l = require\\('./node_modules/lucide-react'\\); console.log\\('Crown:', !!l.Crown, 'Gem:', !!l.Gem, 'Star:', !!l.Star, 'Info:', !!l.Info, 'User:', !!l.User\\)\")",
+      "Read(//Users/apple/Desktop/**)",
+      "Read(//Users/apple/Downloads/**)",
+      "Read(//Users/apple/phucsang app/QU-N-TR-C-A-H-NN/components/pos/**)",
+      "Bash(mkdir -p \"/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/orders/purchase-invoices\")"
     ],
     "additionalDirectories": [
-      "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude"
+      "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/.claude",
+      "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/components/orders"
     ]
   },
   "model": "claude-sonnet-4-6"

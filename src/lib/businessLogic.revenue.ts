@@ -16,7 +16,8 @@ import { isStaffActive } from './businessLogic.payroll';
 export const calculateExecutiveInsights = (data: Partial<AppData>) => {
   const { revenue = [], expenses = [], payroll = [], employees = [], sales = [] } = data;
   const now = new Date();
-  const currentMonthStr = now.toISOString().slice(0, 7);
+  // Dùng local time (sv-SE = YYYY-MM-DD format) để tránh sai múi giờ UTC vs GMT+7
+  const currentMonthStr = now.toLocaleDateString('sv-SE').slice(0, 7);
   const monthRevList = revenue.filter(r => r.date.startsWith(currentMonthStr));
   const currentMonthRev = monthRevList.reduce(
     (sum, r) => sum + (Number(r.netRevenue) || 0) + (Number(r.revenueOther) || 0),
@@ -70,13 +71,23 @@ export const calculateFinancialHealthScore = (data: Partial<AppData>) => {
     0
   );
   const totalGross = revenue.reduce((sum, r) => sum + (Number(r.grossProfit) || 0), 0);
-  const totalPayroll = (payroll || []).reduce(
-    (sum, p) => sum + (Number(p.netPay) || 0),
-    0
-  );
-  const totalOpEx =
-    (expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) +
-    totalPayroll;
+
+  // Tránh double-count: dùng payroll module nếu có, ngược lại dùng ledger salary entries
+  const payrollModuleTotal = (payroll || []).reduce((sum, p) => sum + (Number(p.netPay) || 0), 0);
+  const salaryCategoryKeywords = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
+  // Chuẩn hóa tiếng Việt để so sánh keyword không phụ thuộc dấu
+  const normVNStr = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const isSalaryCategory = (cat: string) => {
+    const normalized = normVNStr(cat);
+    return salaryCategoryKeywords.some(kw => normalized.includes(kw));
+  };
+  const ledgerSalaryTotal = (expenses || []).reduce((sum, e) =>
+    isSalaryCategory(e.category) ? sum + (Number(e.amount) || 0) : sum, 0);
+  const totalPayroll = payrollModuleTotal > 0 ? payrollModuleTotal : ledgerSalaryTotal;
+  // Lọc bỏ salary entries khỏi expenses để tránh cộng hai lần
+  const nonSalaryExpenses = (expenses || []).filter(e => !isSalaryCategory(e.category));
+  const totalOpEx = nonSalaryExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + totalPayroll;
   const netProfit = totalGross - totalOpEx;
   const netMargin = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
   if (netMargin > 20) {
@@ -94,20 +105,7 @@ export const calculateFinancialHealthScore = (data: Partial<AppData>) => {
     score += 10;
     factors.push('Đội ngũ sale chủ động tốt (>50% độ phủ)');
   }
-  const finalizedPayrollTotal =
-    (expenses || [])
-      .filter(e =>
-        [
-          'Lương cơ bản',
-          'Hoa hồng',
-          'Thưởng doanh số',
-          'Lương nhân viên',
-          'Lương & Thưởng',
-          'Thu nhập nhân sự (Biến đổi)',
-        ].includes(e.category)
-      )
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + totalPayroll;
-  const payrollRatio = totalRev > 0 ? (finalizedPayrollTotal / totalRev) * 100 : 0;
+  const payrollRatio = totalRev > 0 ? (totalPayroll / totalRev) * 100 : 0;
   return {
     score: Math.min(Math.max(score, 0), 100),
     factors,
@@ -148,23 +146,16 @@ export const auditFinancials = (data: Partial<AppData>) => {
   const activeStaff = employees.filter(e => isStaffActive(e));
   if (activeStaff.length > 0 && totalOTMinutes > activeStaff.length * 20 * 60)
     leaks.push('🔴 Tỷ lệ tăng ca (OT) cao.');
-  const totalPayroll = (payroll || []).reduce(
-    (sum, p) => sum + (Number(p.netPay) || 0),
-    0
-  );
-  const finalizedPayrollTotal =
-    (expenses || [])
-      .filter(e =>
-        [
-          'Lương cơ bản',
-          'Hoa hồng',
-          'Thưởng doanh số',
-          'Lương nhân viên',
-          'Lương & Thưởng',
-          'Thu nhập nhân sự (Biến đổi)',
-        ].includes(e.category)
-      )
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + totalPayroll;
+  const payrollModuleTotal2 = (payroll || []).reduce((sum, p) => sum + (Number(p.netPay) || 0), 0);
+  const normVNAudit = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const auditSalaryCatKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
+  const auditLedgerSalary = (expenses || []).reduce((sum, e) => {
+    const norm = normVNAudit(e.category);
+    return auditSalaryCatKws.some(kw => norm.includes(kw)) ? sum + (Number(e.amount) || 0) : sum;
+  }, 0);
+  // Tránh double-count: dùng module payroll nếu có, không thì dùng ledger
+  const finalizedPayrollTotal = payrollModuleTotal2 > 0 ? payrollModuleTotal2 : auditLedgerSalary;
   if (totalRevenue > 0 && finalizedPayrollTotal / totalRevenue > 0.4)
     leaks.push('🔴 Quỹ lương hạch toán chiếm tỷ trọng cao.');
   return leaks;
@@ -318,37 +309,26 @@ export const calculateExpenseAnalysis = (
     0
   );
 
-  // Smart Priority for Personnel Costs
-  const salaryKeywords = [
-    'lương',
-    'hoa hồng',
-    'thưởng doanh số',
-    'thưởng nhân viên',
-    'phụ cấp',
-    'tăng ca',
-    'thực nhận',
-  ];
+  // Smart Priority for Personnel Costs — dùng keyword không dấu để tránh miss-match dấu/không dấu
+  const normVNExp = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const salaryKeywords = ['luong', 'hoa hong', 'thuong doanh so', 'thuong nhan vien', 'phu cap', 'tang ca', 'thuc nhan', 'nhan su'];
+  const isSalaryExp = (cat: string) => { const n = normVNExp(cat); return salaryKeywords.some(kw => n.includes(kw)); };
+  const isCogsExp = (cat: string) => { const n = normVNExp(cat); return n.includes('gia von') || n.includes('cogs'); };
 
   // 1. Calculate from Payroll Ledger (Net Pay)
   const payrollNetPayTotal = (payrolls || []).reduce((sum, p) => sum + (Number(p.netPay) || 0), 0);
 
   // 2. Calculate from General Ledger (Salary-related entries)
-  const ledgerSalaryTotal = (expenses || []).reduce((sum, e) => {
-    const catLower = e.category.toLowerCase();
-    if (salaryKeywords.some(kw => catLower.includes(kw))) {
-      return sum + (Number(e.amount) || 0);
-    }
-    return sum;
-  }, 0);
+  const ledgerSalaryTotal = (expenses || []).reduce((sum, e) =>
+    isSalaryExp(e.category) ? sum + (Number(e.amount) || 0) : sum, 0);
 
   // Use Payroll if available, otherwise use Ledger
   const totalPayroll = payrollNetPayTotal > 0 ? payrollNetPayTotal : ledgerSalaryTotal;
 
-  // Filter out salary-related expenses from the general ledger to avoid double counting
-  const filteredExpenses = (expenses || []).filter(e => {
-    const catLower = e.category.toLowerCase();
-    return !salaryKeywords.some(kw => catLower.includes(kw));
-  });
+  // Filter out salary-related AND COGS expenses (giá vốn) from the general ledger to avoid double counting
+  // COGS is tracked separately via revenue.totalCogs, so counting it in OpEx inflates costs
+  const filteredExpenses = (expenses || []).filter(e => !isSalaryExp(e.category) && !isCogsExp(e.category));
 
   const totalOpEx =
     filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + totalPayroll;
@@ -386,8 +366,9 @@ export const calculateExpenseAnalysis = (
   const totalFixedForBreakEven = fixedCosts + depreciationCosts + interestCosts;
   const variableRatio = totalRev > 0 ? (totalCogs + variableCosts) / totalRev : 0;
   const contributionMarginRatio = 1 - variableRatio;
-  const breakEvenRevenue =
-    contributionMarginRatio > 0 ? totalFixedForBreakEven / contributionMarginRatio : 0;
+  // contributionMarginRatio <= 0 = biến phí >= 100% doanh thu → không thể đạt hòa vốn
+  const canBreakEven = contributionMarginRatio > 0;
+  const breakEvenRevenue = canBreakEven ? totalFixedForBreakEven / contributionMarginRatio : 0;
 
   return {
     analysis,
@@ -396,7 +377,8 @@ export const calculateExpenseAnalysis = (
     totalCost: totalOpEx,
     payrollRatio: totalRev > 0 ? (totalPayroll / totalRev) * 100 : 0,
     breakEvenRevenue,
-    safetyMargin: totalRev > 0 ? ((totalRev - breakEvenRevenue) / totalRev) * 100 : 0,
+    canBreakEven,
+    safetyMargin: canBreakEven && totalRev > 0 ? ((totalRev - breakEvenRevenue) / totalRev) * 100 : 0,
   };
 };
 
@@ -548,7 +530,7 @@ export const calculateDailyBreakEven = (
   const dailyBreakEvenRevenue =
     config.grossMarginPercent > 0 ? dailyFixedCost / (config.grossMarginPercent / 100) : 0;
 
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = now.toLocaleDateString('sv-SE');
   const todayRevenue = revenue.find(r => r.date === todayStr);
   const currentRevenue = todayRevenue
     ? (Number(todayRevenue.netRevenue) || 0) + (Number(todayRevenue.revenueOther) || 0)
@@ -630,7 +612,8 @@ export const calculateSeasonalityAnalysis = (
   groupRevenue: ProductGroupRevenue[],
   groups: ProductGroup[]
 ) => {
-  return (groups || []).map(g => {
+  // Bước 1: tính doanh thu tổng và tốc độ tăng trưởng từng nhóm
+  const rows = (groups || []).map(g => {
     const groupRev = groupRevenue.filter(r => r.groupId === g.id || r.groupName === g.name);
     const totalHistorical = groupRev.reduce(
       (sum, r) => sum + (r.netRevenue || r.amount - (r.returnsValue || 0)),
@@ -640,13 +623,46 @@ export const calculateSeasonalityAnalysis = (
     const totalRetQty = groupRev.reduce((sum, r) => sum + (r.returnsQuantity || 0), 0);
     const avgReturnRate = totalQty > 0 ? (totalRetQty / totalQty) * 100 : 0;
 
+    // Tính tăng trưởng: so sánh nửa sau vs nửa đầu lịch sử
+    const sorted = [...groupRev].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const mid = Math.floor(sorted.length / 2);
+    const firstHalf = sorted.slice(0, mid).reduce((s, r) => s + (r.netRevenue || r.amount - (r.returnsValue || 0)), 0);
+    const secondHalf = sorted.slice(mid).reduce((s, r) => s + (r.netRevenue || r.amount - (r.returnsValue || 0)), 0);
+    const growthRate = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf) * 100 : 0;
+
+    return { id: g.id, name: g.name, totalHistorical, avgReturnRate, growthRate };
+  });
+
+  // Bước 2: ABC — tính theo phần trăm tích luỹ doanh thu
+  const totalAllRev = rows.reduce((s, r) => s + r.totalHistorical, 0);
+  const sortedByRev = [...rows].sort((a, b) => b.totalHistorical - a.totalHistorical);
+  let cumulative = 0;
+  const abcMap: Record<string, 'A' | 'B' | 'C'> = {};
+  sortedByRev.forEach(r => {
+    cumulative += r.totalHistorical;
+    const pct = totalAllRev > 0 ? (cumulative / totalAllRev) * 100 : 100;
+    abcMap[r.id] = pct <= 70 ? 'A' : pct <= 90 ? 'B' : 'C';
+  });
+
+  // Bước 3: BCG — thị phần tương đối vs tốc độ tăng trưởng
+  const avgRev = rows.length > 0 ? totalAllRev / rows.length : 0;
+  const avgGrowth = rows.length > 0 ? rows.reduce((s, r) => s + r.growthRate, 0) / rows.length : 0;
+
+  return rows.map(r => {
+    const highShare = r.totalHistorical >= avgRev;
+    const highGrowth = r.growthRate >= avgGrowth;
+    const bcgStatus =
+      highShare && highGrowth ? 'Star' :
+      highShare && !highGrowth ? 'Cash Cow' :
+      !highShare && highGrowth ? 'Question Mark' : 'Dog';
+
     return {
-      id: g.id,
-      name: g.name,
-      totalHistorical,
-      abcClass: 'C',
-      bcgStatus: 'Dog',
-      avgReturnRate,
+      id: r.id,
+      name: r.name,
+      totalHistorical: r.totalHistorical,
+      abcClass: abcMap[r.id] ?? 'C',
+      bcgStatus,
+      avgReturnRate: r.avgReturnRate,
       inventoryExpection: 0,
     };
   });

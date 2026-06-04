@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Calendar,
-  ChevronLeft,
   ChevronRight,
   Download,
   HelpCircle,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import { POSProduct } from '../../types';
 import { exportToExcel } from '../../services/exportService';
+import { FilterDateRange } from '../shared';
 
 type DateFilter = 'this_month' | 'all' | 'custom';
 type WarrantyStatusFilter = 'active' | 'missing' | 'all';
@@ -32,23 +32,24 @@ const formatDate = (value?: string) => {
 
 const normalizeText = (value?: string) => (value || '').toLowerCase().trim();
 
-const isThisMonth = (value?: string) => {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
+const toDateString = (date: Date) => date.toLocaleDateString('sv-SE');
+
+const getThisMonthRange = () => {
   const now = new Date();
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  return {
+    start: toDateString(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end: toDateString(now),
+  };
 };
 
 export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePageProps> = ({
   products,
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [dateFilter, setDateFilter] = React.useState<DateFilter>('this_month');
+  const [purchaseDateRange, setPurchaseDateRange] = React.useState(getThisMonthRange);
   const [warrantyStatus, setWarrantyStatus] = React.useState<WarrantyStatusFilter>('active');
   const [warrantyExpiryFilter, setWarrantyExpiryFilter] = React.useState<DateFilter>('all');
   const [maintenanceFilter, setMaintenanceFilter] = React.useState<MaintenanceFilter>('all');
-  const [isFilterCollapsed, setIsFilterCollapsed] = React.useState(false);
   const [showInfo, setShowInfo] = React.useState(false);
 
   const rows = React.useMemo(() => products.filter(product => !product.isParent), [products]);
@@ -65,7 +66,10 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
 
       const hasWarranty = Boolean(product.warranty?.trim());
       const hasMaintenance = Boolean(product.periodicMaintenance?.trim());
-      const matchesDate = dateFilter === 'all' || dateFilter === 'custom' || isThisMonth(product.createdAt);
+      const createdDate = product.createdAt?.slice(0, 10) || '';
+      const matchesDate =
+        (!purchaseDateRange.start || createdDate >= purchaseDateRange.start) &&
+        (!purchaseDateRange.end || createdDate <= purchaseDateRange.end);
       const matchesWarranty =
         warrantyStatus === 'all' ||
         (warrantyStatus === 'active' && hasWarranty) ||
@@ -78,18 +82,21 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
 
       return matchesSearch && matchesDate && matchesWarranty && matchesMaintenance;
     });
-  }, [dateFilter, maintenanceFilter, rows, searchTerm, warrantyStatus]);
+  }, [maintenanceFilter, purchaseDateRange.end, purchaseDateRange.start, rows, searchTerm, warrantyStatus]);
+
+  const defaultPurchaseRange = React.useMemo(() => getThisMonthRange(), []);
 
   const hasActiveFilters =
     searchTerm ||
-    dateFilter !== 'this_month' ||
+    purchaseDateRange.start !== defaultPurchaseRange.start ||
+    purchaseDateRange.end !== defaultPurchaseRange.end ||
     warrantyStatus !== 'active' ||
     warrantyExpiryFilter !== 'all' ||
     maintenanceFilter !== 'all';
 
   const resetFilters = () => {
     setSearchTerm('');
-    setDateFilter('this_month');
+    setPurchaseDateRange(defaultPurchaseRange);
     setWarrantyStatus('active');
     setWarrantyExpiryFilter('all');
     setMaintenanceFilter('all');
@@ -142,72 +149,37 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">Bảo hành, bảo trì</h1>
-          <p className="text-sm text-slate-500">
-            Theo dõi hàng hóa có thông tin bảo hành và lịch bảo trì định kỳ.
-          </p>
+    <div className="flex h-full min-h-0 gap-4">
+      <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="flex min-h-[58px] flex-col justify-center border-b border-slate-100 px-4">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-900">
+            Bảo hành, bảo trì
+          </h2>
+          <p className="text-2xs uppercase tracking-wide text-slate-400">Hàng hóa</p>
         </div>
-        <div className="flex items-center gap-2">
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:border-indigo-200 hover:text-indigo-600"
-            >
-              Xóa lọc
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={exportRows}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-600"
-          >
-            <Download className="h-4 w-4" />
-            Xuất file
-          </button>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 gap-4">
-        {isFilterCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setIsFilterCollapsed(false)}
-            className="flex h-full w-10 shrink-0 items-start justify-center rounded-2xl border border-slate-100 bg-white pt-4 text-slate-400 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-600"
-            title="Hiện bộ lọc"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        ) : (
-          <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="flex min-h-[52px] items-center justify-between border-b border-slate-100 px-4">
-              <h2 className="text-sm font-bold text-slate-900">Bộ lọc</h2>
-              <button
-                type="button"
-                onClick={() => setIsFilterCollapsed(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition-colors hover:border-indigo-200 hover:text-indigo-600"
-                title="Ẩn bộ lọc"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="border-b border-slate-100 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900">Bộ lọc</h3>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-2xs font-bold uppercase tracking-wide text-indigo-600 hover:text-indigo-700"
+                >
+                  Xóa lọc
+                </button>
+              )}
             </div>
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
+          </div>
+          <div className="space-y-6 p-4">
               <section className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900">Thời gian mua hàng</h3>
-                <RadioRow
-                  checked={dateFilter === 'this_month'}
-                  label="Tháng này"
-                  rightIcon={<ChevronRight className="h-4 w-4 text-slate-400" />}
-                  onClick={() => setDateFilter('this_month')}
-                />
-                <RadioRow
-                  checked={dateFilter === 'custom'}
-                  label="Tùy chỉnh"
-                  rightIcon={<Calendar className="h-4 w-4 text-slate-400" />}
-                  onClick={() => setDateFilter('custom')}
+                <FilterDateRange
+                  startDate={purchaseDateRange.start}
+                  endDate={purchaseDateRange.end}
+                  onStartDateChange={date => setPurchaseDateRange(prev => ({ ...prev, start: date }))}
+                  onEndDateChange={date => setPurchaseDateRange(prev => ({ ...prev, end: date }))}
                 />
               </section>
 
@@ -265,9 +237,17 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
                   Có lịch bảo trì
                 </button>
               </section>
-            </div>
-          </aside>
-        )}
+            <button
+              type="button"
+              onClick={exportRows}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-600"
+            >
+              <Download className="h-4 w-4" />
+              Xuất file
+            </button>
+          </div>
+        </div>
+      </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
           <div className="flex min-h-[60px] shrink-0 flex-wrap items-center gap-3 border-b border-slate-100 px-4">
@@ -367,7 +347,7 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
                 <button
                   type="button"
                   onClick={() => {
-                    setDateFilter('all');
+                    setPurchaseDateRange({ start: '', end: '' });
                     setWarrantyStatus('all');
                   }}
                   className="mt-2 text-sm text-indigo-600 hover:text-indigo-700"
@@ -378,10 +358,9 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
             )}
           </div>
         </main>
-      </div>
 
       {showInfo && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 className="text-lg font-bold text-slate-900">Bảo hành, bảo trì</h2>

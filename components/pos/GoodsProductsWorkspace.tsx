@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { POSProduct, ProductGroup } from '../../types';
 import { GoodsColumnSettings } from './GoodsColumnSettings';
 import { GoodsFilterSidebar } from './GoodsFilterSidebar';
 import { GoodsImportExport, ImportStatus } from './GoodsImportExport';
@@ -38,13 +38,15 @@ interface GoodsProductsWorkspaceProps {
   setFilterLocation: React.Dispatch<React.SetStateAction<string>>;
   filterStock: FilterStock;
   setFilterStock: React.Dispatch<React.SetStateAction<FilterStock>>;
-  filterSupplier: string;
-  setFilterSupplier: React.Dispatch<React.SetStateAction<string>>;
+  filterSupplier: string[];
+  setFilterSupplier: React.Dispatch<React.SetStateAction<string[]>>;
+  productGroups: ProductGroup[];
   uniqueCategories: string[];
   categoryCounts: Record<string, number>;
   attrValuesByName: Record<string, { values: string[]; counts: Record<string, number> }>;
   uniqueLocations: string[];
   uniqueBrands: string[];
+  uniqueSuppliers: string[];
   lowStockCount: number;
   selectedCount: number;
   onClearSelection: () => void;
@@ -52,7 +54,12 @@ interface GoodsProductsWorkspaceProps {
   onPrintSelectedLabels: () => void;
   onPurchaseSelected: () => void;
   onBulkDelete: () => void;
+  onBulkStopBusiness: () => void;
+  onBulkChangeGroup: () => void;
+  onGoToWarranty: () => void;
   onResetPage: () => void;
+  viewMode: 'table' | 'grid';
+  onViewModeChange: (mode: 'table' | 'grid') => void;
 }
 
 export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
@@ -85,11 +92,13 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   setFilterStock,
   filterSupplier,
   setFilterSupplier,
+  productGroups,
   uniqueCategories,
   categoryCounts,
   attrValuesByName,
   uniqueLocations,
   uniqueBrands,
+  uniqueSuppliers,
   lowStockCount,
   selectedCount,
   onClearSelection,
@@ -97,7 +106,12 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   onPrintSelectedLabels,
   onPurchaseSelected,
   onBulkDelete,
+  onBulkStopBusiness,
+  onBulkChangeGroup,
+  onGoToWarranty,
   onResetPage,
+  viewMode,
+  onViewModeChange,
 }) => (
   <div className="flex flex-1 min-h-0 gap-4">
     <GoodsFilterSidebar
@@ -120,15 +134,17 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         setFilterStock('all');
         setFilterLocation('');
         setFilterAttrs([]);
-        setFilterSupplier('');
+        setFilterSupplier([]);
         onResetPage();
       }}
       onResetPage={onResetPage}
+      productGroups={productGroups}
       uniqueCategories={uniqueCategories}
       categoryCounts={categoryCounts}
       attrValuesByName={attrValuesByName}
       uniqueLocations={uniqueLocations}
       uniqueBrands={uniqueBrands}
+      uniqueSuppliers={uniqueSuppliers}
       lowStockCount={lowStockCount}
     />
 
@@ -177,7 +193,12 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         onPrintSelectedLabels={onPrintSelectedLabels}
         onPurchaseSelected={onPurchaseSelected}
         onBulkDelete={onBulkDelete}
+        onBulkStopBusiness={onBulkStopBusiness}
+        onBulkChangeGroup={onBulkChangeGroup}
+        onGoToWarranty={onGoToWarranty}
         onResetPage={onResetPage}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
       />
 
       {children}

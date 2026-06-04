@@ -38,12 +38,12 @@ const POSBillDiscountPopup: React.FC<POSBillDiscountPopupProps> = ({
   return (
     <div
       id="bill-discount-popup"
-      className="fixed z-[200] bg-white rounded-2xl shadow-2xl border border-slate-200 w-[300px] p-4 animate-in fade-in zoom-in-95 duration-150"
+      className="fixed z-modal bg-white rounded-2xl shadow-2xl border border-slate-200 w-[300px] p-4 animate-in fade-in zoom-in-95 duration-150"
       style={{ top, left }}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">Chiết khấu hóa đơn</span>
-        <button onMouseDown={onClose} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-all">
+        <button onMouseDown={onClose} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -55,11 +55,11 @@ const POSBillDiscountPopup: React.FC<POSBillDiscountPopupProps> = ({
         <div className="flex bg-slate-100 rounded-xl p-0.5">
           <button
             onMouseDown={(e) => { e.preventDefault(); onUpdate({ discountType: 'fixed' }); }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-all ${discountType === 'fixed' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-colors ${discountType === 'fixed' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
           >VNĐ</button>
           <button
             onMouseDown={(e) => { e.preventDefault(); onUpdate({ discountType: 'percent' }); }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-all ${discountType === 'percent' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-normal transition-colors ${discountType === 'percent' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
           >%</button>
         </div>
         <input
@@ -79,7 +79,7 @@ const POSBillDiscountPopup: React.FC<POSBillDiscountPopupProps> = ({
         </div>
         <button
           onMouseDown={onClose}
-          className="w-full bg-slate-900 hover:bg-indigo-600 text-white py-2.5 rounded-xl text-xs font-normal uppercase tracking-wider transition-all"
+          className="w-full bg-slate-900 hover:bg-indigo-600 text-white py-2.5 rounded-xl text-xs font-normal uppercase tracking-wider transition-colors"
         >Xác nhận</button>
       </div>
     </div>

@@ -1,18 +1,38 @@
 import React, { useRef, useState } from 'react';
+import { appDataCache } from '../../../services/appDataCache';
 import {
   Upload,
   Trash2,
   Package,
   BarChart3,
+  Users,
+  Truck,
   CheckCircle2,
   XCircle,
   Loader2,
   AlertTriangle,
   ChevronRight,
+  History,
+  RefreshCw,
+  FileText,
 } from 'lucide-react';
 
 type ImportStatus = { status: 'running' | 'done' | 'error'; message: string };
 type DeleteState = 'idle' | 'confirm' | 'running' | 'done';
+
+const readImportResponse = async (res: Response) => {
+  const text = await res.text();
+  if (!text.trim()) {
+    if (!res.ok) throw new Error(`Import thất bại (${res.status}). Server không trả nội dung lỗi.`);
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (!res.ok) throw new Error(`Import thất bại (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(`Server trả dữ liệu không đúng định dạng JSON: ${text.slice(0, 300)}`);
+  }
+};
 
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -63,14 +83,23 @@ const StatusBanner: React.FC<{ status: ImportStatus; onClose: () => void }> = ({
   </div>
 );
 
-const MigrationTab: React.FC = () => {
+const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const productsFileRef = useRef<HTMLInputElement>(null);
   const revenueFileRef = useRef<HTMLInputElement>(null);
+  const customersFileRef = useRef<HTMLInputElement>(null);
+  const purchaseDetailsFileRef = useRef<HTMLInputElement>(null);
 
   const [productsStatus, setProductsStatus] = useState<ImportStatus | null>(null);
   const [revenueStatus, setRevenueStatus] = useState<ImportStatus | null>(null);
+  const [customersStatus, setCustomersStatus] = useState<ImportStatus | null>(null);
+  const [purchaseDetailsStatus, setPurchaseDetailsStatus] = useState<ImportStatus | null>(null);
   const [deleteProductsState, setDeleteProductsState] = useState<DeleteState>('idle');
   const [deleteRevenueState, setDeleteRevenueState] = useState<DeleteState>('idle');
+  const [backfillStatus, setBackfillStatus] = useState<ImportStatus | null>(null);
+  const [recalcRevenueStatus, setRecalcRevenueStatus] = useState<ImportStatus | null>(null);
+  const [syncCustomersStatus, setSyncCustomersStatus] = useState<ImportStatus | null>(null);
+  const [invoicesStatus, setInvoicesStatus] = useState<ImportStatus | null>(null);
+  const invoicesFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,7 +113,7 @@ const MigrationTab: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64 }),
       });
-      const data = await res.json();
+      const data = await readImportResponse(res);
       if (!res.ok) throw new Error(data.error || 'Import thất bại');
       setProductsStatus({
         status: 'done',
@@ -113,14 +142,84 @@ const MigrationTab: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64 }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+      const data = await readImportResponse(res);
+      if (!res.ok) {
+        const debugInfo = data.debug ? ` [debug: col6="${data.debug.sample_col6}", col8="${data.debug.sample_col8}" (${data.debug.sample_col8_type})]` : '';
+        throw new Error((data.error || 'Import thất bại') + debugInfo);
+      }
+      await appDataCache.clearDataKeys(['revenue', 'posOrders', 'productGroups', 'productGroupRevenue']);
       setRevenueStatus({
         status: 'done',
-        message: `Đã import ${data.days} ngày doanh thu (${data.orders} đơn hàng) và ${data.groups} nhóm hàng. Tải lại trang để thấy dữ liệu mới.`,
+        message: `Đã import ${data.days} ngày, ${data.ordersUpserted ?? data.orders} đơn hàng, ${data.groups} nhóm hàng.`,
       });
+      onRefresh?.();
     } catch (err) {
       setRevenueStatus({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Lỗi không xác định',
+      });
+    }
+  };
+
+  const handleImportCustomers = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setCustomersStatus({
+      status: 'running',
+      message: `Đang import khách hàng từ "${file.name}"...`,
+    });
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const res = await fetch('/api/import/kiotviet-customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64 }),
+      });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+      await appDataCache.clearDataKeys(['posCustomers', 'posOrders']);
+      setCustomersStatus({
+        status: 'done',
+        message: `Đã import ${data.customers} khách hàng, gắn ${data.matchedOrders}/${data.orderLinks} hóa đơn. Bỏ qua ${data.guestRows} dòng Khách lẻ.`,
+      });
+      onRefresh?.();
+    } catch (err) {
+      setCustomersStatus({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Lỗi không xác định',
+      });
+    }
+  };
+
+  const handleImportPurchaseDetails = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setPurchaseDetailsStatus({
+      status: 'running',
+      message: `Đang import phiếu nhập chi tiết từ "${file.name}"...`,
+    });
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const res = await fetch('/api/import/kiotviet-purchase-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64 }),
+      });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+      await appDataCache.clearDataKeys(['suppliers', 'supplierDebts', 'inventoryTransactions']);
+      const skipped = data.skippedByStatus ? Object.entries(data.skippedByStatus)
+        .map(([status, count]) => `${status}: ${count}`)
+        .join(', ') : '';
+      setPurchaseDetailsStatus({
+        status: 'done',
+        message: `Đã import ${data.purchases} phiếu nhập, ${data.items} dòng sản phẩm, ${data.suppliers} nhà cung cấp. Không cộng tồn kho tự động.${skipped ? ` Bỏ qua ${skipped}.` : ''}`,
+      });
+      onRefresh?.();
+    } catch (err) {
+      setPurchaseDetailsStatus({
         status: 'error',
         message: err instanceof Error ? err.message : 'Lỗi không xác định',
       });
@@ -137,11 +236,88 @@ const MigrationTab: React.FC = () => {
       try {
         const res = await fetch('/api/admin/reset-products', { method: 'DELETE' });
         if (!res.ok) throw new Error();
+        await appDataCache.clearDataKeys(['posProducts', 'inventoryTransactions']);
         setDeleteProductsState('done');
-        setTimeout(() => setDeleteProductsState('idle'), 3000);
+        onRefresh?.();
       } catch {
         setDeleteProductsState('idle');
       }
+    }
+  };
+
+  const handleImportInvoices = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setInvoicesStatus({ status: 'running', message: `Đang xử lý "${file.name}"...` });
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const res = await fetch('/api/import/kiotviet-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64 }),
+      });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+      setInvoicesStatus({
+        status: 'done',
+        message: `Hoàn tất: ${data.customers} khách hàng, ${data.orders} đơn hàng, ${data.months} tháng doanh thu. Tải lại trang để thấy dữ liệu.`,
+      });
+      onRefresh?.();
+    } catch (err) {
+      setInvoicesStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
+    }
+  };
+
+  const handleSyncCustomersFromOrders = async () => {
+    setSyncCustomersStatus({ status: 'running', message: 'Đang tính toán từ đơn hàng...' });
+    try {
+      const res = await fetch('/api/customers/sync-from-orders', { method: 'POST' });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Thất bại');
+      setSyncCustomersStatus({
+        status: 'done',
+        message: `Hoàn tất: tạo mới ${data.createdCount ?? 0} khách, cập nhật số liệu ${data.updatedCount ?? 0} khách từ lịch sử đơn hàng.`,
+      });
+      onRefresh?.();
+    } catch (err) {
+      setSyncCustomersStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
+    }
+  };
+
+  const handleRecalcRevenueFromOrders = async () => {
+    const month = new Date().toLocaleDateString('sv-SE').slice(0, 7);
+    setRecalcRevenueStatus({ status: 'running', message: `Đang tính lại doanh thu tháng ${month} từ đơn hàng...` });
+    try {
+      const res = await fetch('/api/analytics/recalculate-revenue-from-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+      });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Thất bại');
+      setRecalcRevenueStatus({
+        status: 'done',
+        message: `Đã cập nhật doanh thu tháng ${month}: doanh thu thuần ${(data.net_revenue / 1e6).toFixed(1)}M, tổng tiền hàng ${(data.total_gross_revenue / 1e6).toFixed(1)}M.`,
+      });
+      onRefresh?.();
+    } catch (err) {
+      setRecalcRevenueStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
+    }
+  };
+
+  const handleBackfillCostHistory = async () => {
+    setBackfillStatus({ status: 'running', message: 'Đang đọc lịch sử phiếu nhập hàng...' });
+    try {
+      const res = await fetch('/api/analytics/backfill-cost-history', { method: 'POST' });
+      const data = await readImportResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Thất bại');
+      setBackfillStatus({
+        status: 'done',
+        message: `Đã ghi ${data.written} mục giá nhập từ ${data.transactions} phiếu nhập hàng.`,
+      });
+    } catch (err) {
+      setBackfillStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
     }
   };
 
@@ -155,8 +331,9 @@ const MigrationTab: React.FC = () => {
       try {
         const res = await fetch('/api/admin/reset-revenue', { method: 'DELETE' });
         if (!res.ok) throw new Error();
+        await appDataCache.clearDataKeys(['revenue', 'posOrders', 'productGroups', 'productGroupRevenue']);
         setDeleteRevenueState('done');
-        setTimeout(() => setDeleteRevenueState('idle'), 3000);
+        onRefresh?.();
       } catch {
         setDeleteRevenueState('idle');
       }
@@ -167,7 +344,7 @@ const MigrationTab: React.FC = () => {
     <div className="space-y-6">
       {/* Hướng dẫn quy trình */}
       <section id="migration-guide" className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-4 text-sm font-black uppercase tracking-wide text-slate-800">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-800">
           Quy trình chuyển dữ liệu từ KiotViet
         </h3>
         <ol className="space-y-3">
@@ -187,13 +364,23 @@ const MigrationTab: React.FC = () => {
               label: 'Import doanh thu',
               desc: 'Xuất file "Báo cáo bán hàng theo lợi nhuận" từ KiotViet → Phân tích → Bán hàng.',
             },
+            {
+              step: '4',
+              label: 'Import khách hàng',
+              desc: 'Xuất file "Báo cáo bán hàng theo khách" để tạo CRM và gắn khách vào hóa đơn.',
+            },
+            {
+              step: '5',
+              label: 'Import phiếu nhập chi tiết',
+              desc: 'Xuất file "Danh sách chi tiết nhập hàng" để tạo nhà cung cấp và chi tiết từng phiếu nhập.',
+            },
           ].map(({ step, label, desc }) => (
             <li key={step} className="flex items-start gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white">
                 {step}
               </span>
               <div>
-                <p className="text-sm font-black text-slate-800">{label}</p>
+                <p className="text-sm font-semibold text-slate-800">{label}</p>
                 <p className="text-xs font-normal text-slate-500">{desc}</p>
               </div>
             </li>
@@ -203,7 +390,7 @@ const MigrationTab: React.FC = () => {
 
       {/* Import dữ liệu */}
       <section id="migration-import" className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-4 text-sm font-black uppercase tracking-wide text-slate-800">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-800">
           Import dữ liệu
         </h3>
         <div className="space-y-4">
@@ -215,7 +402,7 @@ const MigrationTab: React.FC = () => {
                   <Package className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-black text-slate-800">Hàng hóa</p>
+                  <p className="text-sm font-semibold text-slate-800">Hàng hóa</p>
                   <p className="text-xs font-normal text-slate-500">
                     File "Danh sách hàng hóa" xuất từ KiotViet (.xlsx)
                   </p>
@@ -225,7 +412,7 @@ const MigrationTab: React.FC = () => {
                 type="button"
                 onClick={() => productsFileRef.current?.click()}
                 disabled={productsStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-[10px] font-normal uppercase tracking-wide text-indigo-600 shadow-sm transition-all hover:bg-indigo-50 disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Chọn file
@@ -251,7 +438,7 @@ const MigrationTab: React.FC = () => {
                   <BarChart3 className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-black text-slate-800">Doanh thu</p>
+                  <p className="text-sm font-semibold text-slate-800">Doanh thu</p>
                   <p className="text-xs font-normal text-slate-500">
                     File "Báo cáo bán hàng theo lợi nhuận" xuất từ KiotViet (.xlsx)
                   </p>
@@ -261,7 +448,7 @@ const MigrationTab: React.FC = () => {
                 type="button"
                 onClick={() => revenueFileRef.current?.click()}
                 disabled={revenueStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[10px] font-normal uppercase tracking-wide text-emerald-600 shadow-sm transition-all hover:bg-emerald-50 disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-emerald-600 shadow-sm transition-colors hover:bg-emerald-50 disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Chọn file
@@ -278,6 +465,117 @@ const MigrationTab: React.FC = () => {
               onChange={handleImportRevenue}
             />
           </div>
+
+          {/* Import hoá đơn — tự động tạo khách + đơn hàng + doanh thu */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Hoá đơn <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-2xs font-normal text-violet-600">Khuyên dùng</span></p>
+                  <p className="text-xs font-normal text-slate-500">
+                    File "Danh sách chi tiết hoá đơn" — tự động tạo khách, đơn hàng &amp; doanh thu
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => invoicesFileRef.current?.click()}
+                disabled={invoicesStatus?.status === 'running'}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-violet-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-violet-600 shadow-sm transition-colors hover:bg-violet-50 disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Chọn file
+              </button>
+            </div>
+            {invoicesStatus && (
+              <StatusBanner status={invoicesStatus} onClose={() => setInvoicesStatus(null)} />
+            )}
+            <input
+              ref={invoicesFileRef}
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls"
+              onChange={handleImportInvoices}
+            />
+          </div>
+
+          {/* Import khách hàng */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Khách hàng</p>
+                  <p className="text-xs font-normal text-slate-500">
+                    File "Báo cáo bán hàng theo khách" xuất từ KiotViet (.xlsx)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => customersFileRef.current?.click()}
+                disabled={customersStatus?.status === 'running'}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-sky-600 shadow-sm transition-colors hover:bg-sky-50 disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Chọn file
+              </button>
+            </div>
+            {customersStatus && (
+              <StatusBanner status={customersStatus} onClose={() => setCustomersStatus(null)} />
+            )}
+            <input
+              ref={customersFileRef}
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls"
+              onChange={handleImportCustomers}
+            />
+          </div>
+
+          {/* Import phiếu nhập chi tiết */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+                  <Truck className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Phiếu nhập chi tiết</p>
+                  <p className="text-xs font-normal text-slate-500">
+                    File "Danh sách chi tiết nhập hàng" xuất từ KiotViet (.xlsx)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => purchaseDetailsFileRef.current?.click()}
+                disabled={purchaseDetailsStatus?.status === 'running'}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-amber-600 shadow-sm transition-colors hover:bg-amber-50 disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Chọn file
+              </button>
+            </div>
+            {purchaseDetailsStatus && (
+              <StatusBanner
+                status={purchaseDetailsStatus}
+                onClose={() => setPurchaseDetailsStatus(null)}
+              />
+            )}
+            <input
+              ref={purchaseDetailsFileRef}
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls"
+              onChange={handleImportPurchaseDetails}
+            />
+          </div>
         </div>
       </section>
 
@@ -285,7 +583,7 @@ const MigrationTab: React.FC = () => {
       <section id="migration-delete" className="rounded-2xl border border-rose-100 bg-white p-6">
         <div className="mb-4 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-rose-500" />
-          <h3 className="text-sm font-black uppercase tracking-wide text-rose-700">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-rose-700">
             Xóa dữ liệu test
           </h3>
         </div>
@@ -314,7 +612,7 @@ const MigrationTab: React.FC = () => {
                 type="button"
                 onClick={handleDeleteProducts}
                 disabled={deleteProductsState === 'running'}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-normal transition-all disabled:opacity-50 ${
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-normal transition-colors disabled:opacity-50 ${
                   deleteProductsState === 'confirm'
                     ? 'bg-rose-600 text-white hover:bg-rose-700'
                     : deleteProductsState === 'done'
@@ -362,7 +660,7 @@ const MigrationTab: React.FC = () => {
                 type="button"
                 onClick={handleDeleteRevenue}
                 disabled={deleteRevenueState === 'running'}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-normal transition-all disabled:opacity-50 ${
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-normal transition-colors disabled:opacity-50 ${
                   deleteRevenueState === 'confirm'
                     ? 'bg-rose-600 text-white hover:bg-rose-700'
                     : deleteRevenueState === 'done'
@@ -390,6 +688,79 @@ const MigrationTab: React.FC = () => {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Lịch sử giá nhập */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
+          Khởi tạo lịch sử giá nhập
+        </h3>
+        <p className="mb-4 text-xs font-normal text-slate-500">
+          Chạy 1 lần duy nhất — đọc toàn bộ phiếu nhập hàng và ghi vào bảng lịch sử giá.
+          Sau đó mỗi phiếu nhập mới sẽ tự động ghi lịch sử.
+        </p>
+        <button
+          onClick={handleBackfillCostHistory}
+          disabled={backfillStatus?.status === 'running'}
+          className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+        >
+          {backfillStatus?.status === 'running'
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <History className="h-4 w-4" />}
+          Khởi tạo lịch sử giá nhập
+        </button>
+        {backfillStatus && (
+          <StatusBanner status={backfillStatus} onClose={() => setBackfillStatus(null)} />
+        )}
+      </section>
+
+      {/* Tính lại doanh thu tháng này từ đơn hàng */}
+      <section className="rounded-2xl border border-amber-100 bg-white p-6">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
+          Tính lại doanh thu tháng này từ đơn hàng
+        </h3>
+        <p className="mb-4 text-xs font-normal text-slate-500">
+          Dùng khi doanh thu tháng hiện tại bị sai. Đọc toàn bộ đơn hàng trong tháng
+          và tính lại revenue_records từ đầu.
+        </p>
+        <button
+          onClick={handleRecalcRevenueFromOrders}
+          disabled={recalcRevenueStatus?.status === 'running'}
+          className="flex items-center gap-2 rounded-xl border border-amber-200 px-4 py-2 text-sm font-normal text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+        >
+          {recalcRevenueStatus?.status === 'running'
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4" />}
+          Tính lại doanh thu tháng này
+        </button>
+        {recalcRevenueStatus && (
+          <StatusBanner status={recalcRevenueStatus} onClose={() => setRecalcRevenueStatus(null)} />
+        )}
+      </section>
+
+      {/* Đồng bộ khách hàng từ đơn hàng */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
+          Đồng bộ số liệu khách hàng từ đơn hàng
+        </h3>
+        <p className="mb-4 text-xs font-normal text-slate-500">
+          Tính lại tổng chi tiêu, lần mua cuối và điểm tích lũy của từng khách hàng
+          từ toàn bộ đơn hàng trong hệ thống. Chạy 1 lần để fix dữ liệu cũ từ KiotViet —
+          sau đó mỗi đơn hàng mới sẽ tự động cập nhật.
+        </p>
+        <button
+          onClick={handleSyncCustomersFromOrders}
+          disabled={syncCustomersStatus?.status === 'running'}
+          className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+        >
+          {syncCustomersStatus?.status === 'running'
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4" />}
+          Đồng bộ số liệu khách hàng
+        </button>
+        {syncCustomersStatus && (
+          <StatusBanner status={syncCustomersStatus} onClose={() => setSyncCustomersStatus(null)} />
+        )}
       </section>
     </div>
   );

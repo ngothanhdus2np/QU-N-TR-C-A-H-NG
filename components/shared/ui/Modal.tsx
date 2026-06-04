@@ -55,16 +55,16 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
 
       {/* Modal */}
       <div
-        className={`relative bg-white rounded-2xl shadow-2xl ${sizeStyles[size]} w-full max-h-[90vh] overflow-hidden flex flex-col`}
+        className={`relative bg-white rounded-2xl shadow-modal ${sizeStyles[size]} w-full max-h-[90vh] overflow-hidden flex flex-col`}
       >
         {/* Header */}
         {(title || showCloseButton) && (

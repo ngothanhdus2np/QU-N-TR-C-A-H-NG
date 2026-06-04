@@ -91,7 +91,7 @@ const TwoLevelCategoryColumn: React.FC<TwoLevelColumnProps> = ({
         <div className="flex items-center gap-4 mb-4">
           <div className={`p-3 ${colors.icon} text-white rounded-2xl shadow-lg`}>{icon}</div>
           <div>
-            <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">{title}</h3>
+            <h3 className="text-sm font-semibold text-slate-900 tracking-tight uppercase">{title}</h3>
           </div>
         </div>
         <div className="flex justify-between items-end">
@@ -102,7 +102,7 @@ const TwoLevelCategoryColumn: React.FC<TwoLevelColumnProps> = ({
           <button
             onClick={onSmartScan}
             disabled={isScanning}
-            className={`flex items-center gap-2 px-2 py-1 ${colors.scan} rounded-lg text-[8px] font-normal uppercase hover:text-white transition-all`}
+            className={`flex items-center gap-2 px-2 py-1 ${colors.scan} rounded-lg text-[8px] font-normal uppercase hover:text-white transition-colors`}
           >
             {isScanning ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />}
             Quét
@@ -128,13 +128,13 @@ const TwoLevelCategoryColumn: React.FC<TwoLevelColumnProps> = ({
                 </div>
                 <div className={`grid grid-cols-1 gap-2 pl-3 border-l-2 ${colors.border}`}>
                   {categories.filter(category => category.parentId === level2.id).map(level3 => (
-                    <div key={level3.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md rounded-xl border border-slate-100 transition-all">
+                    <div key={level3.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md rounded-xl border border-slate-100 transition-colors">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-normal text-slate-600">{level3.name}</span>
+                        <span className="text-2xs font-normal text-slate-600">{level3.name}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] font-normal text-slate-400">{formatNumber(categoryTotals[level3.id] || 0)}đ</span>
-                        <button onClick={() => setEditingCategory(level3)} className={`p-1 text-slate-200 ${colors.edit} opacity-0 group-hover:opacity-100 transition-all`}><Pencil className="w-3 h-3" /></button>
+                        <button onClick={() => setEditingCategory(level3)} className={`p-1 text-slate-200 ${colors.edit} opacity-0 group-hover:opacity-100 transition-colors`}><Pencil className="w-3 h-3" /></button>
                       </div>
                     </div>
                   ))}
@@ -143,7 +143,7 @@ const TwoLevelCategoryColumn: React.FC<TwoLevelColumnProps> = ({
             ))}
             <button
               onClick={() => setActiveParentId(parent.id)}
-              className={`w-full py-3 border-2 border-dashed border-slate-100 rounded-xl text-[9px] font-normal text-slate-400 uppercase ${colors.button} transition-all flex items-center justify-center gap-2`}
+              className={`w-full py-3 border-2 border-dashed border-slate-100 rounded-xl text-[9px] font-normal text-slate-400 uppercase ${colors.button} transition-colors flex items-center justify-center gap-2`}
             >
               <Plus className="w-3 h-3" /> Thêm nhóm
             </button>
@@ -187,7 +187,7 @@ const FlatCategoryColumn: React.FC<FlatColumnProps> = ({
         <div className="flex items-center gap-4 mb-4">
           <div className={`p-3 ${colors.icon} text-white rounded-2xl shadow-lg`}>{icon}</div>
           <div>
-            <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">{title}</h3>
+            <h3 className="text-sm font-semibold text-slate-900 tracking-tight uppercase">{title}</h3>
           </div>
         </div>
         <div className="flex justify-between items-end">
@@ -202,20 +202,20 @@ const FlatCategoryColumn: React.FC<FlatColumnProps> = ({
         {parent && (
           <div className="space-y-6">
             {categories.filter(category => category.parentId === parent.id).map(level2 => (
-              <div key={level2.id} className="group flex items-center justify-between p-4 bg-slate-50 hover:bg-white hover:shadow-md rounded-2xl border border-slate-100 transition-all">
+              <div key={level2.id} className="group flex items-center justify-between p-4 bg-slate-50 hover:bg-white hover:shadow-md rounded-2xl border border-slate-100 transition-colors">
                 <div className="flex flex-col">
                   <span className="text-xs font-normal text-slate-600">{level2.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-normal text-slate-400">{formatNumber(categoryTotals[level2.id] || 0)}đ</span>
-                  <button onClick={() => setEditingCategory(level2)} className={`p-1.5 text-slate-200 ${colors.edit} opacity-0 group-hover:opacity-100 transition-all`}><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => onDeleteCategory(level2.id)} className="p-1.5 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <span className="text-2xs font-normal text-slate-400">{formatNumber(categoryTotals[level2.id] || 0)}đ</span>
+                  <button onClick={() => setEditingCategory(level2)} className={`p-1.5 text-slate-200 ${colors.edit} opacity-0 group-hover:opacity-100 transition-colors`}><Pencil className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => onDeleteCategory(level2.id)} className="p-1.5 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             ))}
             <button
               onClick={() => setActiveParentId(parent.id)}
-              className={`w-full py-3 border-2 border-dashed border-slate-100 rounded-xl text-[9px] font-normal text-slate-400 uppercase ${colors.button} transition-all flex items-center justify-center gap-2`}
+              className={`w-full py-3 border-2 border-dashed border-slate-100 rounded-xl text-[9px] font-normal text-slate-400 uppercase ${colors.button} transition-colors flex items-center justify-center gap-2`}
             >
               <Plus className="w-3 h-3" /> Thêm mục
             </button>
@@ -252,7 +252,7 @@ export const ExpenseCategoriesTab: React.FC<ExpenseCategoriesTabProps> = ({
 
     {otherParents.length > 0 && (
       <div className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl">
-        <h3 className="text-sm font-black text-slate-900 mb-8 uppercase flex items-center gap-3">
+        <h3 className="text-sm font-semibold text-slate-900 mb-8 uppercase flex items-center gap-3">
           <div className="p-2 bg-slate-800 text-white rounded-lg"><LayoutGrid className="w-4 h-4" /></div>
           CÁC NHÓM CHI PHÍ KHÁC
         </h3>
@@ -268,11 +268,11 @@ export const ExpenseCategoriesTab: React.FC<ExpenseCategoriesTabProps> = ({
               </div>
               <div className="space-y-2">
                 {categories.filter(category => category.parentId === parent.id).map(child => (
-                  <div key={child.id} className="flex justify-between items-center text-[10px] font-normal text-slate-500 group/child">
+                  <div key={child.id} className="flex justify-between items-center text-2xs font-normal text-slate-500 group/child">
                     <span>{child.name}</span>
                     <div className="flex items-center gap-2">
                       <span>{formatNumber(categoryTotals[child.id] || 0)}đ</span>
-                      <button onClick={() => setEditingCategory(child)} className="opacity-0 group-hover/child:opacity-100 p-1 hover:bg-white rounded transition-all"><Pencil className="w-2.5 h-2.5 text-indigo-400" /></button>
+                      <button onClick={() => setEditingCategory(child)} className="opacity-0 group-hover/child:opacity-100 p-1 hover:bg-white rounded transition-colors"><Pencil className="w-2.5 h-2.5 text-indigo-400" /></button>
                     </div>
                   </div>
                 ))}
@@ -283,7 +283,7 @@ export const ExpenseCategoriesTab: React.FC<ExpenseCategoriesTabProps> = ({
       </div>
     )}
 
-    <button onClick={onStartAddParent} className="p-8 rounded-[2.5rem] border-4 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-400 hover:text-indigo-600 transition-all flex flex-col items-center justify-center gap-4 w-full font-normal uppercase tracking-widest text-[10px]">
+    <button onClick={onStartAddParent} className="p-8 rounded-[2.5rem] border-4 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-400 hover:text-indigo-600 transition-colors flex flex-col items-center justify-center gap-4 w-full font-normal uppercase tracking-widest text-2xs">
       <Plus className="w-8 h-8" /> THÊM NHÓM CHI PHÍ CHA MỚI
     </button>
   </div>

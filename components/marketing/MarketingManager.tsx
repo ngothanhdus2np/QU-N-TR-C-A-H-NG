@@ -22,6 +22,11 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
+  CalendarDays,
+  FileText,
+  Settings,
+  Facebook,
+  Tag,
 } from 'lucide-react';
 import {
   ContentPlanItem,
@@ -42,19 +47,72 @@ import { uploadImage } from '../../services/marketingStorageService';
 import MarketingFacebookTab, { AutoPostConfig, FacebookPage } from './MarketingFacebookTab';
 import MarketingSettingsTab from './MarketingSettingsTab';
 import { useMarketingState, MarketingTab } from '../../hooks/useMarketingState';
+import { SingleDatePicker } from '../shared';
 
 interface MarketingManagerProps {
   brandProfile: BrandProfile;
   onUpdateBrand: (profile: BrandProfile) => void;
   suggestedFocusProducts?: ProductLine[];
+  onSelectMainTab?: (tab: string) => void;
 }
 
 const MARKETING_TABS: MarketingTab[] = ['calendar', 'list', 'settings', 'facebook'];
+type MarketingSidebarItem = MarketingTab | 'promotions';
+
+const MARKETING_TAB_META: Record<
+  MarketingSidebarItem,
+  {
+    label: string;
+    description: string;
+    icon: React.ElementType;
+    group: 'Cửa hàng' | 'Facebook';
+  }
+> = {
+  calendar: {
+    label: 'Lịch đăng',
+    description: 'Xem kế hoạch đăng bài theo ngày',
+    icon: CalendarDays,
+    group: 'Facebook',
+  },
+  promotions: {
+    label: 'Khuyến mãi',
+    description: 'Thiết lập chương trình và phân tích hiệu quả',
+    icon: Tag,
+    group: 'Cửa hàng',
+  },
+  list: {
+    label: 'Kho bài',
+    description: 'Quản lý bài đã duyệt và trạng thái đăng',
+    icon: FileText,
+    group: 'Facebook',
+  },
+  settings: {
+    label: 'Chiến lược',
+    description: 'Tỉ lệ nội dung và sản phẩm trọng tâm',
+    icon: Settings,
+    group: 'Facebook',
+  },
+  facebook: {
+    label: 'Facebook API',
+    description: 'Kết nối fanpage và tự động đăng',
+    icon: Facebook,
+    group: 'Facebook',
+  },
+};
+
+const MARKETING_SIDEBAR_ITEMS: MarketingSidebarItem[] = [
+  'promotions',
+  'calendar',
+  'list',
+  'settings',
+  'facebook',
+];
 
 const MarketingManager: React.FC<MarketingManagerProps> = ({
   brandProfile,
   onUpdateBrand,
   suggestedFocusProducts,
+  onSelectMainTab,
 }) => {
   const [session] = useState<any>(null);
 
@@ -273,6 +331,19 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
     }
   };
 
+  const handleSelectedPostDateChange = (date: string) => {
+    if (!selectedPost) return;
+    const previousDate = selectedPost.date;
+    const updatePostDate = (items: ContentPlanItem[]) =>
+      items.map(item => (item.date === previousDate ? { ...item, date } : item));
+
+    if (selectedPost.isDraft) setDrafts(updatePostDate);
+    else setSchedule(updatePostDate);
+    setSelectedPost(post => (post ? { ...post, date } : null));
+    setUploadingForDate(current => (current === previousDate ? date : current));
+    setViewDate(new Date(`${date}T00:00:00`));
+  };
+
   const changeTab = (tab: MarketingTab) => {
     startTabTransition(() => setActiveTab(tab));
   };
@@ -451,8 +522,13 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
     imageUploadRef.current?.click();
   };
 
+  const activeMeta = MARKETING_TAB_META[activeTab];
+  const sidebarGroups = Array.from(
+    new Set(MARKETING_SIDEBAR_ITEMS.map(tab => MARKETING_TAB_META[tab].group))
+  );
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 gap-4 pt-4">
       <input
         type="file"
         ref={imageUploadRef}
@@ -472,27 +548,64 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
         }}
       />
 
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-6">
-          <nav className="flex gap-1 bg-slate-200 p-1 rounded-xl">
-            {MARKETING_TABS.map(t => (
-              <button
-                key={t}
-                onClick={() => changeTab(t)}
-                className={`px-6 py-2 rounded-lg text-[10px] font-normal uppercase transition-all ${activeTab === t ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                {t === 'calendar'
-                  ? 'Lịch Đăng'
-                  : t === 'list'
-                    ? 'Kho Bài'
-                    : t === 'settings'
-                      ? 'Chiến Lược'
-                      : 'Facebook API'}
-              </button>
-            ))}
-          </nav>
+      <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+        <div className="px-4 min-h-[60px] border-b border-slate-100 shrink-0 flex flex-col justify-center">
+          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
+            {activeMeta.label}
+          </h2>
+          <p className="text-2xs text-slate-400 uppercase tracking-wide">Marketing</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+          {sidebarGroups.map(group => (
+            <div key={group} className="space-y-2">
+              <p className="px-2 text-2xs font-normal uppercase tracking-widest text-slate-400">
+                {group}
+              </p>
+              <div className="space-y-1">
+                {MARKETING_SIDEBAR_ITEMS.filter(tab => MARKETING_TAB_META[tab].group === group).map(tab => {
+                  const meta = MARKETING_TAB_META[tab];
+                  const Icon = meta.icon;
+                  const isActive = activeTab === tab;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => {
+                        if (tab === 'promotions') onSelectMainTab?.('promotions');
+                        else changeTab(tab);
+                      }}
+                      className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                        isActive
+                          ? 'border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:border-slate-100 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-normal uppercase">{meta.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      <section className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="shrink-0 border-b border-slate-100 px-5 py-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-2xs font-normal uppercase tracking-widest text-slate-400">
+              <span>Marketing</span>
+              <span>/</span>
+              <span>{activeMeta.label}</span>
+            </div>
+            <h1 className="mt-1 text-xl font-semibold uppercase tracking-tight text-slate-900">
+              {activeMeta.label}
+            </h1>
+            <p className="mt-1 text-xs text-slate-500">{activeMeta.description}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-2">
               <label className="relative inline-flex items-center cursor-pointer group">
@@ -504,12 +617,12 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                 />
                 <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 group-hover:ring-4 ring-indigo-500/10"></div>
               </label>
-              <span className="text-[10px] font-normal uppercase text-slate-400 select-none">
+              <span className="text-2xs font-normal uppercase text-slate-400 select-none">
                 Backup
               </span>
             </div>
             <div className="h-4 w-px bg-slate-200"></div>
-            <div className="flex items-center gap-2 text-[10px] font-normal uppercase">
+            <div className="flex items-center gap-2 text-2xs font-normal uppercase">
               {!isCloudSyncEnabled ? (
                 <span className="text-slate-500 flex items-center gap-1.5">
                   <CloudOff size={14} /> Sandbox
@@ -528,13 +641,13 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
           <button
             onClick={handleGenerateNext}
             disabled={loading || generationCount <= 0}
-            className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl text-white text-xs font-normal flex items-center gap-2 shadow-lg disabled:opacity-50 transition-all"
+            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white text-xs font-normal flex items-center gap-2 shadow-md disabled:opacity-50 transition-all"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
             {generationCount > 0 ? `SÁNG TẠO ${generationCount} BÀI` : 'ĐÃ ĐỦ BÀI THÁNG'}
           </button>
         </div>
-      </div>
+        </div>
 
       {initialLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
@@ -543,12 +656,12 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               <SkeletonPost key={i} />
             ))}
           </div>
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+          <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest">
             Đang tải dữ liệu...
           </span>
         </div>
       ) : (
-        <div className="flex-1 bg-white border border-slate-200 rounded-[2.5rem] shadow-xl overflow-auto flex flex-col relative min-h-[600px]">
+        <div className="flex-1 min-h-0 overflow-auto flex flex-col relative">
           {activeTab === 'calendar' && (
             <div className="flex flex-col h-full min-w-[1000px]">
               <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-20">
@@ -577,13 +690,13 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                   <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
                     <button
                       onClick={() => setDuration('week')}
-                      className={`px-5 py-2 rounded-lg text-[10px] font-normal uppercase transition-all duration-200 ${duration === 'week' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`px-5 py-2 rounded-lg text-2xs font-normal uppercase transition-all duration-200 ${duration === 'week' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Tuần
                     </button>
                     <button
                       onClick={() => setDuration('month')}
-                      className={`px-5 py-2 rounded-lg text-[10px] font-normal uppercase transition-all duration-200 ${duration === 'month' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`px-5 py-2 rounded-lg text-2xs font-normal uppercase transition-all duration-200 ${duration === 'month' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Tháng
                     </button>
@@ -601,7 +714,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-7 bg-slate-900 text-white text-[10px] font-normal py-3 text-center uppercase tracking-widest sticky top-[80px] z-10">
+              <div className="grid grid-cols-7 bg-slate-900 text-white text-2xs font-normal py-3 text-center uppercase tracking-widest sticky top-[80px] z-10">
                 {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
                   <div key={d}>{d}</div>
                 ))}
@@ -632,7 +745,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                           {post && (
                             <div className="flex flex-col gap-1.5">
                               <StrategyBadge type={post.type} strategies={strategies} />
-                              <h4 className="text-[10px] font-normal leading-tight line-clamp-3 uppercase tracking-tighter text-slate-700">
+                              <h4 className="text-2xs font-normal leading-tight line-clamp-3 uppercase tracking-tighter text-slate-700">
                                 {post.topic}
                               </h4>
                               {isDraft && (
@@ -654,7 +767,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
           {activeTab === 'list' && (
             <div className="p-8 h-full flex flex-col overflow-hidden">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black uppercase text-slate-900 tracking-tight">
+                <h3 className="text-xl font-semibold uppercase text-slate-900 tracking-tight">
                   Kho bài viết
                 </h3>
                 <div className="flex gap-2">
@@ -681,7 +794,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               <div className="flex flex-wrap gap-2 mb-8 overflow-x-auto scrollbar-hide">
                 <button
                   onClick={() => setSelectedStrategyFilter('all')}
-                  className={`px-5 py-2.5 rounded-xl text-[10px] font-normal uppercase transition-all whitespace-nowrap ${selectedStrategyFilter === 'all' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                  className={`px-5 py-2.5 rounded-xl text-2xs font-normal uppercase transition-all whitespace-nowrap ${selectedStrategyFilter === 'all' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
                 >
                   Tất cả
                 </button>
@@ -694,7 +807,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                     <button
                       key={s.id}
                       onClick={() => setSelectedStrategyFilter(s.name)}
-                      className={`px-5 py-2.5 rounded-xl text-[10px] font-normal uppercase border transition-all whitespace-nowrap flex items-center gap-2 ${isActive ? `${style.bg} ${style.text} ${style.border} shadow-sm ring-1 ring-offset-1 ring-slate-100` : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                      className={`px-5 py-2.5 rounded-xl text-2xs font-normal uppercase border transition-all whitespace-nowrap flex items-center gap-2 ${isActive ? `${style.bg} ${style.text} ${style.border} shadow-sm ring-1 ring-offset-1 ring-slate-100` : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
                     >
                       <div className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></div>
                       {s.name}
@@ -706,7 +819,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                 {Object.entries(groupedSchedule).length > 0 ? (
                   Object.entries(groupedSchedule).map(([month, items]) => (
                     <div key={month} className="space-y-4">
-                      <div className="flex items-center gap-4 text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+                      <div className="flex items-center gap-4 text-2xs font-normal text-slate-400 uppercase tracking-widest">
                         <span>{month}</span>
                         <div className="flex-1 h-px bg-slate-100"></div>
                         <span>{(items as ContentPlanItem[]).length} BÀI</span>
@@ -726,7 +839,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                             )}
                             <div className="flex justify-between items-center">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-normal text-indigo-500">
+                                <span className="text-2xs font-normal text-indigo-500">
                                   {item.date.split('-').reverse().join('/')}
                                 </span>
                                 {item.scheduledTime && (
@@ -760,7 +873,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                                       e.stopPropagation();
                                       handleQuickUpload(item.date);
                                     }}
-                                    className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 text-[10px] font-normal uppercase"
+                                    className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 text-2xs font-normal uppercase"
                                   >
                                     <Upload size={16} /> Thay ảnh
                                   </button>
@@ -786,7 +899,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                             <div className="flex justify-between items-center pt-2 border-t mt-auto">
                               <button
                                 onClick={() => togglePosted(item.date)}
-                                className={`text-[10px] font-normal uppercase flex items-center gap-1.5 ${item.isPosted ? 'text-green-600' : 'text-slate-400'}`}
+                                className={`text-2xs font-normal uppercase flex items-center gap-1.5 ${item.isPosted ? 'text-green-600' : 'text-slate-400'}`}
                               >
                                 {item.isPosted ? <CheckCircle2 size={14} /> : <Clock size={14} />}{' '}
                                 {item.isPosted ? 'Đã đăng' : 'Chưa đăng'}
@@ -819,7 +932,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                    <span className="text-[10px] font-normal uppercase tracking-widest">
+                    <span className="text-2xs font-normal uppercase tracking-widest">
                       Không tìm thấy bài viết nào
                     </span>
                   </div>
@@ -862,9 +975,10 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
           )}
         </div>
       )}
+      </section>
 
       {selectedPost && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md p-4 flex items-center justify-center">
+        <div className="fixed inset-0 z-modal bg-slate-950/90 backdrop-blur-md p-4 flex items-center justify-center">
           <div className="bg-[#f0f2f5] w-full max-w-7xl h-full max-h-[92vh] rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
             <button
               onClick={() => setSelectedPost(null)}
@@ -876,19 +990,29 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               <div className="p-6 border-b bg-slate-50 flex gap-2">
                 <button
                   onClick={() => setModalMode('edit_caption')}
-                  className={`flex-1 py-3 text-[10px] font-normal uppercase rounded-xl transition-all ${modalMode === 'edit_caption' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border'}`}
+                  className={`flex-1 py-3 text-2xs font-normal uppercase rounded-xl transition-all ${modalMode === 'edit_caption' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border'}`}
                 >
                   Viết Bài
                 </button>
                 <button
                   onClick={() => setModalMode('resources')}
-                  className={`flex-1 py-3 text-[10px] font-normal uppercase rounded-xl transition-all ${modalMode === 'resources' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border'}`}
+                  className={`flex-1 py-3 text-2xs font-normal uppercase rounded-xl transition-all ${modalMode === 'resources' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border'}`}
                 >
                   Hình Ảnh
                 </button>
               </div>
               <div className="flex-1 overflow-hidden p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="flex flex-col gap-1 min-w-[150px]">
+                    <span className="text-[9px] font-normal text-slate-400 uppercase">
+                      Ngày đăng
+                    </span>
+                    <SingleDatePicker
+                      value={selectedPost.date}
+                      onChange={handleSelectedPostDateChange}
+                      className="h-[30px] rounded-lg px-2 text-xs"
+                    />
+                  </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[9px] font-normal text-slate-400 uppercase">
                       Giờ lên lịch
@@ -968,7 +1092,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                       className="w-full py-10 border-2 border-dashed rounded-[2rem] bg-slate-50 flex flex-col items-center gap-2 text-slate-400"
                     >
                       <UploadCloud size={32} />
-                      <span className="text-[10px] font-normal uppercase">Tải ảnh lên</span>
+                      <span className="text-2xs font-normal uppercase">Tải ảnh lên</span>
                     </button>
                     {selectedPost.image && (
                       <img src={selectedPost.image} className="w-full rounded-2xl shadow-xl" />
@@ -1007,7 +1131,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
                     navigator.clipboard.writeText(selectedPost.caption);
                     alert('Copy!');
                   }}
-                  className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl font-normal text-[10px] uppercase"
+                  className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl font-normal text-2xs uppercase"
                 >
                   COPY NỘI DUNG
                 </button>

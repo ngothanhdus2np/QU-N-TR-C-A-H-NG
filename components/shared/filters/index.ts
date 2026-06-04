@@ -5,3 +5,4 @@
 export { FilterSection } from './FilterSection';
 export { FilterDateRange } from './FilterDateRange';
 export { FilterCheckboxGroup } from './FilterCheckboxGroup';
+export { SingleDatePicker } from './SingleDatePicker';

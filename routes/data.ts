@@ -111,6 +111,27 @@ const getItems = (record: Record<string, unknown>): Record<string, unknown>[] =>
   return items.map(asRecord);
 };
 
+// Ghi lịch sử giá nhập khi có phiếu nhập hàng
+async function writeCostHistory(
+  supabase: SupabaseClient,
+  items: { sku: string; productId: string; importPrice: number }[],
+  effectiveDate: string,
+  source = 'purchase'
+) {
+  const entries = items
+    .filter(i => i.sku && i.importPrice > 0)
+    .map(i => ({
+      id: crypto.randomUUID(),
+      sku: i.sku,
+      product_id: i.productId || null,
+      import_price: i.importPrice,
+      effective_date: effectiveDate.slice(0, 10),
+      source,
+    }));
+  if (!entries.length) return;
+  await supabase.from('product_cost_history').upsert(entries, { onConflict: 'id' });
+}
+
 async function setProductStock(supabase: SupabaseClient, productId: string, stock: number) {
   const { error } = await supabase
     .from('pos_products')
@@ -157,12 +178,18 @@ async function applyInventoryTransactionFallback(
   if (error) throw error;
 
   const type = getTextField(payload, 'type');
+  const txDate = getTextField(payload, 'date') || new Date().toISOString();
+  const costItems: { sku: string; productId: string; importPrice: number }[] = [];
+
   for (const item of getItems(payload)) {
     const productId = getTextField(item, 'productId');
     if (!productId) continue;
 
     if (type === 'Import') {
       await adjustProductStock(supabase, productId, getNumberField(item, 'quantity'));
+      const sku = getTextField(item, 'sku');
+      const price = getNumberField(item, 'price');
+      if (sku && price > 0) costItems.push({ sku, productId, importPrice: price });
     } else if (type === 'Sale') {
       await adjustProductStock(supabase, productId, -Math.abs(getNumberField(item, 'quantity')));
     } else if (type === 'Return') {
@@ -170,6 +197,10 @@ async function applyInventoryTransactionFallback(
     } else if (type === 'Check') {
       await setProductStock(supabase, productId, getNumberField(item, 'newStock'));
     }
+  }
+
+  if (costItems.length) {
+    await writeCostHistory(supabase, costItems, txDate, 'purchase').catch(() => {});
   }
 }
 
@@ -289,6 +320,18 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
   });
 
   router.post('/api/data/clear', requireAuth, async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      const authHeader = req.headers.authorization;
+      const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (!jwt) {
+        return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
+      }
+      const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
+      if (userError || !user || user.user_metadata?.role !== 'admin') {
+        return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
+      }
+    }
+
     const tableName = resolveTable(req.body?.key);
     if (!tableName) return res.status(400).json({ error: 'Bảng xóa không hợp lệ' });
 
@@ -418,6 +461,417 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     } catch (error: unknown) {
       console.error(`[DataRoute] knowledge file download failed [${path}]:`, error);
       res.status(404).json({ error: 'Không tìm thấy file' });
+    }
+  });
+
+  // Backfill lịch sử giá nhập từ toàn bộ inventory_transactions có sẵn
+  router.post('/api/analytics/backfill-cost-history', requireAuth, async (req, res) => {
+    try {
+      let allTx: any[] = [], offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('inventory_transactions')
+          .select('date, type, items')
+          .eq('type', 'Import')
+          .order('date', { ascending: true })
+          .range(offset, offset + 999);
+        if (error) throw new Error(error.message);
+        if (!data?.length) break;
+        allTx = allTx.concat(data);
+        if (data.length < 1000) break;
+        offset += 1000;
+      }
+
+      let written = 0;
+      const BATCH = 200;
+      const entries: any[] = [];
+      for (const tx of allTx) {
+        const date = (tx.date as string)?.slice(0, 10);
+        if (!date) continue;
+        for (const item of ((tx.items as any[]) || [])) {
+          const sku = String(item.sku || '').trim();
+          const price = Number(item.price || 0);
+          if (!sku || price <= 0) continue;
+          entries.push({
+            id: crypto.randomUUID(),
+            sku,
+            product_id: item.productId || null,
+            import_price: price,
+            effective_date: date,
+            source: 'purchase',
+          });
+        }
+      }
+
+      for (let i = 0; i < entries.length; i += BATCH) {
+        const { error } = await supabase
+          .from('product_cost_history')
+          .upsert(entries.slice(i, i + BATCH), { onConflict: 'id' });
+        if (error) throw new Error(error.message);
+        written += Math.min(BATCH, entries.length - i);
+      }
+
+      res.json({ written, transactions: allTx.length });
+    } catch (error: unknown) {
+      console.error('[DataRoute] backfill-cost-history failed:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Lỗi' });
+    }
+  });
+
+  // Tính lại COGS + gross_profit cho tất cả tháng từ pos_orders × giá lịch sử
+  router.post('/api/analytics/recalculate-cogs', requireAuth, async (req, res) => {
+    try {
+      // Load product_cost_history (giá nhập theo thời gian) — nguồn chính xác nhất
+      const { data: costHistory } = await supabase
+        .from('product_cost_history')
+        .select('sku, import_price, effective_date')
+        .order('effective_date', { ascending: true });
+
+      // Build Map<sku, [{date, price}]> để lookup giá gần nhất trước ngày bán
+      const historyBySku = new Map<string, { date: string; price: number }[]>();
+      for (const h of ((costHistory as any[]) || [])) {
+        const sku = String(h.sku || '').trim();
+        if (!sku) continue;
+        if (!historyBySku.has(sku)) historyBySku.set(sku, []);
+        historyBySku.get(sku)!.push({ date: h.effective_date, price: Number(h.import_price || 0) });
+      }
+
+      // Tìm giá nhập gần nhất <= orderDate cho 1 SKU
+      const getHistoricalPrice = (sku: string, orderDate: string): number => {
+        const entries = historyBySku.get(sku);
+        if (!entries?.length) return 0;
+        let best = 0;
+        for (const e of entries) {
+          if (e.date <= orderDate && e.price > 0) best = e.price;
+        }
+        return best;
+      };
+
+      // Fallback: giá hiện tại từ pos_products (cho sản phẩm chưa có history)
+      const { data: products } = await supabase.from('pos_products').select('id, sku, import_price');
+      const priceById  = new Map((products || []).map((p: any) => [p.id,  Number(p.import_price || 0)]));
+      const priceBySku = new Map((products || []).map((p: any) => [p.sku, Number(p.import_price || 0)]));
+
+      // Paginate toàn bộ pos_orders, gộp COGS theo tháng (YYYY-MM)
+      const cogsByMonth = new Map<string, number>();
+      let offset = 0;
+      while (true) {
+        const { data: orders, error } = await supabase
+          .from('pos_orders')
+          .select('date, is_return, items')
+          .order('date', { ascending: false })
+          .range(offset, offset + 999);
+        if (error) throw new Error(error.message);
+        if (!orders?.length) break;
+
+        for (const o of orders) {
+          const month = (o.date as string)?.slice(0, 7);
+          const orderDate = (o.date as string)?.slice(0, 10);
+          if (!month || !orderDate) continue;
+          if (!cogsByMonth.has(month)) cogsByMonth.set(month, 0);
+          const isReturn = o.is_return === true;
+          for (const item of ((o.items as any[]) || [])) {
+            const qty = Math.abs(Number(item.quantity || 0));
+            const sku = String(item.sku || '').trim();
+            // Ưu tiên: importPrice lưu trong item → lịch sử giá → giá hiện tại
+            const ip = Number(item.importPrice || 0)
+              || getHistoricalPrice(sku, orderDate)
+              || priceById.get(item.productId)
+              || priceBySku.get(sku)
+              || 0;
+            cogsByMonth.set(month, cogsByMonth.get(month)! + (isReturn ? -qty * ip : qty * ip));
+          }
+        }
+        if (orders.length < 1000) break;
+        offset += 1000;
+      }
+
+      // Load tất cả revenue_records kèm total_cogs hiện tại
+      const { data: revRecords } = await supabase
+        .from('revenue_records')
+        .select('id, date, net_revenue, total_cogs');
+      if (!revRecords?.length) return res.json({ updated: 0 });
+
+      // Gộp revenue_records theo tháng
+      type RevMonth = { ids: string[]; netRevenue: number; existingCogs: number };
+      const revByMonth = new Map<string, RevMonth>();
+      for (const r of revRecords as any[]) {
+        const month = (r.date as string)?.slice(0, 7);
+        if (!month) continue;
+        if (!revByMonth.has(month)) revByMonth.set(month, { ids: [], netRevenue: 0, existingCogs: 0 });
+        const m = revByMonth.get(month)!;
+        m.ids.push(r.id);
+        m.netRevenue += Number(r.net_revenue || 0);
+        m.existingCogs += Number(r.total_cogs || 0);
+      }
+
+      // Cập nhật từng record:
+      // - total_cogs: chỉ ghi nếu chưa có (= 0) → không ghi đè data KiotViet đã import
+      // - gross_profit: luôn tính lại = net_revenue - total_cogs
+      let updated = 0;
+      const BATCH = 100;
+      const toUpdate: any[] = [];
+      for (const [month, rev] of revByMonth) {
+        const posCogs = Math.round(cogsByMonth.get(month) || 0);
+        // Dùng COGS hiện có nếu đã được set (từ KiotViet), fallback sang pos_orders nếu = 0
+        const finalCogs = rev.existingCogs !== 0 ? rev.existingCogs : posCogs;
+
+        if (rev.ids.length === 1) {
+          const payload: any = { id: rev.ids[0], gross_profit: Math.round(rev.netRevenue) - finalCogs };
+          if (rev.existingCogs === 0) payload.total_cogs = posCogs; // chỉ set nếu chưa có
+          toUpdate.push(payload);
+        } else {
+          // Nhiều records/tháng (daily) → mỗi record tự tính gross_profit từ total_cogs riêng
+          for (const r of (revRecords as any[]).filter((x: any) => x.date?.slice(0, 7) === month)) {
+            const rExisting = Number(r.total_cogs || 0);
+            const ratio = rev.netRevenue ? Number(r.net_revenue || 0) / rev.netRevenue : 1 / rev.ids.length;
+            const rCogs = rExisting !== 0 ? rExisting : Math.round(posCogs * ratio);
+            const payload: any = { id: r.id, gross_profit: Math.round(Number(r.net_revenue || 0)) - rCogs };
+            if (rExisting === 0) payload.total_cogs = rCogs;
+            toUpdate.push(payload);
+          }
+        }
+      }
+
+      for (let i = 0; i < toUpdate.length; i += BATCH) {
+        const { error } = await supabase
+          .from('revenue_records')
+          .upsert(toUpdate.slice(i, i + BATCH), { onConflict: 'id' });
+        if (error) throw new Error(error.message);
+        updated += toUpdate.slice(i, i + BATCH).length;
+      }
+
+      res.json({ updated, months: cogsByMonth.size });
+    } catch (error: unknown) {
+      console.error('[DataRoute] recalculate-cogs failed:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Lỗi không xác định' });
+    }
+  });
+
+  // Tổng hợp ma trận tài chính từ pos_orders (nguồn gốc thực tế)
+  router.post('/api/analytics/financial-matrix', requireAuth, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.body as { startDate?: string; endDate?: string };
+      const startMD = startDate ? startDate.slice(5, 10) : '01-01';
+      const endMD   = endDate   ? endDate.slice(5, 10)   : '12-31';
+      const includeAll = startMD <= '01-01' && endMD >= '12-31';
+
+      // Tra import_price theo productId và sku
+      const { data: products } = await supabase.from('pos_products').select('id, sku, import_price');
+      const priceById  = new Map((products || []).map((p: any) => [p.id,  Number(p.import_price || 0)]));
+      const priceBySku = new Map((products || []).map((p: any) => [p.sku, Number(p.import_price || 0)]));
+
+      type YearAgg = { gross: number; discount: number; returns: number; net: number; cogs: number };
+      const byYear = new Map<string, YearAgg>();
+
+      // Paginate qua toàn bộ pos_orders (tất cả năm)
+      let offset = 0;
+      while (true) {
+        const { data: orders, error } = await supabase
+          .from('pos_orders')
+          .select('date, total_amount, discount, final_amount, is_return, items')
+          .order('date', { ascending: false })
+          .range(offset, offset + 999);
+        if (error) throw new Error(error.message);
+        if (!orders?.length) break;
+
+        for (const o of orders) {
+          const year = (o.date as string)?.slice(0, 4);
+          if (!year) continue;
+          const md = (o.date as string).slice(5, 10);
+          if (!includeAll && (md < startMD || md > endMD)) continue;
+
+          if (!byYear.has(year)) byYear.set(year, { gross: 0, discount: 0, returns: 0, net: 0, cogs: 0 });
+          const agg = byYear.get(year)!;
+          const isReturn = o.is_return === true;
+
+          if (!isReturn) {
+            agg.gross    += Number(o.total_amount || 0);
+            agg.discount += Math.abs(Number(o.discount || 0));
+          } else {
+            agg.returns += Math.abs(Number(o.final_amount || 0));
+          }
+          agg.net += Number(o.final_amount || 0);
+
+          for (const item of ((o.items as any[]) || [])) {
+            const qty = Math.abs(Number(item.quantity || 0));
+            const ip  = priceById.get(item.productId) || priceBySku.get(item.sku) || 0;
+            if (!isReturn) agg.cogs += qty * ip;
+            else           agg.cogs -= qty * ip;
+          }
+        }
+
+        if (orders.length < 1000) break;
+        offset += 1000;
+      }
+
+      const data: Record<string, Record<string, number>> = {};
+      byYear.forEach((agg, year) => {
+        const net  = Math.round(agg.net);
+        const cogs = Math.round(agg.cogs);
+        data[year] = {
+          totalGrossRevenue: Math.round(agg.gross),
+          discount:          Math.round(agg.discount),
+          returnsValue:      Math.round(agg.returns),
+          revenueOther:      0,
+          netRevenue:        net,
+          totalCogs:         cogs,
+          grossProfit:       net - cogs,
+        };
+      });
+
+      const years = Array.from(byYear.keys()).sort((a, b) => b.localeCompare(a));
+      res.json({ data, years });
+    } catch (error: unknown) {
+      console.error('[DataRoute] financial-matrix failed:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Lỗi không xác định' });
+    }
+  });
+
+  // Tính lại revenue_records cho 1 tháng từ pos_orders (fix khi data bị sai)
+  router.post('/api/analytics/recalculate-revenue-from-orders', requireAuth, async (req, res) => {
+    try {
+      const { month } = req.body as { month?: string }; // "YYYY-MM", mặc định tháng hiện tại
+      const targetMonth = month || new Date().toLocaleDateString('sv-SE').slice(0, 7);
+      const [y, m] = targetMonth.split('-').map(Number);
+      const lastDayNum = new Date(y, m, 0).getDate();
+      const date = `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}`;
+
+      let netRev = 0, discountSum = 0;
+      let offset = 0;
+      while (true) {
+        const { data: orders, error } = await supabase
+          .from('pos_orders')
+          .select('final_amount, discount, is_return')
+          .gte('date', `${targetMonth}-01`)
+          .lte('date', `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}T23:59:59`)
+          .range(offset, offset + 999);
+        if (error) throw new Error(error.message);
+        if (!orders?.length) break;
+
+        for (const o of orders) {
+          netRev += Number(o.final_amount || 0);
+          if (!o.is_return) discountSum += Number(o.discount || 0);
+        }
+
+        if (orders.length < 1000) break;
+        offset += 1000;
+      }
+
+      const net  = Math.round(netRev);
+      const disc = Math.round(discountSum);
+
+      const { data: existing } = await supabase.from('revenue_records').select('id').eq('date', date).maybeSingle();
+      const id = (existing as { id: string } | null)?.id ?? crypto.randomUUID();
+
+      const { error } = await supabase.from('revenue_records').upsert({
+        id, date,
+        total_gross_revenue: Math.round(net + Math.abs(disc)),
+        discount: disc,
+        net_revenue: net,
+        returns_value: 0,
+        revenue_other: 0,
+      }, { onConflict: 'id' });
+      if (error) throw new Error(error.message);
+
+      res.json({ success: true, date, net_revenue: net, discount: disc, total_gross_revenue: Math.round(net + Math.abs(disc)) });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Đồng bộ khách hàng từ pos_orders: tạo mới nếu chưa có, update số liệu nếu đã có
+  router.post('/api/customers/sync-from-orders', requireAuth, async (req, res) => {
+    try {
+      type CustomerAgg = { name: string; totalSpent: number; lastVisit: string; points: number };
+      const aggByCustomer = new Map<string, CustomerAgg>();
+
+      // Bước 1: Aggregate từ pos_orders (lấy thêm customer_name)
+      let offset = 0;
+      while (true) {
+        const { data: orders, error } = await supabase
+          .from('pos_orders')
+          .select('customer_id, customer_name, final_amount, date, is_return, points_earned')
+          .not('customer_id', 'is', null)
+          .range(offset, offset + 999);
+        if (error) throw new Error(error.message);
+        if (!orders?.length) break;
+
+        for (const o of orders) {
+          const cid = String(o.customer_id);
+          const isReturn = o.is_return === true;
+          const prev = aggByCustomer.get(cid) ?? { name: '', totalSpent: 0, lastVisit: '', points: 0 };
+          aggByCustomer.set(cid, {
+            name: prev.name || String(o.customer_name || ''),
+            totalSpent: prev.totalSpent + (isReturn ? 0 : Number(o.final_amount || 0)),
+            lastVisit: String(o.date || '') > prev.lastVisit ? String(o.date) : prev.lastVisit,
+            points: prev.points + Number(o.points_earned || 0),
+          });
+        }
+
+        if (orders.length < 1000) break;
+        offset += 1000;
+      }
+
+      // Bước 2: Lấy danh sách ID đã tồn tại trong pos_customers
+      const existingIds = new Set<string>();
+      let cidOffset = 0;
+      while (true) {
+        const { data: existing, error } = await supabase
+          .from('pos_customers')
+          .select('id')
+          .range(cidOffset, cidOffset + 999);
+        if (error) throw new Error(error.message);
+        if (!existing?.length) break;
+        (existing as any[]).forEach(c => existingIds.add(String(c.id)));
+        if (existing.length < 1000) break;
+        cidOffset += 1000;
+      }
+
+      // Bước 3: Tạo mới khách chưa có
+      const toInsert = Array.from(aggByCustomer.entries())
+        .filter(([id, agg]) => !existingIds.has(id) && agg.name)
+        .map(([id, agg]) => ({
+          id,
+          name: agg.name,
+          phone: '',
+          points: Math.round(agg.points),
+          total_spent: Math.round(agg.totalSpent),
+          last_visit: agg.lastVisit || null,
+          tier: 'Standard',
+        }));
+
+      let createdCount = 0;
+      const BATCH = 500;
+      for (let i = 0; i < toInsert.length; i += BATCH) {
+        const { error } = await supabase
+          .from('pos_customers')
+          .insert(toInsert.slice(i, i + BATCH));
+        if (error) throw new Error(error.message);
+        createdCount += toInsert.slice(i, i + BATCH).length;
+      }
+
+      // Bước 4: Update số liệu khách đã có
+      let updatedCount = 0;
+      for (const [id, agg] of aggByCustomer.entries()) {
+        if (!existingIds.has(id)) continue;
+        const { error } = await supabase
+          .from('pos_customers')
+          .update({
+            total_spent: Math.round(agg.totalSpent),
+            last_visit: agg.lastVisit || null,
+            points: Math.round(agg.points),
+          })
+          .eq('id', id);
+        if (error) throw new Error(error.message);
+        updatedCount++;
+      }
+
+      res.json({ success: true, createdCount, updatedCount });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
     }
   });
 

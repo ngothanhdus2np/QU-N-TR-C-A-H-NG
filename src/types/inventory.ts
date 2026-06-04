@@ -41,7 +41,10 @@ export interface Supplier {
   address?: string;
   group?: string; // Nhóm nhà cung cấp
   status?: 'active' | 'inactive'; // Trạng thái hoạt động
+  isFavorite?: boolean; // Đánh dấu nhà cung cấp quan trọng
   notes?: string;
+  companyName?: string; // Tên công ty xuất hóa đơn
+  taxCode?: string; // Mã số thuế
   // Computed fields (không lưu DB, tính runtime từ transactions và debts)
   totalPurchase?: number; // Tổng giá trị mua hàng
   currentDebt?: number; // Nợ hiện tại cần trả

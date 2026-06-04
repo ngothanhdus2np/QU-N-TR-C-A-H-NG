@@ -166,7 +166,7 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
         <style>
           * { box-sizing: border-box; }
           html, body { margin: 0; padding: 0; }
-          body { font-family: Arial, sans-serif; color: #0f172a; }
+          body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; letter-spacing: 0; }
           .sheet {
             display: grid;
             grid-template-columns: repeat(${template.columns}, ${template.widthMm}mm);

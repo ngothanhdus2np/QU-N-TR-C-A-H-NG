@@ -44,14 +44,14 @@ export const ListPageLayout: React.FC<ListPageLayoutProps> = ({
         <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
           {/* Sidebar Header */}
           <div className="px-4 min-h-[52px] border-b border-slate-100 shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
               {sidebarTitle}
             </h2>
             <div className="flex items-center gap-2">
               {hasActiveFilters && onClearFilters && (
                 <button
                   onClick={onClearFilters}
-                  className="text-[10px] text-indigo-600 font-normal hover:underline"
+                  className="text-2xs text-indigo-600 font-normal hover:underline"
                 >
                   Xóa lọc
                 </button>

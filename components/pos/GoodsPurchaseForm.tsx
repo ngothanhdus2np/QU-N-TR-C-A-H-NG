@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   Search,
@@ -13,10 +13,9 @@ import {
   Upload,
   FileCheck,
   FileMinus,
-  FileText,
   FileX,
 } from 'lucide-react';
-import { POSProduct, InventoryTransaction } from '../../types';
+import { POSProduct, InventoryTransaction, Supplier } from '../../types';
 import { InvoiceStatus } from '../../services/invoiceService';
 
 export interface PurchaseItem {
@@ -42,6 +41,7 @@ interface GoodsPurchaseFormProps {
   setPurchaseDiscountValue: (v: number) => void;
   setPurchaseDiscountType: (v: PurchaseDiscountType) => void;
   products: POSProduct[];
+  suppliers: Supplier[];
   transactions: InventoryTransaction[];
   onClickFileInput: () => void;
   onOpenQuickAddProduct: () => void;
@@ -75,6 +75,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
   setPurchaseDiscountValue,
   setPurchaseDiscountType,
   products,
+  suppliers,
   transactions,
   onClickFileInput,
   onOpenQuickAddProduct,
@@ -92,8 +93,14 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
   setInvoiceFile,
 }) => {
   const invoiceFileInputRef = useRef<HTMLInputElement>(null);
+  // Map O(1) thay vì products.find() O(n) trong mỗi dòng bảng
+  const productById = useMemo(
+    () => new Map(products.map(p => [p.id, p])),
+    [products]
+  );
   const [searchFocused, setSearchFocused] = useState(false);
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
+  const [supplierSearchFocused, setSupplierSearchFocused] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const goodsTotal = purchaseItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
   const lineDiscountTotal = purchaseItems.reduce((sum, item) => sum + item.discount, 0);
@@ -103,6 +110,24 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
       ? Math.min(beforeBillDiscount, Math.round((beforeBillDiscount * purchaseDiscountValue) / 100))
       : Math.min(beforeBillDiscount, purchaseDiscountValue);
   const payableAmount = Math.max(0, beforeBillDiscount - billDiscountAmount);
+  const supplierSearchTerm = purchaseSupplier.trim().toLowerCase();
+  const filteredSuppliers = supplierSearchTerm
+    ? suppliers
+        .filter(supplier => {
+          const haystack = [
+            supplier.name,
+            supplier.code,
+            supplier.phone,
+            supplier.email,
+            supplier.group,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          return haystack.includes(supplierSearchTerm);
+        })
+        .slice(0, 8)
+    : suppliers.filter(supplier => supplier.status !== 'inactive').slice(0, 8);
 
   return (
     <div className="h-full flex flex-col -m-6 bg-[#f0f2f5]">
@@ -249,11 +274,11 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                         </td>
                         <td className="px-3 py-2 text-slate-500 border-r text-center">{idx + 1}</td>
                         <td className="px-3 py-2 font-mono text-indigo-600 border-r">
-                          {products.find(p => p.id === item.productId)?.sku}
+                          {productById.get(item.productId)?.sku}
                         </td>
                         <td className="px-3 py-2 font-normal border-r">{item.name}</td>
                         <td className="px-3 py-2 border-r">
-                          {products.find(p => p.id === item.productId)?.unit || 'Cái'}
+                          {productById.get(item.productId)?.unit || 'Cái'}
                         </td>
                         <td className="px-3 py-2 border-r">
                           <div className="flex items-center border rounded overflow-hidden">
@@ -370,7 +395,34 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                       placeholder="Tìm nhà cung cấp"
                       value={purchaseSupplier}
                       onChange={e => setPurchaseSupplier(e.target.value)}
+                      onFocus={() => setSupplierSearchFocused(true)}
+                      onBlur={() => setSupplierSearchFocused(false)}
                     />
+                    {supplierSearchFocused && filteredSuppliers.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                        {filteredSuppliers.map(supplier => (
+                          <button
+                            key={supplier.id}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setPurchaseSupplier(supplier.name);
+                              setSupplierSearchFocused(false);
+                            }}
+                            className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-indigo-50"
+                          >
+                            <span className="text-sm font-normal text-slate-800">
+                              {supplier.name}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {[supplier.code, supplier.phone, supplier.group]
+                                .filter(Boolean)
+                                .join(' • ') || 'Nhà cung cấp'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={onOpenQuickAddSupplier}
@@ -408,7 +460,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
               {/* Chứng từ đầu vào */}
               <div className="pt-4">
                 <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                  <p className="text-2xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
                     Chứng từ đầu vào
                   </p>
                   <div className="space-y-1.5">
@@ -425,12 +477,6 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                           label: 'Hóa đơn một phần',
                           Icon: FileMinus,
                           color: 'text-yellow-600',
-                        },
-                        {
-                          value: 'memo_only',
-                          label: 'Bảng kê không có HĐ',
-                          Icon: FileText,
-                          color: 'text-blue-600',
                         },
                         {
                           value: 'none',
@@ -580,13 +626,13 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
         /* Purchase History */
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-4 border-b flex justify-between items-center bg-slate-50/50">
-            <h3 className="text-sm font-black uppercase flex items-center gap-2">
+            <h3 className="text-sm font-semibold uppercase flex items-center gap-2">
               <History className="h-4 w-4 text-indigo-500" /> Lịch sử nhập hàng
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-[#f8fafc] border-b font-black text-[11px] uppercase text-slate-700">
+              <thead className="bg-[#f8fafc] border-b font-semibold text-xs uppercase text-slate-700">
                 <tr>
                   <th className="p-4 text-left">Mã đơn</th>
                   <th className="p-4 text-left">Ngày nhập</th>
@@ -603,10 +649,10 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     const badges = {
                       full: { label: '✅ Đủ HĐ', cls: 'bg-green-100 text-green-700' },
                       partial: { label: '⚠️ Một phần', cls: 'bg-yellow-100 text-yellow-700' },
-                      memo_only: { label: '📋 Bảng kê', cls: 'bg-blue-100 text-blue-700' },
                       none: { label: '🔴 Thiếu CT', cls: 'bg-red-100 text-red-600' },
                     };
-                    const badge = badges[t.invoiceStatus as keyof typeof badges] ?? badges.none;
+                    const status = t.invoiceStatus === 'memo_only' ? 'partial' : t.invoiceStatus;
+                    const badge = badges[status as keyof typeof badges] ?? badges.none;
                     return (
                       <tr key={t.id} className="border-b transition-colors hover:bg-slate-50">
                         <td className="p-4 font-mono font-normal text-indigo-600">
@@ -625,7 +671,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                         </td>
                         <td className="p-4">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-normal ${badge.cls}`}
+                            className={`px-2 py-0.5 rounded text-2xs font-normal ${badge.cls}`}
                           >
                             {badge.label}
                           </span>

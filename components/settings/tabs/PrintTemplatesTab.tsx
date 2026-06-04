@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { BrandProfile } from '../../../types';
+import { useToast } from '../../ui/Toast';
 
 // Constants
 const PRINT_TEMPLATE_TYPES = [
@@ -268,6 +269,7 @@ const Section: React.FC<{
 );
 
 const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) => {
+  const { showToast } = useToast();
   // Refs
   const invoiceTemplateTextareaRef = useRef<HTMLTextAreaElement>(null);
   const exchangeTemplateTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -807,7 +809,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
     if (activePrintTemplateType === 'barcodeLabel') {
       const printWindow = window.open('', '_blank', 'width=420,height=320');
       if (!printWindow) {
-        window.alert('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thử.');
+        showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thử.', 'warning');
         return;
       }
 
@@ -850,13 +852,13 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
     }[activePrintTemplateType];
 
     if (!printConfig) {
-      window.alert('Mẫu in này chưa hỗ trợ in thử.');
+      showToast('Mẫu in này chưa hỗ trợ in thử.', 'warning');
       return;
     }
 
     const printWindow = window.open('', '_blank', 'width=420,height=640');
     if (!printWindow) {
-      window.alert('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thử.');
+      showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thử.', 'warning');
       return;
     }
 
@@ -866,7 +868,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
           <title>${printConfig.title}</title>
           <style>
             @page { size: 80mm auto; margin: 0; }
-            body { margin: 0; padding: 5mm; font-family: Inter, Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #0f172a; letter-spacing: -0.015em; }
+            body { margin: 0; padding: 5mm; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; line-height: 1.5; color: #0f172a; letter-spacing: 0; }
             pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
           </style>
         </head>

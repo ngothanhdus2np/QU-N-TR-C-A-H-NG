@@ -59,7 +59,7 @@ const AllowanceRow = ({ icon: Icon, label, value, color = 'text-slate-400' }: an
   <div className="flex items-center justify-between py-1 border-b border-slate-50/50 last:border-none">
     <div className="flex items-center gap-2.5">
       <Icon className={`w-3 h-3 ${color}`} />
-      <span className="text-[10px] font-normal text-slate-500 uppercase tracking-tight">{label}</span>
+      <span className="text-2xs font-normal text-slate-500 uppercase tracking-tight">{label}</span>
     </div>
     <span className="text-xs font-normal text-slate-700">{(value || 0).toLocaleString()}đ</span>
   </div>
@@ -99,7 +99,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                   100
                 );
               }}
-              className={`group p-8 rounded-[3.5rem] border-2 transition-all duration-500 h-[880px] cursor-pointer relative overflow-hidden flex flex-col ${selectedPolicyId === p.id ? 'bg-white border-indigo-600 shadow-2xl ring-8 ring-indigo-50 translate-y-[-8px]' : 'bg-white border-slate-100 shadow-lg hover:border-slate-200'}`}
+              className={`group p-8 rounded-[3.5rem] border-2 transition-all duration-500 min-h-[880px] cursor-pointer relative flex flex-col ${selectedPolicyId === p.id ? 'bg-white border-indigo-600 shadow-2xl ring-8 ring-indigo-50 translate-y-[-8px]' : 'bg-white border-slate-100 shadow-lg hover:border-slate-200'}`}
             >
               <div className="flex items-start justify-between mb-8 relative z-10">
                 <div
@@ -111,12 +111,12 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                   <span className="block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-normal uppercase tracking-widest mb-1">
                     {p.salaryType === 'monthly' ? 'Lương Tháng' : 'Lương Ngày'}
                   </span>
-                  <span className="block text-[10px] font-normal text-slate-400 uppercase">
+                  <span className="block text-2xs font-normal text-slate-400 uppercase">
                     ID: {p.id}
                   </span>
                 </div>
               </div>
-              <h4 className="font-black text-xl mb-4 text-slate-900 uppercase tracking-tight break-words">
+              <h4 className="font-semibold text-xl mb-4 text-slate-900 uppercase tracking-tight break-words">
                 {p.name}
               </h4>
 
@@ -136,7 +136,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
               </div>
 
               <div className="p-4 bg-slate-50 rounded-2xl mb-6 border border-slate-100/50">
-                <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                   <Timer className="w-3 h-3" /> Khoảng thâm niên nhảy bậc
                 </p>
                 <div className="flex items-center gap-4">
@@ -160,7 +160,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
 
               <div className="space-y-4 flex-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400 font-normal uppercase">
+                  <span className="text-2xs text-slate-400 font-normal uppercase">
                     Lương Cơ Bản
                   </span>
                   <span className="text-lg font-normal text-slate-900 tabular-nums">
@@ -228,7 +228,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
-                <div className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-2xl text-[10px] font-normal uppercase group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                <div className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-2xl text-2xs font-normal uppercase group-hover:bg-indigo-600 group-hover:text-white transition-all">
                   Sửa Cơ Chế
                 </div>
               </div>
@@ -237,10 +237,10 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
         })}
         <button
           onClick={onAddNewPolicy}
-          className="p-10 rounded-[3.5rem] border-4 border-dashed border-slate-200 hover:border-indigo-400 text-slate-400 flex flex-col items-center justify-center gap-6 h-[880px] transition-all"
+          className="p-10 rounded-[3.5rem] border-4 border-dashed border-slate-200 hover:border-indigo-400 text-slate-400 flex flex-col items-center justify-center gap-6 min-h-[880px] transition-all"
         >
           <Plus className="w-16 h-16" />
-          <span className="text-[12px] font-normal uppercase tracking-widest">
+          <span className="text-xs font-normal uppercase tracking-widest">
             Thêm Nhóm Lương
           </span>
         </button>
@@ -257,10 +257,10 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                 <Settings className="w-8 h-8" />
               </div>
               <div>
-                <h4 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
+                <h4 className="text-3xl font-semibold text-slate-900 uppercase tracking-tight">
                   Cấu hình: {policyForm.name}
                 </h4>
-                <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
+                <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mt-1">
                   Chỉnh sửa điều kiện nhảy bậc và phụ cấp
                 </p>
               </div>
@@ -285,13 +285,13 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
               <div className="p-8 bg-indigo-50 rounded-[2.5rem] border border-indigo-100 space-y-8">
                 <div className="flex items-center gap-3 border-b border-indigo-200 pb-4">
                   <Timer className="w-6 h-6 text-indigo-600" />
-                  <h5 className="text-[12px] font-black text-indigo-900 uppercase tracking-widest">
+                  <h5 className="text-xs font-semibold text-indigo-900 uppercase tracking-widest">
                     ĐIỀU KIỆN THỜI GIAN (NHẢY BẬC TỰ ĐỘNG)
                   </h5>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   <div className="space-y-4">
-                    <label className="text-[10px] font-normal text-slate-500 uppercase ml-1">
+                    <label className="text-2xs font-normal text-slate-500 uppercase ml-1">
                       Mốc Bắt Đầu (Ngày công tác)
                     </label>
                     <div className="relative">
@@ -306,13 +306,13 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                         }
                         className="w-full px-8 py-5 bg-white border-2 border-indigo-200 rounded-[2rem] text-xl font-normal text-indigo-900 outline-none focus:border-indigo-500 transition-all shadow-inner"
                       />
-                      <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-normal text-slate-300 uppercase tracking-widest">
+                      <span className="absolute right-8 top-1/2 -translate-y-1/2 text-2xs font-normal text-slate-300 uppercase tracking-widest">
                         Ngày
                       </span>
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <label className="text-[10px] font-normal text-slate-500 uppercase ml-1">
+                    <label className="text-2xs font-normal text-slate-500 uppercase ml-1">
                       Mốc Kết Thúc (0 = Vô cực)
                     </label>
                     <div className="relative">
@@ -331,7 +331,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                         {policyForm.endThreshold === 0 && (
                           <span className="text-2xl font-normal text-indigo-400">∞</span>
                         )}
-                        <span className="text-[10px] font-normal text-slate-300 uppercase tracking-widest">
+                        <span className="text-2xs font-normal text-slate-300 uppercase tracking-widest">
                           {policyForm.endThreshold === 0 ? 'TRỞ ĐI' : 'NGÀY'}
                         </span>
                       </div>
@@ -340,7 +340,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                 </div>
                 <div className="flex items-start gap-4 p-4 bg-indigo-100/50 rounded-2xl border border-indigo-200/50">
                   <Info className="w-5 h-5 text-indigo-600 mt-1" />
-                  <p className="text-[11px] text-indigo-800 font-normal leading-relaxed italic">
+                  <p className="text-xs text-indigo-800 font-normal leading-relaxed italic">
                     Gợi ý: Hệ thống sẽ tự động gán bậc lương dựa trên số ngày nhân viên đã
                     làm việc. Nếu mốc Kết thúc là 0, bậc này sẽ kéo dài mãi mãi cho đến khi
                     có bậc cao hơn.
@@ -350,7 +350,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-2xs font-normal text-slate-400 uppercase tracking-widest ml-1">
                     Tên Nhóm
                   </label>
                   <input
@@ -361,7 +361,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-2xs font-normal text-slate-400 uppercase tracking-widest ml-1">
                     Lương Gốc (đ)
                   </label>
                   <input
@@ -374,7 +374,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-2xs font-normal text-slate-400 uppercase tracking-widest ml-1">
                     Đơn giá OT (đ/h)
                   </label>
                   <input
@@ -387,7 +387,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-normal text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-2xs font-normal text-slate-400 uppercase tracking-widest ml-1">
                     Hoa Hồng (%)
                   </label>
                   <input
@@ -407,7 +407,7 @@ const MechanismsSalarySubTab: React.FC<Props> = ({
             <div className="space-y-8 bg-slate-50 p-8 rounded-[3rem] border border-slate-100 shadow-inner">
               <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
                 <Sparkles className="w-6 h-6 text-emerald-500" />
-                <h5 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">
+                <h5 className="text-xs font-semibold text-slate-800 uppercase tracking-widest">
                   Phụ cấp Cố định
                 </h5>
               </div>

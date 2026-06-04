@@ -11,10 +11,25 @@ import {
   UpdateAppData,
 } from '../types';
 import {
+  Activity,
+  Calendar,
+  Clock,
+  Eye,
+  EyeOff,
+  FileDown,
+  Gavel,
+  Landmark,
+  LayoutList,
+  ListChecks,
+  TrendingUp,
+  UserPlus,
+} from 'lucide-react';
+import {
   calculateSeniority,
   determineCurrentPolicy,
   generateId,
 } from '../src/lib';
+import { getPayrollSalaryCost } from '../src/lib/staffPerformanceLedger';
 import { exportToExcel as xlsxExport } from '../services/exportService';
 import AttendanceTab from './payroll/AttendanceTab';
 import OvertimeTab from './payroll/OvertimeTab';
@@ -23,9 +38,9 @@ import PenaltiesTab from './payroll/PenaltiesTab';
 import SummaryTab from './payroll/SummaryTab';
 import LedgerTab from './payroll/LedgerTab';
 import { PayrollPrintPreviewModal } from './payroll/PayrollPrintPreviewModal';
-import { PayrollToolbar } from './payroll/PayrollToolbar';
 import { buildPayrollPayslipHtml } from './payroll/payrollPayslipPrint';
 import { usePayrollState } from '../hooks/usePayrollState';
+import { useToast } from './ui/Toast';
 
 interface Props {
   data: AppData;
@@ -34,7 +49,22 @@ interface Props {
   showResigned: boolean;
   setShowResigned: (val: boolean) => void;
   requestedTab?: PayrollSubTab;
+  onSelectMainTab?: (tab: string) => void;
 }
+
+const PEOPLE_NAV_ITEMS = [
+  { id: 'staff', label: 'Danh sách nhân sự', icon: UserPlus },
+  { id: 'staff-ledger', label: 'Sổ cái hiệu năng', icon: LayoutList },
+];
+
+const PAYROLL_NAV_ITEMS: Array<{ id: PayrollSubTab; label: string; icon: React.ElementType }> = [
+  { id: 'attendance', label: 'Chấm công', icon: ListChecks },
+  { id: 'overtime', label: 'Tăng ca', icon: Clock },
+  { id: 'sales', label: 'Doanh số', icon: TrendingUp },
+  { id: 'penalties', label: 'Các khoản khấu trừ', icon: Gavel },
+  { id: 'summary', label: 'Bảng lương', icon: Activity },
+  { id: 'ledger', label: 'Sổ cái lương', icon: Landmark },
+];
 
 const PayrollManager: React.FC<Props> = ({
   data,
@@ -43,7 +73,9 @@ const PayrollManager: React.FC<Props> = ({
   showResigned,
   setShowResigned,
   requestedTab,
+  onSelectMainTab,
 }) => {
+  const { showToast } = useToast();
   const {
     subTab,
     setSubTab,
@@ -101,7 +133,7 @@ const PayrollManager: React.FC<Props> = ({
       printWindow.document.write(printHtml);
       printWindow.document.close();
     } else {
-      alert('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in phiếu lương.');
+      showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in phiếu lương.', 'warning');
     }
 
     closePrintPreview();
@@ -123,14 +155,16 @@ const PayrollManager: React.FC<Props> = ({
 
     const netPayVal = Math.round(Number(payroll.netPay) || 0);
     if (isNaN(netPayVal)) {
-      alert(
-        'Lỗi: Giá trị thực nhận không hợp lệ (NaN). Vui lòng kiểm tra lại bảng chấm công của nhân viên này.'
+      showToast(
+        'Lỗi: Giá trị thực nhận không hợp lệ (NaN). Vui lòng kiểm tra lại bảng chấm công của nhân viên này.',
+        'error'
       );
       return;
     }
 
+    const salaryCost = getPayrollSalaryCost(payroll);
     const totalSales = calculateTotalSalesAmount(payroll.employeeId);
-    const roi = netPayVal > 0 ? totalSales / netPayVal : 0;
+    const roi = salaryCost > 0 ? totalSales / salaryCost : 0;
     const rankObj = staffRankings.find(r => r.id === payroll.employeeId);
 
     // Create Performance Record
@@ -143,7 +177,7 @@ const PayrollManager: React.FC<Props> = ({
       employeeName: payroll.employeeName,
       month: selectedMonth,
       totalSales,
-      totalIncome: netPayVal,
+      totalIncome: salaryCost,
       roi,
       rank: rankObj?.rank,
     };
@@ -159,7 +193,7 @@ const PayrollManager: React.FC<Props> = ({
       id: existingExpense?.id || generateId(),
       date: expenseDate,
       category: 'Lương & Thưởng',
-      amount: netPayVal,
+      amount: salaryCost,
       description: expenseDesc,
     };
 
@@ -172,13 +206,21 @@ const PayrollManager: React.FC<Props> = ({
       netPay: netPayVal,
     };
 
+    // Cập nhật nợ chuyển kỳ cho nhân viên sau khi chốt lương
+    const emp = data.employees.find(e => e.id === payroll.employeeId);
+    const updatedEmpForDebt = emp
+      ? { ...emp, carryForwardDebt: payroll.carryForwardDebtOut || 0 }
+      : null;
+
     try {
       if (onUpdateSurgical) {
-        await onUpdateSurgical([
+        const updates: Parameters<typeof onUpdateSurgical>[0] = [
           { key: 'payroll', item: finalPayroll },
           { key: 'expenses', item: newExpense },
           { key: 'staffPerformance', item: perfRecord },
-        ]);
+        ];
+        if (updatedEmpForDebt) updates.push({ key: 'employees', item: updatedEmpForDebt });
+        await onUpdateSurgical(updates);
       } else {
         const updatedPayroll = data.payroll.filter(
           p => !(p.month === selectedMonth && p.employeeId === payroll.employeeId)
@@ -192,11 +234,11 @@ const PayrollManager: React.FC<Props> = ({
         onUpdateData('staffPerformance', [...updatedPerf, perfRecord]);
       }
       if (!isSettlement)
-        alert(`✅ Đã chốt lương & đúc hồ sơ hiệu năng cho ${payroll.employeeName} thành công!`);
+        showToast(`✅ Đã chốt lương & đúc hồ sơ hiệu năng cho ${payroll.employeeName} thành công!`, 'success');
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'Lỗi kết nối';
-      alert(`❌ LỖI SAO LƯU: Không thể lưu dữ liệu lên Cloud. Chi tiết: ${message}`);
+      showToast(`❌ LỖI SAO LƯU: Không thể lưu dữ liệu lên Cloud. Chi tiết: ${message}`, 'error');
     }
   };
 
@@ -206,17 +248,18 @@ const PayrollManager: React.FC<Props> = ({
 
     const netPayVal = Math.round(Number(payroll.netPay) || 0);
     if (isNaN(netPayVal)) {
-      alert('LỖI DỮ LIỆU: Giá trị thực nhận không hợp lệ. Hãy kiểm tra bảng công.');
+      showToast('LỖI DỮ LIỆU: Giá trị thực nhận không hợp lệ. Hãy kiểm tra bảng công.', 'error');
       return;
     }
 
     const emp = data.employees.find(e => e.id === originalEmpId);
     if (!emp) {
-      alert('LỖI: Không tìm thấy hồ sơ nhân sự.');
+      showToast('LỖI: Không tìm thấy hồ sơ nhân sự.', 'error');
       return;
     }
 
-    const confirmMsg = `XÁC NHẬN QUYẾT TOÁN VÀ CHO NGHỈ VIỆC\n\n- Nhân viên: ${payroll.employeeName}\n- Thực nhận: ${netPayVal.toLocaleString()}đ\n\nSau khi bấm OK:\n1. Lưu sổ cái lương tháng ${selectedMonth}.\n2. Ghi chi phí lương.\n3. Lưu hồ sơ hiệu năng tháng cuối.\n4. Đóng hồ sơ nhân sự ngay hôm nay (${today.split('-').reverse().join('/')}).`;
+    const salaryCost = getPayrollSalaryCost(payroll);
+    const confirmMsg = `XÁC NHẬN QUYẾT TOÁN VÀ CHO NGHỈ VIỆC\n\n- Nhân viên: ${payroll.employeeName}\n- Thực nhận: ${netPayVal.toLocaleString()}đ\n- Tổng chi lương: ${salaryCost.toLocaleString()}đ\n\nSau khi bấm OK:\n1. Lưu sổ cái lương tháng ${selectedMonth}.\n2. Ghi chi phí lương.\n3. Lưu hồ sơ hiệu năng tháng cuối.\n4. Đóng hồ sơ nhân sự ngay hôm nay (${today.split('-').reverse().join('/')}).`;
 
     if (!confirm(confirmMsg)) return;
 
@@ -241,14 +284,14 @@ const PayrollManager: React.FC<Props> = ({
         id: existingExpense?.id || generateId(),
         date: today,
         category: 'Lương & Thưởng',
-        amount: netPayVal,
+        amount: salaryCost,
         description: expenseDesc,
       };
       updates.push({ key: 'expenses', item: newExpense });
 
       // Add performance capture for last month
       const totalSales = calculateTotalSalesAmount(originalEmpId);
-      const roi = netPayVal > 0 ? totalSales / netPayVal : 0;
+      const roi = salaryCost > 0 ? totalSales / salaryCost : 0;
       const existingPerf = (data.staffPerformance || []).find(
         p => p.employeeId === originalEmpId && p.month === selectedMonth
       );
@@ -260,7 +303,7 @@ const PayrollManager: React.FC<Props> = ({
           employeeName: payroll.employeeName,
           month: selectedMonth,
           totalSales,
-          totalIncome: netPayVal,
+          totalIncome: salaryCost,
           roi,
         },
       });
@@ -273,8 +316,9 @@ const PayrollManager: React.FC<Props> = ({
 
       if (onUpdateSurgical) {
         await onUpdateSurgical(updates);
-        alert(
-          `✅ Đã quyết toán thành công cho ${payroll.employeeName}!\n\nHồ sơ đã được đóng và Headcount đã cập nhật.`
+        showToast(
+          `✅ Đã quyết toán thành công cho ${payroll.employeeName}!\n\nHồ sơ đã được đóng và Headcount đã cập nhật.`,
+          'success'
         );
       } else {
         onUpdateData('payroll', [
@@ -296,7 +340,7 @@ const PayrollManager: React.FC<Props> = ({
     } catch (err) {
       console.error('Critical Settlement Error:', err);
       const message = err instanceof Error ? err.message : 'Lỗi không xác định';
-      alert(`Lỗi hệ thống: ${message}`);
+      showToast(`Lỗi hệ thống: ${message}`, 'error');
     } finally {
       setIsProcessingSettlement(null);
     }
@@ -648,6 +692,114 @@ const PayrollManager: React.FC<Props> = ({
     );
   };
 
+  const handleRecalculateCarryForwardDebt = async () => {
+    if (
+      !confirm(
+        'Tính lại nợ chuyển kỳ cho toàn bộ lịch sử lương?\n\nHệ thống sẽ xử lý từng nhân viên theo thứ tự thời gian, tính lại số nợ tích lũy. Thao tác này không thể hoàn tác.'
+      )
+    )
+      return;
+
+    const allEmployees = data.employees;
+    const allPayrolls = [...data.payroll].sort((a, b) => a.month.localeCompare(b.month));
+    const updates: AppDataSurgicalUpdate[] = [];
+
+    for (const emp of allEmployees) {
+      const empPayrolls = allPayrolls.filter(r => r.employeeId === emp.id);
+      let accDebt = 0;
+
+      for (const record of empPayrolls) {
+        // record.netPay là rawNet trước carry-forward (với dữ liệu cũ chưa có carry-forward)
+        const rawNetEst =
+          (record.carryForwardDeduction || 0) > 0
+            ? record.netPay + (record.carryForwardDeduction || 0) // đã có carry-forward → hồi phục rawNet
+            : record.netPay;
+
+        const available = Math.max(0, rawNetEst);
+        const deduction = Math.min(available, accDebt);
+        const finalNetPay = available - deduction;
+        const newDebtThisPeriod = Math.max(0, -rawNetEst);
+        const newAccDebt = accDebt - deduction + newDebtThisPeriod;
+
+        updates.push({
+          key: 'payroll',
+          item: {
+            ...record,
+            netPay: finalNetPay,
+            carryForwardDeduction: deduction,
+            carryForwardDebtOut: newAccDebt,
+          },
+        });
+
+        accDebt = newAccDebt;
+      }
+
+      updates.push({ key: 'employees', item: { ...emp, carryForwardDebt: accDebt } });
+    }
+
+    try {
+      if (onUpdateSurgical) {
+        // Chia nhỏ để tránh quá tải
+        const chunkSize = 50;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+          await onUpdateSurgical(updates.slice(i, i + chunkSize));
+        }
+        showToast('✅ Đã tính lại nợ chuyển kỳ cho toàn bộ nhân viên!', 'success');
+      } else {
+        showToast('Chức năng này cần kết nối cloud để lưu dữ liệu.', 'warning');
+      }
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Lỗi kết nối';
+      showToast(`❌ Lỗi khi tính lại: ${message}`, 'error');
+    }
+  };
+
+  const handleRecalculateExpensesWithAdvance = async () => {
+    if (
+      !confirm(
+        'Cập nhật lại chi phí lương toàn bộ lịch sử?\n\nHệ thống sẽ cộng thêm tiền tạm ứng vào từng bản ghi chi phí đã chốt. Thao tác này không thể hoàn tác.'
+      )
+    )
+      return;
+
+    const updates: AppDataSurgicalUpdate[] = [];
+
+    for (const record of data.payroll) {
+      const [y, m] = record.month.split('-');
+      const mmyyyy = `${m}/${y}`;
+      const expenseDesc = `Chi lương tháng ${mmyyyy} - ${record.employeeName}`;
+      const existingExpense = data.expenses.find(e => e.description === expenseDesc);
+      if (!existingExpense) continue;
+
+      const correctedAmount = Math.round(Number(record.netPay) || 0) + Math.round(Number(record.advance) || 0);
+      if (existingExpense.amount === correctedAmount) continue;
+
+      updates.push({ key: 'expenses', item: { ...existingExpense, amount: correctedAmount } });
+    }
+
+    if (updates.length === 0) {
+      showToast('Không có bản ghi nào cần cập nhật.', 'info');
+      return;
+    }
+
+    try {
+      if (onUpdateSurgical) {
+        const chunkSize = 50;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+          await onUpdateSurgical(updates.slice(i, i + chunkSize));
+        }
+        showToast(`✅ Đã cập nhật ${updates.length} bản ghi chi phí lương!`, 'success');
+      } else {
+        showToast('Chức năng này cần kết nối cloud để lưu dữ liệu.', 'warning');
+      }
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Lỗi kết nối';
+      showToast(`❌ Lỗi khi cập nhật: ${message}`, 'error');
+    }
+  };
+
   const daysArray = Array.from({ length: getDaysInMonth(selectedMonth) }, (_, i) => i + 1);
 
   const handleExportPayroll = () => {
@@ -669,15 +821,109 @@ const PayrollManager: React.FC<Props> = ({
     );
   };
 
+  const activePayrollMeta = PAYROLL_NAV_ITEMS.find(item => item.id === subTab);
+
   return (
-    <div className="space-y-6 max-w-full mx-auto pb-20">
-      <PayrollToolbar
-        selectedMonth={selectedMonth}
-        showResigned={showResigned}
-        onChangeMonth={setSelectedMonth}
-        onExportPayroll={handleExportPayroll}
-        onToggleShowResigned={() => setShowResigned(!showResigned)}
-      />
+    <div className="flex h-full min-h-0 gap-4">
+      <aside className="w-64 shrink-0 h-full min-h-0 flex flex-col gap-4">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 min-h-[58px] border-b border-slate-100 flex flex-col justify-center">
+            <h2 className="line-clamp-2 text-sm font-medium leading-5 text-slate-700">
+              {activePayrollMeta?.label || 'Lương & Thưởng'}
+            </h2>
+            <p className="text-xs text-slate-400">Nhân sự</p>
+          </div>
+          <div className="p-3 space-y-5">
+            <div className="space-y-2">
+              <p className="px-1 text-sm font-normal text-slate-600">
+                Nhân sự
+              </p>
+              <div className="space-y-1">
+                {PEOPLE_NAV_ITEMS.map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => onSelectMainTab?.(item.id)}
+                      className="flex w-full items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm font-normal text-slate-500 transition-colors hover:border-slate-100 hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="px-1 text-sm font-normal text-slate-600">
+                Lương & Thưởng
+              </p>
+              <div className="space-y-1">
+                {PAYROLL_NAV_ITEMS.map(item => {
+                  const Icon = item.icon;
+                  const isActive = subTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setSubTab(item.id)}
+                      className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-normal transition-colors ${
+                        isActive
+                          ? 'border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:border-slate-100 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 min-h-[52px] border-b border-slate-100 flex items-center justify-between">
+            <h3 className="line-clamp-2 text-sm font-medium leading-5 text-slate-700">Bộ lọc</h3>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-2xs font-normal uppercase tracking-widest text-slate-400">
+                Tháng
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <Calendar className="h-4 w-4 text-slate-400" />
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={e => setSelectedMonth(e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-sm font-normal text-slate-700 outline-none"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => setShowResigned(!showResigned)}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-2xs font-normal uppercase tracking-widest transition-colors ${
+                showResigned
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'border border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {showResigned ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              {showResigned ? 'Đang hiện nhân sự cũ' : 'Hiện nhân sự cũ'}
+            </button>
+            <button
+              onClick={handleExportPayroll}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-2xs font-normal uppercase tracking-widest text-emerald-700 transition-colors hover:bg-emerald-100"
+            >
+              <FileDown className="h-3.5 w-3.5" /> Xuất Excel
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <section className="flex-1 min-w-0 min-h-0 overflow-auto rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div className="space-y-6 max-w-full mx-auto pb-20">
 
       {subTab === 'attendance' && (
         <AttendanceTab
@@ -733,21 +979,37 @@ const PayrollManager: React.FC<Props> = ({
         />
       )}
       {subTab === 'summary' && (
-        <SummaryTab
-          draftPayrolls={draftPayrolls}
-          archivedPayrolls={archivedPayrolls}
-          data={data}
-          selectedMonth={selectedMonth}
-          violationOccurrences={violationOccurrences}
-          violationTypes={violationTypes}
-          responsibilityApprovals={responsibilityApprovals}
-          policies={policies}
-          isProcessingSettlement={isProcessingSettlement}
-          toggleResponsibilityApproval={toggleResponsibilityApproval}
-          handlePrintPayslip={handlePrintPayslip}
-          handleFinalizeIndividual={handleFinalizeIndividual}
-          handleSettlementAndResignation={handleSettlementAndResignation}
-        />
+        <>
+          <SummaryTab
+            draftPayrolls={draftPayrolls}
+            archivedPayrolls={archivedPayrolls}
+            data={data}
+            selectedMonth={selectedMonth}
+            violationOccurrences={violationOccurrences}
+            violationTypes={violationTypes}
+            responsibilityApprovals={responsibilityApprovals}
+            policies={policies}
+            isProcessingSettlement={isProcessingSettlement}
+            toggleResponsibilityApproval={toggleResponsibilityApproval}
+            handlePrintPayslip={handlePrintPayslip}
+            handleFinalizeIndividual={handleFinalizeIndividual}
+            handleSettlementAndResignation={handleSettlementAndResignation}
+          />
+          <div className="flex justify-end gap-2 mt-4 px-2">
+            <button
+              onClick={handleRecalculateExpensesWithAdvance}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-2xs font-normal uppercase tracking-widest bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 transition-colors"
+            >
+              Cập nhật chi phí lương + tạm ứng (lịch sử)
+            </button>
+            <button
+              onClick={handleRecalculateCarryForwardDebt}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-2xs font-normal uppercase tracking-widest bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              Tính lại nợ chuyển kỳ (toàn bộ lịch sử)
+            </button>
+          </div>
+        </>
       )}
       {subTab === 'ledger' && (
         <LedgerTab
@@ -770,6 +1032,8 @@ const PayrollManager: React.FC<Props> = ({
           onConfirmPrint={handleConfirmPrint}
         />
       )}
+        </div>
+      </section>
     </div>
   );
 };

@@ -29,11 +29,11 @@ const OvertimeTab: React.FC<Props> = ({
         <table className="w-full text-left border-collapse table-fixed">
           <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-30 backdrop-blur-sm bg-slate-50/90">
             <tr>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
+              <th className="px-6 py-4 text-2xs font-semibold text-slate-500 uppercase sticky left-0 top-0 bg-slate-50 z-40 border-r border-slate-100 w-[200px]">Nhân viên</th>
               {daysArray.map(day => (
-                <th key={day} className={`px-1 py-4 text-center text-[10px] font-black w-[42px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
+                <th key={day} className={`px-1 py-4 text-center text-2xs font-semibold w-[42px] border-r border-slate-100/50 ${isHoliday(day) ? 'bg-amber-50 text-amber-600' : 'text-slate-400'}`}>{day}</th>
               ))}
-              <th className="px-3 py-4 text-center text-[10px] font-black text-emerald-600 uppercase bg-emerald-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[60px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Giờ</th>
+              <th className="px-3 py-4 text-center text-2xs font-semibold text-emerald-600 uppercase bg-emerald-50 sticky right-0 top-0 z-40 border-l border-slate-200 w-[60px] shadow-[-2px_0_5_rgba(0,0,0,0.02)]">Giờ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -42,7 +42,7 @@ const OvertimeTab: React.FC<Props> = ({
                 <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
                     <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>
+                    <p className="text-2xs text-slate-400 truncate">{emp.position}</p>
                   </td>
                   {daysArray.map(day => (
                     <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>

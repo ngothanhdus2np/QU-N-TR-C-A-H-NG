@@ -17,7 +17,6 @@ import { DEFAULT_BRAND } from '../constants/marketing';
 import {
   DEFAULT_POLICIES,
   DEFAULT_EXPENSE_CATEGORIES,
-  DEFAULT_POS_INVENTORY_SETTINGS,
   DEFAULT_POS_PAYMENT_SETTINGS,
   INITIAL_APP_DATA,
   normalizePOSPaymentSettings,
@@ -26,6 +25,9 @@ import { buildVariantProductName } from '../src/lib';
 
 type DbRow = Record<string, unknown>;
 type ConfigRow = DbRow & { key?: string; value?: unknown };
+
+const inferIsReturnOrder = (orderCode: unknown, finalAmount: number, explicit: unknown) =>
+  explicit === true || /^TH/i.test(String(orderCode || '')) || finalAmount < 0;
 
 interface DataMapperResults {
   brandProfile?: DbRow | null;
@@ -60,6 +62,11 @@ interface DataMapperResults {
 
 const getConfigValue = (configs: ConfigRow[] | undefined, key: string) =>
   configs?.find(config => config.key === key)?.value;
+
+const extractKiotVietSupplierCode = (notes?: unknown) => {
+  if (typeof notes !== 'string') return undefined;
+  return notes.match(/Mã NCC KiotViet:\s*(NCC\d+)/i)?.[1];
+};
 
 // Parse "SIZE:43|MÀU:ĐỎ" hoặc "MÀU:NÂU" thành { SIZE: "43", MÀU: "ĐỎ" }
 const parseVariantAttrText = (text?: string): Record<string, string> => {
@@ -96,10 +103,13 @@ export const dataMapper = {
     if (!cloud || cloud.length === 0) return local || [];
     if (!local || local.length === 0) return cloud || [];
 
+    // Dùng Map để tránh O(n²) findIndex — đặc biệt quan trọng cho posOrders/posProducts lớn
+    const cloudIndexMap = new Map<unknown, number>(cloud.map((c, i) => [c[key], i]));
     const merged = [...cloud];
     local.forEach(l => {
-      const idx = merged.findIndex(c => c[key] === l[key]);
-      if (idx === -1) {
+      const k = l[key];
+      const idx = cloudIndexMap.get(k);
+      if (idx === undefined) {
         // Local-only record (chưa sync lên cloud) → giữ lại
         merged.push(l);
       } else {
@@ -138,6 +148,7 @@ export const dataMapper = {
       photoUrl: e.photo_url || e.photoUrl,
       bloodType: e.blood_type || e.bloodType,
       email: e.email,
+      carryForwardDebt: Number(e.carry_forward_debt || e.carryForwardDebt || 0),
     }));
 
     const cloudPolicies = (results.policies || []).map(p => ({
@@ -288,6 +299,8 @@ export const dataMapper = {
           isOfficial: p.is_official || p.isOfficial,
           hasTetCommitment: p.has_tet_commitment || p.hasTetCommitment,
           calculationNote: p.calculation_note || p.calculationNote,
+          carryForwardDeduction: p.carry_forward_deduction || p.carryForwardDeduction || 0,
+          carryForwardDebtOut: p.carry_forward_debt_out || p.carryForwardDebtOut || 0,
         })),
         localData?.payroll || []
       ),
@@ -411,6 +424,11 @@ export const dataMapper = {
           importPrice: r.import_price || r.importPrice || 0,
           salePrice: r.sale_price || r.salePrice || 0,
           status: r.status,
+          groupId: r.group_id || r.groupId,
+          starred: r.starred || false,
+          imageUrl: r.image_url || r.imageUrl,
+          description: r.description,
+          shops: r.shops,
         })),
         localData?.shopeeSourceData || [],
         'sku'
@@ -453,7 +471,9 @@ export const dataMapper = {
           personalIncomeTax: r.personal_income_tax || r.personalIncomeTax || 0,
           netProfit: r.net_profit || r.netProfit || 0,
           address: r.address,
-          shipping_unit: r.shipping_unit || r.shippingUnit,
+          shippingUnit: r.shipping_unit || r.shippingUnit,
+          platform: r.platform || 'Shopee 2',
+          productName: r.product_name || r.productName || '',
         })),
         localData?.shopeeInventoryOut || []
       ),
@@ -525,8 +545,21 @@ export const dataMapper = {
           finalAmount: Number(o.final_amount || 0),
           paymentMethod: o.payment_method || o.paymentMethod,
           staffId: o.staff_id || o.staffId,
+          staffName: o.staff_name || o.staffName || '',
+          createdBy: o.created_by || o.createdBy || o.staff_id || o.staffId,
+          channel: o.channel || 'direct',
+          channelName: o.channel_name || o.channelName || 'Bán trực tiếp',
+          priceBookId: o.price_book_id || o.priceBookId || undefined,
+          priceBookName: o.price_book_name || o.priceBookName || undefined,
+          status: o.status || o.orderStatus || 'completed',
           notes: o.notes,
           pointsEarned: Number(o.points_earned || 0),
+          isReturn: inferIsReturnOrder(
+            o.order_code || o.orderCode,
+            Number(o.final_amount || 0),
+            o.is_return ?? o.isReturn
+          ),
+          refundAmount: Number(o.refund_amount || 0),
         })),
         localData?.posOrders || []
       ),
@@ -582,13 +615,19 @@ export const dataMapper = {
         (results.suppliers || []).map(s => ({
           id: s.id,
           name: s.name,
-          code: s.code,
+          code: s.code || extractKiotVietSupplierCode(s.notes),
           phone: s.phone,
           email: s.email,
           address: s.address,
           group: s.supplier_group || s.group,
           status: s.status || 'active',
           notes: s.notes,
+          companyName: s.company_name || s.companyName,
+          taxCode: s.tax_code || s.taxCode,
+          invoiceCompanyName: s.invoice_company_name || s.invoiceCompanyName,
+          invoiceTaxCode: s.invoice_tax_code || s.invoiceTaxCode,
+          invoicePhone: s.invoice_phone || s.invoicePhone,
+          invoiceAddress: s.invoice_address || s.invoiceAddress,
         })),
         localData?.suppliers || []
       ),

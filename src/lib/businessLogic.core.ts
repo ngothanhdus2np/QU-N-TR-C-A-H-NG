@@ -129,12 +129,15 @@ export const parseVNDate = (dateStr: unknown): string => {
 
   if (typeof dateStr === 'number') {
     try {
-      // Excel serial date to JS Date
-      const d = new Date(Math.round((dateStr - 25569) * 86400 * 1000));
+      // Excel serial date → JS Date
+      // Math.floor bỏ phần giờ (tránh 45000.5 làm tròn lên ngày tiếp theo)
+      // Dùng UTC methods để không bị lệch múi giờ (midnight UTC = 7am VN)
+      const serialInt = Math.floor(dateStr);
+      const d = new Date((serialInt - 25569) * 86400 * 1000);
       if (isNaN(d.getTime())) return '';
-      const y = d.getFullYear();
-      const m = (d.getMonth() + 1).toString().padStart(2, '0');
-      const day = d.getDate().toString().padStart(2, '0');
+      const y = d.getUTCFullYear();
+      const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+      const day = d.getUTCDate().toString().padStart(2, '0');
       return `${y}-${m}-${day}`;
     } catch {
       return '';
@@ -261,10 +264,8 @@ export const processExcelRawData = (
         maxMatch = matchCount;
         headerRowIndex = i;
       }
-      if (matchCount >= 2) {
-        headerRowIndex = i;
-        break;
-      }
+      // Dừng sớm khi đã tìm thấy hàng tốt nhất (>= 2 từ khóa) — không ghi đè lại headerRowIndex
+      if (maxMatch >= 2) break;
     }
 
     if (headerRowIndex === -1) return [];

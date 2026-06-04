@@ -103,7 +103,8 @@ export const usePayrollState = ({ data, showResigned, requestedTab }: UsePayroll
         isResponsibilityApproved,
         shortages,
         advances,
-        existingPayroll?.id
+        existingPayroll?.id,
+        emp.carryForwardDebt || 0
       );
     });
   }, [

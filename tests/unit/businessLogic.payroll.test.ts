@@ -113,6 +113,91 @@ describe('calculateEmployeePayroll', () => {
     expect(result.allowance).toBe(expectedMonthlyAllowance + expectedDinnerAllowance);
   });
 
+  it('vẫn giữ chuyên cần khi nghỉ có phép 1 ngày', () => {
+    const attendance: AttendanceRecord[] = [
+      { id: 'a1', employeeId: 'e1', date: '2024-05-01', status: 'Present', hours: 11 },
+      { id: 'a2', employeeId: 'e1', date: '2024-05-02', status: 'Present', hours: 8 },
+      { id: 'a3', employeeId: 'e1', date: '2024-05-03', status: 'AuthorizedLeave', hours: 0 },
+    ];
+    const result = calculateEmployeePayroll(
+      baseEmployee,
+      '2024-05',
+      [basePolicy],
+      [],
+      attendance,
+      [],
+      [],
+      undefined,
+      26,
+      [],
+      [],
+      false,
+      [],
+      []
+    );
+
+    const expectedMonthlyAllowance = Math.round(2000000 * (2 / 31));
+    const expectedDinnerAllowance = 30000 * 2;
+    expect(result.allowance).toBe(expectedMonthlyAllowance + expectedDinnerAllowance);
+  });
+
+  it('mất chuyên cần khi nghỉ có phép hơn 1 ngày', () => {
+    const attendance: AttendanceRecord[] = [
+      { id: 'a1', employeeId: 'e1', date: '2024-05-01', status: 'Present', hours: 11 },
+      { id: 'a2', employeeId: 'e1', date: '2024-05-02', status: 'Present', hours: 11 },
+      { id: 'a3', employeeId: 'e1', date: '2024-05-03', status: 'AuthorizedLeave', hours: 0 },
+      { id: 'a4', employeeId: 'e1', date: '2024-05-04', status: 'AuthorizedLeave', hours: 0 },
+    ];
+    const result = calculateEmployeePayroll(
+      baseEmployee,
+      '2024-05',
+      [basePolicy],
+      [],
+      attendance,
+      [],
+      [],
+      undefined,
+      26,
+      [],
+      [],
+      false,
+      [],
+      []
+    );
+
+    const expectedMonthlyAllowanceWithoutAttendance = Math.round(1500000 * (2 / 31));
+    const expectedDinnerAllowance = 30000 * 2;
+    expect(result.allowance).toBe(expectedMonthlyAllowanceWithoutAttendance + expectedDinnerAllowance);
+  });
+
+  it('mất chuyên cần khi nghỉ không phép 1 ngày', () => {
+    const attendance: AttendanceRecord[] = [
+      { id: 'a1', employeeId: 'e1', date: '2024-05-01', status: 'Present', hours: 11 },
+      { id: 'a2', employeeId: 'e1', date: '2024-05-02', status: 'Present', hours: 11 },
+      { id: 'a3', employeeId: 'e1', date: '2024-05-03', status: 'UnauthorizedLeave', hours: 0 },
+    ];
+    const result = calculateEmployeePayroll(
+      baseEmployee,
+      '2024-05',
+      [basePolicy],
+      [],
+      attendance,
+      [],
+      [],
+      undefined,
+      26,
+      [],
+      [],
+      false,
+      [],
+      []
+    );
+
+    const expectedMonthlyAllowanceWithoutAttendance = Math.round(1500000 * (2 / 31));
+    const expectedDinnerAllowance = 30000 * 2;
+    expect(result.allowance).toBe(expectedMonthlyAllowanceWithoutAttendance + expectedDinnerAllowance);
+  });
+
   it('tính lương trách nhiệm khi có phê duyệt', () => {
     const attendance: AttendanceRecord[] = [
       { id: 'a1', employeeId: 'e1', date: '2024-05-01', status: 'Present', hours: 11 },

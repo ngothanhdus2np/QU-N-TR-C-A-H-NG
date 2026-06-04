@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X, FileDown, Printer, PackageIcon, MoreHorizontal, List, LayoutGrid } from 'lucide-react';
 
 interface GoodsToolbarProps {
   searchTerm: string;
@@ -26,7 +26,12 @@ interface GoodsToolbarProps {
   onPrintSelectedLabels: () => void;
   onPurchaseSelected: () => void;
   onBulkDelete: () => void;
+  onBulkStopBusiness: () => void;
+  onBulkChangeGroup: () => void;
+  onGoToWarranty: () => void;
   onResetPage: () => void;
+  viewMode: 'table' | 'grid';
+  onViewModeChange: (mode: 'table' | 'grid') => void;
 }
 
 export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
@@ -52,8 +57,31 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   onPrintSelectedLabels,
   onPurchaseSelected,
   onBulkDelete,
+  onBulkStopBusiness,
+  onBulkChangeGroup,
+  onGoToWarranty,
   onResetPage,
-}) => (
+  viewMode,
+  onViewModeChange,
+}) => {
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false);
+  const moreMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showMoreMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMoreMenu]);
+
+  const btnBase =
+    'flex items-center gap-1.5 px-3 py-2 rounded-xl font-semibold text-2xs uppercase tracking-wide transition-all border';
+
+  return (
   <>
     <div className="px-4 min-h-[52px] border-b border-slate-100 flex items-center gap-3 shrink-0">
       <div className="flex-1 relative max-w-sm">
@@ -66,26 +94,123 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
           onChange={e => onSearchChange(e.target.value)}
         />
       </div>
-      <div className="flex items-center gap-2 ml-auto">
-        <button
-          onClick={onOpenCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
-        >
-          <Plus className="h-3.5 w-3.5" /> Tạo mới
-        </button>
-        {rightControls}
-      </div>
+
+      {selectedCount > 0 ? (
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-2xs font-semibold uppercase tracking-wide border border-indigo-200">
+            Đã chọn {selectedCount}
+            <button onClick={onClearSelection} className="hover:text-indigo-900 transition-colors">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+          <button
+            onClick={onExportSelected}
+            className={`${btnBase} bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm`}
+          >
+            <FileDown className="h-3.5 w-3.5" /> Xuất file
+          </button>
+          <button
+            onClick={onPrintSelectedLabels}
+            className={`${btnBase} bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm`}
+          >
+            <Printer className="h-3.5 w-3.5" /> In tem mã
+          </button>
+          <button
+            onClick={onPurchaseSelected}
+            className={`${btnBase} bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm`}
+          >
+            <PackageIcon className="h-3.5 w-3.5" /> Nhập hàng
+          </button>
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setShowMoreMenu(v => !v)}
+              className={`${btnBase} bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm px-2.5`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {showMoreMenu && (
+              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50">
+                <button
+                  onClick={() => { onPurchaseSelected(); setShowMoreMenu(false); }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
+                >
+                  Đặt hàng nhập
+                </button>
+                <button
+                  onClick={() => { onBulkChangeGroup(); setShowMoreMenu(false); }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
+                >
+                  Đổi nhóm hàng
+                </button>
+                <button
+                  onClick={() => { onGoToWarranty(); setShowMoreMenu(false); }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
+                >
+                  Sửa bảo hành, bảo trì
+                </button>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  onClick={() => { onBulkStopBusiness(); setShowMoreMenu(false); }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-amber-600 hover:bg-amber-50 transition-all"
+                >
+                  Ngừng kinh doanh
+                </button>
+                <button
+                  onClick={() => { onBulkDelete(); setShowMoreMenu(false); }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 transition-all"
+                >
+                  Xóa
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shrink-0">
+            <button
+              onClick={() => onViewModeChange('table')}
+              className={`flex items-center justify-center w-8 h-8 transition-all ${
+                viewMode === 'table'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'bg-white text-slate-400 hover:bg-slate-50'
+              }`}
+              title="Xem dạng bảng"
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onViewModeChange('grid')}
+              className={`flex items-center justify-center w-8 h-8 transition-all border-l border-slate-200 ${
+                viewMode === 'grid'
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'bg-white text-slate-400 hover:bg-slate-50'
+              }`}
+              title="Xem dạng lưới ảnh"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <button
+            onClick={onOpenCreate}
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-2xs uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" /> Tạo mới
+          </button>
+          {rightControls}
+        </div>
+      )}
     </div>
 
     <div className="px-4 py-2 bg-slate-50/60 border-b border-slate-100 flex items-center gap-2 flex-wrap shrink-0">
-      <span className="text-[10px] font-bold text-slate-500">
-        Hiển thị <span className="font-black text-slate-800">{filteredCount}</span> / {totalCount}{' '}
+      <span className="text-2xs font-bold text-slate-500">
+        Hiển thị <span className="font-semibold text-slate-800">{filteredCount}</span> / {totalCount}{' '}
         hàng hóa
       </span>
       {filterCategories.map(cat => (
         <span
           key={cat}
-          className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-black text-[9px]"
+          className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold text-[9px]"
         >
           {cat}
           <button
@@ -99,7 +224,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
         </span>
       ))}
       {filterBrand && (
-        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-black text-[9px]">
+        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold text-[9px]">
           {filterBrand}
           <button
             onClick={() => {
@@ -114,7 +239,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
       {filterAttrs.map(attr => (
         <span
           key={attr}
-          className="flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full font-black text-[9px]"
+          className="flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full font-semibold text-[9px]"
         >
           {attr}
           <button
@@ -128,7 +253,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
         </span>
       ))}
       {filterLocation && (
-        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-black text-[9px]">
+        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold text-[9px]">
           {filterLocation}
           <button
             onClick={() => {
@@ -141,7 +266,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
         </span>
       )}
       {filterStock !== 'all' && (
-        <span className="flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-black text-[9px]">
+        <span className="flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-semibold text-[9px]">
           {filterStock === 'low_stock'
             ? 'Sắp hết hàng'
             : filterStock === 'out_of_stock'
@@ -157,11 +282,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
           </button>
         </span>
       )}
-      {selectedCount > 0 && (
-        <span className="ml-auto text-[10px] font-black text-slate-700">
-          Đã chọn {selectedCount}
-        </span>
-      )}
     </div>
   </>
-);
+  );
+};

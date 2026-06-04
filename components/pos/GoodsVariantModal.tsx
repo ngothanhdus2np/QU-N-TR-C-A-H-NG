@@ -156,7 +156,7 @@ export const GoodsVariantModal: React.FC<GoodsVariantModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/50"
       onClick={onClose}
     >
       <div
@@ -291,7 +291,7 @@ export const GoodsVariantModal: React.FC<GoodsVariantModalProps> = ({
                         Chọn nhanh
                       </button>
                       {quickSelectAttributeId === attr.id && effectiveAttributeType && (
-                        <div className="absolute right-0 top-full z-[1010] mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                        <div className="absolute right-0 top-full z-modal mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                           <div className="max-h-56 overflow-y-auto p-2">
                             {getQuickValues(effectiveAttributeType).length > 0 ? (
                               getQuickValues(effectiveAttributeType).map(value => (

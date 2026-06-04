@@ -39,6 +39,12 @@ export const isStaffActive = (e: Pick<Employee, 'resignedDate'> | null | undefin
   return !resigned || String(resigned).trim() === '';
 };
 
+export const shouldCutAttendanceAllowanceByLeave = (attendance: AttendanceRecord[]): boolean => {
+  const authorizedLeaveDays = attendance.filter(a => a.status === 'AuthorizedLeave').length;
+  const unauthorizedLeaveDays = attendance.filter(a => a.status === 'UnauthorizedLeave').length;
+  return authorizedLeaveDays > 1 || unauthorizedLeaveDays > 0;
+};
+
 export const getPolicyLogicDescription = (_policies: SalaryPolicy[]): string => {
   return "Hệ thống áp dụng logic 'Top-Down Range Matching': Ưu tiên mốc Bắt đầu cao nhất trước. Mốc kết thúc 0 được hiểu là Vô cực (∞).";
 };
@@ -58,6 +64,7 @@ export const calculateSeniority = (joinDateStr: string, asOfDateStr?: string): n
   }
 
   const diffTime = targetDate.getTime() - joinDate.getTime();
+  // +1 để tính cả ngày gia nhập (inclusive): nhân viên join ngày 1/1 → tính thâm niên từ ngày đó luôn
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
   return diffDays < 0 ? 0 : diffDays;
 };
@@ -83,6 +90,16 @@ export const determineCurrentPolicy = (
   const sortedCandidates = candidates.sort(
     (a, b) => (b.startThreshold || 0) - (a.startThreshold || 0)
   );
+
+  // Kiểm tra và cảnh báo nếu có policy ranges chồng lên nhau (dấu hiệu cấu hình sai)
+  for (let i = 0; i < sortedCandidates.length - 1; i++) {
+    const curr = sortedCandidates[i];
+    const next = sortedCandidates[i + 1];
+    const currEnd = curr.endThreshold === 0 || curr.endThreshold == null ? Infinity : curr.endThreshold;
+    if (currEnd > (next.startThreshold || 0)) {
+      console.warn(`[Payroll] Policy overlap: "${curr.name}" [${curr.startThreshold}-${currEnd}) vs "${next.name}" [${next.startThreshold}-...)`);
+    }
+  }
 
   const match = sortedCandidates.find(p => {
     const start = p.startThreshold || 0;
@@ -113,7 +130,8 @@ export const calculateEmployeePayroll = (
   isResponsibilityApproved: boolean = false,
   shortages: ShortageRecord[] = [],
   advances: AdvanceRecord[] = [],
-  existingId?: string
+  existingId?: string,
+  carryForwardDebt: number = 0
 ): PayrollRecord => {
   const parts = (selectedMonth || '').split('-');
   if (parts.length < 2) {
@@ -139,6 +157,8 @@ export const calculateEmployeePayroll = (
       seniorityDays: 0,
       isOfficial: false,
       hasTetCommitment: false,
+      carryForwardDeduction: 0,
+      carryForwardDebtOut: 0,
     };
   }
 
@@ -166,6 +186,8 @@ export const calculateEmployeePayroll = (
       seniorityDays: 0,
       isOfficial: false,
       hasTetCommitment: false,
+      carryForwardDeduction: 0,
+      carryForwardDebtOut: 0,
     };
   }
 
@@ -182,7 +204,9 @@ export const calculateEmployeePayroll = (
   const monthAttendance = attendance.filter(
     a => a.employeeId === emp.id && a.date.startsWith(selectedMonth)
   );
-  const workingDays = monthAttendance.filter(a => a.status === 'Present').length || 0;
+  // Ngày lễ (Holiday) = ngày nghỉ lễ theo quy định → vẫn tính như ngày công để không bị trừ lương cơ bản
+  const workingDays =
+    monthAttendance.filter(a => a.status === 'Present' || a.status === 'Holiday').length || 0;
   const totalHoursWorked =
     monthAttendance
       .filter(a => a.status === 'Present')
@@ -194,7 +218,9 @@ export const calculateEmployeePayroll = (
 
   let monthHolidaysCount = 0;
   for (let d = 1; d <= (daysInMonthTotal || 30); d++) {
-    if (holidays.some(h => h.date === `${currentMonthStr}-${d.toString().padStart(2, '0')}`))
+    // Hỗ trợ cả 2 format: MM-DD (chuẩn lưu ngày lễ) và YYYY-MM-DD (legacy)
+    const dayStr = `${currentMonthStr}-${d.toString().padStart(2, '0')}`;
+    if (holidays.some(h => h.date === dayStr || h.date === `${year}-${dayStr}`))
       monthHolidaysCount++;
   }
 
@@ -211,6 +237,15 @@ export const calculateEmployeePayroll = (
     lostHousing = false,
     lostResponsibility = false;
   let disciplinaryDeduction = 0;
+  const lostAttendanceByLeave = shouldCutAttendanceAllowanceByLeave(monthAttendance);
+  if (lostAttendanceByLeave) {
+    lostAttendance = true;
+    const authorizedLeaveDays = monthAttendance.filter(a => a.status === 'AuthorizedLeave').length;
+    const unauthorizedLeaveDays = monthAttendance.filter(
+      a => a.status === 'UnauthorizedLeave'
+    ).length;
+    notes.push(`Chuyên cần: Mất do CP ${authorizedLeaveDays} ngày, KP ${unauthorizedLeaveDays} ngày.`);
+  }
 
   // Chuẩn hóa chuỗi phạt: bỏ dấu, lowercase, giữ spaces — tránh miss-match do lỗi gõ dấu
   const normVN = (s: string) =>
@@ -233,12 +268,20 @@ export const calculateEmployeePayroll = (
           lostHousing = true;
         if (pStr.includes('trach nhiem')) lostResponsibility = true;
 
-        const match = pStr.match(/\d+/g);
-        if (match) {
-          const n = parseInt(match.join(''));
-          const amount = n < 1000 ? n * 1000 : n;
-          disciplinaryDeduction += amount;
-          notes.push(`Phạt: ${vType.name} (${amount.toLocaleString()}đ)`);
+        // Parse số tiền phạt: ưu tiên pattern "XYZk" (vd "50k"), nếu không thì lấy số cuối cùng
+        const kMatch = pStr.match(/(\d+)\s*k\b/i);
+        const allNums = pStr.match(/\d+/g);
+        let penaltyAmount = 0;
+        if (kMatch) {
+          penaltyAmount = parseInt(kMatch[1]) * 1000;
+        } else if (allNums) {
+          // Lấy số CUỐI cùng (tránh nối số thứ tự như "lần 2" với số tiền)
+          const lastNum = parseInt(allNums[allNums.length - 1]);
+          penaltyAmount = lastNum < 1000 ? lastNum * 1000 : lastNum;
+        }
+        if (penaltyAmount > 0) {
+          disciplinaryDeduction += penaltyAmount;
+          notes.push(`Phạt: ${vType.name} (${penaltyAmount.toLocaleString()}đ)`);
         }
       }
     });
@@ -338,13 +381,12 @@ export const calculateEmployeePayroll = (
         tetBonusBefore += Number(tetConfig.bonus30Tet) || 0;
     }
     if (tetConfig.beforeTetExtraDays && tetConfig.beforeTetExtraDays.length > 0) {
-      if (
-        tetConfig.beforeTetExtraDays.every(d =>
-          monthAttendance.some(a => a.date === d && a.status === 'Present')
-        )
-      ) {
-        if (monthStr === tetConfig.beforeTetExtraDays[0].slice(0, 7))
-          tetBonusBefore += Number(tetConfig.beforeTetExtraBonus) || 0;
+      // Dùng toàn bộ attendance (không chỉ tháng hiện tại) để xử lý ngày extra vượt ranh giới tháng
+      const allBeforeExtraPresent = tetConfig.beforeTetExtraDays.every(d =>
+        attendance.some(a => a.employeeId === emp.id && a.date === d && a.status === 'Present')
+      );
+      if (allBeforeExtraPresent && monthStr === tetConfig.beforeTetExtraDays[0].slice(0, 7)) {
+        tetBonusBefore += Number(tetConfig.beforeTetExtraBonus) || 0;
       }
     }
     if (tetConfig.afterTetDate && monthStr === tetConfig.afterTetDate.slice(0, 7)) {
@@ -352,13 +394,12 @@ export const calculateEmployeePayroll = (
         tetBonusAfter += Number(tetConfig.lixiBonus) || 0;
     }
     if (tetConfig.afterTetExtraDays && tetConfig.afterTetExtraDays.length > 0) {
-      if (
-        tetConfig.afterTetExtraDays.every(d =>
-          monthAttendance.some(a => a.date === d && a.status === 'Present')
-        )
-      ) {
-        if (monthStr === tetConfig.afterTetExtraDays[0].slice(0, 7))
-          tetBonusAfter += Number(tetConfig.afterTetExtraBonus) || 0;
+      // Dùng toàn bộ attendance để xử lý ngày extra vượt ranh giới tháng
+      const allAfterExtraPresent = tetConfig.afterTetExtraDays.every(d =>
+        attendance.some(a => a.employeeId === emp.id && a.date === d && a.status === 'Present')
+      );
+      if (allAfterExtraPresent && monthStr === tetConfig.afterTetExtraDays[0].slice(0, 7)) {
+        tetBonusAfter += Number(tetConfig.afterTetExtraBonus) || 0;
       }
     }
   }
@@ -404,7 +445,19 @@ export const calculateEmployeePayroll = (
       shortageAmount -
       totalAdvance
   );
-  const netPay = Number(rawNet) || 0;
+
+  // Carry-forward debt: phần lương âm kỳ này được cộng vào nợ chuyển kỳ sau
+  const totalDebt = Number(carryForwardDebt) || 0;
+  const available = Math.max(0, rawNet);
+  const cfDeduction = Math.min(available, totalDebt);
+  const finalNetPay = available - cfDeduction;
+  const newDebtThisPeriod = Math.max(0, -rawNet);
+  const cfDebtOut = totalDebt - cfDeduction + newDebtThisPeriod;
+
+  if (cfDeduction > 0)
+    notes.push(`NỢ KỲ TRƯỚC: -${cfDeduction.toLocaleString()}đ (còn nợ sau kỳ: ${cfDebtOut.toLocaleString()}đ).`);
+  if (newDebtThisPeriod > 0)
+    notes.push(`LƯƠNG ÂM: ${newDebtThisPeriod.toLocaleString()}đ sẽ trừ vào kỳ sau.`);
 
   return {
     id: existingId || generateId(),
@@ -424,11 +477,13 @@ export const calculateEmployeePayroll = (
     advance: Number(totalAdvance) || 0,
     shortage: Number(shortageAmount) || 0,
     fine: Number(disciplinaryDeduction) || 0,
-    netPay: isNaN(netPay) ? 0 : netPay,
+    netPay: isNaN(finalNetPay) ? 0 : finalNetPay,
     seniorityDays: Number(seniorityAtMonthEnd) || 0,
     isOfficial,
     hasTetCommitment: true,
     calculationNote: notes.join(' | '),
+    carryForwardDeduction: cfDeduction,
+    carryForwardDebtOut: cfDebtOut,
   };
 };
 

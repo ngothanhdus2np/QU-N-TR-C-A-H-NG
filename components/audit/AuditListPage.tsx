@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, FileDown, Star, Trash2, FileText, Eye, Info, X } from 'lucide-react';
 import {
   ListPageLayout,
@@ -69,6 +69,7 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
     emptyDescription: config?.emptyDescription || 'Bấm nút "Phiếu kiểm kho" để tạo phiếu kiểm mới',
     showInfoButton: config?.showInfoButton ?? true,
   };
+  const starStorageKey = `auditStarred:${listConfig.transactionType}`;
 
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,6 +83,20 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
   // Selection
   const [selectedAudits, setSelectedAudits] = useState<string[]>([]);
   const [starredAudits, setStarredAudits] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(starStorageKey);
+      setStarredAudits(new Set(raw ? JSON.parse(raw) : []));
+    } catch {
+      setStarredAudits(new Set());
+    }
+  }, [starStorageKey]);
+
+  const persistStarredAudits = (next: Set<string>) => {
+    setStarredAudits(next);
+    localStorage.setItem(starStorageKey, JSON.stringify(Array.from(next)));
+  };
 
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -195,15 +210,13 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
   };
 
   const handleToggleStar = (id: string) => {
-    setStarredAudits(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
+    const next = new Set(starredAudits);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    persistStarredAudits(next);
   };
 
   const handleClearFilters = () => {
@@ -276,14 +289,15 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
         />
       </FilterSection>
 
-      <FilterSection title="Thời gian">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <h3 className="mb-2 text-sm font-bold text-slate-900">Thời gian</h3>
         <FilterDateRange
           startDate={dateRange.start}
           endDate={dateRange.end}
           onStartDateChange={date => setDateRange(prev => ({ ...prev, start: date }))}
           onEndDateChange={date => setDateRange(prev => ({ ...prev, end: date }))}
         />
-      </FilterSection>
+      </div>
 
       <FilterSection title="Người tạo">
         <FilterCheckboxGroup
@@ -573,14 +587,14 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
       </ListPageLayout>
 
       {showInfoModal && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-toast flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <p className="text-[10px] font-normal uppercase tracking-widest text-indigo-500">
+                <p className="text-2xs font-normal uppercase tracking-widest text-indigo-500">
                   Thông tin chức năng
                 </p>
-                <h3 className="text-lg font-black text-slate-900">Kiểm kho</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Kiểm kho</h3>
               </div>
               <button
                 onClick={() => setShowInfoModal(false)}
@@ -592,14 +606,14 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
             </div>
             <div className="space-y-4 px-5 py-5 text-sm text-slate-600">
               <div>
-                <h4 className="font-black text-slate-900">Phiếu kiểm kho</h4>
+                <h4 className="font-semibold text-slate-900">Phiếu kiểm kho</h4>
                 <p className="mt-1">
                   Dùng khi đếm số lượng thực tế. Quét hoặc tìm mã hàng, nhập cột Thực tế, hệ thống
                   tự tính số lượng lệch và cập nhật tồn kho khi hoàn thành.
                 </p>
               </div>
               <div>
-                <h4 className="font-black text-slate-900">Chọn hàng hóa</h4>
+                <h4 className="font-semibold text-slate-900">Chọn hàng hóa</h4>
                 <p className="mt-1">
                   Chọn nhóm hàng trước khi quét để ô tìm kiếm chỉ tìm trong nhóm đó, giúp thao tác
                   nhẹ và nhanh hơn với dữ liệu lớn.

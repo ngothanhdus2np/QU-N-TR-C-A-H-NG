@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, FileDown, Star, Trash2, FileText, Eye } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { Plus, FileDown, Star, Trash2, FileText, Eye, Upload, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { appDataCache } from '../../services/appDataCache';
 import {
   ListPageLayout,
   ListPageToolbar,
@@ -38,6 +39,45 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   onExportPurchases,
 }) => {
   const { showToast } = useToast();
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [importMessage, setImportMessage] = useState('');
+
+  const handleImportKiotViet = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImportStatus('loading');
+    setImportMessage(`Đang xử lý "${file.name}"...`);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const CHUNK = 8192;
+      for (let i = 0; i < bytes.length; i += CHUNK)
+        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)));
+      const fileBase64 = btoa(binary);
+      const res = await fetch('/api/import/kiotviet-purchase-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64 }),
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+      await appDataCache.clearDataKeys(['suppliers', 'supplierDebts', 'inventoryTransactions']);
+      const skipped = data.skippedByStatus
+        ? Object.entries(data.skippedByStatus).map(([s, c]) => `${s}: ${c}`).join(', ')
+        : '';
+      setImportStatus('done');
+      setImportMessage(
+        `Đã import ${data.purchases} phiếu, ${data.items} dòng SP, ${data.suppliers} NCC.${skipped ? ` Bỏ qua ${skipped}.` : ''} Tải lại trang để xem dữ liệu mới.`
+      );
+    } catch (err) {
+      setImportStatus('error');
+      setImportMessage(err instanceof Error ? err.message : 'Lỗi không xác định');
+    }
+  };
 
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState('');
@@ -322,6 +362,23 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             Phiếu nhập hàng
           </button>
           <button
+            onClick={() => importFileRef.current?.click()}
+            disabled={importStatus === 'loading'}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            {importStatus === 'loading'
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Upload className="h-4 w-4" />}
+            Import KiotViet
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportKiotViet}
+          />
+          <button
             onClick={() => onExportPurchases(sortedOrders)}
             className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors"
           >
@@ -402,7 +459,9 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: order => (
-        <span className="font-mono font-normal text-indigo-600 text-xs">{order.id.slice(0, 12)}</span>
+        <span className="font-mono font-normal text-indigo-600 text-xs">
+          {order.referenceId || order.id.slice(0, 12)}
+        </span>
       ),
     },
     {
@@ -504,6 +563,27 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
 
   return (
     <div className="h-full">
+      {importStatus !== 'idle' && (
+        <div className={`mx-4 mt-3 flex items-start gap-3 rounded-xl border p-3 text-sm ${
+          importStatus === 'loading' ? 'border-indigo-100 bg-indigo-50 text-indigo-700'
+          : importStatus === 'done'  ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+          : 'border-rose-100 bg-rose-50 text-rose-700'
+        }`}>
+          {importStatus === 'loading' ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          : importStatus === 'done'   ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+          <p className="flex-1 font-normal leading-relaxed">{importMessage}</p>
+          {importStatus !== 'loading' && (
+            <button
+              type="button"
+              onClick={() => setImportStatus('idle')}
+              className="shrink-0 text-xs underline opacity-60 hover:opacity-100"
+            >
+              Đóng
+            </button>
+          )}
+        </div>
+      )}
       <ListPageLayout
         sidebarTitle="Nhập hàng"
         sidebar={sidebar}

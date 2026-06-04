@@ -3,10 +3,10 @@ import { X, ChevronDown, ChevronRight, Undo2 } from 'lucide-react';
 import { POSOrder, POSCustomer } from '../../types';
 
 const ReturnInput = ({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) => (
-  <div className="relative group">
+  <div className="relative">
     <input
       type="text"
-      className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-normal text-slate-800 outline-none focus:border-indigo-400 transition-all placeholder:text-slate-300 border-b-2 tracking-tight"
+      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-400"
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
@@ -15,7 +15,7 @@ const ReturnInput = ({ value, onChange, placeholder }: { value: string; onChange
 );
 
 const PaginationButton = ({ icon, onClick }: { icon: React.ReactNode; onClick?: () => void }) => (
-  <button onClick={onClick} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all">
+  <button onClick={onClick} className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all">
     {icon}
   </button>
 );
@@ -25,9 +25,10 @@ interface POSReturnModalProps {
   customers: POSCustomer[];
   onClose: () => void;
   onReturnFast: () => void;
+  onSelectOrder: (order: POSOrder) => void;
 }
 
-const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onClose, onReturnFast }) => {
+const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onClose, onReturnFast, onSelectOrder }) => {
   const [returnSearch, setReturnSearch] = useState({
     invoiceId: '',
     trackingId: '',
@@ -55,37 +56,45 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
   }, [orders, returnSearch, customers]);
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[160] flex items-center justify-center p-6">
-      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl overflow-hidden animate-in fade-in zoom-in-95 duration-500 flex flex-col h-[85vh]">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col h-[85vh] overflow-hidden">
+
         {/* Header */}
-        <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center shrink-0">
-          <h3 className="font-black text-xl text-slate-900 uppercase tracking-tight">Chọn hóa đơn trả hàng</h3>
-          <button onClick={onClose} className="h-10 w-10 flex items-center justify-center hover:bg-slate-50 rounded-xl hover:text-rose-500 transition-all border border-transparent hover:border-slate-100">
-            <X className="h-5 w-5" />
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <h3 className="font-semibold text-base text-slate-900 uppercase tracking-tight">Chọn hóa đơn trả hàng</h3>
+          <button
+            onClick={onClose}
+            className="h-8 w-8 flex items-center justify-center hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left sidebar - Filters */}
-          <div className="w-[300px] border-r border-slate-100 p-6 space-y-8 overflow-y-auto no-scrollbar shrink-0 bg-slate-50/50">
-            <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tìm kiếm</h4>
-              <div className="space-y-2">
+        {/* Body — 2 cards trên nền slate-50 */}
+        <div className="flex-1 flex min-h-0 gap-3 p-3 bg-slate-50 overflow-hidden">
+
+          {/* Card trái — Bộ lọc */}
+          <div className="w-64 shrink-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+            <div className="px-4 h-11 border-b border-slate-100 shrink-0 flex items-center">
+              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-widest">Bộ lọc</h4>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+              <section className="space-y-2">
+                <p className="text-2xs font-semibold text-slate-400 uppercase tracking-widest px-0.5">Tìm kiếm</p>
                 <ReturnInput value={returnSearch.invoiceId} onChange={val => setReturnSearch(prev => ({ ...prev, invoiceId: val }))} placeholder="Theo mã hóa đơn" />
                 <ReturnInput value={returnSearch.trackingId} onChange={val => setReturnSearch(prev => ({ ...prev, trackingId: val }))} placeholder="Theo mã vận đơn bán" />
                 <ReturnInput value={returnSearch.customer} onChange={val => setReturnSearch(prev => ({ ...prev, customer: val }))} placeholder="Theo khách hàng hoặc ĐT" />
                 <ReturnInput value={returnSearch.productId} onChange={val => setReturnSearch(prev => ({ ...prev, productId: val }))} placeholder="Theo mã hàng" />
                 <ReturnInput value={returnSearch.productName} onChange={val => setReturnSearch(prev => ({ ...prev, productName: val }))} placeholder="Theo tên hàng" />
-              </div>
-            </section>
+              </section>
 
-            <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Thời gian</h4>
-              <div className="space-y-2">
+              <section className="space-y-2">
+                <p className="text-2xs font-semibold text-slate-400 uppercase tracking-widest px-0.5">Thời gian</p>
                 <div className="relative">
                   <input
                     type="date"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
                     value={returnSearch.fromDate}
                     onChange={e => setReturnSearch(prev => ({ ...prev, fromDate: e.target.value }))}
                   />
@@ -93,42 +102,45 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                 <div className="relative">
                   <input
                     type="date"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
                     placeholder="Đến ngày"
                     value={returnSearch.toDate}
                     onChange={e => setReturnSearch(prev => ({ ...prev, toDate: e.target.value }))}
                   />
                 </div>
-              </div>
-            </section>
+              </section>
+
+            </div>
           </div>
 
-          {/* Main content - Results table */}
-          <div className="flex-1 flex flex-col min-w-0 bg-white">
-            <div className="flex-1 overflow-y-auto no-scrollbar">
+          {/* Card phải — Danh sách hóa đơn */}
+          <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
               <table className="w-full text-xs text-left">
-                <thead className="sticky top-0 bg-indigo-500 text-white z-10">
+                <thead className="sticky top-0 bg-slate-50 border-b border-slate-100 z-10">
                   <tr>
-                    <th className="px-6 py-4 font-bold">Mã hóa đơn</th>
-                    <th className="px-6 py-4 font-bold flex items-center gap-1">Thời gian <ChevronDown className="h-3 w-3" /></th>
-                    <th className="px-6 py-4 font-bold">Nhân viên</th>
-                    <th className="px-6 py-4 font-bold">Khách hàng</th>
-                    <th className="px-6 py-4 font-bold text-right">Tổng cộng</th>
-                    <th className="px-6 py-4 font-bold text-center">Thao tác</th>
+                    <th className="px-4 py-3 font-bold text-slate-600">Mã hóa đơn</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 flex items-center gap-1">
+                      Thời gian <ChevronDown className="h-3 w-3" />
+                    </th>
+                    <th className="px-4 py-3 font-bold text-slate-600">Nhân viên</th>
+                    <th className="px-4 py-3 font-bold text-slate-600">Khách hàng</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 text-right">Tổng cộng</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 text-center">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50 italic">
+                <tbody className="divide-y divide-slate-50">
                   {filteredReturnOrders.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-indigo-50/50 group transition-all">
-                      <td className="px-6 py-4 font-normal text-indigo-600 cursor-pointer hover:underline">{inv.orderCode}</td>
-                      <td className="px-6 py-4 font-normal text-slate-600">{new Date(inv.date).toLocaleString('vi-VN')}</td>
-                      <td className="px-6 py-4 font-normal text-slate-700">{inv.staffId}</td>
-                      <td className="px-6 py-4 font-normal text-slate-600">{inv.customerName || 'Khách lẻ'}</td>
-                      <td className="px-6 py-4 font-normal text-slate-900 text-right">{inv.finalAmount.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-center">
+                    <tr key={inv.id} className="hover:bg-indigo-50/40 transition-colors">
+                      <td className="px-4 py-3 font-normal text-indigo-600 cursor-pointer hover:underline">{inv.orderCode}</td>
+                      <td className="px-4 py-3 font-normal text-slate-500">{new Date(inv.date).toLocaleString('vi-VN')}</td>
+                      <td className="px-4 py-3 font-normal text-slate-600">{inv.staffId}</td>
+                      <td className="px-4 py-3 font-normal text-slate-600">{inv.customerName || 'Khách lẻ'}</td>
+                      <td className="px-4 py-3 font-normal text-slate-800 text-right">{inv.finalAmount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">
                         <button
-                          className="px-4 py-1.5 border border-slate-200 rounded-lg text-[11px] font-normal uppercase text-slate-600 hover:bg-slate-950 hover:text-white transition-all shadow-sm"
-                          onClick={onClose}
+                          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-normal text-slate-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all"
+                          onClick={() => onSelectOrder(inv)}
                         >
                           Chọn
                         </button>
@@ -137,7 +149,7 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                   ))}
                   {filteredReturnOrders.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center text-slate-300 font-normal uppercase tracking-widest">
+                      <td colSpan={6} className="px-4 py-16 text-center text-slate-400 text-xs italic">
                         Không tìm thấy hóa đơn phù hợp
                       </td>
                     </tr>
@@ -146,35 +158,33 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="px-8 py-6 border-t border-slate-100 bg-white flex items-center justify-between shrink-0">
+            {/* Pagination + action */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-1">
-                <PaginationButton icon={<Undo2 className="h-4 w-4 rotate-180" />} />
-                <PaginationButton icon={<ChevronRight className="h-4 w-4 rotate-180" />} />
+                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5 rotate-180" />} />
+                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5 rotate-180" />} />
                 <div className="flex items-center gap-1">
-                  <button className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-normal text-xs flex items-center justify-center">1</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">2</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">3</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">4</button>
-                  <button className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-600 font-normal text-xs flex items-center justify-center transition-colors">5</button>
-                  <span className="text-slate-300 mx-1">...</span>
+                  {[1,2,3,4,5].map(n => (
+                    <button key={n} className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition-colors ${n === 1 ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{n}</button>
+                  ))}
+                  <span className="text-slate-300 mx-1 text-xs">...</span>
                 </div>
-                <PaginationButton icon={<ChevronRight className="h-4 w-4" />} />
-                <PaginationButton icon={<Undo2 className="h-4 w-4" />} />
+                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5" />} />
+                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5" />} />
               </div>
-              <div className="text-[11px] font-normal text-slate-400">Hiển thị {filteredReturnOrders.length} hóa đơn</div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">{filteredReturnOrders.length} hóa đơn</span>
+                <button
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
+                  onClick={onReturnFast}
+                >
+                  Trả nhanh
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer action */}
-        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-          <button
-            className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-normal uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
-            onClick={onReturnFast}
-          >
-            Trả nhanh
-          </button>
         </div>
       </div>
     </div>

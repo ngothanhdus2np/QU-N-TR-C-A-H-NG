@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   ReceiptText,
-  MessageSquareText,
   Landmark,
   UserPlus,
   Library,
@@ -36,16 +35,12 @@ import {
   UserSearch,
   Gauge,
   CalendarCheck,
-  FileBarChart,
 } from 'lucide-react';
 
 export const SIDEBAR_SECTIONS = [
   {
     title: 'Tổng quan',
-    items: [
-      { id: 'dashboard', label: 'Bảng Điều Khiển', icon: LayoutDashboard },
-      { id: 'chat', label: 'Hỏi CFO (AI)', icon: MessageSquareText },
-    ],
+    items: [{ id: 'overview', label: 'Tổng quan', icon: LayoutDashboard }],
   },
   {
     title: 'Hàng hóa',
@@ -82,6 +77,12 @@ export const SIDEBAR_SECTIONS = [
       { id: 'order-invoices', label: 'Hóa đơn', icon: ReceiptText },
       { id: 'order-returns', label: 'Trả hàng', icon: RotateCcw },
       { id: 'order-repairs', label: 'Yêu cầu sửa chữa', icon: Wrench },
+    ],
+  },
+  {
+    title: 'Online',
+    items: [
+      { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
       { id: 'delivery-partners', label: 'Đối tác giao hàng', icon: Bike },
       { id: 'shipping-orders', label: 'Vận đơn', icon: FileText },
     ],
@@ -93,7 +94,7 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Nhân sự',
     groups: [
-      { header: 'Nhân sự', itemIds: ['staff', 'staff-performance', 'staff-ledger'] },
+      { header: 'Nhân sự', itemIds: ['staff', 'staff-ledger'] },
       {
         header: 'Lương & Thưởng',
         itemIds: [
@@ -108,7 +109,6 @@ export const SIDEBAR_SECTIONS = [
     ],
     items: [
       { id: 'staff', label: 'Danh sách nhân sự', icon: UserPlus },
-      { id: 'staff-performance', label: 'Hiệu năng nhân sự', icon: Activity },
       { id: 'staff-ledger', label: 'Sổ cái hiệu năng', icon: LayoutList },
       { id: 'payroll-attendance', label: 'Chấm công', icon: ListChecks },
       { id: 'payroll-overtime', label: 'Tăng ca', icon: Clock },
@@ -119,25 +119,24 @@ export const SIDEBAR_SECTIONS = [
     ],
   },
   {
-    title: 'Tài chính',
-    items: [
-      { id: 'expenses', label: 'Chi Phí', icon: Wallet },
-      { id: 'store-revenue', label: 'Doanh Thu Cửa Hàng', icon: ReceiptText },
-      { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
-    ],
+    title: 'Sổ quỹ',
+    items: [{ id: 'cash-ledger', label: 'Sổ quỹ', icon: Landmark }],
   },
   {
     title: 'Phân tích',
-    items: [
-      { id: 'analysis-business', label: 'Kinh Doanh', icon: TrendingUp, badge: 'AI' },
-      { id: 'analysis-goods', label: 'Hàng Hóa', icon: BarChart2, badge: 'AI' },
-      { id: 'analysis-customers', label: 'Khách Hàng', icon: UserSearch, badge: 'AI' },
-      { id: 'analysis-efficiency', label: 'Hiệu Quả', icon: Gauge, badge: 'AI' },
-    ],
-  },
-  {
-    title: 'Báo cáo',
     groups: [
+      {
+        header: 'Phân tích',
+        itemIds: [
+          'analysis-business',
+          'analysis-online-sales',
+          'analysis-goods',
+          'analysis-customers',
+          'analysis-staff',
+          'analysis-expenses',
+          'analysis-efficiency',
+        ],
+      },
       {
         header: 'Báo cáo',
         itemIds: [
@@ -149,11 +148,18 @@ export const SIDEBAR_SECTIONS = [
         ],
       },
       {
-        header: 'Chi tiết',
+        header: '',
         itemIds: ['report-suppliers', 'report-staff', 'report-channels', 'report-finance'],
       },
     ],
     items: [
+      { id: 'analysis-business', label: 'Kinh Doanh', icon: TrendingUp, badge: 'AI' },
+      { id: 'analysis-online-sales', label: 'Bán Online', icon: ShoppingCart, badge: 'AI' },
+      { id: 'analysis-goods', label: 'Hàng Hóa', icon: BarChart2, badge: 'AI' },
+      { id: 'analysis-customers', label: 'Khách Hàng', icon: UserSearch, badge: 'AI' },
+      { id: 'analysis-staff', label: 'Nhân Sự', icon: Activity, badge: 'AI' },
+      { id: 'analysis-expenses', label: 'Chi Phí', icon: Wallet },
+      { id: 'analysis-efficiency', label: 'Hiệu Quả', icon: Gauge, badge: 'AI' },
       { id: 'report-eod', label: 'Cuối Ngày', icon: CalendarCheck },
       { id: 'report-sales', label: 'Bán Hàng', icon: ShoppingCart },
       { id: 'report-orders', label: 'Đặt Hàng', icon: ShoppingBag },
@@ -174,6 +180,17 @@ export const SIDEBAR_SECTIONS = [
   },
   {
     title: 'Hệ thống',
-    items: [{ id: 'sop', label: 'Chính Sách & Quy Trình', icon: Library }],
+    groups: [
+      {
+        header: 'Hệ thống',
+        itemIds: ['sop-mechanisms', 'sop-standards', 'sop-workflows', 'sop-templates'],
+      },
+    ],
+    items: [
+      { id: 'sop-mechanisms', label: 'Cơ chế', icon: Library },
+      { id: 'sop-standards', label: 'Quy chuẩn', icon: ClipboardList },
+      { id: 'sop-workflows', label: 'Quy trình', icon: ListChecks },
+      { id: 'sop-templates', label: 'Biểu mẫu', icon: FileText },
+    ],
   },
 ];

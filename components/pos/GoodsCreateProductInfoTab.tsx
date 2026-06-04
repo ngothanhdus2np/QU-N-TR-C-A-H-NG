@@ -135,7 +135,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
         <div className="flex h-full min-h-[154px] w-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 transition-colors hover:bg-slate-100">
           <ImageIcon className="h-9 w-9 text-slate-400 mb-2" />
           <span className="text-xs text-slate-500 font-normal">Thêm ảnh</span>
-          <span className="text-[10px] text-slate-400 mt-1">Mỗi ảnh không quá 2 MB</span>
+          <span className="text-2xs text-slate-400 mt-1">Mỗi ảnh không quá 2 MB</span>
         </div>
       </div>
 
@@ -145,7 +145,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
             Mã hàng {barcodeManualMode && <span className="text-rose-500">*</span>}
             <span className="group relative inline-flex h-4 w-4 items-center justify-center text-slate-400">
               <Info className="h-3.5 w-3.5" />
-              <span className="pointer-events-none absolute left-1/2 top-full z-[1020] mt-2 hidden w-72 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-600 shadow-xl group-hover:block">
+              <span className="pointer-events-none absolute left-1/2 top-full z-modal mt-2 hidden w-72 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-600 shadow-xl group-hover:block">
                 Vào Cài đặt &gt; Hàng hóa &gt; Mã vạch hàng hóa và tắt chế độ nhập tay nếu muốn hệ thống sinh mã hàng tự động.
               </span>
             </span>
@@ -156,7 +156,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
             onChange={e => setFormData({ ...formData, sku: e.target.value })}
             placeholder={barcodeManualMode ? 'Nhập hoặc quét mã hàng bạn đang có' : 'Tự động'}
           />
-          <p className="mt-1 text-[11px] font-normal text-slate-400">
+          <p className="mt-1 text-xs font-normal text-slate-400">
             {barcodeManualMode
               ? 'Nhập hoặc quét mã hàng bạn đang có. Bắt buộc khi bật mã vạch hàng hóa.'
               : 'Mã hàng này cũng được dùng để sinh barcode và in tem mã.'}
@@ -463,7 +463,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
                     Chọn nhanh
                     </button>
                     {quickSelectAttributeId === '__first__' && firstAttributeDraft.name && (
-                      <div className="absolute right-0 top-full z-[1010] mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                      <div className="absolute right-0 top-full z-modal mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                         <div className="max-h-56 overflow-y-auto p-2">
                           {getQuickValues(firstAttributeDraft.name).length > 0 ? (
                             getQuickValues(firstAttributeDraft.name).map(value => (
@@ -578,7 +578,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
 	                        Chọn nhanh
 	                      </button>
 	                      {quickSelectAttributeId === attr.id && attr.name && (
-	                        <div className="absolute right-0 top-full z-[1010] mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+	                        <div className="absolute right-0 top-full z-modal mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
 	                          <div className="max-h-56 overflow-y-auto p-2">
 	                            {getQuickValues(attr.name).length > 0 ? (
 	                              getQuickValues(attr.name).map(value => (

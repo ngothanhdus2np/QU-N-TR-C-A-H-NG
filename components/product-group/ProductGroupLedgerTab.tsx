@@ -76,8 +76,8 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
   <div className="space-y-8 animate-in slide-in-from-bottom-4">
     <div className="grid grid-cols-1 gap-6">
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl">
-        <h3 className="text-xs font-black text-slate-900 mb-6 flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-lg text-white">
+        <h3 className="text-xs font-semibold text-slate-900 mb-6 flex items-center gap-3">
+          <div className="p-2 bg-indigo-600 rounded-lg text-white">
             <Plus className="w-3.5 h-3.5" />
           </div>{' '}
           NHẬP NHANH CHỈ SỐ
@@ -90,7 +90,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
                 required
                 value={groupFormData.date}
                 onChange={e => onSetGroupFormData({ ...groupFormData, date: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="SL bán" icon={Hash}>
@@ -100,7 +100,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
                 placeholder="0"
                 value={groupFormData.quantity}
                 onChange={e => onSetGroupFormData({ ...groupFormData, quantity: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
           </div>
@@ -112,7 +112,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
                 placeholder="0"
                 value={groupFormData.amount}
                 onChange={e => onSetGroupFormData({ ...groupFormData, amount: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
             <InputWrapper label="Giá vốn" icon={ShoppingCart} color="text-slate-600">
@@ -121,7 +121,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
                 placeholder="0"
                 value={groupFormData.cogs}
                 onChange={e => onSetGroupFormData({ ...groupFormData, cogs: e.target.value })}
-                className="input-field py-2.5 font-normal text-[10px] border-none"
+                className="input-field py-2.5 font-normal text-2xs border-none"
               />
             </InputWrapper>
           </div>
@@ -144,7 +144,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
           </InputWrapper>
           <button
             type="submit"
-            className="w-full bg-slate-900 hover:bg-black text-white py-3.5 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-all shadow-xl"
+            className="w-full bg-slate-900 hover:bg-black text-white py-3.5 rounded-xl font-normal text-[9px] uppercase tracking-widest transition-colors shadow-xl"
           >
             GHI NHẬN CHỈ SỐ
           </button>
@@ -155,10 +155,10 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
       <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
+          <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg">
             <FileSpreadsheet className="w-5 h-5" />
           </div>
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+          <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-tight">
             Sổ Cái Nhóm Hàng Chi Tiết
           </h3>
         </div>
@@ -168,13 +168,13 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
               type="date"
               value={filterStartDate}
               onChange={e => onSetFilterStartDate(e.target.value)}
-              className="bg-transparent text-[10px] font-normal text-slate-600 outline-none"
+              className="bg-transparent text-2xs font-normal text-slate-600 outline-none"
             />
             <input
               type="date"
               value={filterEndDate}
               onChange={e => onSetFilterEndDate(e.target.value)}
-              className="bg-transparent text-[10px] font-normal text-slate-600 outline-none ml-2"
+              className="bg-transparent text-2xs font-normal text-slate-600 outline-none ml-2"
             />
           </div>
         </div>
@@ -182,21 +182,21 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white border-b border-slate-100">
+            <tr className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest bg-white border-b border-slate-100">
               <th className="px-8 py-6 w-[220px]">Thời gian / Nhóm</th>
               <th className="px-4 py-6 text-right">SL bán</th>
               <th className="px-4 py-6 text-right text-blue-600">Doanh thu thuần</th>
               <th className="px-4 py-6 text-right text-rose-600">Giá vốn</th>
-              <th className="px-4 py-6 text-right font-black bg-emerald-50 text-emerald-800">
+              <th className="px-4 py-6 text-right font-semibold bg-emerald-50 text-emerald-800">
                 Lợi nhuận gộp
               </th>
-              <th className="px-4 py-6 text-center text-indigo-600 font-black w-[100px]">
+              <th className="px-4 py-6 text-center text-indigo-600 font-semibold w-[100px]">
                 Tỉ suất LN
               </th>
               <th className="px-4 py-6 text-center w-[60px]">Xóa</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 tabular-nums text-[10px] font-normal">
+          <tbody className="divide-y divide-slate-50 tabular-nums text-2xs font-normal">
             {visibleLedgerRows.map(row => {
               const isExp = expandedLedgerRows.has(`${row.month}_${row.fullPath}`);
               const marginColor =
@@ -209,7 +209,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
               return (
                 <tr
                   key={`${row.month}_${row.fullPath}`}
-                  className="group hover:bg-slate-50 transition-all"
+                  className="group hover:bg-slate-50 transition-colors"
                 >
                   <td className="px-8 py-4" style={{ paddingLeft: `${row.level * 20}px` }}>
                     <div className="flex items-center gap-2">
@@ -251,7 +251,7 @@ const ProductGroupLedgerTab: React.FC<ProductGroupLedgerTabProps> = ({
                   </td>
                   <td className="px-4 py-4 text-center">
                     <div
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-normal text-[10px] ${marginColor}`}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-normal text-2xs ${marginColor}`}
                     >
                       <Percent className="w-3 h-3" />
                       {row.margin.toFixed(1)}%

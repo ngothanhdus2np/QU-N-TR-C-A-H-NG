@@ -170,12 +170,12 @@ const POSMobileView: React.FC<POSMobileViewProps> = ({
       <div className="bg-white border-t border-slate-100 px-4 pt-3 pb-6">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-slate-500 font-medium">{totalItems} sản phẩm</span>
-          <span className="font-black text-xl text-slate-800">{fmt(netPayable)}</span>
+          <span className="font-semibold text-xl text-slate-800">{fmt(netPayable)}</span>
         </div>
         <button
           onClick={onOpenCheckout}
           disabled={cart.length === 0}
-          className="w-full py-4 bg-indigo-600 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:bg-indigo-700 transition-colors"
+          className="w-full py-4 bg-indigo-600 text-white font-semibold text-base rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:bg-indigo-700 transition-colors"
         >
           Thanh toán
           <ChevronRight className="w-5 h-5" />

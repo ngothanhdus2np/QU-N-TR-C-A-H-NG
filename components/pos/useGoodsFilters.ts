@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct } from '../../types';
+import { POSProduct, InventoryTransaction, Supplier } from '../../types';
 import { useProductSearchIndex } from './useProductSearchIndex';
 
 export type GoodsSortKey = 'sku' | 'salePrice' | 'importPrice' | 'stock';
@@ -7,12 +7,15 @@ export type GoodsSortDirection = 'desc' | 'asc';
 
 interface UseGoodsFiltersParams {
   products: POSProduct[];
+  transactions: InventoryTransaction[];
+  suppliers: Supplier[];
   debouncedSearchTerm: string;
   filterCategories: string[];
   filterBrand: string;
   filterStock: 'all' | 'in_stock' | 'out_of_stock' | 'low_stock';
   filterLocation: string;
   filterAttrs: string[];
+  filterSupplier: string[];
   sortKey: GoodsSortKey;
   sortDirection: GoodsSortDirection;
   currentPage: number;
@@ -36,6 +39,28 @@ const getSortValue = (
   return Number(product[sortKey] ?? 0);
 };
 
+const splitCategoryPath = (value?: string | null) =>
+  String(value || '')
+    .split(/\s*(?:>>|>|\/)\s*/g)
+    .map(part => part.trim())
+    .filter(Boolean);
+
+const normalizeCategoryPath = (value?: string | null) => splitCategoryPath(value).join(' >> ');
+
+const getProductCategoryPath = (product: POSProduct) =>
+  normalizeCategoryPath(product.categoryPath || product.categoryId || '');
+
+const categoryMatchesSelection = (productPath: string, selectedPath: string) => {
+  const normalizedSelectedPath = normalizeCategoryPath(selectedPath);
+  if (!productPath || !normalizedSelectedPath) return false;
+  if (productPath === normalizedSelectedPath) return true;
+  if (productPath.startsWith(normalizedSelectedPath + ' >> ')) return true;
+
+  const selectedParts = splitCategoryPath(normalizedSelectedPath);
+  const lastPart = selectedParts[selectedParts.length - 1];
+  return productPath === lastPart;
+};
+
 const sortProducts = (
   source: POSProduct[],
   sortKey: GoodsSortKey,
@@ -53,12 +78,15 @@ const sortProducts = (
 
 export const useGoodsFilters = ({
   products,
+  transactions,
+  suppliers,
   debouncedSearchTerm,
   filterCategories,
   filterBrand,
   filterStock,
   filterLocation,
   filterAttrs,
+  filterSupplier,
   sortKey,
   sortDirection,
   currentPage,
@@ -67,13 +95,96 @@ export const useGoodsFilters = ({
   // Use search index for fast lookups
   const { searchProducts } = useProductSearchIndex(products);
 
+  const supplierIdToName = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of suppliers) map.set(s.id, s.name);
+    return map;
+  }, [suppliers]);
+
+  // Normalize SKU for consistent comparison
+  const normalizeSku = (sku?: string | null) => String(sku || '').trim().toLowerCase();
+
+  // Map normalized SKU -> current product ID (for resolving old transaction items with stale productId)
+  const skuToProductIdMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) {
+      const sku = normalizeSku(p.sku);
+      if (sku) map.set(sku, p.id);
+    }
+    return map;
+  }, [products]);
+
+  // Resolve supplier name: prefer current DB name (via supplierId) over stored supplierName
+  const resolveSupplierName = React.useCallback(
+    (tx: { supplierId?: string; supplierName?: string }) =>
+      (tx.supplierId ? supplierIdToName.get(tx.supplierId) : undefined) || tx.supplierName,
+    [supplierIdToName]
+  );
+
+  // Map productId -> Set<supplierName> from Import transactions
+  // Also maps by current product ID via SKU fallback (handles deleted+recreated products)
+  const productSupplierMap = React.useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const addEntry = (productId: string, name: string) => {
+      if (!map.has(productId)) map.set(productId, new Set());
+      map.get(productId)!.add(name);
+    };
+    for (const tx of transactions) {
+      if (tx.type !== 'Import') continue;
+      const name = resolveSupplierName(tx);
+      if (!name) continue;
+      for (const item of tx.items) {
+        addEntry(item.productId, name);
+        // SKU fallback: product may have been recreated with a new ID but same SKU
+        if (item.sku) {
+          const currentProductId = skuToProductIdMap.get(normalizeSku(item.sku));
+          if (currentProductId && currentProductId !== item.productId) {
+            addEntry(currentProductId, name);
+          }
+        }
+      }
+    }
+    return map;
+  }, [transactions, resolveSupplierName, skuToProductIdMap]);
+
+  // Map parentId → Set<supplierName> từ variants — tránh O(n²) khi filter supplier
+  const parentProductSupplierMap = React.useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const p of products) {
+      if (!p.parentId) continue;
+      const sups = productSupplierMap.get(p.id);
+      if (!sups || sups.size === 0) continue;
+      if (!map.has(p.parentId)) map.set(p.parentId, new Set());
+      const parentSet = map.get(p.parentId)!;
+      for (const s of sups) parentSet.add(s);
+    }
+    return map;
+  }, [products, productSupplierMap]);
+
+  const uniqueSuppliers = React.useMemo(() => {
+    const names = new Set<string>();
+    for (const s of suppliers) {
+      if (s.status !== 'inactive') names.add(s.name);
+    }
+    // Also include supplier names from import transactions (using current DB name when possible)
+    for (const tx of transactions) {
+      if (tx.type !== 'Import') continue;
+      const name = resolveSupplierName(tx);
+      if (name) names.add(name);
+    }
+    return Array.from(names).sort();
+  }, [suppliers, transactions, resolveSupplierName]);
+
   const lowStockProducts = React.useMemo(
-    () => products.filter(p => p.status !== 'Inactive' && p.stock <= (p.minStock ?? 5)),
+    () => products.filter(p => p.status !== 'Inactive' && p.stock > 0 && p.stock <= (p.minStock ?? 5)),
     [products]
   );
 
   const uniqueCategories = React.useMemo(
-    () => Array.from(new Set(products.map(p => p.categoryId || '').filter(Boolean))).sort(),
+    () =>
+      Array.from(new Set(products.map(getProductCategoryPath).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b, 'vi', { numeric: true })
+      ),
     [products]
   );
 
@@ -120,7 +231,13 @@ export const useGoodsFilters = ({
   const categoryCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
     products.forEach(p => {
-      if (p.categoryId) counts[p.categoryId] = (counts[p.categoryId] || 0) + 1;
+      if (p.isParent) return;
+      const parts = splitCategoryPath(p.categoryPath || p.categoryId || '');
+      let currentPath = '';
+      parts.forEach(part => {
+        currentPath = currentPath ? `${currentPath} >> ${part}` : part;
+        counts[currentPath] = (counts[currentPath] || 0) + 1;
+      });
     });
     return counts;
   }, [products]);
@@ -133,8 +250,10 @@ export const useGoodsFilters = ({
 
     // Apply other filters on search results (much smaller set)
     return searchResults.filter(p => {
+      const productCategoryPath = getProductCategoryPath(p);
       const matchCategory =
-        filterCategories.length === 0 || filterCategories.includes(p.categoryId);
+        filterCategories.length === 0 ||
+        filterCategories.some(fc => categoryMatchesSelection(productCategoryPath, fc));
       const matchBrand =
         !filterBrand || (p.brand || '').toLowerCase().includes(filterBrand.toLowerCase());
       const matchStock =
@@ -144,7 +263,7 @@ export const useGoodsFilters = ({
             ? p.stock > 0
             : filterStock === 'out_of_stock'
               ? p.stock === 0
-              : p.stock <= (p.minStock ?? 5);
+              : p.stock > 0 && p.stock <= (p.minStock ?? 5);
       const matchLocation =
         !filterLocation || (p.location || '').toLowerCase().includes(filterLocation.toLowerCase());
       const matchAttr =
@@ -154,7 +273,15 @@ export const useGoodsFilters = ({
             Object.values(p.variantAttributes || {}).includes(val) ||
             (p.attributes || []).some(a => a.values.includes(val))
         );
-      return matchCategory && matchBrand && matchStock && matchLocation && matchAttr;
+      const matchSupplier =
+        filterSupplier.length === 0 ||
+        filterSupplier.some(sel => {
+          if (productSupplierMap.get(p.id)?.has(sel)) return true;
+          // Dùng pre-built map thay vì products.some() O(n) → tránh O(n²)
+          if (!p.parentId) return parentProductSupplierMap.get(p.id)?.has(sel) ?? false;
+          return false;
+        });
+      return matchCategory && matchBrand && matchStock && matchLocation && matchAttr && matchSupplier;
     });
   }, [
     searchProducts,
@@ -165,24 +292,31 @@ export const useGoodsFilters = ({
     filterStock,
     filterLocation,
     filterAttrs,
+    filterSupplier,
+    productSupplierMap,
+    parentProductSupplierMap,
   ]);
 
+
+  // Tách riêng để filteredProducts không cần products trong deps (tránh re-sort khi products thay đổi mà filteredProductCandidates không đổi)
+  const parentSkuFallback = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of products) {
+      if (!p.parentId || !p.sku) continue;
+      const current = map.get(p.parentId) ?? 0;
+      map.set(p.parentId, Math.max(current, getSkuNumber(p.sku)));
+    }
+    return map;
+  }, [products]);
+
   const filteredProducts = React.useMemo(
-    () => {
-      const parentSkuFallback = new Map<string, number>();
-      products.forEach(product => {
-        if (!product.parentId || !product.sku) return;
-        const current = parentSkuFallback.get(product.parentId) ?? 0;
-        parentSkuFallback.set(product.parentId, Math.max(current, getSkuNumber(product.sku)));
-      });
-      return sortProducts(
-        filteredProductCandidates.filter(p => !p.parentId),
-        sortKey,
-        sortDirection,
-        parentSkuFallback
-      );
-    },
-    [filteredProductCandidates, products, sortKey, sortDirection]
+    () => sortProducts(
+      filteredProductCandidates.filter(p => !p.parentId),
+      sortKey,
+      sortDirection,
+      parentSkuFallback
+    ),
+    [filteredProductCandidates, sortKey, sortDirection, parentSkuFallback]
   );
 
   const sellableSkuCount = React.useMemo(
@@ -220,6 +354,7 @@ export const useGoodsFilters = ({
     uniqueCategories,
     uniqueBrands,
     uniqueLocations,
+    uniqueSuppliers,
     attrValuesByName,
     categoryCounts,
     filteredProducts,

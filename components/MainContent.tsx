@@ -1,44 +1,58 @@
-import React, { useTransition, useState, useEffect } from 'react';
+import React, { useTransition, useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import Dashboard from './Dashboard';
-import ChatInterface from './ChatInterface';
+import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
+import OverviewPage from './overview/OverviewPage';
 import RevenueManager from './RevenueManager';
 import ExpenseManager from './ExpenseManager';
 import PayrollManager from './PayrollManager';
 import StaffManager from './StaffManager';
 import ProductGroupManager from './ProductGroupManager';
-import KnowledgeManager from './KnowledgeManager';
 import PromotionManager from './PromotionManager';
 import MarketingManager from './marketing/MarketingManager';
 import BrandManager from './marketing/BrandManager';
 import POSComputer from './pos/POSComputer';
 import GoodsInventory from './pos/GoodsInventory';
-import OrderHistory from './pos/OrderHistory';
 import CustomerListPage from './customers/CustomerListPage';
 import SupplierContainer from './suppliers/SupplierContainer';
 import PurchaseOrdersContainer from './purchase/PurchaseOrdersContainer';
 import AuditContainer from './audit/AuditContainer';
+import PendingOrdersPage from './orders/PendingOrdersPage';
 import OrderInvoices from './orders/OrderInvoices';
 import OrderReturns from './orders/OrderReturns';
 import OrderRepairs from './orders/OrderRepairs';
 import DeliveryPartners from './orders/DeliveryPartners';
 import ShippingOrders from './orders/ShippingOrders';
+import OnlineSidebarNav from './online/OnlineSidebarNav';
 import PurchaseInvoices from './orders/PurchaseInvoices';
 import GoodsInternalUse from './inventory/GoodsInternalUse';
 import GoodsDisposal from './inventory/GoodsDisposal';
 import AnalysisContainer from './analysis/AnalysisContainer';
+import CashLedgerPage from './finance/CashLedgerPage';
+import EndOfDayReportPage from './reports/EndOfDayReportPage';
+import SalesReportPage from './reports/SalesReportPage';
+import OrderReportPage from './reports/OrderReportPage';
+import GoodsReportPage from './reports/GoodsReportPage';
+import CustomerReportPage from './reports/CustomerReportPage';
+import SupplierReportPage from './reports/SupplierReportPage';
+import StaffReportPage from './reports/StaffReportPage';
+import ChannelReportPage from './reports/ChannelReportPage';
+import FinanceReportPage from './reports/FinanceReportPage';
+import TimeFilter from './TimeFilter';
 import {
   AppData,
   AppDataSurgicalUpdate,
   BrandProfile,
-  ChatMessage,
   DashboardBreakEvenAnalysis,
   DiagnosisRange,
   ProductLine,
+  RevenueSubTab,
 } from '../types';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
+
+const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
 
 interface MainContentProps {
   activeTab: string;
@@ -46,8 +60,6 @@ interface MainContentProps {
   data: AppData;
   brandProfile: BrandProfile;
   setBrandProfile: (profile: BrandProfile) => void;
-  chatMessages: ChatMessage[];
-  setChatMessages: (messages: ChatMessage[]) => void;
   showResigned: boolean;
   setShowResigned: (show: boolean) => void;
   diagnosisRange: DiagnosisRange;
@@ -66,7 +78,9 @@ interface MainContentProps {
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   offlinePendingCount?: number;
+  offlineOrderPendingCount?: number;
   isDraining?: boolean;
+  onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -75,8 +89,6 @@ const MainContent: React.FC<MainContentProps> = ({
   data,
   brandProfile,
   setBrandProfile,
-  chatMessages,
-  setChatMessages,
   showResigned,
   setShowResigned,
   diagnosisRange,
@@ -90,18 +102,56 @@ const MainContent: React.FC<MainContentProps> = ({
   updateData,
   updateSurgical,
   pushBatch,
-  offlinePendingCount,
+  offlinePendingCount: _offlinePendingCount,
+  offlineOrderPendingCount,
   isDraining,
+  onDrainOfflineQueue,
 }) => {
   const [isPending, startTransition] = useTransition();
-  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([activeTab]));
+  const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
+  const [eodDismissed, setEodDismissed] = useState(false);
+  const [onlineShopeeSubTab, setOnlineShopeeSubTab] = useState<RevenueSubTab>('source');
+  const [inventoryInFormOpen, setInventoryInFormOpen] = useState(false);
+  const [shopFilter, setShopFilter] = useState<number | null>(null);
+  const [filterOutPlatforms, setFilterOutPlatforms] = useState<string[]>([]);
+  const [filterOutStatuses, setFilterOutStatuses] = useState<string[]>([]);
+  const [filterOutShippingUnits, setFilterOutShippingUnits] = useState<string[]>([]);
+  const [openFilterPopup, setOpenFilterPopup] = useState<'platform' | 'status' | 'shipping' | null>(null);
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
+  const platformBtnRef = useRef<HTMLButtonElement>(null);
+  const statusBtnRef = useRef<HTMLButtonElement>(null);
+  const shippingBtnRef = useRef<HTMLButtonElement>(null);
+
+  const openPopup = (key: 'platform' | 'status' | 'shipping', ref: React.RefObject<HTMLButtonElement>) => {
+    if (openFilterPopup === key) { setOpenFilterPopup(null); return; }
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPopupPos({ top: rect.top, left: rect.right + 8 });
+    }
+    setOpenFilterPopup(key);
+  };
 
   useEffect(() => {
-    setVisitedTabs(prev => {
-      if (prev.has(activeTab)) return prev;
-      return new Set([...prev, activeTab]);
-    });
-  }, [activeTab]);
+    if (!openFilterPopup) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-filter-popup-portal]') && !target.closest('[data-filter-btn]')) {
+        setOpenFilterPopup(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openFilterPopup]);
+
+  useEffect(() => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    fetch(`/api/eod-report?date=${yesterday}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (d?.summary) setEodReport(d);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSetActiveTab = (tab: string) => {
     startTransition(() => {
@@ -110,23 +160,88 @@ const MainContent: React.FC<MainContentProps> = ({
   };
 
   const renderContent = () => {
+    const renderKnowledgeManager = (
+      initialMainTab: 'mechanisms' | 'standards' | 'workflows' | 'templates'
+    ) => (
+      <React.Suspense
+        fallback={
+          <div className="space-y-8 pt-4">
+            <CardSkeleton />
+            <TableSkeleton />
+          </div>
+        }
+      >
+        <KnowledgeManager data={data} onUpdateData={updateData} initialMainTab={initialMainTab} />
+      </React.Suspense>
+    );
+
+    const renderOnlineNav = () => (
+      <OnlineSidebarNav
+        activeTab={activeTab}
+        activeShopeeSubTab={onlineShopeeSubTab}
+        onSelectMainTab={handleSetActiveTab}
+        onSelectShopeeSubTab={setOnlineShopeeSubTab}
+      />
+    );
+
+    const renderShopeeRevenueManager = ({
+      initialSubTab = 'diagnosis',
+      hiddenSubTabs = [],
+      diagnosisLabel,
+      withFilters = false,
+    }: {
+      initialSubTab?: RevenueSubTab;
+      hiddenSubTabs?: RevenueSubTab[];
+      diagnosisLabel?: string;
+      withFilters?: boolean;
+    } = {}) => (
+      <RevenueManager
+        list={data.shopeeRevenue || []}
+        productGroups={data.productGroups || []}
+        groupRevenue={data.shopeeProductGroupRevenue || []}
+        shopeeSourceData={data.shopeeSourceData || []}
+        shopeeCosts={data.shopeeCosts}
+        shopeeInventoryIn={data.shopeeInventoryIn || []}
+        shopeeInventoryOut={data.shopeeInventoryOut || []}
+        dailyAdsConfig={data.dailyAdsConfig || {}}
+        onUpdate={(newList, idToRem) => updateData('shopeeRevenue', newList, idToRem)}
+        onUpdateSurgical={updateSurgical}
+        onUpdateGroupRevenue={newList => updateData('shopeeProductGroupRevenue', newList)}
+        onUpdateGroups={newList => updateData('productGroups', newList)}
+        onUpdateShopeeSource={newList => updateData('shopeeSourceData', newList)}
+        onUpdateShopeeCosts={newConfig => updateData('shopeeCosts', newConfig)}
+        onUpdateShopeeInventoryIn={newList => updateData('shopeeInventoryIn', newList)}
+        onInventoryInFormToggle={setInventoryInFormOpen}
+        suppliers={data.suppliers || []}
+        shopFilter={shopFilter}
+        onShopFilterChange={setShopFilter}
+        onUpdateShopeeInventoryOut={newList => updateData('shopeeInventoryOut', newList)}
+        onUpdateDailyAdsConfig={newConfig => updateData('dailyAdsConfig', newConfig)}
+        isShopee={true}
+        initialSubTab={initialSubTab}
+        activeSubTab={onlineShopeeSubTab}
+        onChangeSubTab={setOnlineShopeeSubTab}
+        hiddenSubTabs={hiddenSubTabs}
+        diagnosisLabel={diagnosisLabel}
+        hideSubTabNav={true}
+        hideTimeFilter={true}
+        inventoryOutFilterPlatforms={withFilters ? filterOutPlatforms : []}
+        inventoryOutFilterStatuses={withFilters ? filterOutStatuses : []}
+        inventoryOutFilterShippingUnits={withFilters ? filterOutShippingUnits : []}
+        diagnosisRange={diagnosisRange}
+        setDiagnosisRange={setDiagnosisRange}
+        diagStartDate={diagStartDate}
+        setDiagStartDate={setDiagStartDate}
+        diagEndDate={diagEndDate}
+        setDiagEndDate={setDiagEndDate}
+      />
+    );
+
     switch (activeTab) {
-      case 'dashboard':
-        return (
-          <Dashboard
-            data={data}
-            breakEvenAnalysis={breakEvenAnalysis}
-            onUpdateData={updateData}
-            diagnosisRange={diagnosisRange}
-            setDiagnosisRange={setDiagnosisRange}
-            diagStartDate={diagStartDate}
-            setDiagStartDate={setDiagStartDate}
-            diagEndDate={diagEndDate}
-            setDiagEndDate={setDiagEndDate}
-          />
-        );
+      case 'overview':
+        return <OverviewPage data={data} />;
       case 'orders':
-        return <OrderHistory orders={data.posOrders || []} storeName={brandProfile.name} />;
+        return <PendingOrdersPage orders={data.posOrders || []} />;
       case 'customers':
         return (
           <CustomerListPage
@@ -177,31 +292,167 @@ const MainContent: React.FC<MainContentProps> = ({
         );
       case 'shopee-revenue':
         return (
-          <RevenueManager
-            list={data.shopeeRevenue || []}
-            productGroups={data.productGroups || []}
-            groupRevenue={data.shopeeProductGroupRevenue || []}
-            shopeeSourceData={data.shopeeSourceData || []}
-            shopeeCosts={data.shopeeCosts}
-            shopeeInventoryIn={data.shopeeInventoryIn || []}
-            shopeeInventoryOut={data.shopeeInventoryOut || []}
-            dailyAdsConfig={data.dailyAdsConfig || {}}
-            onUpdate={(newList, idToRem) => updateData('shopeeRevenue', newList, idToRem)}
-            onUpdateSurgical={updateSurgical}
-            onUpdateGroupRevenue={newList => updateData('shopeeProductGroupRevenue', newList)}
-            onUpdateGroups={newList => updateData('productGroups', newList)}
-            onUpdateShopeeSource={newList => updateData('shopeeSourceData', newList)}
-            onUpdateShopeeCosts={newConfig => updateData('shopeeCosts', newConfig)}
-            onUpdateShopeeInventoryIn={newList => updateData('shopeeInventoryIn', newList)}
-            onUpdateShopeeInventoryOut={newList => updateData('shopeeInventoryOut', newList)}
-            onUpdateDailyAdsConfig={newConfig => updateData('dailyAdsConfig', newConfig)}
-            isShopee={true}
-            diagnosisRange={diagnosisRange}
-            setDiagnosisRange={setDiagnosisRange}
-            diagStartDate={diagStartDate}
-            setDiagStartDate={setDiagStartDate}
-            diagEndDate={diagEndDate}
-            setDiagEndDate={setDiagEndDate}
+          <div className={`grid h-full min-h-0 grid-cols-1 gap-4 overflow-hidden bg-slate-50 px-4 pb-5 pt-10 ${inventoryInFormOpen ? '' : 'lg:grid-cols-[280px_minmax(0,1fr)]'}`}>
+            <aside className={`flex h-full min-h-0 ${inventoryInFormOpen ? 'hidden' : ''}`}>
+              <div className="flex h-full min-h-0 w-full flex-col gap-4">
+                {renderOnlineNav()}
+                <div className="min-h-0 flex-1 rounded-lg border border-slate-200 bg-white p-3" style={{overflow: 'visible'}}>
+                  <div className="h-full min-h-0 overflow-y-auto pr-1">
+                    <p className="mb-3 px-1 text-xs font-semibold uppercase text-slate-500">
+                      Bộ lọc
+                    </p>
+                    {/* Nhóm: Thời gian */}
+                    <div className="mb-4">
+                      <p className="text-2xs font-bold uppercase text-slate-400 tracking-widest mb-2">Thời gian</p>
+                      <TimeFilter
+                        diagnosisRange={diagnosisRange}
+                        setDiagnosisRange={setDiagnosisRange}
+                        diagStartDate={diagStartDate}
+                        setDiagStartDate={setDiagStartDate}
+                        diagEndDate={diagEndDate}
+                        setDiagEndDate={setDiagEndDate}
+                        variant="range"
+                      />
+                    </div>
+                    {onlineShopeeSubTab === 'source' && (
+                      <div className="mb-4">
+                        <p className="text-2xs font-bold uppercase text-slate-400 tracking-widest mb-2">Shop</p>
+                        <div className="flex flex-col gap-1">
+                          {[null, 0, 1].map((val, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setShopFilter(val)}
+                              className={`w-full text-left px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+                                shopFilter === val
+                                  ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                              }`}
+                            >
+                              {val === null ? 'Tất cả' : `Shop ${val + 1}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {onlineShopeeSubTab === 'inventory_out' && (
+                      <div className="space-y-4">
+
+                        {/* Nhóm: Nền tảng */}
+                        <div>
+                          <p className="text-2xs font-bold uppercase text-slate-400 tracking-widest mb-2">Nền tảng</p>
+                          <button
+                            ref={platformBtnRef}
+                            data-filter-btn
+                            onClick={() => openPopup('platform', platformBtnRef)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-all ${filterOutPlatforms.length > 0 ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                          >
+                            <span className="truncate">{filterOutPlatforms.length > 0 ? filterOutPlatforms.join(', ') : 'Chọn nền tảng'}</span>
+                            <svg className={`w-3.5 h-3.5 shrink-0 ml-1 transition-transform ${openFilterPopup === 'platform' ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                        </div>
+
+                        {/* Nhóm: Trạng thái */}
+                        <div>
+                          <p className="text-2xs font-bold uppercase text-slate-400 tracking-widest mb-2">Trạng thái</p>
+                          <button
+                            ref={statusBtnRef}
+                            data-filter-btn
+                            onClick={() => openPopup('status', statusBtnRef)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-all ${filterOutStatuses.length > 0 ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                          >
+                            <span className="truncate">{filterOutStatuses.length > 0 ? filterOutStatuses.join(', ') : 'Chọn trạng thái'}</span>
+                            <svg className={`w-3.5 h-3.5 shrink-0 ml-1 transition-transform ${openFilterPopup === 'status' ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                        </div>
+
+                        {/* Nhóm: ĐVVC */}
+                        <div>
+                          <p className="text-2xs font-bold uppercase text-slate-400 tracking-widest mb-2">ĐVVC</p>
+                          <button
+                            ref={shippingBtnRef}
+                            data-filter-btn
+                            onClick={() => openPopup('shipping', shippingBtnRef)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-all ${filterOutShippingUnits.length > 0 ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                          >
+                            <span className="truncate">{filterOutShippingUnits.length > 0 ? filterOutShippingUnits.join(', ') : 'Chọn ĐVVC'}</span>
+                            <svg className={`w-3.5 h-3.5 shrink-0 ml-1 transition-transform ${openFilterPopup === 'shipping' ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                        </div>
+
+                        {/* Portals — render popup ra ngoài DOM tree để thoát overflow */}
+                        {openFilterPopup === 'platform' && ReactDOM.createPortal(
+                          <div data-filter-popup-portal style={{ position: 'fixed', top: popupPos.top, left: popupPos.left, zIndex: 9999 }} className="w-48 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-2xs font-bold uppercase text-slate-400">Nền tảng</span>
+                              {filterOutPlatforms.length > 0 && <button onClick={() => setFilterOutPlatforms([])} className="text-2xs text-indigo-500 hover:underline">Xóa</button>}
+                            </div>
+                            {['Shopee 1', 'Shopee 2', 'Lazada', 'TikTok'].map(p => (
+                              <label key={p} className="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" checked={filterOutPlatforms.includes(p)} onChange={() => setFilterOutPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                <span className="text-xs text-slate-700 group-hover:text-slate-900">{p}</span>
+                              </label>
+                            ))}
+                          </div>,
+                          document.body
+                        )}
+                        {openFilterPopup === 'status' && ReactDOM.createPortal(
+                          <div data-filter-popup-portal style={{ position: 'fixed', top: popupPos.top, left: popupPos.left, zIndex: 9999 }} className="w-48 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-2xs font-bold uppercase text-slate-400">Trạng thái</span>
+                              {filterOutStatuses.length > 0 && <button onClick={() => setFilterOutStatuses([])} className="text-2xs text-indigo-500 hover:underline">Xóa</button>}
+                            </div>
+                            {[
+                              { code: 'OK', label: 'Đã giao' },
+                              { code: 'SHIPPING', label: 'Đang giao' },
+                              { code: 'RETURN', label: 'Hoàn hàng' },
+                              { code: 'CANCEL', label: 'Huỷ' },
+                              { code: 'LOST', label: 'Thất lạc' },
+                              { code: 'PENDING', label: 'Chờ xử lý' },
+                            ].map(({ code, label }) => (
+                              <label key={code} className="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" checked={filterOutStatuses.includes(code)} onChange={() => setFilterOutStatuses(prev => prev.includes(code) ? prev.filter(x => x !== code) : [...prev, code])} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                <span className="text-xs text-slate-700 group-hover:text-slate-900">{label}</span>
+                              </label>
+                            ))}
+                          </div>,
+                          document.body
+                        )}
+                        {openFilterPopup === 'shipping' && ReactDOM.createPortal(
+                          <div data-filter-popup-portal style={{ position: 'fixed', top: popupPos.top, left: popupPos.left, zIndex: 9999 }} className="w-48 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-2xs font-bold uppercase text-slate-400">ĐVVC</span>
+                              {filterOutShippingUnits.length > 0 && <button onClick={() => setFilterOutShippingUnits([])} className="text-2xs text-indigo-500 hover:underline">Xóa</button>}
+                            </div>
+                            {['GHN', 'SPX', 'GHTK', 'J&T'].map(u => (
+                              <label key={u} className="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" checked={filterOutShippingUnits.includes(u)} onChange={() => setFilterOutShippingUnits(prev => prev.includes(u) ? prev.filter(x => x !== u) : [...prev, u])} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                <span className="text-xs text-slate-700 group-hover:text-slate-900">{u}</span>
+                              </label>
+                            ))}
+                          </div>,
+                          document.body
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </aside>
+            <section className="relative h-full min-h-0 min-w-0 overflow-hidden">
+              {renderShopeeRevenueManager({
+                initialSubTab: 'source',
+                hiddenSubTabs: ['diagnosis'],
+                withFilters: true,
+              })}
+            </section>
+          </div>
+        );
+      case 'cash-ledger':
+        return (
+          <CashLedgerPage
+            data={data}
+            onAddExpense={expense => updateData('expenses', [...(data.expenses || []), expense])}
+            onAddPosOrder={order => pushBatch('posOrders', [order])}
           />
         );
       case 'expenses':
@@ -232,6 +483,7 @@ const MainContent: React.FC<MainContentProps> = ({
             revenue={data.revenue}
             expenses={data.expenses}
             onUpdate={(newList, idToRem) => updateData('promotions', newList, idToRem)}
+            onSelectMainTab={handleSetActiveTab}
           />
         );
       case 'marketing':
@@ -240,21 +492,20 @@ const MainContent: React.FC<MainContentProps> = ({
             brandProfile={brandProfile}
             onUpdateBrand={setBrandProfile}
             suggestedFocusProducts={suggestedFocusProducts}
+            onSelectMainTab={handleSetActiveTab}
           />
         );
       case 'brand':
         return <BrandManager brandProfile={brandProfile} onUpdate={setBrandProfile} />;
       case 'sop':
-        return <KnowledgeManager data={data} onUpdateData={updateData} />;
-      case 'chat':
-        return (
-          <ChatInterface
-            data={data}
-            messages={chatMessages}
-            setMessages={setChatMessages}
-            isCFOReady={true}
-          />
-        );
+      case 'sop-mechanisms':
+        return renderKnowledgeManager('mechanisms');
+      case 'sop-standards':
+        return renderKnowledgeManager('standards');
+      case 'sop-workflows':
+        return renderKnowledgeManager('workflows');
+      case 'sop-templates':
+        return renderKnowledgeManager('templates');
       case 'goods-purchase':
       case 'purchase-returns':
         return (
@@ -281,6 +532,7 @@ const MainContent: React.FC<MainContentProps> = ({
             orders={data.posOrders || []}
             customers={data.posCustomers || []}
             storeName={brandProfile.name}
+            onUpdateSurgical={updateSurgical}
           />
         );
       case 'order-returns':
@@ -289,21 +541,23 @@ const MainContent: React.FC<MainContentProps> = ({
             orders={data.posOrders || []}
             products={data.posProducts || []}
             customers={data.posCustomers || []}
+            transactions={data.inventoryTransactions || []}
             onUpdateSurgical={updateSurgical}
           />
         );
       case 'order-repairs':
         return <OrderRepairs />;
       case 'delivery-partners':
-        return <DeliveryPartners />;
+        return <DeliveryPartners navigationSlot={renderOnlineNav()} />;
       case 'shipping-orders':
-        return <ShippingOrders />;
+        return <ShippingOrders navigationSlot={renderOnlineNav()} />;
       case 'purchase-invoices':
         return (
           <PurchaseInvoices
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
             supplierDebts={data.supplierDebts || []}
+            products={data.posProducts || []}
           />
         );
       case 'goods-internal-use':
@@ -323,29 +577,112 @@ const MainContent: React.FC<MainContentProps> = ({
           />
         );
       case 'analysis-business':
-        return <AnalysisContainer data={data} initialSection="business" />;
+        return (
+          <AnalysisContainer
+            data={data}
+            initialSection="business"
+            breakEvenAnalysis={breakEvenAnalysis}
+            onUpdateData={updateData}
+            diagnosisRange={diagnosisRange}
+            setDiagnosisRange={setDiagnosisRange}
+            diagStartDate={diagStartDate}
+            setDiagStartDate={setDiagStartDate}
+            diagEndDate={diagEndDate}
+            setDiagEndDate={setDiagEndDate}
+          />
+        );
+      case 'analysis-online-sales':
+        return renderShopeeRevenueManager({
+          initialSubTab: 'diagnosis',
+          diagnosisLabel: 'Bán Online',
+        });
       case 'analysis-goods':
         return <AnalysisContainer data={data} initialSection="goods" onUpdate={updateData} />;
       case 'analysis-customers':
         return <AnalysisContainer data={data} initialSection="customers" />;
+      case 'analysis-staff':
+        return <AnalysisContainer data={data} initialSection="staff" />;
+      case 'analysis-expenses':
+        return <AnalysisContainer data={data} initialSection="expenses" onUpdate={updateData} />;
       case 'analysis-efficiency':
         return <AnalysisContainer data={data} initialSection="efficiency" />;
       case 'analysis-placeholder':
       case 'report-eod':
+        return (
+          <EndOfDayReportPage
+            orders={data.posOrders || []}
+            employees={data.employees || []}
+            sales={data.sales || []}
+            onUpdateSales={records => updateData('sales', records)}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-sales':
+        return (
+          <SalesReportPage
+            orders={data.posOrders || []}
+            products={data.posProducts || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-orders':
+        return (
+          <OrderReportPage
+            orders={data.posOrders || []}
+            products={data.posProducts || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-goods':
+        return (
+          <GoodsReportPage
+            orders={data.posOrders || []}
+            products={data.posProducts || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-customers':
+        return (
+          <CustomerReportPage
+            orders={data.posOrders || []}
+            customers={data.posCustomers || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-suppliers':
+        return (
+          <SupplierReportPage
+            transactions={data.inventoryTransactions || []}
+            suppliers={data.suppliers || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-staff':
+        return (
+          <StaffReportPage
+            orders={data.posOrders || []}
+            employees={data.employees || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-channels':
+        return (
+          <ChannelReportPage
+            orders={data.posOrders || []}
+            employees={data.employees || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
+        );
       case 'report-finance':
         return (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
-            <div className="text-5xl">🚧</div>
-            <p className="text-base font-medium text-slate-500">Đang xây dựng</p>
-            <p className="text-sm">Tính năng này sẽ sớm ra mắt.</p>
-          </div>
+          <FinanceReportPage
+            orders={data.posOrders || []}
+            products={data.posProducts || []}
+            expenses={data.expenses || []}
+            payroll={data.payroll || []}
+            inventoryTransactions={data.inventoryTransactions || []}
+            storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+          />
         );
       default:
         return null;
@@ -355,19 +692,26 @@ const MainContent: React.FC<MainContentProps> = ({
   const isPosActive = activeTab === 'pos';
   const isGoodsActive =
     activeTab === 'goods' || activeTab === 'goods-pricing' || activeTab === 'goods-warranty';
-  const isStaffActive = activeTab === 'staff' || activeTab.startsWith('staff-');
+  const isStaffActive = activeTab === 'staff' || activeTab === 'staff-ledger';
   const isPayrollActive = activeTab === 'payroll' || activeTab.startsWith('payroll-');
+  const isOnlineActive =
+    activeTab === 'shopee-revenue' ||
+    activeTab === 'delivery-partners' ||
+    activeTab === 'shipping-orders';
 
   return (
     <div
       className="h-full flex flex-col"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
-      {/* Keep POSComputer and GoodsInventory mounted after first visit — hidden via CSS to avoid remount lag */}
-      {(isPosActive || visitedTabs.has('pos')) && (
+      {eodReport && !eodDismissed && (
+        <div className="px-4 md:px-8 shrink-0">
+          <DashboardEodBanner report={eodReport} onDismiss={() => setEodDismissed(true)} />
+        </div>
+      )}
+      {isPosActive && (
         <div
           style={{
-            display: isPosActive ? 'flex' : 'none',
             flex: '1 1 0',
             minHeight: 0,
             flexDirection: 'column',
@@ -380,14 +724,16 @@ const MainContent: React.FC<MainContentProps> = ({
               products={data.posProducts || []}
               productGroups={data.productGroups || []}
               customers={data.posCustomers || []}
+              employees={data.employees || []}
               orders={data.posOrders || []}
               paymentSettings={data.posPaymentSettings}
               inventorySettings={data.posInventorySettings}
               brandProfile={brandProfile}
               currentStaffName={brandProfile?.name || 'Quản lý'}
-              onGoToManagement={() => handleSetActiveTab('dashboard')}
-              offlinePendingCount={offlinePendingCount}
+              onGoToManagement={() => handleSetActiveTab('overview')}
+              offlineOrderPendingCount={offlineOrderPendingCount}
               isDraining={isDraining}
+              onDrainOfflineQueue={onDrainOfflineQueue}
               onAddCustomer={customer => {
                 const updatedCustomers = [...(data.posCustomers || []), customer];
                 updateData('posCustomers', updatedCustomers);
@@ -420,16 +766,15 @@ const MainContent: React.FC<MainContentProps> = ({
           </ErrorBoundary>
         </div>
       )}
-      {(isGoodsActive || visitedTabs.has('goods')) && (
-        <div
-          style={{ display: isGoodsActive ? undefined : 'none' }}
-          className="h-full min-h-0 pt-4 md:pt-8 flex flex-col"
-        >
+      {isGoodsActive && (
+        <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="goods" moduleName="goods">
             <GoodsInventory
               products={data.posProducts || []}
               transactions={data.inventoryTransactions || []}
+              orders={data.posOrders || []}
               productGroups={data.productGroups || []}
+              suppliers={data.suppliers || []}
               onUpdateProducts={newList => updateData('posProducts', newList)}
               onUpdateSurgical={updateSurgical}
               onPushBatch={pushBatch}
@@ -448,11 +793,8 @@ const MainContent: React.FC<MainContentProps> = ({
         </div>
       )}
 
-      {(isStaffActive ||
-        visitedTabs.has('staff') ||
-        visitedTabs.has('staff-performance') ||
-        visitedTabs.has('staff-ledger')) && (
-        <div style={{ display: isStaffActive ? undefined : 'none' }} className="pt-4 md:pt-8">
+      {isStaffActive && (
+        <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="staff" moduleName="staff">
             <StaffManager
               list={data.employees}
@@ -462,28 +804,16 @@ const MainContent: React.FC<MainContentProps> = ({
               showResigned={showResigned}
               setShowResigned={setShowResigned}
               onUpdatePerformance={newList => updateData('staffPerformance', newList)}
+              onSelectMainTab={handleSetActiveTab}
               requestedTab={
-                activeTab === 'staff-performance'
-                  ? 'performance'
-                  : activeTab === 'staff-ledger'
-                    ? 'ledger'
-                    : activeTab === 'staff'
-                      ? 'list'
-                      : undefined
+                activeTab === 'staff-ledger' ? 'ledger' : activeTab === 'staff' ? 'list' : undefined
               }
             />
           </ErrorBoundary>
         </div>
       )}
-      {(isPayrollActive ||
-        visitedTabs.has('payroll') ||
-        visitedTabs.has('payroll-attendance') ||
-        visitedTabs.has('payroll-overtime') ||
-        visitedTabs.has('payroll-sales') ||
-        visitedTabs.has('payroll-penalties') ||
-        visitedTabs.has('payroll-summary') ||
-        visitedTabs.has('payroll-ledger')) && (
-        <div style={{ display: isPayrollActive ? undefined : 'none' }} className="pt-4 md:pt-8">
+      {isPayrollActive && (
+        <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="payroll" moduleName="payroll">
             <PayrollManager
               data={data}
@@ -506,6 +836,7 @@ const MainContent: React.FC<MainContentProps> = ({
                             ? 'attendance'
                             : undefined
               }
+              onSelectMainTab={handleSetActiveTab}
             />
           </ErrorBoundary>
         </div>
@@ -532,7 +863,21 @@ const MainContent: React.FC<MainContentProps> = ({
               className="h-full"
             >
               <ErrorBoundary key={activeTab} moduleName={activeTab}>
-                <div className={activeTab === 'dashboard' ? 'h-full' : 'h-full pt-4 md:pt-8'}>
+                <div
+                  className={
+                    isOnlineActive
+                      ? 'h-full min-h-0'
+                      : activeTab.startsWith('analysis-')
+                        ? 'h-full pt-10 pb-5'
+                        : activeTab.startsWith('report-')
+                          ? 'h-full pt-10 pb-5'
+                          : activeTab === 'cash-ledger'
+                            ? 'h-full pt-10 pb-5'
+                            : activeTab === 'overview'
+                              ? 'h-full pt-10 pb-5'
+                              : 'h-full pt-10 pb-5'
+                  }
+                >
                   {renderContent()}
                 </div>
               </ErrorBoundary>

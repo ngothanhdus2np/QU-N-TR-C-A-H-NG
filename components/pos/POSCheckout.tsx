@@ -7,7 +7,6 @@ import {
   X,
   CheckCircle2,
   MoreVertical,
-  UserCircle,
   ExternalLink,
 } from 'lucide-react';
 import {
@@ -180,6 +179,22 @@ const NonCashPaymentPanel: React.FC<{
     }
   }, [accounts, selectedAccountId]);
 
+  const copyPaymentInfo = async () => {
+    const text = [
+      config.accountLabel,
+      amount > 0 ? `Số tiền: ${amount.toLocaleString('vi-VN')}đ` : '',
+      config.notes || '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert('Đã sao chép thông tin thanh toán.');
+    } catch {
+      window.alert(text);
+    }
+  };
+
   return (
     <>
       {/* QR phóng to overlay */}
@@ -251,7 +266,7 @@ const NonCashPaymentPanel: React.FC<{
                   <span className="block text-sm font-normal">
                     {account.provider} {account.accountNumber}
                   </span>
-                  <span className="block text-[11px] text-slate-400 mt-0.5">
+                  <span className="block text-xs text-slate-400 mt-0.5">
                     {account.accountHolder}
                   </span>
                 </button>
@@ -267,12 +282,16 @@ const NonCashPaymentPanel: React.FC<{
               <ExternalLink className="h-4 w-4" />
               {config.actionLabel}
             </button>
-            <button className="text-sm font-normal text-indigo-600 hover:text-indigo-700 whitespace-nowrap">
+            <button
+              type="button"
+              onClick={copyPaymentInfo}
+              className="text-sm font-normal text-indigo-600 hover:text-indigo-700 whitespace-nowrap"
+            >
               {config.helperText}
             </button>
           </div>
           {config.notes && (
-            <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+            <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
               {config.notes}
             </p>
           )}
@@ -292,6 +311,7 @@ const formatCurrencyInput = (value: number): string =>
   value > 0 ? formatSplitCurrency(value) : '';
 
 type SplitPayment = { cash: number; bank: number; card: number; momo: number };
+type POSStaffOption = { id: string; name: string };
 
 const getSplitPaymentTotal = (splitPayment: SplitPayment): number =>
   splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo;
@@ -319,6 +339,7 @@ interface POSCheckoutProps {
   totalReturnBeforeDiscount: number;
   finalReturnAmount: number;
   amountToPayCustomer: number;
+  customerPaysDifference: number;
   currentCashReceived: number;
   isDebtMode: boolean;
   pointsEarned: number;
@@ -329,6 +350,10 @@ interface POSCheckoutProps {
   setUseSplitPayment: (v: boolean) => void;
   splitPayment: SplitPayment;
   cashSuggestions: number[];
+  staffOptions?: POSStaffOption[];
+  currentStaffId?: string;
+  currentStaffName?: string;
+  onCurrentStaffChange?: (staffId: string) => void;
   // Actions
   onUpdateTab: (updates: Partial<InvoiceTab>) => void;
   onBillDiscountClick: (rect: DOMRect) => void;
@@ -356,6 +381,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   totalReturnBeforeDiscount,
   finalReturnAmount,
   amountToPayCustomer,
+  customerPaysDifference,
   currentCashReceived,
   isDebtMode,
   pointsEarned,
@@ -365,11 +391,17 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   setUseSplitPayment,
   splitPayment,
   cashSuggestions,
+  staffOptions = [],
+  currentStaffId,
+  currentStaffName = 'Nhân viên',
+  onCurrentStaffChange,
   onUpdateTab,
   onBillDiscountClick,
   onCheckout,
   isCheckoutLocked = false,
 }) => {
+  const [showPaymentMore, setShowPaymentMore] = React.useState(false);
+  const [showStaffDropdown, setShowStaffDropdown] = React.useState(false);
   const resolvedPaymentSettings = normalizePOSPaymentSettings(paymentSettings);
   const canUseSplitPayment = resolvedPaymentSettings.allowSplitPayment;
   const isSplitPaymentActive = canUseSplitPayment && useSplitPayment;
@@ -444,6 +476,12 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
     }
   }, [canUseSplitPayment, setUseSplitPayment, useSplitPayment]);
 
+  const editOtherFees = () => {
+    const raw = window.prompt('Nhập phí khác', otherFees > 0 ? String(otherFees) : '');
+    if (raw === null) return;
+    onUpdateTab({ otherFees: parseCurrencyInput(raw) });
+  };
+
   return (
     <div
       className="w-[480px] bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden relative z-20"
@@ -457,16 +495,40 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
     >
       {/* Active User Header */}
       <div className="px-4 h-10 flex items-center justify-between bg-white border-b border-slate-100">
-        <div className="flex items-center gap-2 group cursor-pointer">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-normal text-slate-700">Ngô Thành Du</span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-          </div>
-          <div className="w-px h-3 bg-slate-200 mx-1" />
-          <UserCircle className="h-4 w-4 text-slate-400" />
-          <ChevronDown className="h-3 w-3 text-slate-400" />
+        <div className="relative flex items-center gap-2 group">
+          <button
+            type="button"
+            onClick={() => setShowStaffDropdown(value => !value)}
+            className="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-slate-50"
+          >
+            <span className="text-xs font-normal text-slate-700">{currentStaffName}</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-slate-400 transition ${showStaffDropdown ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {showStaffDropdown && (
+            <div className="absolute left-0 top-[calc(100%+4px)] z-modal min-w-[150px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
+              {staffOptions.map(staff => (
+                <button
+                  key={staff.id}
+                  type="button"
+                  onClick={() => {
+                    onCurrentStaffChange?.(staff.id);
+                    setShowStaffDropdown(false);
+                  }}
+                  className={`flex w-full items-center px-3 py-2 text-left text-xs transition hover:bg-indigo-50 ${
+                    staff.id === currentStaffId
+                      ? 'font-semibold text-indigo-600'
+                      : 'font-normal text-slate-700'
+                  }`}
+                >
+                  {staff.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="text-[10px] font-normal text-slate-500">
+        <div className="text-2xs font-normal text-slate-500">
           {new Date().toLocaleDateString('vi-VN')}{' '}
           {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
         </div>
@@ -494,7 +556,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
 
           {/* Customer Dropdown */}
           {!selectedCustomer && filteredCustomers.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white shadow-2xl rounded-xl overflow-hidden border border-slate-100 z-[100] mt-1 animate-in fade-in slide-in-from-top-2">
+            <div className="absolute top-full left-0 right-0 bg-white shadow-2xl rounded-xl overflow-hidden border border-slate-100 z-modal mt-1 animate-in fade-in slide-in-from-top-2">
               <div className="p-2 bg-slate-50/50 border-b border-slate-100 text-[8px] font-normal uppercase text-slate-400 tracking-wider">
                 Kết quả tìm kiếm
               </div>
@@ -530,7 +592,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                 {selectedCustomer.name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="text-[11px] font-normal text-indigo-950 uppercase tracking-tight leading-none">
+                <div className="text-xs font-normal text-indigo-950 uppercase tracking-tight leading-none">
                   {selectedCustomer.name}
                 </div>
                 <div className="text-[9px] font-normal text-indigo-500/80 flex items-center gap-2 mt-1">
@@ -556,7 +618,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
           <>
             {/* Trả hàng Section */}
             <div>
-              <h3 className="text-emerald-500 font-black text-lg mb-2 uppercase tracking-tight">
+              <h3 className="text-emerald-500 font-semibold text-lg mb-2 uppercase tracking-tight">
                 Trả hàng
               </h3>
               <div className="space-y-3">
@@ -613,7 +675,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
             {/* Mua hàng Section */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-emerald-500 font-black text-lg uppercase tracking-tight">
+                <h3 className="text-emerald-500 font-semibold text-lg uppercase tracking-tight">
                   Mua hàng
                 </h3>
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -621,7 +683,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                     type="checkbox"
                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-[11px] font-normal text-slate-600 uppercase tracking-wide">
+                  <span className="text-xs font-normal text-slate-600 uppercase tracking-wide">
                     Giao hàng
                   </span>
                 </label>
@@ -661,34 +723,40 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               </div>
             </div>
 
-            <div className="pt-4 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-normal uppercase text-slate-950 tracking-tight">
-                  Cần trả khách
-                </span>
-                <span className="text-2xl font-normal text-indigo-600 italic tracking-tighter">
-                  {amountToPayCustomer.toLocaleString()}
-                </span>
+            {finalReturnAmount > 0 && netPayable > 0 && (
+              <div className="pt-4">
+                {customerPaysDifference > 0 ? (
+                  <div className="flex justify-between items-center border-t border-slate-100 pt-3">
+                    <span className="text-sm font-normal uppercase text-slate-950 tracking-tight">
+                      Khách thanh toán
+                    </span>
+                    <div className="flex-1 border-b-2 border-slate-200 mx-6" />
+                    <span className="text-xl font-normal text-slate-400 tabular-nums">
+                      {customerPaysDifference.toLocaleString()}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center border-t border-slate-100 pt-3">
+                    <span className="text-sm font-normal uppercase text-slate-950 tracking-tight">
+                      Tiền trả khách
+                    </span>
+                    <div className="flex-1 border-b-2 border-slate-200 mx-6" />
+                    <span className="text-xl font-normal text-slate-400 tabular-nums">
+                      {amountToPayCustomer.toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between items-center border-t border-slate-100 pt-3">
-                <span className="text-sm font-normal uppercase text-slate-950 tracking-tight">
-                  Tiền trả khách
-                </span>
-                <div className="flex-1 border-b-2 border-slate-200 mx-6" />
-                <span className="text-xl font-normal text-slate-400 tabular-nums">
-                  {amountToPayCustomer.toLocaleString()}
-                </span>
-              </div>
-            </div>
+            )}
           </>
         ) : (
           <div className="space-y-2 flex flex-col flex-1">
             <div className="flex justify-between items-center py-0.5">
-              <span className="text-[13px] font-normal text-slate-600 uppercase tracking-wide">
+              <span className="text-sm font-normal text-slate-600 uppercase tracking-wide">
                 Tiền hàng
               </span>
               <div className="flex items-center gap-6">
-                <span className="text-[13px] font-normal text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                <span className="text-sm font-normal text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
                   {cart.reduce((a, b) => a + b.quantity, 0)}
                 </span>
                 <span className="text-sm font-normal text-slate-900 tabular-nums">
@@ -703,7 +771,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                 onBillDiscountClick((e.currentTarget as HTMLDivElement).getBoundingClientRect())
               }
             >
-              <span className="text-[13px] font-normal text-slate-600 uppercase tracking-wide">
+              <span className="text-sm font-normal text-slate-600 uppercase tracking-wide">
                 Giảm giá
               </span>
               <span className="text-sm font-normal text-slate-700 tabular-nums border-b border-dashed border-slate-300 w-32 text-right">
@@ -711,12 +779,15 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               </span>
             </div>
 
-            <div className="flex justify-between items-center py-0.5 border-b border-slate-50 pb-1 cursor-pointer group">
-              <span className="text-[13px] font-normal text-slate-600 uppercase tracking-wide">
+            <div
+              className="flex justify-between items-center py-0.5 border-b border-slate-50 pb-1 cursor-pointer group"
+              onClick={editOtherFees}
+            >
+              <span className="text-sm font-normal text-slate-600 uppercase tracking-wide">
                 Phí khác
               </span>
               <span className="text-sm font-normal text-slate-900 tabular-nums border-b border-dashed border-slate-300 w-32 text-right">
-                0
+                {otherFees.toLocaleString()}
               </span>
             </div>
 
@@ -731,7 +802,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
 
             {paymentMethod === 'Cash' && (
               <div className="flex justify-between items-center pt-2 px-1">
-                <span className="text-[13px] font-normal text-slate-500 uppercase tracking-wider">
+                <span className="text-sm font-normal text-slate-500 uppercase tracking-wider">
                   Khách đưa
                 </span>
                 <span className="text-lg font-normal text-slate-900 tabular-nums">
@@ -743,13 +814,13 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
             <div className="pt-1 space-y-3">
               {/* Toggle Split Payment */}
               <div className="flex items-center justify-between px-2 py-1">
-                <span className="text-[11px] font-normal text-slate-500 uppercase tracking-wider">
+                <span className="text-xs font-normal text-slate-500 uppercase tracking-wider">
                   Phương thức thanh toán
                 </span>
                 {canUseSplitPayment && (
                   <button
                     onClick={() => setUseSplitPayment(!useSplitPayment)}
-                    className="text-[10px] font-normal text-indigo-600 hover:text-indigo-700 uppercase tracking-wide flex items-center gap-1"
+                    className="text-2xs font-normal text-indigo-600 hover:text-indigo-700 uppercase tracking-wide flex items-center gap-1"
                   >
                     {useSplitPayment ? '← Đơn giản' : 'Chia nhiều →'}
                   </button>
@@ -772,9 +843,62 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                           label={label}
                         />
                       ))}
-                    <button className="text-slate-400 hover:text-slate-600 px-1">
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentMore(open => !open)}
+                        className="text-slate-400 hover:text-slate-600 px-1"
+                        title="Tùy chọn thanh toán"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                      {showPaymentMore && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-30"
+                            onClick={() => setShowPaymentMore(false)}
+                          />
+                          <div className="absolute right-0 top-full z-40 mt-2 w-52 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 shadow-xl">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateTab({ cashReceived: netPayable, isDebtMode: false });
+                                setShowPaymentMore(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              Nhận đúng số tiền
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateTab({
+                                  cashReceived: 0,
+                                  isDebtMode: false,
+                                  splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
+                                });
+                                setShowPaymentMore(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              Xóa tiền đã nhận
+                            </button>
+                            {selectedCustomer && mode === 'sales' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onUpdateTab({ isDebtMode: true, cashReceived: 0 });
+                                  setShowPaymentMore(false);
+                                }}
+                                className="w-full px-3 py-2 text-left text-xs text-rose-600 hover:bg-rose-50"
+                              >
+                                Chuyển sang ghi nợ
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   {paymentMethod === 'Cash' ? (
                     <div className="space-y-2">
@@ -790,7 +914,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                       {selectedCustomer && mode === 'sales' && (
                         <button
                           onClick={() => onUpdateTab({ isDebtMode: !isDebtMode, cashReceived: 0 })}
-                          className={`w-full py-2 rounded-xl text-[12px] font-normal uppercase tracking-wider border transition-all ${
+                          className={`w-full py-2 rounded-xl text-xs font-normal uppercase tracking-wider border transition-all ${
                             isDebtMode
                               ? 'bg-rose-50 border-rose-300 text-rose-600'
                               : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-rose-200 hover:text-rose-500'
@@ -812,10 +936,10 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[11px] font-normal text-slate-500 uppercase tracking-wider">
+                    <span className="text-xs font-normal text-slate-500 uppercase tracking-wider">
                       Chia thanh toán
                     </span>
-                    <span className="text-[11px] font-normal text-slate-400">
+                    <span className="text-xs font-normal text-slate-400">
                       Nhập số tiền theo từng phương thức
                     </span>
                   </div>
@@ -823,7 +947,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                   <div className="space-y-2">
                     {splitPaymentMethods.map(({ key, label }) => (
                       <div key={key} className="flex items-center justify-between gap-4 py-0.5">
-                        <span className="text-[13px] font-normal text-slate-600 uppercase tracking-wide shrink-0">
+                        <span className="text-sm font-normal text-slate-600 uppercase tracking-wide shrink-0">
                           {label}
                         </span>
                         <div className="w-44 h-10 rounded-xl border border-slate-200 bg-white px-3 flex items-center gap-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
@@ -842,14 +966,14 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                             className="min-w-0 flex-1 bg-transparent border-0 text-sm font-normal text-slate-900 outline-none text-right tabular-nums"
                             placeholder="0"
                           />
-                          <span className="text-[11px] font-normal text-slate-400 shrink-0">đ</span>
+                          <span className="text-xs font-normal text-slate-400 shrink-0">đ</span>
                         </div>
                       </div>
                     ))}
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <span className="text-[11px] font-normal text-slate-700 uppercase tracking-wider">
+                    <span className="text-xs font-normal text-slate-700 uppercase tracking-wider">
                       Tổng đã nhận
                     </span>
                     <span
@@ -869,7 +993,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                     if (diff < 0)
                       return (
                         <div className="flex items-center justify-between py-1.5 px-2 bg-rose-50 border border-rose-100 rounded-lg">
-                          <span className="text-[10px] font-normal text-rose-700 uppercase tracking-wider">
+                          <span className="text-2xs font-normal text-rose-700 uppercase tracking-wider">
                             Còn thiếu
                           </span>
                           <span className="text-sm font-normal text-rose-600 tabular-nums">
@@ -880,7 +1004,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                     if (diff > 0)
                       return (
                         <div className="flex items-center justify-between py-1.5 px-2 bg-emerald-50 border border-emerald-100 rounded-lg">
-                          <span className="text-[10px] font-normal text-emerald-700 uppercase tracking-wider">
+                          <span className="text-2xs font-normal text-emerald-700 uppercase tracking-wider">
                             Tiền thừa
                           </span>
                           <span className="text-sm font-normal text-emerald-600 tabular-nums">
@@ -896,7 +1020,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               {/* Tiền thừa cho Single Payment Mode */}
               {!isSplitPaymentActive && !isDebtMode && currentCashReceived > netPayable && (
                 <div className="flex justify-between items-center py-1.5 px-3 bg-emerald-50 border border-emerald-100 rounded-xl animate-in fade-in slide-in-from-top-1">
-                  <span className="text-[11px] font-normal text-emerald-800 uppercase tracking-widest">
+                  <span className="text-xs font-normal text-emerald-800 uppercase tracking-widest">
                     Tiền thừa
                   </span>
                   <span className="text-lg font-normal text-emerald-600 tabular-nums">
@@ -908,7 +1032,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               {/* Tính vào công nợ */}
               {!isSplitPaymentActive && isDebtMode && selectedCustomer && mode === 'sales' && (
                 <div className="flex justify-between items-center py-1.5 px-3 bg-rose-50 border border-rose-200 rounded-xl animate-in fade-in slide-in-from-top-1">
-                  <span className="text-[11px] font-normal text-rose-700 uppercase tracking-widest">
+                  <span className="text-xs font-normal text-rose-700 uppercase tracking-widest">
                     Tính vào công nợ
                   </span>
                   <span className="text-lg font-normal text-rose-600 tabular-nums">

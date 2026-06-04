@@ -36,14 +36,17 @@ export interface AlertConfig {
 
 export interface KnowledgeBaseArticle {
   id: string;
-  category: 'Nhân sự' | 'Vận hành' | 'Bán hàng' | 'Tài chính' | 'Khác';
+  category: 'Nhân sự' | 'Vận hành' | 'Bán hàng' | 'Tài chính' | 'Biểu mẫu' | 'Khác';
   title: string;
   content: string; // Hỗ trợ Markdown
+  summary?: string;
   updatedAt: string;
   sourceFileName?: string;
   sourceFileData?: string; // Legacy base64 data of original file
   sourceFilePath?: string;
   sourceFileUrl?: string;
+  sourcePreviewUrl?: string;
+  sourcePageImages?: string[];
   sourceFileType?: string;
   sourceFileSize?: number;
 }

@@ -58,14 +58,14 @@ const PromotionAiPanel: React.FC<PromotionAiPanelProps> = ({
             <BrainCircuit className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900">Cố vấn Chiến lược Khuyến mãi (AI)</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Cố vấn Chiến lược Khuyến mãi (AI)</h3>
             <p className="text-sm text-slate-500">Phân tích dữ liệu thực tế để tối ưu hóa ROI</p>
           </div>
         </div>
         <button
           onClick={onRunAnalysis}
           disabled={isAnalyzing}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-normal text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-normal text-xs uppercase tracking-widest hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-lg shadow-indigo-200"
         >
           {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           {aiAnalysis ? 'Phân tích lại chiến lược' : 'Bắt đầu phân tích chiến lược'}
@@ -88,7 +88,7 @@ const PromotionAiPanel: React.FC<PromotionAiPanelProps> = ({
           <p className="text-slate-400 text-xs italic mb-6">Nhấn nút phía trên để nhận gợi ý chiến lược từ CFO AI</p>
           <button
             onClick={onRunAnalysis}
-            className="px-8 py-3 bg-white border-2 border-indigo-600 text-indigo-600 rounded-xl font-normal text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all"
+            className="px-8 py-3 bg-white border-2 border-indigo-600 text-indigo-600 rounded-xl font-normal text-xs uppercase tracking-widest hover:bg-indigo-50 transition-colors"
           >
             Bắt đầu ngay
           </button>

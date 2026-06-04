@@ -1,31 +1,25 @@
 import React, { useState, useRef, useMemo, useTransition } from 'react';
 import DOMPurify from 'dompurify';
-import { ProductGroup, ProductGroupRevenue, RevenueRecord, POSProduct } from '../types';
+import { ProductGroup, ProductGroupRevenue, RevenueRecord, POSProduct, POSOrder } from '../types';
 import {
+  ChevronDown,
+  ChevronRight,
   DollarSign,
   Sparkles,
   Loader2,
-  Activity,
   Info,
   TrendingUp,
   DatabaseZap,
   X,
-  Target,
   FileText,
   Filter,
   FileSpreadsheet,
-  Zap,
   ShieldAlert,
   Star,
   History,
   Boxes,
-  Award,
-  ArrowUp,
-  Briefcase,
 } from 'lucide-react';
 import {
-  calculateStrategicSuggestions,
-  calculateSeasonalityAnalysis,
   cleanVNNumber,
   parseVNDate,
   parseHierarchyGroups,
@@ -35,14 +29,12 @@ import {
   type ParsedExcelRow,
 } from '../src/lib';
 import { marked } from 'marked';
-import { MetricCard } from './product-group/ProductGroupSharedUI';
+import { useToast } from './ui/Toast';
 import ProductGroupLedgerTab from './product-group/ProductGroupLedgerTab';
 import ProductGroupMatrixTab from './product-group/ProductGroupMatrixTab';
-import ProductGroupTreeTab from './product-group/ProductGroupTreeTab';
 
-type AnalysisMode = 'range' | 'seasonality';
 type ViewMode = 'revenue' | 'quantity';
-type ProductGroupSubTab = 'groups' | 'seasonality' | 'matrix' | 'ledger';
+type ProductGroupSubTab = 'seasonality' | 'matrix' | 'ledger';
 
 interface SeasonalRow {
   month: string;
@@ -64,6 +56,7 @@ interface SeasonalRow {
 interface Props {
   productGroups: ProductGroup[];
   products?: POSProduct[];
+  orders?: POSOrder[];
   groupRevenue: ProductGroupRevenue[];
   list: RevenueRecord[];
   onUpdateGroups: (newList: ProductGroup[]) => void;
@@ -92,16 +85,36 @@ type LedgerMonthMetric = {
   cogs: number;
 };
 
+type GroupTreeNode = {
+  id: string;
+  name: string;
+  fullPath: string;
+  level: number;
+  rev: number;
+  qty: number;
+  selfRev: number;
+  selfQty: number;
+  percent: number;
+  children: GroupTreeNode[];
+};
+
+type GroupMetricRow = {
+  groupName: string;
+  rev: number;
+  qty: number;
+};
+
 const ProductGroupManager: React.FC<Props> = ({
   productGroups,
   products = [],
+  orders = [],
   groupRevenue,
   onUpdateGroups,
   onUpdateGroupRevenue,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<ProductGroupSubTab>('groups');
+  const { showToast } = useToast();
+  const [activeSubTab, setActiveSubTab] = useState<ProductGroupSubTab>('seasonality');
   const [, startSubTabTransition] = useTransition();
-  const [analysisMode] = useState<AnalysisMode>('seasonality');
   const [viewMode, setViewMode] = useState<ViewMode>('quantity');
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(new Date().getMonth() + 1);
 
@@ -110,6 +123,10 @@ const ProductGroupManager: React.FC<Props> = ({
 
   const [expandedNodesStrategic, setExpandedNodesStrategic] = useState<Set<string>>(new Set());
   const [expandedLedgerRows, setExpandedLedgerRows] = useState<Set<string>>(new Set());
+  const [expandedCurrentGroups, setExpandedCurrentGroups] = useState<Set<string>>(new Set());
+  const [expandedNextGroups, setExpandedNextGroups] = useState<Set<string>>(new Set());
+  const [showAllCurrentGroups, setShowAllCurrentGroups] = useState(false);
+  const [showAllNextGroups, setShowAllNextGroups] = useState(false);
 
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnosisResult, setDiagnosisResult] = useState<string | null>(null);
@@ -157,34 +174,6 @@ const ProductGroupManager: React.FC<Props> = ({
     }));
   }, [productGroups, groupRevenue]);
 
-  const filteredGroupRevenue = useMemo(() => {
-    if (activeSubTab !== 'seasonality') return [];
-    if (analysisMode === 'seasonality') {
-      return groupRevenue.filter(r => {
-        const month = parseInt(r.date.split('-')[1]);
-        return month === selectedMonthNum;
-      });
-    }
-    return groupRevenue;
-  }, [activeSubTab, groupRevenue, analysisMode, selectedMonthNum]);
-
-  const seasonalityStats = useMemo(
-    () => calculateSeasonalityAnalysis(filteredGroupRevenue, effectiveGroups),
-    [filteredGroupRevenue, effectiveGroups]
-  );
-
-  const strategicKPIs = useMemo(() => {
-    if (seasonalityStats.length === 0)
-      return { totalRev: 0, totalQty: 0, avgReturn: 0, inventory: 0, stars: 0 };
-    const totalRev = seasonalityStats.reduce((sum, s) => sum + (s.totalHistorical || 0), 0);
-    const totalQty = filteredGroupRevenue.reduce((sum, r) => sum + (r.quantity || 0), 0);
-    const avgReturn =
-      seasonalityStats.reduce((sum, s) => sum + (s.avgReturnRate || 0), 0) /
-      (seasonalityStats.length || 1);
-    const inventory = seasonalityStats.reduce((sum, s) => sum + (s.inventoryExpection || 0), 0);
-    return { totalRev, totalQty, avgReturn, inventory };
-  }, [seasonalityStats, filteredGroupRevenue]);
-
   // --- NEW MIS TACTICAL LOGIC ---
   const nextMonthNum = selectedMonthNum === 12 ? 1 : selectedMonthNum + 1;
   const years = useMemo(() => {
@@ -193,42 +182,151 @@ const ProductGroupManager: React.FC<Props> = ({
     return Array.from(ySet).sort((a, b) => b.localeCompare(a));
   }, [groupRevenue]);
 
-  const thisMonthTactical = useMemo(() => {
-    if (activeSubTab !== 'seasonality') return [];
-    const data = groupRevenue.filter(r => parseInt(r.date.split('-')[1]) === selectedMonthNum);
-    const totalRev = data.reduce(
-      (s, r) => s + (r.netRevenue || r.amount - (r.returnsValue || 0)),
-      0
-    );
-    const totalQty = data.reduce((s, r) => s + (r.quantity || 0), 0);
+  const orderYears = useMemo(() => {
+    const ySet = new Set<string>();
+    orders.forEach(order => {
+      if (order.isReturn) return;
+      const year = new Date(order.date).getFullYear();
+      if (!Number.isNaN(year)) ySet.add(String(year));
+    });
+    return Array.from(ySet).sort((a, b) => b.localeCompare(a));
+  }, [orders]);
 
-    const groupsMap: Record<string, { name: string; rev: number; qty: number }> = {};
-    data.forEach(r => {
-      if (!groupsMap[r.groupName]) groupsMap[r.groupName] = { name: r.groupName, rev: 0, qty: 0 };
-      groupsMap[r.groupName].rev += r.netRevenue || r.amount - (r.returnsValue || 0);
-      groupsMap[r.groupName].qty += r.quantity || 0;
+  const productGroupPathMap = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach(product => {
+      const rawPath = product.categoryPath || product.categoryId || 'Chưa phân loại';
+      const parts = String(rawPath)
+        .split(/\s*(?:>>|>|\/)\s*/g)
+        .map(part => part.trim())
+        .filter(Boolean);
+      map.set(product.id, parts.length > 0 ? parts.join(' >> ') : 'Chưa phân loại');
+    });
+    return map;
+  }, [products]);
+
+  const monthlyOrderGroupMetrics = useMemo(() => {
+    const byMonth = new Map<number, { yearSet: Set<number>; groups: Map<string, GroupMetricRow> }>();
+
+    orders.forEach(order => {
+      if (order.isReturn) return;
+      const orderDate = new Date(order.date);
+      if (Number.isNaN(orderDate.getTime())) return;
+      const month = orderDate.getMonth() + 1;
+      const year = orderDate.getFullYear();
+      let monthBucket = byMonth.get(month);
+      if (!monthBucket) {
+        monthBucket = { yearSet: new Set<number>(), groups: new Map<string, GroupMetricRow>() };
+        byMonth.set(month, monthBucket);
+      }
+      monthBucket.yearSet.add(year);
+
+      order.items.forEach(item => {
+        const groupName = productGroupPathMap.get(item.productId) || 'Chưa phân loại';
+        const current = monthBucket.groups.get(groupName) || { groupName, rev: 0, qty: 0 };
+        current.rev += item.total || item.price * item.quantity;
+        current.qty += item.quantity || 0;
+        monthBucket.groups.set(groupName, current);
+      });
     });
 
-    return Object.values(groupsMap)
-      .sort((a, b) => (viewMode === 'revenue' ? b.rev - a.rev : b.qty - a.qty))
-      .slice(0, 10)
-      .map(g => ({
-        ...g,
-        percent:
-          viewMode === 'revenue'
-            ? totalRev > 0
-              ? (g.rev / totalRev) * 100
-              : 0
-            : totalQty > 0
-              ? (g.qty / totalQty) * 100
-              : 0,
-      }));
-  }, [activeSubTab, groupRevenue, selectedMonthNum, viewMode]);
+    return byMonth;
+  }, [orders, productGroupPathMap]);
 
-  const nextMonthTactical = useMemo(() => {
-    if (activeSubTab !== 'seasonality') return [];
-    return calculateStrategicSuggestions(groupRevenue, nextMonthNum, viewMode);
-  }, [activeSubTab, groupRevenue, nextMonthNum, viewMode]);
+  const buildGroupTree = (
+    records: GroupMetricRow[],
+    divisor = 1
+  ): { roots: GroupTreeNode[]; totalRev: number; totalQty: number } => {
+    const nodeMap = new Map<string, GroupTreeNode>();
+
+    const ensureNode = (fullPath: string, level: number): GroupTreeNode => {
+      const existing = nodeMap.get(fullPath);
+      if (existing) return existing;
+      const parts = fullPath.split(' >> ');
+      const node: GroupTreeNode = {
+        id: fullPath,
+        name: parts[parts.length - 1] || fullPath,
+        fullPath,
+        level,
+        rev: 0,
+        qty: 0,
+        selfRev: 0,
+        selfQty: 0,
+        percent: 0,
+        children: [],
+      };
+      nodeMap.set(fullPath, node);
+
+      if (parts.length > 1) {
+        const parentPath = parts.slice(0, -1).join(' >> ');
+        const parent = ensureNode(parentPath, level - 1);
+        if (!parent.children.some(child => child.fullPath === fullPath)) parent.children.push(node);
+      }
+
+      return node;
+    };
+
+    records.forEach(record => {
+      const parts = String(record.groupName || 'Chưa phân loại')
+        .split(' >> ')
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length === 0) parts.push('Chưa phân loại');
+      let currentPath = '';
+      parts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath} >> ${part}` : part;
+        ensureNode(currentPath, index + 1);
+      });
+      const leafPath = parts.join(' >> ');
+      const leaf = ensureNode(leafPath, parts.length);
+      leaf.selfRev += record.rev / divisor;
+      leaf.selfQty += record.qty / divisor;
+    });
+
+    const computeTotals = (node: GroupTreeNode) => {
+      node.children.forEach(computeTotals);
+      node.rev = node.selfRev + node.children.reduce((sum, child) => sum + child.rev, 0);
+      node.qty = node.selfQty + node.children.reduce((sum, child) => sum + child.qty, 0);
+      node.children.sort((a, b) => (viewMode === 'revenue' ? b.rev - a.rev : b.qty - a.qty));
+    };
+
+    const roots = Array.from(nodeMap.values()).filter(node => node.level === 1);
+    roots.forEach(computeTotals);
+    roots.sort((a, b) => (viewMode === 'revenue' ? b.rev - a.rev : b.qty - a.qty));
+
+    const totalRev = roots.reduce((sum, node) => sum + node.rev, 0);
+    const totalQty = roots.reduce((sum, node) => sum + node.qty, 0);
+    const denominator = viewMode === 'revenue' ? totalRev : totalQty;
+    nodeMap.forEach(node => {
+      const metric = viewMode === 'revenue' ? node.rev : node.qty;
+      node.percent = denominator > 0 ? (metric / denominator) * 100 : 0;
+    });
+
+    return { roots, totalRev, totalQty };
+  };
+
+  const currentGroupTree = useMemo(() => {
+    if (activeSubTab !== 'seasonality') return { roots: [], totalRev: 0, totalQty: 0 };
+    const bucket = monthlyOrderGroupMetrics.get(selectedMonthNum);
+    return buildGroupTree(Array.from(bucket?.groups.values() || []));
+  }, [activeSubTab, monthlyOrderGroupMetrics, selectedMonthNum, viewMode]);
+
+  const nextGroupTree = useMemo(() => {
+    if (activeSubTab !== 'seasonality') return { roots: [], totalRev: 0, totalQty: 0 };
+    const bucket = monthlyOrderGroupMetrics.get(nextMonthNum);
+    return buildGroupTree(Array.from(bucket?.groups.values() || []), Math.max(bucket?.yearSet.size || 0, 1));
+  }, [activeSubTab, monthlyOrderGroupMetrics, nextMonthNum, viewMode]);
+
+  const thisMonthTactical = currentGroupTree.roots;
+  const nextMonthTactical = nextGroupTree.roots;
+
+  const strategicKPIs = useMemo(
+    () => ({
+      totalRev: currentGroupTree.totalRev,
+      totalQty: currentGroupTree.totalQty,
+    }),
+    [currentGroupTree.totalQty, currentGroupTree.totalRev]
+  );
 
   const matrixData = useMemo(() => {
     if (activeSubTab !== 'matrix') return [];
@@ -378,7 +476,7 @@ const ProductGroupManager: React.FC<Props> = ({
         setPendingGroupRevenue(mappedGroupRev);
         setIsAuditMode(true);
       } catch {
-        alert('Lỗi hệ thống khi xử lý file Excel.');
+        showToast('Lỗi hệ thống khi xử lý file Excel.', 'error');
       }
     };
     if (isExcel) reader.readAsArrayBuffer(file);
@@ -441,10 +539,10 @@ const ProductGroupManager: React.FC<Props> = ({
       await onUpdateGroupRevenue(finalList);
       setIsAuditMode(false);
       setGroupConflicts([]);
-      alert('Đồng bộ dữ liệu Nhóm hàng thành công!');
+      showToast('Đồng bộ dữ liệu Nhóm hàng thành công!', 'success');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Lỗi khi lưu dữ liệu: ${message}`);
+      showToast(`Lỗi khi lưu dữ liệu: ${message}`, 'error');
     } finally {
       setIsCommitting(false);
     }
@@ -459,7 +557,7 @@ const ProductGroupManager: React.FC<Props> = ({
         DỮ LIỆU THỰC TẾ THÁNG ${selectedMonthNum}:
         ${thisMonthTactical.map(g => `- Nhóm ${g.name}: Chiếm ${g.percent.toFixed(1)}% tổng ${viewMode === 'revenue' ? 'doanh thu' : 'số lượng'}`).join('\n')}
         DỮ LIỆU LỊCH SỬ THÁNG ${nextMonthNum}:
-        ${nextMonthTactical.map(g => `- Nhóm ${g.name}: Thường đạt TB ${viewMode === 'revenue' ? formatNumber(g.avgRev) + 'đ' : formatNumber(g.avgQty) + ' đv'}`).join('\n')}
+        ${nextMonthTactical.map(g => `- Nhóm ${g.name}: Thường đạt TB ${viewMode === 'revenue' ? formatNumber(g.rev) + 'đ' : formatNumber(g.qty) + ' đv'}`).join('\n')}
         YÊU CẦU:
         1. Nhận định về sự chuyển dịch trọng tâm giữa 2 tháng.
         2. Cảnh báo "Điểm rơi doanh số" nếu có nhóm hàng sụt giảm mạnh vào tháng tới.
@@ -617,8 +715,101 @@ const ProductGroupManager: React.FC<Props> = ({
     });
   }, [activeSubTab, groupRevenue, expandedLedgerRows, filterStartDate, filterEndDate]);
 
+  const renderGroupRows = (
+    nodes: GroupTreeNode[],
+    expanded: Set<string>,
+    setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>,
+    actionMode = false,
+    totalMetric = 0
+  ): React.ReactNode[] => {
+    const rows: React.ReactNode[] = [];
+    const metricKey = viewMode === 'revenue' ? 'rev' : 'qty';
+    const selfMetricKey = viewMode === 'revenue' ? 'selfRev' : 'selfQty';
+
+    const renderNode = (node: GroupTreeNode, indexPath: string) => {
+      const isExpanded = expanded.has(node.fullPath);
+      const hasChildren = node.children.length > 0;
+      const metric = node[metricKey];
+      rows.push(
+        <tr key={node.fullPath} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+          <td className="pl-5 pr-4 py-3">
+            <div
+              className="flex items-center gap-2"
+              style={{ paddingLeft: Math.max(0, node.level - 1) * 18 }}
+            >
+              {hasChildren ? (
+                <button
+                  onClick={() =>
+                    setExpanded(prev => {
+                      const next = new Set(prev);
+                      if (next.has(node.fullPath)) next.delete(node.fullPath);
+                      else next.add(node.fullPath);
+                      return next;
+                    })
+                  }
+                  className="w-5 h-5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center"
+                >
+                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </button>
+              ) : (
+                <span className="w-5 h-5" />
+              )}
+              {node.level === 1 && (
+                <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 text-2xs font-bold flex items-center justify-center">
+                  {indexPath}
+                </span>
+              )}
+              <span className={`text-sm truncate ${node.level === 1 ? 'text-slate-700 font-semibold' : 'text-slate-600 font-medium'}`}>
+                {node.name}
+              </span>
+            </div>
+          </td>
+          <td className="px-4 py-3 text-right">
+            <span className="text-sm text-slate-700 font-medium">{node.percent.toFixed(1)}%</span>
+          </td>
+          <td className="px-4 py-3 text-right text-sm text-slate-500">
+            {viewMode === 'revenue' ? `${formatNumber(metric)}đ` : `${formatNumber(metric)} đv`}
+          </td>
+          {actionMode && (
+            <td className="pr-5 pl-4 py-3">
+              <span className="text-xs text-slate-600">
+                {node.level === 1 && Number(indexPath) <= 3 ? 'Ưu tiên nhập hàng' : 'Đẩy mạnh marketing'}
+              </span>
+            </td>
+          )}
+        </tr>
+      );
+
+      if (!isExpanded) return;
+
+      const selfMetric = node[selfMetricKey];
+      if (hasChildren && selfMetric > 0) {
+        const selfPercent = totalMetric > 0 ? (selfMetric / totalMetric) * 100 : 0;
+        rows.push(
+          <tr key={`${node.fullPath}__direct`} className="border-b border-slate-50 bg-slate-50/40">
+            <td className="pl-5 pr-4 py-2.5">
+              <div className="flex items-center gap-2" style={{ paddingLeft: node.level * 18 + 20 }}>
+                <span className="text-xs text-slate-500 font-medium">Khác / trực tiếp</span>
+              </div>
+            </td>
+            <td className="px-4 py-2.5 text-right text-xs text-slate-500">{selfPercent.toFixed(1)}%</td>
+            <td className="px-4 py-2.5 text-right text-xs text-slate-500">
+              {viewMode === 'revenue' ? `${formatNumber(selfMetric)}đ` : `${formatNumber(selfMetric)} đv`}
+            </td>
+            {actionMode && <td className="pr-5 pl-4 py-2.5 text-xs text-slate-400">Theo dõi thêm</td>}
+          </tr>
+        );
+      }
+
+      node.children.forEach((child, childIndex) => renderNode(child, `${indexPath}.${childIndex + 1}`));
+    };
+
+    nodes.forEach((node, index) => renderNode(node, String(index + 1)));
+    return rows;
+  };
+
   return (
-    <div className="space-y-8 pb-20 max-w-full animate-in fade-in duration-500">
+    <div className="h-full max-w-full overflow-y-auto p-6 pb-20 space-y-8 animate-in fade-in duration-500">
       {/* BỘ LỌC CHU KỲ HÀNG THÁNG */}
       <div className="bg-white p-8 md:p-10 rounded-[3.5rem] border border-slate-200 shadow-xl space-y-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -627,10 +818,10 @@ const ProductGroupManager: React.FC<Props> = ({
               <History className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+              <h3 className="text-2xl font-semibold text-slate-900 uppercase tracking-tight">
                 Đối Soát Quy Luật Chu Kỳ
               </h3>
-              <p className="text-[11px] text-indigo-600 font-normal uppercase tracking-widest mt-1">
+              <p className="text-xs text-indigo-600 font-normal uppercase tracking-widest mt-1">
                 Tìm quy luật bán hàng qua nhiều năm
               </p>
             </div>
@@ -639,13 +830,13 @@ const ProductGroupManager: React.FC<Props> = ({
           <div className="flex items-center gap-4 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
             <button
               onClick={() => setViewMode('quantity')}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${viewMode === 'quantity' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-2xs font-normal uppercase tracking-widest transition-all ${viewMode === 'quantity' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <Boxes className="w-4 h-4" /> Số lượng
             </button>
             <button
               onClick={() => setViewMode('revenue')}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-normal uppercase tracking-widest transition-all ${viewMode === 'revenue' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-2xs font-normal uppercase tracking-widest transition-all ${viewMode === 'revenue' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <DollarSign className="w-4 h-4" /> Doanh thu
             </button>
@@ -657,7 +848,7 @@ const ProductGroupManager: React.FC<Props> = ({
             <button
               key={m}
               onClick={() => setSelectedMonthNum(m)}
-              className={`group relative py-6 rounded-[1.5rem] text-[12px] font-normal transition-all border-2 overflow-hidden ${selectedMonthNum === m ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xl scale-110 z-10' : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200 hover:bg-slate-50'}`}
+              className={`group relative py-6 rounded-[1.5rem] text-xs font-normal transition-all border-2 overflow-hidden ${selectedMonthNum === m ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xl scale-110 z-10' : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200 hover:bg-slate-50'}`}
             >
               <span className="relative z-10">THÁNG {m}</span>
               {selectedMonthNum === m && (
@@ -670,257 +861,204 @@ const ProductGroupManager: React.FC<Props> = ({
 
       <div className="flex bg-slate-100 p-1.5 rounded-[2rem] w-fit mx-auto shadow-sm border border-slate-200">
         <button
-          onClick={() => changeSubTab('groups')}
-          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'groups' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          <Boxes className="w-4 h-4" /> Nhóm Hàng
-        </button>
-        <button
           onClick={() => changeSubTab('seasonality')}
-          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'seasonality' ? 'bg-white text-emerald-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-2xs uppercase tracking-widest transition-all ${activeSubTab === 'seasonality' ? 'bg-white text-emerald-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <Sparkles className="w-4 h-4" /> Dự Báo Chiến Lược
         </button>
         <button
           onClick={() => changeSubTab('matrix')}
-          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'matrix' ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-2xs uppercase tracking-widest transition-all ${activeSubTab === 'matrix' ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <Filter className="w-4 h-4" /> Ma Trận Phân Tích Năm
         </button>
         <button
           onClick={() => changeSubTab('ledger')}
-          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-[10px] uppercase tracking-widest transition-all ${activeSubTab === 'ledger' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex items-center gap-2 px-8 py-4 rounded-[1.5rem] font-normal text-2xs uppercase tracking-widest transition-all ${activeSubTab === 'ledger' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <FileSpreadsheet className="w-4 h-4" /> Sổ Cái Nhóm Hàng
         </button>
       </div>
 
-      {activeSubTab === 'groups' && (
-        <ProductGroupTreeTab
-          groups={effectiveGroups}
-          products={products}
-          onUpdateGroups={onUpdateGroups}
-        />
-      )}
-
       {activeSubTab === 'seasonality' && (
-        <div className="space-y-10 animate-in fade-in duration-700">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard
-              title={`Sản lượng Tháng ${selectedMonthNum}`}
-              value={formatNumber(strategicKPIs.totalQty) + ' đv'}
-              icon={Boxes}
-              color="indigo"
-              desc="Tổng bán trong tháng này (Tất cả các năm)"
-            />
-            <MetricCard
-              title={`Doanh thu Tháng ${selectedMonthNum}`}
-              value={formatNumber(strategicKPIs.totalRev) + 'đ'}
-              icon={DollarSign}
-              color="emerald"
-              desc="Tổng thu hạch toán"
-            />
-            <MetricCard
-              title="Dự báo Tháng Sau"
-              value={`T${nextMonthNum}`}
-              icon={TrendingUp}
-              color="emerald"
-              desc="Chu kỳ bùng nổ tiếp theo"
-            />
-            <MetricCard
-              title="Nhóm chủ lực"
-              value={`${thisMonthTactical.length} Nhóm`}
-              icon={Star}
-              color="indigo"
-              desc="Số lượng nhóm hàng đóng góp chính"
-            />
+        <div className="space-y-5 animate-in fade-in duration-300">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              {
+                label: `Sản lượng tháng ${selectedMonthNum}`,
+                value: `${formatNumber(strategicKPIs.totalQty)} đv`,
+                desc: 'Tổng bán từ hóa đơn cùng tháng qua các năm',
+              },
+              {
+                label: `Doanh thu tháng ${selectedMonthNum}`,
+                value: `${formatNumber(strategicKPIs.totalRev)}đ`,
+                desc: 'Doanh thu hóa đơn cùng tháng',
+              },
+              {
+                label: 'Dự báo tháng sau',
+                value: `Tháng ${nextMonthNum}`,
+                desc: `Dựa trên trung bình hóa đơn ${orderYears.length} năm`,
+              },
+              {
+                label: 'Nhóm chủ lực',
+                value: `${thisMonthTactical.length} nhóm`,
+                desc: 'Nhóm đang đóng góp chính',
+              },
+            ].map(card => (
+              <div key={card.label} className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
+                <p className="text-xs text-slate-500 mb-1">{card.label}</p>
+                <p className="text-2xl font-bold text-slate-800 mb-2">{card.value}</p>
+                <p className="text-xs text-slate-400">{card.desc}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
-            {/* TACTICAL COLUMN LEFT: CURRENT MONTH FOCUS */}
-            <div className="lg:col-span-5 bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-xl flex flex-col">
-              <div className="flex items-center justify-between mb-10">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl shadow-sm">
-                    <Target className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                      Trọng tâm Tháng {selectedMonthNum}
-                    </h3>
-                    <p className="text-[10px] text-emerald-600 font-normal uppercase tracking-widest">
-                      Xếp hạng thực tế theo {viewMode === 'revenue' ? 'Doanh thu' : 'Số lượng'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-6 flex-1 pr-2 overflow-y-auto no-scrollbar max-h-[500px]">
-                {thisMonthTactical.map((g, idx) => (
-                  <div key={g.name} className="space-y-2 group">
-                    <div className="flex justify-between items-end">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-normal ${idx === 0 ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
-                        >
-                          {idx + 1}
-                        </span>
-                        <span className="text-sm font-normal text-slate-800 uppercase truncate max-w-[200px]">
-                          {g.name}
-                        </span>
-                        {idx === 0 && (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded text-[8px] font-normal uppercase flex items-center gap-1">
-                            <Award className="w-2.5 h-2.5" /> Best Seller
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs font-normal text-emerald-700">
-                          {g.percent.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-1000 group-hover:bg-emerald-400"
-                        style={{ width: `${g.percent}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-[9px] font-normal text-slate-400 uppercase tracking-tighter">
-                      Đạt:{' '}
-                      {viewMode === 'revenue'
-                        ? formatNumber(g.rev) + 'đ'
-                        : formatNumber(g.qty) + ' đv'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* TACTICAL COLUMN RIGHT: NEXT MONTH STRATEGY */}
-            <div className="lg:col-span-5 bg-white p-10 rounded-[3.5rem] border border-indigo-100 shadow-xl flex flex-col relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-5">
-                <Zap className="w-32 h-32 text-indigo-600" />
-              </div>
-              <div className="flex items-center justify-between mb-10 relative z-10">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl shadow-sm">
-                    <Briefcase className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                      Gợi ý Chiến lược Tháng {nextMonthNum}
-                    </h3>
-                    <p className="text-[10px] text-indigo-600 font-normal uppercase tracking-widest">
-                      Dự báo dựa trên TB lịch sử {years.length} năm
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4 flex-1 pr-2 overflow-y-auto no-scrollbar max-h-[500px] relative z-10">
-                {nextMonthTactical.map((g, idx) => (
-                  <div
-                    key={g.name}
-                    className="p-5 bg-indigo-50/30 border border-indigo-100/50 rounded-[1.5rem] hover:bg-white hover:shadow-lg transition-all group"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white rounded-xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                          <TrendingUp className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs font-normal text-slate-800 uppercase truncate max-w-[180px]">
-                          {g.name}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <div className="flex items-center gap-1 text-indigo-600">
-                          <ArrowUp className="w-3 h-3" />
-                          <span className="text-[10px] font-normal uppercase">Trend Up</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-normal text-slate-400 uppercase tracking-widest">
-                          Dự báo hiệu suất
-                        </p>
-                        <p className="text-sm font-normal text-indigo-700">
-                          {viewMode === 'revenue'
-                            ? formatNumber(g.avgRev) + 'đ'
-                            : formatNumber(g.avgQty) + ' đv'}
-                        </p>
-                      </div>
-                      <div className="px-3 py-1.5 bg-white border border-indigo-100 rounded-lg text-[8px] font-normal text-indigo-500 uppercase tracking-widest group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                        {idx < 3 ? 'Ưu tiên nhập hàng' : 'Đẩy mạnh Marketing'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* AI ADVISOR & DIAGNOSIS */}
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
-            <div className="lg:col-span-10 bg-slate-900 p-10 md:p-14 rounded-[4rem] text-white shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-10 opacity-10">
-                <Sparkles className="w-48 h-48 text-emerald-400" />
-              </div>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-10 relative z-10">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-3 text-emerald-400 font-normal uppercase text-[10px] tracking-widest mb-4">
-                    <Activity className="w-4 h-4" /> Strategic MIS Intelligence
-                  </div>
-                  <h3 className="text-4xl font-black uppercase tracking-tighter leading-tight">
-                    Seasonal Advisor
-                  </h3>
-                  <p className="text-slate-400 text-lg mt-4 max-w-2xl font-normal">
-                    Đối soát sự chuyển dịch thị trường từ Tháng {selectedMonthNum} sang Tháng{' '}
-                    {nextMonthNum} để tối ưu kho vận.
+                  <span className="text-sm font-semibold text-slate-700">
+                    Trọng tâm tháng {selectedMonthNum}
+                  </span>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Xếp hạng thực tế theo {viewMode === 'revenue' ? 'doanh thu' : 'số lượng'}
                   </p>
                 </div>
-                <button
-                  onClick={runStrategicDiagnosis}
-                  disabled={isDiagnosing}
-                  className="px-12 py-7 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[2.5rem] font-normal text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isDiagnosing ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  ) : (
-                    <DatabaseZap className="w-6 h-6" />
-                  )}
-                  {isDiagnosing ? 'Đang giải mã chu kỳ...' : 'Khởi tạo Chẩn đoán Chiến lược'}
-                </button>
+                {thisMonthTactical.length > 10 && (
+                  <button
+                    onClick={() => setShowAllCurrentGroups(value => !value)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                  >
+                    {showAllCurrentGroups ? 'Thu gọn' : 'Xem tất cả'}
+                  </button>
+                )}
               </div>
-
-              {diagnosisResult && (
-                <div className="mt-12 bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative z-10">
-                  <div className="flex items-center justify-between mb-8 border-b border-slate-50 pb-8">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl shadow-lg">
-                        <FileText className="w-6 h-6" />
-                      </div>
-                      <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                        Báo Cáo Phân Tích Chu Kỳ Kinh Doanh
-                      </h4>
-                    </div>
-                    <button
-                      onClick={() => setDiagnosisResult(null)}
-                      className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-                  <div
-                    className="markdown-content text-slate-800"
-                    dangerouslySetInnerHTML={{
-                      __html: DOMPurify.sanitize(marked.parse(String(diagnosisResult)) as string),
-                    }}
-                  />
-                </div>
-              )}
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="text-left pl-5 pr-4 py-2.5 text-xs font-medium text-slate-500">Nhóm hàng</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">Đóng góp</th>
+                    <th className="text-right pr-5 pl-4 py-2.5 text-xs font-medium text-slate-500">
+                      {viewMode === 'revenue' ? 'Doanh thu' : 'Số lượng'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {thisMonthTactical.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-5 py-8 text-center text-sm text-slate-400">
+                        Không có dữ liệu tháng này.
+                      </td>
+                    </tr>
+                  ) : (
+                    renderGroupRows(
+                      showAllCurrentGroups ? thisMonthTactical : thisMonthTactical.slice(0, 10),
+                      expandedCurrentGroups,
+                      setExpandedCurrentGroups,
+                      false,
+                      viewMode === 'revenue' ? currentGroupTree.totalRev : currentGroupTree.totalQty
+                    )
+                  )}
+                </tbody>
+              </table>
             </div>
+
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold text-slate-700">
+                    Gợi ý chiến lược tháng {nextMonthNum}
+                  </span>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Dự báo dựa trên trung bình hóa đơn {orderYears.length} năm
+                  </p>
+                </div>
+                {nextMonthTactical.length > 10 && (
+                  <button
+                    onClick={() => setShowAllNextGroups(value => !value)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                  >
+                    {showAllNextGroups ? 'Thu gọn' : 'Xem tất cả'}
+                  </button>
+                )}
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="text-left pl-5 pr-4 py-2.5 text-xs font-medium text-slate-500">Nhóm hàng</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">Đóng góp</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500">Dự báo</th>
+                    <th className="text-left pr-5 pl-4 py-2.5 text-xs font-medium text-slate-500">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nextMonthTactical.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-8 text-center text-sm text-slate-400">
+                        Chưa đủ dữ liệu lịch sử cho tháng sau.
+                      </td>
+                    </tr>
+                  ) : (
+                    renderGroupRows(
+                      showAllNextGroups ? nextMonthTactical : nextMonthTactical.slice(0, 10),
+                      expandedNextGroups,
+                      setExpandedNextGroups,
+                      true,
+                      viewMode === 'revenue' ? nextGroupTree.totalRev : nextGroupTree.totalQty
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm font-semibold text-slate-700">Chẩn đoán chiến lược</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Đối soát sự chuyển dịch từ tháng {selectedMonthNum} sang tháng {nextMonthNum} để tối ưu nhập hàng và marketing.
+                </p>
+              </div>
+              <button
+                onClick={runStrategicDiagnosis}
+                disabled={isDiagnosing}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+              >
+                {isDiagnosing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <DatabaseZap className="w-4 h-4" />
+                )}
+                {isDiagnosing ? 'Đang phân tích...' : 'Chạy chẩn đoán'}
+              </button>
+            </div>
+
+            {diagnosisResult && (
+              <div className="border-t border-slate-100 px-5 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-600">Báo cáo phân tích chu kỳ</span>
+                  </div>
+                  <button
+                    onClick={() => setDiagnosisResult(null)}
+                    className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div
+                  className="markdown-content text-sm text-slate-700"
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(marked.parse(String(diagnosisResult)) as string),
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -959,7 +1097,7 @@ const ProductGroupManager: React.FC<Props> = ({
 
       {/* SYNC AUDIT MODAL */}
       {isAuditMode && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             onClick={() => setIsAuditMode(false)}
@@ -971,10 +1109,10 @@ const ProductGroupManager: React.FC<Props> = ({
                   <ShieldAlert className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                  <h3 className="text-2xl font-semibold text-slate-900 uppercase tracking-tight">
                     Đối Soát Nhóm Hàng
                   </h3>
-                  <p className="text-[10px] text-indigo-600 font-normal uppercase tracking-widest mt-1">
+                  <p className="text-2xs text-indigo-600 font-normal uppercase tracking-widest mt-1">
                     Phát hiện cấu trúc mới
                   </p>
                 </div>
@@ -1002,7 +1140,7 @@ const ProductGroupManager: React.FC<Props> = ({
 
               {pendingGroups.length > 0 && (
                 <div className="space-y-6">
-                  <h4 className="text-sm font-black text-slate-800 uppercase flex items-center gap-3">
+                  <h4 className="text-sm font-semibold text-slate-800 uppercase flex items-center gap-3">
                     <div className="w-2 h-2 bg-indigo-600 rounded-full"></div>
                     NHÓM HÀNG MỚI PHÁT HIỆN
                   </h4>
@@ -1023,7 +1161,7 @@ const ProductGroupManager: React.FC<Props> = ({
                           className="w-5 h-5 rounded text-indigo-600"
                         />
                         <div>
-                          <p className="text-[10px] font-normal text-slate-400 uppercase">
+                          <p className="text-2xs font-normal text-slate-400 uppercase">
                             Cấp {g.level}
                           </p>
                           <p className="text-xs font-normal text-slate-800 truncate">
@@ -1038,7 +1176,7 @@ const ProductGroupManager: React.FC<Props> = ({
 
               {groupConflicts.length > 0 && (
                 <div className="space-y-6">
-                  <h4 className="text-sm font-black text-rose-600 uppercase flex items-center gap-3">
+                  <h4 className="text-sm font-semibold text-rose-600 uppercase flex items-center gap-3">
                     <div className="w-2 h-2 bg-rose-600 rounded-full"></div>
                     PHÁT HIỆN {groupConflicts.length} DÒNG DỮ LIỆU TRÙNG LẶP
                   </h4>
@@ -1059,7 +1197,7 @@ const ProductGroupManager: React.FC<Props> = ({
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${conflictResolution === opt.id ? 'bg-white border-rose-500 shadow-md' : 'bg-white/50 border-transparent text-slate-400 hover:bg-white'}`}
                         >
                           <p
-                            className={`text-[10px] font-normal uppercase ${conflictResolution === opt.id ? 'text-rose-600' : 'text-slate-400'}`}
+                            className={`text-2xs font-normal uppercase ${conflictResolution === opt.id ? 'text-rose-600' : 'text-slate-400'}`}
                           >
                             {opt.label}
                           </p>
@@ -1070,9 +1208,9 @@ const ProductGroupManager: React.FC<Props> = ({
                   </div>
 
                   <div className="max-h-[200px] overflow-y-auto pr-2 border border-slate-100 rounded-2xl">
-                    <table className="w-full text-[10px] text-left">
+                    <table className="w-full text-2xs text-left">
                       <thead className="bg-slate-50 sticky top-0">
-                        <tr className="text-slate-400 font-black uppercase">
+                        <tr className="text-slate-400 font-semibold uppercase">
                           <th className="p-3">Ngày</th>
                           <th className="p-3">Nhóm hàng</th>
                           <th className="p-3 text-right">Số cũ</th>
@@ -1101,13 +1239,13 @@ const ProductGroupManager: React.FC<Props> = ({
               <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white flex items-center justify-between">
                 <div className="flex items-center gap-6">
                   <div className="text-center">
-                    <p className="text-[10px] font-normal text-slate-400 uppercase mb-1">
+                    <p className="text-2xs font-normal text-slate-400 uppercase mb-1">
                       Tổng bản ghi
                     </p>
                     <p className="text-2xl font-normal">{pendingGroupRevenue.length}</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] font-normal text-slate-400 uppercase mb-1">
+                    <p className="text-2xs font-normal text-slate-400 uppercase mb-1">
                       Tổng doanh thu
                     </p>
                     <p className="text-2xl font-normal text-emerald-400">
@@ -1116,7 +1254,7 @@ const ProductGroupManager: React.FC<Props> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-normal text-slate-400 uppercase">
+                  <span className="text-2xs font-normal text-slate-400 uppercase">
                     Tháng hạch toán:
                   </span>
                   <input

@@ -41,6 +41,18 @@ type SpreadsheetRow = SpreadsheetCell[];
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const parts = [record.message, record.details, record.hint, record.code]
+      .filter(Boolean)
+      .map(String);
+    if (parts.length > 0) return parts.join(' | ');
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
   return 'Unknown error';
 };
 
@@ -65,7 +77,47 @@ const stableUuidFromKey = (key: string) => {
 const productIdFromSku = (sku: string) => stableUuidFromKey(`pos-product:${sku}`);
 const parentIdFromRelatedSku = (sku: string) => stableUuidFromKey(`pos-product-parent:${sku}`);
 const parentSkuFromRelatedSku = (sku: string) => `__PARENT__${sku}`;
+const customerIdFromKiotVietCode = (code: string) => stableUuidFromKey(`kiotviet-customer:${code}`);
+const supplierIdFromKiotVietCode = (code: string) => stableUuidFromKey(`kiotviet-supplier:${code}`);
 const APP_SKU_PATTERN = /^SP\d{6}$/;
+const MISSING_SCHEMA_COLUMN_RE =
+  /Could not find the '([^']+)' column of 'pos_orders' in the schema cache/;
+const GENERIC_MISSING_SCHEMA_COLUMN_RE =
+  /Could not find the '([^']+)' column of '[^']+' in the schema cache/;
+const OPTIONAL_POS_ORDER_COLUMNS = new Set([
+  'channel',
+  'channel_name',
+  'created_by',
+  'is_return',
+  'price_book_id',
+  'price_book_name',
+  'status',
+]);
+const OPTIONAL_SUPPLIER_COLUMNS = new Set([
+  'code',
+  'phone',
+  'email',
+  'address',
+  'supplier_group',
+  'status',
+  'notes',
+  'company_name',
+  'tax_code',
+]);
+const OPTIONAL_INVENTORY_TRANSACTION_COLUMNS = new Set([
+  'note',
+  'staff_id',
+  'supplier_id',
+  'supplier_name',
+  'total_amount',
+  'status',
+  'balanced_date',
+  'total_actual_qty',
+  'total_diff',
+  'increase_count',
+  'decrease_count',
+]);
+const OPTIONAL_SUPPLIER_DEBT_COLUMNS = new Set(['description']);
 
 const getNextSkuNumberFromValues = (skus: Iterable<string | null | undefined>) => {
   const skuNumbers = Array.from(skus)
@@ -75,6 +127,164 @@ const getNextSkuNumberFromValues = (skus: Iterable<string | null | undefined>) =
     .filter(num => Number.isFinite(num));
 
   return skuNumbers.length > 0 ? Math.max(...skuNumbers) + 1 : 1;
+};
+
+const removeColumns = <T extends Record<string, unknown>>(records: T[], columns: Set<string>) =>
+  records.map(record => {
+    const next = { ...record };
+    for (const column of columns) delete next[column];
+    return next;
+  });
+
+const upsertPosOrdersWithSchemaFallback = async (
+  supabase: SupabaseClient,
+  records: Record<string, unknown>[],
+  batchSize: number
+) => {
+  const unsupportedColumns = new Set<string>();
+
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize);
+
+    while (true) {
+      const payload = removeColumns(batch, unsupportedColumns);
+      const { error } = await supabase
+        .from('pos_orders')
+        .upsert(payload, { onConflict: 'id' });
+
+      if (!error) break;
+
+      const missingColumn = error.message.match(MISSING_SCHEMA_COLUMN_RE)?.[1];
+      if (missingColumn && OPTIONAL_POS_ORDER_COLUMNS.has(missingColumn)) {
+        unsupportedColumns.add(missingColumn);
+        console.warn(
+          `[Import Revenue] pos_orders thiếu cột "${missingColumn}", retry import không dùng cột này.`
+        );
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return Array.from(unsupportedColumns);
+};
+
+const upsertWithSchemaFallback = async (
+  supabase: SupabaseClient,
+  table: string,
+  records: Record<string, unknown>[],
+  batchSize: number,
+  optionalColumns: Set<string>
+) => {
+  const unsupportedColumns = new Set<string>();
+
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize);
+
+    while (true) {
+      const payload = removeColumns(batch, unsupportedColumns);
+      const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' });
+
+      if (!error) break;
+
+      const missingColumn = error.message.match(GENERIC_MISSING_SCHEMA_COLUMN_RE)?.[1];
+      if (missingColumn && optionalColumns.has(missingColumn)) {
+        unsupportedColumns.add(missingColumn);
+        console.warn(
+          `[Import] ${table} thiếu cột "${missingColumn}", retry import không dùng cột này.`
+        );
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return Array.from(unsupportedColumns);
+};
+
+const excelDateToIsoDate = (raw: SpreadsheetCell): string | null => {
+  if (raw == null) return null;
+  if (typeof raw === 'number' && raw > 40000) {
+    const d = new Date((raw - 25569) * 86400 * 1000);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  }
+  if (raw instanceof Date) {
+    return isNaN(raw.getTime()) ? null : raw.toISOString().split('T')[0];
+  }
+  const s = String(raw).trim();
+  const isoMatch = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return null;
+};
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+const formatLocalDateTimeParts = (
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0
+) =>
+  `${year}-${pad2(month)}-${pad2(day)}T${pad2(hour)}:${pad2(minute)}:${pad2(second)}`;
+
+const excelDateToLocalIsoDateTime = (raw: SpreadsheetCell): string | null => {
+  if (raw == null) return null;
+  if (typeof raw === 'number' && raw > 40000) {
+    const d = new Date((raw - 25569) * 86400 * 1000);
+    if (isNaN(d.getTime())) return null;
+    return formatLocalDateTimeParts(
+      d.getUTCFullYear(),
+      d.getUTCMonth() + 1,
+      d.getUTCDate(),
+      d.getUTCHours(),
+      d.getUTCMinutes(),
+      d.getUTCSeconds()
+    );
+  }
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return null;
+    // XLSX tạo Date object theo local timezone — phải dùng local getters, không dùng UTC
+    return formatLocalDateTimeParts(
+      raw.getFullYear(),
+      raw.getMonth() + 1,
+      raw.getDate(),
+      raw.getHours(),
+      raw.getMinutes(),
+      raw.getSeconds()
+    );
+  }
+  const s = String(raw).trim();
+  const isoMatch = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (isoMatch) {
+    const [, y, m, d, hh = '0', mm = '0', ss = '0'] = isoMatch;
+    return formatLocalDateTimeParts(Number(y), Number(m), Number(d), Number(hh), Number(mm), Number(ss));
+  }
+  const dmyMatch = s.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+  if (dmyMatch) {
+    const [, d, m, y, hh = '0', mm = '0', ss = '0'] = dmyMatch;
+    return formatLocalDateTimeParts(Number(y), Number(m), Number(d), Number(hh), Number(mm), Number(ss));
+  }
+  return null;
+};
+
+const tierFromNetSpent = (amount: number): 'Standard' | 'Silver' | 'Gold' | 'Diamond' => {
+  if (amount >= 10000000) return 'Diamond';
+  if (amount >= 5000000) return 'Gold';
+  if (amount >= 1000000) return 'Silver';
+  return 'Standard';
 };
 
 export function createImportRouter(supabase: SupabaseClient, requireAuth: RequestHandler): Router {
@@ -165,14 +375,17 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       let nextSkuNumber = getNextSkuNumberFromValues(existingSkuSet);
       const sourceSkuToFinalSku = new Map<string, string>();
 
+      // Chỉ xử lý hàng có Mã hàng (cột 2). Hàng cha KiotViet không có mã → bỏ qua,
+      // vì parent record sẽ được tạo tự động từ related_sku bên dưới.
       const dataRows = rows
         .slice(1)
-        .filter(r => String(r[2] || '').trim() !== '' || String(r[3] || '').trim() !== '');
+        .filter(r => String(r[2] || '').trim() !== '');
 
       const finalSkusByRow = dataRows.map(r => {
         const sourceSku = String(r[2] || '').trim();
         let sku = sourceSku;
-        if (!APP_SKU_PATTERN.test(sku) || assignedSkus.has(sku)) {
+        // Chỉ sinh auto-code khi cột Mã hàng trống hoặc trùng trong file
+        if (!sku || assignedSkus.has(sku)) {
           do {
             sku = formatAutoSku(nextSkuNumber);
             nextSkuNumber += 1;
@@ -358,63 +571,131 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     }
   });
 
+  const categoryCanHaveLocation = (path: string) => path.includes(' >> ');
+
+  const sanitizeCategoryLocation = (path: string, location?: string) => {
+    const trimmed = String(location || '').trim();
+    return categoryCanHaveLocation(path) && trimmed ? trimmed : null;
+  };
+
   // Rename / reparent a category — updates category_path on all affected products
   router.post('/api/categories/rename', requireAuth, async (req, res) => {
-    const { oldPath, newPath } = req.body as { oldPath?: string; newPath?: string };
-    if (!oldPath || !newPath) {
-      return res.status(400).json({ ok: false, error: 'Thiếu oldPath hoặc newPath' });
+    try {
+      const { oldPath, newPath, location } = req.body as {
+        oldPath?: string;
+        newPath?: string;
+        location?: string;
+      };
+      if (!oldPath || !newPath) {
+        return res.status(400).json({ ok: false, error: 'Thiếu oldPath hoặc newPath' });
+      }
+
+      // Fetch exact matches + children (paths that start with oldPath + ' >> ')
+      const [{ data: exact }, { data: children }, { data: categoryExact }, { data: categoryChildren }] =
+        await Promise.all([
+        supabase.from('pos_products').select('id, category_path').eq('category_path', oldPath),
+        supabase
+          .from('pos_products')
+          .select('id, category_path')
+          .like('category_path', `${oldPath} >> %`),
+        supabase.from('categories').select('path, location').eq('path', oldPath),
+        supabase.from('categories').select('path, location').like('path', `${oldPath} >> %`),
+      ]);
+
+      const all = [...(exact ?? []), ...(children ?? [])];
+      const updates = all.map((p: { id: string; category_path: string }) => ({
+        id: p.id,
+        category_path: p.category_path.startsWith(oldPath)
+          ? newPath + p.category_path.slice(oldPath.length)
+          : p.category_path,
+      }));
+      const categoryRows = [...(categoryExact ?? []), ...(categoryChildren ?? [])] as {
+        path: string;
+        location?: string | null;
+      }[];
+      const categoryUpserts = categoryRows.map(row => {
+        const nextPath = row.path.startsWith(oldPath)
+          ? newPath + row.path.slice(oldPath.length)
+          : row.path;
+        const nextLocation =
+          row.path === oldPath
+            ? sanitizeCategoryLocation(nextPath, location)
+            : sanitizeCategoryLocation(nextPath, row.location || '');
+        return { path: nextPath, location: nextLocation };
+      });
+      if (!categoryUpserts.some(row => row.path === newPath)) {
+        categoryUpserts.push({
+          path: newPath,
+          location: sanitizeCategoryLocation(newPath, location),
+        });
+      }
+
+      const BATCH = 300;
+      let updated = 0;
+      let firstError: string | null = null;
+      for (let i = 0; i < updates.length; i += BATCH) {
+        const { error } = await supabase
+          .from('pos_products')
+          .upsert(updates.slice(i, i + BATCH), { onConflict: 'id' });
+        if (error) {
+          if (!firstError) firstError = error.message;
+        } else updated += Math.min(BATCH, updates.length - i);
+      }
+
+      if (categoryUpserts.length > 0) {
+        const { error } = await supabase
+          .from('categories')
+          .upsert(categoryUpserts, { onConflict: 'path' });
+        if (error && !firstError) firstError = error.message;
+      }
+      if (oldPath !== newPath && categoryRows.length > 0) {
+        const oldPaths = categoryRows.map(row => row.path);
+        const { error } = await supabase.from('categories').delete().in('path', oldPaths);
+        if (error && !firstError) firstError = error.message;
+      }
+
+      if (firstError) return res.status(500).json({ ok: false, error: firstError });
+      res.json({ ok: true, updated });
+    } catch (err: unknown) {
+      console.error('[Category rename] Error:', getErrorMessage(err));
+      res.status(500).json({ ok: false, error: getErrorMessage(err) });
     }
-    if (oldPath === newPath) return res.json({ ok: true, updated: 0 });
-
-    // Fetch exact matches + children (paths that start with oldPath + ' >> ')
-    const [{ data: exact }, { data: children }] = await Promise.all([
-      supabase.from('pos_products').select('id, category_path').eq('category_path', oldPath),
-      supabase
-        .from('pos_products')
-        .select('id, category_path')
-        .like('category_path', `${oldPath} >> %`),
-    ]);
-
-    const all = [...(exact ?? []), ...(children ?? [])];
-    if (all.length === 0) return res.json({ ok: true, updated: 0 });
-
-    const updates = all.map((p: { id: string; category_path: string }) => ({
-      id: p.id,
-      category_path: p.category_path.startsWith(oldPath)
-        ? newPath + p.category_path.slice(oldPath.length)
-        : p.category_path,
-    }));
-
-    const BATCH = 300;
-    let updated = 0;
-    let firstError: string | null = null;
-    for (let i = 0; i < updates.length; i += BATCH) {
-      const { error } = await supabase
-        .from('pos_products')
-        .upsert(updates.slice(i, i + BATCH), { onConflict: 'id' });
-      if (error) {
-        if (!firstError) firstError = error.message;
-      } else updated += Math.min(BATCH, updates.length - i);
-    }
-
-    if (firstError) return res.status(500).json({ ok: false, error: firstError });
-    res.json({ ok: true, updated });
   });
 
   router.get('/api/categories', requireAuth, async (_req, res) => {
-    const { data, error } = await supabase.from('categories').select('path').order('path');
-    if (error) return res.status(500).json({ ok: false, error: error.message });
-    res.json({ ok: true, categories: (data ?? []).map((r: { path: string }) => r.path) });
+    try {
+      const { data, error } = await supabase.from('categories').select('path, location').order('path');
+      if (error) return res.status(500).json({ ok: false, error: error.message });
+      res.json({
+        ok: true,
+        categories: (data ?? []).map((r: { path: string; location?: string | null }) => ({
+          path: r.path,
+          location: categoryCanHaveLocation(r.path) ? r.location || '' : '',
+        })),
+      });
+    } catch (err: unknown) {
+      console.error('[Categories fetch] Error:', getErrorMessage(err));
+      res.status(500).json({ ok: false, error: getErrorMessage(err) });
+    }
   });
 
   router.post('/api/categories/create', requireAuth, async (req, res) => {
-    const { path } = req.body as { path?: string };
-    if (!path?.trim()) return res.status(400).json({ ok: false, error: 'Thiếu path' });
-    const { error } = await supabase
-      .from('categories')
-      .upsert({ path: path.trim() }, { onConflict: 'path' });
-    if (error) return res.status(500).json({ ok: false, error: error.message });
-    res.json({ ok: true });
+    try {
+      const { path, location } = req.body as { path?: string; location?: string };
+      if (!path?.trim()) return res.status(400).json({ ok: false, error: 'Thiếu path' });
+      const normalizedPath = path.trim();
+      const { error } = await supabase
+        .from('categories')
+        .upsert(
+          { path: normalizedPath, location: sanitizeCategoryLocation(normalizedPath, location) },
+          { onConflict: 'path' }
+        );
+      if (error) return res.status(500).json({ ok: false, error: error.message });
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      console.error('[Category create] Error:', getErrorMessage(err));
+      res.status(500).json({ ok: false, error: getErrorMessage(err) });
+    }
   });
 
   // Import doanh thu từ file "Báo cáo bán hàng theo lợi nhuận" của KiotViet
@@ -424,7 +705,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer' });
+      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -432,17 +713,18 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
 
       const headers = rows[0];
-      if (String(headers[6] || '').trim() !== 'Mã giao dịch') {
+      const col6Header = String(headers[6] || '').trim();
+
+      // Nhận 2 format KiotViet:
+      // "Theo thời gian": col6 = "Giá trị trả" — daily summary, mỗi ngày lặp lại cho từng giao dịch
+      // "Theo lợi nhuận": col6 = "Mã giao dịch" — transaction-level với đầy đủ thông tin
+      const isTheoThoiGian = col6Header === 'Giá trị trả';
+      const isTheoLoiNhuan = col6Header === 'Mã giao dịch';
+      if (!isTheoThoiGian && !isTheoLoiNhuan) {
         return res.status(400).json({
-          error:
-            'File không đúng định dạng. Cần file "Báo cáo bán hàng theo lợi nhuận" từ KiotViet (cột 7 phải là "Mã giao dịch").',
+          error: `File không đúng định dạng. Cột 7 hiện là "${col6Header}". Cần dùng file "Báo cáo bán hàng theo thời gian" hoặc "theo lợi nhuận" từ KiotViet.`,
         });
       }
-
-      const excelToDate = (serial: number): string => {
-        const ms = (serial - 25569) * 86400 * 1000;
-        return new Date(ms).toISOString().split('T')[0];
-      };
 
       const lastDayOfMonth = (yearMonth: string): string => {
         const [y, m] = yearMonth.split('-').map(Number);
@@ -450,10 +732,11 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         return `${yearMonth}-${d.toString().padStart(2, '0')}`;
       };
 
-      // ── Pass 1: aggregate by day (dedup by order) → revenue_records ──
+      // ── Pass 1: aggregate by day → revenue_records ──
       type DayAgg = {
-        totalGross: number;
+        totalGross: number;   // doanh thu hàng hóa (không tính đơn trả)
         discount: number;
+        returnsGross: number; // giá trị trả hàng (dương)
         netRev: number;
         cogs: number;
         profit: number;
@@ -465,32 +748,112 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       type GroupAgg = { amount: number; qty: number; cogs: number };
       const groupMonthMap = new Map<string, GroupAgg>(); // key: "groupName|YYYY-MM"
 
+      // ── Pass 4: khách hàng duy nhất từ "theo lợi nhuận" ──
+      const customerMap = new Map<string, { name: string }>(); // key: customerId (UUID)
+
+      // ── Pass 3: build pos_orders with line items ──
+      type ImportedOrderItem = {
+        productId: string;
+        sku: string;
+        name: string;
+        quantity: number;
+        price: number;
+        discount: number;
+        total: number;
+      };
+      type ImportedOrderData = {
+        date: string;
+        totalAmount: number;
+        discount: number;
+        finalAmount: number;
+        isReturn: boolean;
+        items: Map<string, ImportedOrderItem>;
+      };
+      const orderMap = new Map<string, ImportedOrderData>();
+
+      if (isTheoThoiGian) {
+        // ── Format "Báo cáo bán hàng theo thời gian" ──
+        // Hỗ trợ cả "theo ngày" (date = "31/05/2024") và "theo tháng" (date = "05-2026" hoặc "05/2026")
+        const parseDateOrMonth = (raw: unknown): string => {
+          if (!raw) return '';
+          const s = String(raw).trim();
+          // Thử parse ngày đầy đủ trước
+          const d = parseVNDate(s);
+          if (d) return d;
+          // Thử format "MM-YYYY" hoặc "MM/YYYY" → lấy ngày cuối tháng
+          const m = s.match(/^(\d{1,2})[-\/](\d{4})$/);
+          if (m) {
+            const month = parseInt(m[1]), year = parseInt(m[2]);
+            if (month >= 1 && month <= 12 && year > 1900) {
+              const lastDay = new Date(year, month, 0).getDate();
+              return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            }
+          }
+          return '';
+        };
+
+        const seenDates = new Set<string>();
+        for (const row of rows.slice(1)) {
+          if (!row[0]) continue;
+          const date = parseDateOrMonth(row[0]);
+          if (!date || seenDates.has(date)) continue;
+          seenDates.add(date);
+          const gross = Math.abs(Number(row[2] || 0));
+          const discount = Number(row[3] || 0); // âm theo KiotViet
+          const returns = Math.abs(Number(row[6] || 0));
+          const net = Number(row[7] || 0);
+          dateMap.set(date, {
+            totalGross: gross,
+            discount,
+            returnsGross: returns,
+            netRev: net,
+            cogs: 0,
+            profit: net,
+          });
+        }
+      } else {
+        // ── Format "Báo cáo bán hàng theo lợi nhuận" ──
+        // Transaction-level: col6=MãGiaoDịch, col8=datetime, col9=gross, col10=discount,
+        //                    col11=finalAmount, col12=COGS, col13=profit
       for (const row of rows.slice(1)) {
         const orderCode = String(row[6] || '').trim();
         if (!orderCode) continue;
 
-        const serialDate = Number(row[8]);
-        if (!serialDate) continue;
-        const date = excelToDate(serialDate);
+        const dateTime = excelDateToLocalIsoDateTime(row[8]);
+        if (!dateTime) continue;
+        const date = dateTime.slice(0, 10);
         const yearMonth = date.slice(0, 7); // "YYYY-MM"
+        const finalAmount = Number(row[11] || 0);
+        const isReturnOrder = /^TH/i.test(orderCode) || finalAmount < 0;
 
-        // Day aggregation — dedup by order
+        // Day aggregation — dedup by order, tách gross bán vs gross trả
         if (!seenOrders.has(orderCode)) {
           seenOrders.add(orderCode);
           const prev: DayAgg = dateMap.get(date) ?? {
             totalGross: 0,
             discount: 0,
+            returnsGross: 0,
             netRev: 0,
             cogs: 0,
             profit: 0,
           };
+          const orderGross = Number(row[9] || 0);
           dateMap.set(date, {
-            totalGross: prev.totalGross + Number(row[9] || 0),
+            // Chỉ cộng gross vào đơn bán; đơn trả → lưu riêng vào returnsGross
+            totalGross: isReturnOrder ? prev.totalGross : prev.totalGross + orderGross,
             discount: prev.discount + Number(row[10] || 0),
+            returnsGross: isReturnOrder ? prev.returnsGross + Math.abs(orderGross) : prev.returnsGross,
             netRev: prev.netRev + Number(row[11] || 0),
             cogs: prev.cogs + Number(row[12] || 0),
             profit: prev.profit + Number(row[13] || 0),
           });
+        }
+
+        // Customer extraction — col15=Tên KH, col16=Mã KH
+        const customerCode = String(row[16] || '').trim();
+        const customerName = String(row[15] || '').trim();
+        if (customerCode && customerName && !customerMap.has(customerIdFromKiotVietCode(customerCode))) {
+          customerMap.set(customerIdFromKiotVietCode(customerCode), { name: customerName });
         }
 
         // Group aggregation — every line item counts
@@ -507,10 +870,54 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             cogs: prev.cogs + qty * cost,
           });
         }
+
+        // Order + item building — one entry per order, one item per sku
+        if (!orderMap.has(orderCode)) {
+          orderMap.set(orderCode, {
+            date: dateTime,
+            totalAmount: Number(row[9] || 0),
+            discount: Number(row[10] || 0),
+            finalAmount,
+            isReturn: isReturnOrder,
+            items: new Map(),
+          });
+        }
+        const sku = String(row[14] || '').trim();
+        const itemName = String(row[15] || '').trim();
+        const rawItemQty = Number(row[18] || 0);
+        const itemQty = Math.abs(rawItemQty);
+        const itemPrice = Number(row[19] || 0);
+        if (sku && itemName && itemQty > 0) {
+          const ord = orderMap.get(orderCode)!;
+          const existingItem = ord.items.get(sku);
+          if (existingItem) {
+            existingItem.quantity += itemQty;
+            existingItem.total += itemQty * itemPrice;
+          } else {
+            ord.items.set(sku, {
+              productId: productIdFromSku(sku),
+              sku,
+              name: itemName,
+              quantity: itemQty,
+              price: itemPrice,
+              discount: 0,
+              total: itemQty * itemPrice,
+            });
+          }
+        }
       }
+      } // end else (isTheoLoiNhuan)
 
       if (dateMap.size === 0)
-        return res.status(400).json({ error: 'Không tìm thấy dữ liệu hợp lệ.' });
+        return res.status(400).json({
+          error: 'Không tìm thấy dữ liệu hợp lệ. Kiểm tra file: cột ngày phải chứa ngày hợp lệ và không rỗng.',
+          debug: {
+            totalRows: rows.length - 1,
+            sample_col0: String(rows[1]?.[0] ?? ''),
+            sample_col6: String(rows[1]?.[6] ?? ''),
+            sample_col8: String(rows[1]?.[8] ?? ''),
+          },
+        });
 
       // ── Upsert revenue_records ──
       const dates = Array.from(dateMap.keys());
@@ -523,17 +930,21 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       );
       const revenueToUpsert = dates.map(date => {
         const d = dateMap.get(date)!;
-        return {
+        const base = {
           id: existingDateMap.get(date) ?? generateId(),
           date,
-          total_gross_revenue: Math.round(d.totalGross),
+          total_gross_revenue: Math.round(d.netRev + Math.abs(d.discount)),
           discount: Math.round(d.discount),
           net_revenue: Math.round(d.netRev),
-          total_cogs: Math.round(d.cogs),
-          gross_profit: Math.round(d.profit),
-          revenue_other: 0,
           returns_value: 0,
+          revenue_other: 0,
         };
+        // "Theo lợi nhuận" cung cấp COGS và lợi nhuận thực → ghi đè 2 cột này
+        // "Theo thời gian" không có COGS → không gửi lên, Supabase giữ nguyên giá trị cũ
+        if (isTheoLoiNhuan) {
+          return { ...base, total_cogs: Math.round(d.cogs), gross_profit: Math.round(d.profit) };
+        }
+        return base;
       });
 
       const BATCH = 500;
@@ -599,12 +1010,106 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       }
       if (firstError) throw new Error(firstError);
 
+      // ── Upsert pos_orders (merge strategy: fill gaps, keep existing data) ──
+      const allOrderCodes = Array.from(orderMap.keys());
+      type ExistingPosOrder = {
+        id: string;
+        order_code: string;
+        customer_name: string | null;
+        payment_method: string | null;
+        staff_id: string | null;
+        items: ImportedOrderItem[] | null;
+      };
+      const existingPosOrderMap = new Map<string, ExistingPosOrder>();
+      for (let i = 0; i < allOrderCodes.length; i += BATCH) {
+        const { data: chunk } = await supabase
+          .from('pos_orders')
+          .select('id, order_code, customer_name, payment_method, staff_id, items')
+          .in('order_code', allOrderCodes.slice(i, i + BATCH));
+        for (const o of (chunk as ExistingPosOrder[] | null) ?? []) {
+          existingPosOrderMap.set(o.order_code, o);
+        }
+      }
+
+      const ordersToUpsert = allOrderCodes.map(orderCode => {
+        const newData = orderMap.get(orderCode)!;
+        const existing = existingPosOrderMap.get(orderCode);
+
+        // Merge items: keep existing items first, then add new skus not yet present
+        const mergedItems = new Map<string, ImportedOrderItem>();
+        for (const item of (existing?.items ?? [])) {
+          mergedItems.set(item.sku, item);
+        }
+        for (const [sku, item] of newData.items) {
+          if (!mergedItems.has(sku)) mergedItems.set(sku, item);
+        }
+
+        return {
+          id: existing?.id ?? stableUuidFromKey(`pos-order:${orderCode}`),
+          order_code: orderCode,
+          date: newData.date,
+          total_amount: newData.totalAmount,
+          discount: newData.discount,
+          final_amount: newData.finalAmount,
+          items: Array.from(mergedItems.values()),
+          // COALESCE: chỉ điền field còn null, không ghi đè data đã có
+          customer_name: existing?.customer_name ?? null,
+          payment_method: existing?.payment_method ?? 'Cash',
+          staff_id: existing?.staff_id ?? '',
+          status: 'completed',
+          channel: 'direct',
+          points_earned: 0,
+          is_return: newData.isReturn,
+        };
+      });
+
+      const skippedPosOrderColumns = await upsertPosOrdersWithSchemaFallback(
+        supabase,
+        ordersToUpsert,
+        BATCH
+      );
+
+      // ── Tự động tạo khách hàng mới từ file "theo lợi nhuận" ──
+      let newCustomersCount = 0;
+      if (customerMap.size > 0) {
+        const customerIds = Array.from(customerMap.keys());
+        const existingCustomerIds = new Set<string>();
+        for (let i = 0; i < customerIds.length; i += BATCH) {
+          const { data: existing } = await supabase
+            .from('pos_customers')
+            .select('id')
+            .in('id', customerIds.slice(i, i + BATCH));
+          (existing as { id: string }[] | null)?.forEach(c => existingCustomerIds.add(c.id));
+        }
+        const toInsert = customerIds
+          .filter(id => !existingCustomerIds.has(id))
+          .map(id => ({
+            id,
+            name: customerMap.get(id)!.name,
+            phone: '',
+            points: 0,
+            total_spent: 0,
+            tier: 'Standard',
+          }));
+        for (let i = 0; i < toInsert.length; i += BATCH) {
+          const { error: e } = await supabase
+            .from('pos_customers')
+            .insert(toInsert.slice(i, i + BATCH));
+          if (e && !firstError) firstError = e.message;
+        }
+        if (firstError) throw new Error(firstError);
+        newCustomersCount = toInsert.length;
+      }
+
       res.json({
         success: true,
         days: dateMap.size,
         orders: seenOrders.size,
+        ordersUpserted: ordersToUpsert.length,
         groups: uniqueGroupNames.length,
         groupMonths: groupRevToUpsert.length,
+        newCustomers: newCustomersCount,
+        skippedPosOrderColumns,
       });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-revenue]', getErrorMessage(error));
@@ -612,22 +1117,671 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     }
   });
 
-  // Xóa toàn bộ hàng hóa (dùng khi chuyển từ app test sang app thật)
+  router.post('/api/import/kiotviet-customers', requireAuth, async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2)
+        return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
+
+      const headers = rows[0];
+      const col0Header = String(headers[0] || '').trim();
+      const col11Header = String(headers[11] || '').trim();
+
+      // ── Format "Báo cáo lợi nhuận theo khách hàng" ──
+      // col0=Mã khách hàng, col1=Khách hàng, col2=SĐT, col8=Doanh thu thuần
+      if (col0Header === 'Mã khách hàng') {
+        const toUpsert = rows.slice(1)
+          .filter(row => {
+            const code = String(row[0] || '').trim();
+            return code && code !== 'Khách lẻ' && /^KH/i.test(code);
+          })
+          .map(row => {
+            const code = String(row[0] || '').trim();
+            const name = String(row[1] || '').trim();
+            const phone = String(row[2] || '').trim();
+            const net = Number(row[8] || 0);
+            return {
+              id: customerIdFromKiotVietCode(code),
+              name: name || code,
+              phone,
+              points: 0,
+              total_spent: Math.round(net),
+              tier: tierFromNetSpent(net),
+            };
+          });
+
+        if (toUpsert.length === 0)
+          return res.status(400).json({ error: 'Không có khách hàng hợp lệ trong file.' });
+
+        const batchSize = 500;
+        let upserted = 0;
+        for (let i = 0; i < toUpsert.length; i += batchSize) {
+          const { error } = await supabase
+            .from('pos_customers')
+            .upsert(toUpsert.slice(i, i + batchSize), { onConflict: 'id' });
+          if (error) throw new Error(error.message);
+          upserted += toUpsert.slice(i, i + batchSize).length;
+        }
+        return res.json({ success: true, upserted, message: `Đã import ${upserted} khách hàng. Tải lại trang để thấy dữ liệu.` });
+      }
+
+      if (col0Header !== 'Mã KH' || col11Header !== 'Mã giao dịch') {
+        return res.status(400).json({
+          error: `File không đúng định dạng. Cần file "Báo cáo lợi nhuận theo khách hàng" (cột 1 = "Mã khách hàng") hoặc file giao dịch KiotViet (cột 1 = "Mã KH"). Hiện là "${col0Header}".`,
+        });
+      }
+
+      type CustomerAgg = {
+        id: string;
+        code: string;
+        name: string;
+        phone: string;
+        group: string;
+        orders: number;
+        returns: number;
+        gross: number;
+        discount: number;
+        revenue: number;
+        returnValue: number;
+        net: number;
+        lastVisit: string;
+      };
+
+      const customerMap = new Map<string, CustomerAgg>();
+      const orderCustomerMap = new Map<string, { customerId: string; customerName: string }>();
+      let guestRows = 0;
+
+      for (const row of rows.slice(1)) {
+        const code = String(row[0] || '').trim();
+        const name = String(row[1] || '').trim();
+        if (!code || code === 'Khách lẻ') {
+          if (code === 'Khách lẻ') guestRows += 1;
+          continue;
+        }
+
+        const customerId = customerIdFromKiotVietCode(code);
+        const visitDate = excelDateToIsoDate(row[12]) || '';
+        if (!customerMap.has(code)) {
+          customerMap.set(code, {
+            id: customerId,
+            code,
+            name: name || code,
+            phone: String(row[2] || '').trim(),
+            group: String(row[3] || '').trim(),
+            orders: Number(row[4] || 0),
+            gross: Number(row[5] || 0),
+            discount: Number(row[6] || 0),
+            revenue: Number(row[7] || 0),
+            returns: Number(row[8] || 0),
+            returnValue: Number(row[9] || 0),
+            net: Number(row[10] || 0),
+            lastVisit: visitDate,
+          });
+        } else {
+          const current = customerMap.get(code)!;
+          if (!current.phone) current.phone = String(row[2] || '').trim();
+          if (!current.group) current.group = String(row[3] || '').trim();
+          if (visitDate && (!current.lastVisit || visitDate > current.lastVisit)) {
+            current.lastVisit = visitDate;
+          }
+        }
+
+        const orderCode = String(row[11] || '').trim();
+        if (orderCode) orderCustomerMap.set(orderCode, { customerId, customerName: name || code });
+      }
+
+      const customers = Array.from(customerMap.values());
+      if (customers.length === 0)
+        return res.status(400).json({
+          error: `Không tìm thấy khách hàng hợp lệ. File có ${guestRows} dòng Khách lẻ, các dòng này không import vào CRM.`,
+        });
+
+      const BATCH = 500;
+      const customersToUpsert = customers.map(c => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: null,
+        address: null,
+        notes: [
+          `Mã KH KiotViet: ${c.code}`,
+          c.group ? `Nhóm KiotViet: ${c.group}` : '',
+          `SL đơn bán: ${c.orders}`,
+          `SL đơn trả: ${c.returns}`,
+          `Doanh thu KiotViet: ${Math.round(c.revenue)}`,
+          `Giá trị trả KiotViet: ${Math.round(c.returnValue)}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        points: 0,
+        total_spent: Math.round(c.net),
+        last_visit: c.lastVisit || null,
+        tier: tierFromNetSpent(c.net),
+      }));
+
+      let firstError: string | null = null;
+      for (let i = 0; i < customersToUpsert.length; i += BATCH) {
+        const { error } = await supabase
+          .from('pos_customers')
+          .upsert(customersToUpsert.slice(i, i + BATCH), { onConflict: 'id' });
+        if (error && !firstError) firstError = error.message;
+      }
+      if (firstError) throw new Error(firstError);
+
+      const allOrderCodes = Array.from(orderCustomerMap.keys());
+      let matchedOrders = 0;
+      for (let i = 0; i < allOrderCodes.length; i += BATCH) {
+        const chunkCodes = allOrderCodes.slice(i, i + BATCH);
+        const { data: existingOrders, error } = await supabase
+          .from('pos_orders')
+          .select('id, order_code')
+          .in('order_code', chunkCodes);
+        if (error) throw error;
+
+        const updatesByCustomer = new Map<
+          string,
+          { customer_id: string; customer_name: string; ids: string[] }
+        >();
+        for (const order of (existingOrders as { id: string; order_code: string }[] | null) ?? []) {
+          const customer = orderCustomerMap.get(order.order_code);
+          if (!customer) continue;
+          const key = `${customer.customerId}|${customer.customerName}`;
+          const group =
+            updatesByCustomer.get(key) ?? {
+              customer_id: customer.customerId,
+              customer_name: customer.customerName,
+              ids: [],
+            };
+          group.ids.push(order.id);
+          updatesByCustomer.set(key, group);
+        }
+
+        for (const group of updatesByCustomer.values()) {
+          matchedOrders += group.ids.length;
+          const { error: updateError } = await supabase
+            .from('pos_orders')
+            .update({ customer_id: group.customer_id, customer_name: group.customer_name })
+            .in('id', group.ids);
+          if (updateError) throw updateError;
+        }
+      }
+
+      res.json({
+        success: true,
+        customers: customers.length,
+        guestRows,
+        orderLinks: orderCustomerMap.size,
+        matchedOrders,
+      });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-customers]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Import "Danh sách chi tiết hoá đơn" từ trang Hoá đơn KiotViet
+  // Tự động tạo: khách hàng + đơn hàng pos_orders + revenue_records theo tháng
+  router.post('/api/import/kiotviet-invoices', requireAuth, async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2) return res.status(400).json({ error: 'File trống.' });
+
+      const h = rows[0];
+      if (String(h[1] || '').trim() !== 'Mã hóa đơn' || String(h[12] || '').trim() !== 'Mã khách hàng') {
+        return res.status(400).json({
+          error: `File không đúng định dạng. Cần file "Danh sách chi tiết hoá đơn" từ KiotViet. Cột 2 hiện là "${h[1]}".`,
+        });
+      }
+
+      type CustInfo  = { name: string; phone: string; email: string; address: string };
+      type OrdItem   = { productId: string; sku: string; name: string; quantity: number; price: number; discount: number; total: number };
+      type OrdData   = { date: string; customerId: string | null; customerName: string; staffId: string; staffName: string; channel: string; notes: string; totalAmount: number; discount: number; finalAmount: number; paymentMethod: 'Cash'|'Bank'|'Momo'|'Other'; isReturn: boolean; items: Map<string, OrdItem> };
+      type MonthAgg  = { totalGross: number; discount: number; returnsGross: number; netRev: number };
+
+      const customerMap  = new Map<string, CustInfo>();
+      const orderMap     = new Map<string, OrdData>();
+      const monthMap     = new Map<string, MonthAgg>();
+      const seenInvoices = new Set<string>();
+
+      for (const row of rows.slice(1)) {
+        const invoiceCode = String(row[1] || '').trim();
+        if (!invoiceCode) continue;
+
+        const dateTime = excelDateToLocalIsoDateTime(row[6]);
+        if (!dateTime) continue;
+        const date      = dateTime.slice(0, 10);
+        const yearMonth = date.slice(0, 7);
+
+        const customerCode = String(row[12] || '').trim();
+        const customerName = String(row[13] || '').trim();
+        const isRealCustomer = customerCode && customerCode !== 'Khách lẻ' && /^KH/i.test(customerCode);
+
+        if (isRealCustomer && !customerMap.has(customerCode)) {
+          customerMap.set(customerCode, {
+            name: customerName,
+            phone:   String(row[15] || '').trim(),
+            email:   String(row[14] || '').trim(),
+            address: String(row[16] || '').trim(),
+          });
+        }
+
+        const totalAmount = Number(row[38] || 0);
+        const discountAmt = Number(row[39] || 0);
+        const finalAmount = Number(row[41] || 0);
+        const isReturn    = !!String(row[11] || '').trim() || /^TH/i.test(invoiceCode);
+
+        let paymentMethod: 'Cash'|'Bank'|'Momo'|'Other' = 'Cash';
+        if (Number(row[46] || 0) > 0)      paymentMethod = 'Bank';
+        else if (Number(row[45] || 0) > 0) paymentMethod = 'Momo';
+        else if (Number(row[44] || 0) > 0) paymentMethod = 'Other';
+
+        if (!orderMap.has(invoiceCode)) {
+          orderMap.set(invoiceCode, {
+            date: dateTime,
+            customerId:    isRealCustomer ? customerIdFromKiotVietCode(customerCode) : null,
+            customerName,
+            staffName:     String(row[21] || '').trim(),
+            staffId:       String(row[21] || '').trim() ? stableUuidFromKey(`kiotviet-staff:${String(row[21]).trim()}`) : '',
+            channel:       String(row[22] || '').trim(),
+            notes:         String(row[37] || '').trim(),
+            totalAmount, discount: discountAmt, finalAmount, paymentMethod, isReturn,
+            items: new Map(),
+          });
+        }
+
+        const sku = String(row[52] || '').trim();
+        const qty = Number(row[57] || 0);
+        if (sku && qty !== 0) {
+          const ord = orderMap.get(invoiceCode)!;
+          const productId = stableUuidFromKey(`kiotviet-product:${sku}`);
+          const existing  = ord.items.get(sku);
+          if (existing) { existing.quantity += qty; existing.total += Number(row[62] || 0); }
+          else ord.items.set(sku, { productId, sku, name: String(row[53] || '').trim(), quantity: qty, price: Number(row[61] || 0), discount: Number(row[60] || 0), total: Number(row[62] || 0) });
+        }
+
+        // Month aggregation — count each invoice only once
+        if (!seenInvoices.has(invoiceCode)) {
+          seenInvoices.add(invoiceCode);
+          const prev = monthMap.get(yearMonth) ?? { totalGross: 0, discount: 0, returnsGross: 0, netRev: 0 };
+          if (!isReturn) {
+            monthMap.set(yearMonth, { ...prev, totalGross: prev.totalGross + totalAmount, discount: prev.discount + discountAmt, netRev: prev.netRev + finalAmount });
+          } else {
+            monthMap.set(yearMonth, { ...prev, returnsGross: prev.returnsGross + Math.abs(finalAmount), netRev: prev.netRev - Math.abs(finalAmount) });
+          }
+        }
+      }
+
+      const IBATCH = 500;
+      let firstError: string | null = null;
+
+      // ── 1. Khách hàng ──
+      const customersToUpsert = Array.from(customerMap.entries()).map(([code, c]) => ({
+        id: customerIdFromKiotVietCode(code),
+        name:    c.name || code,
+        phone:   c.phone,
+        email:   c.email  || null,
+        address: c.address || null,
+        points:  0,
+        total_spent: 0,
+        tier: 'Standard',
+      }));
+      for (let i = 0; i < customersToUpsert.length; i += IBATCH) {
+        const { error } = await supabase.from('pos_customers').upsert(customersToUpsert.slice(i, i + IBATCH), { onConflict: 'id' });
+        if (error && !firstError) firstError = error.message;
+      }
+      if (firstError) throw new Error(firstError);
+
+      // ── 2. Đơn hàng pos_orders ──
+      const allCodes = Array.from(orderMap.keys());
+      type ExOrd = { id: string; order_code: string; customer_name: string | null; payment_method: string | null; staff_id: string | null; staff_name: string | null; items: OrdItem[] | null };
+      const existingOrdMap = new Map<string, ExOrd>();
+      for (let i = 0; i < allCodes.length; i += IBATCH) {
+        const { data: chunk } = await supabase.from('pos_orders').select('id, order_code, customer_name, payment_method, staff_id, staff_name, items').in('order_code', allCodes.slice(i, i + IBATCH));
+        for (const o of (chunk as ExOrd[] | null) ?? []) existingOrdMap.set(o.order_code, o);
+      }
+      const ordersToUpsert = allCodes.map(code => {
+        const d  = orderMap.get(code)!;
+        const ex = existingOrdMap.get(code);
+        return {
+          id:             ex?.id ?? stableUuidFromKey(`kiotviet-order:${code}`),
+          order_code:     code,
+          date:           d.date,
+          customer_id:    d.customerId,
+          customer_name:  d.customerName || ex?.customer_name || null,
+          staff_name:     d.staffName    || ex?.staff_name    || null,
+          staff_id:       d.staffId      || ex?.staff_id      || null,
+          channel:        d.channel || null,
+          notes:          d.notes   || null,
+          total_amount:   d.totalAmount,
+          discount:       d.discount,
+          final_amount:   d.finalAmount,
+          payment_method: d.paymentMethod,
+          is_return:      d.isReturn,
+          // KiotViet: đơn trả → refund_amount = finalAmount (tiền shop hoàn cho khách)
+          refund_amount:  d.isReturn ? Math.abs(d.finalAmount) : 0,
+          points_earned:  0,
+          items:          Array.from(d.items.values()).length > 0 ? Array.from(d.items.values()) : (ex?.items ?? []),
+        };
+      });
+      const skipped = await upsertPosOrdersWithSchemaFallback(supabase, ordersToUpsert, IBATCH);
+
+      // Revenue records KHÔNG được ghi từ file hoá đơn vì file thường chỉ là một khoảng thời gian
+      // → sẽ ghi đè và làm sai tổng tháng. Dùng route kiotviet-revenue để cập nhật revenue_records.
+
+      res.json({ success: true, customers: customersToUpsert.length, orders: ordersToUpsert.length, skipped });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-invoices]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  router.post('/api/import/kiotviet-purchase-details', requireAuth, async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2)
+        return res.status(400).json({ error: 'File trống hoặc không có dữ liệu.' });
+
+      const headers = rows[0];
+      // Dùng tên cột thay vì chỉ số cứng — không bị ảnh hưởng khi KiotViet thêm/bớt cột
+      const colMap = new Map<string, number>();
+      (headers as unknown[]).forEach((h, i) => { if (h) colMap.set(String(h).trim(), i); });
+      const c = (name: string) => colMap.get(name) ?? -1;
+
+      if (!colMap.has('Mã nhập hàng') || !colMap.has('Mã hàng') || !colMap.has('Số lượng')) {
+        return res.status(400).json({
+          error: `File không đúng định dạng. Cần file "Danh sách chi tiết nhập hàng" từ KiotViet. Headers tìm thấy: ${Array.from(colMap.keys()).slice(0, 10).join(', ')}`,
+        });
+      }
+
+      type PurchaseItem = {
+        productId: string;
+        sku: string;
+        name: string;
+        productName: string;
+        quantity: number;
+        price: number;
+        discount: number;
+        costMethod: 'fixed';
+        note?: string;
+      };
+
+      type PurchaseAgg = {
+        code: string;
+        date: string;
+        supplierId: string;
+        supplierCode: string;
+        supplierName: string;
+        staffName: string;
+        totalAmount: number;
+        totalGoods: number;
+        discount: number;
+        payable: number;
+        paid: number;
+        totalQuantity: number;
+        totalSkus: number;
+        note: string;
+        items: Map<string, PurchaseItem>;
+      };
+
+      type SupplierAgg = {
+        id: string;
+        code: string;
+        name: string;
+        phone: string;
+        address: string;
+      };
+
+      const suppliers = new Map<string, SupplierAgg>();
+      const purchases = new Map<string, PurchaseAgg>();
+      const skippedByStatus = new Map<string, number>();
+      let detailRows = 0;
+
+      for (const row of rows.slice(1)) {
+        const purchaseCode = String(row[c('Mã nhập hàng')] || '').trim();
+        const supplierCode = String(row[c('Mã nhà cung cấp')] || '').trim();
+        const supplierName = String(row[c('Tên nhà cung cấp')] || '').trim();
+        const sku = String(row[c('Mã hàng')] || '').trim();
+        const productName = String(row[c('Tên hàng')] || '').trim();
+        const status = String(row[c('Trạng thái')] || '').trim();
+        if (!purchaseCode || !supplierCode || !supplierName || !sku || !productName) continue;
+
+        if (status !== 'Đã nhập hàng') {
+          skippedByStatus.set(status || 'Không rõ', (skippedByStatus.get(status || 'Không rõ') || 0) + 1);
+          continue;
+        }
+
+        const dateTime = excelDateToLocalIsoDateTime(row[c('Thời gian')]);
+        if (!dateTime) continue;
+
+        detailRows += 1;
+        const supplierId = supplierIdFromKiotVietCode(supplierCode);
+        if (!suppliers.has(supplierCode)) {
+          suppliers.set(supplierCode, {
+            id: supplierId,
+            code: supplierCode,
+            name: supplierName,
+            phone: String(row[c('Điện thoại')] || '').trim(),
+            address: String(row[c('Địa chỉ')] || '').trim(),
+          });
+        }
+
+        const cPayable = c('Cần trả NCC');
+        const cGiaNhap = c('Giá nhập');
+        if (!purchases.has(purchaseCode)) {
+          purchases.set(purchaseCode, {
+            code: purchaseCode,
+            date: dateTime,
+            supplierId,
+            supplierCode,
+            supplierName,
+            staffName: String(row[c('Người nhập')] || row[c('Người tạo')] || '').trim(),
+            totalGoods: Number(row[c('Tổng tiền hàng')] || 0),
+            discount: Number(row[c('Giảm giá phiếu nhập')] || 0),
+            payable: Number(row[cPayable] || 0),
+            paid: Number(row[c('Tiền đã trả NCC')] || 0),
+            totalAmount: Number(row[cPayable] || row[cGiaNhap] || 0),
+            totalQuantity: Number(row[c('Tổng số lượng')] || 0),
+            totalSkus: Number(row[c('Tổng số mặt hàng')] || 0),
+            note: String(row[c('Ghi chú')] || '').trim(),
+            items: new Map(),
+          });
+        }
+
+        const purchase = purchases.get(purchaseCode)!;
+        const quantity = Number(row[c('Số lượng')] || 0);
+        const importPrice = Number(row[cGiaNhap] || row[c('Đơn giá')] || 0);
+        const lineDiscount = Number(row[c('Giảm giá')] || 0);
+        const unit = String(row[c('ĐVT')] || '').trim();
+        const brand = String(row[c('Thương hiệu')] || '').trim();
+        const cThanhTien = c('Thành tiền');
+        const noteParts = [
+          unit ? `ĐVT: ${unit}` : '',
+          brand ? `Thương hiệu: ${brand}` : '',
+          row[c('Ghi chú hàng hóa')] ? `Ghi chú HH: ${String(row[c('Ghi chú hàng hóa')]).trim()}` : '',
+          row[cThanhTien] ? `Thành tiền: ${Math.round(Number(row[cThanhTien] || 0))}` : '',
+        ].filter(Boolean);
+
+        const existingItem = purchase.items.get(sku);
+        if (existingItem) {
+          existingItem.quantity += quantity;
+          existingItem.discount += lineDiscount;
+        } else {
+          purchase.items.set(sku, {
+            productId: productIdFromSku(sku),
+            sku,
+            name: productName,
+            productName,
+            quantity,
+            price: importPrice,
+            discount: lineDiscount,
+            costMethod: 'fixed',
+            note: noteParts.join(' | ') || undefined,
+          });
+        }
+      }
+
+      if (purchases.size === 0) {
+        return res.status(400).json({
+          error: 'Không tìm thấy phiếu nhập hợp lệ. Importer chỉ nhận các dòng có trạng thái "Đã nhập hàng".',
+        });
+      }
+
+      const BATCH = 500;
+
+      const suppliersToUpsert = Array.from(suppliers.values()).map(s => ({
+        id: s.id,
+        name: s.name,
+        code: s.code,
+        phone: s.phone || null,
+        email: null,
+        address: s.address || null,
+        supplier_group: 'KiotViet',
+        status: 'active',
+        notes: `Mã NCC KiotViet: ${s.code}`,
+      }));
+
+      const skippedSupplierColumns = await upsertWithSchemaFallback(
+        supabase,
+        'suppliers',
+        suppliersToUpsert,
+        BATCH,
+        OPTIONAL_SUPPLIER_COLUMNS
+      );
+
+      const transactionsToUpsert = Array.from(purchases.values()).map(p => ({
+        id: stableUuidFromKey(`kiotviet-purchase:${p.code}`),
+        date: p.date,
+        type: 'Import',
+        items: Array.from(p.items.values()),
+        note: [
+          `Import từ KiotViet: ${p.code}`,
+          `Mã NCC: ${p.supplierCode}`,
+          p.staffName ? `Người nhập: ${p.staffName}` : '',
+          `Tổng SL: ${p.totalQuantity}`,
+          `Tổng mặt hàng: ${p.totalSkus}`,
+          `Tổng tiền hàng: ${Math.round(p.totalGoods)}`,
+          `Giảm giá phiếu: ${Math.round(p.discount)}`,
+          `Cần trả NCC: ${Math.round(p.payable)}`,
+          `Đã trả NCC: ${Math.round(p.paid)}`,
+          p.note,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        reference_id: p.code,
+        staff_id: p.staffName || null,
+        supplier_id: p.supplierId,
+        supplier_name: p.supplierName,
+        total_amount: Math.round(p.totalAmount),
+        status: 'completed',
+      }));
+
+      const skippedInventoryTransactionColumns = await upsertWithSchemaFallback(
+        supabase,
+        'inventory_transactions',
+        transactionsToUpsert,
+        BATCH,
+        OPTIONAL_INVENTORY_TRANSACTION_COLUMNS
+      );
+
+      const debtRecords = Array.from(purchases.values()).flatMap(p => {
+        const records = [
+          {
+            id: stableUuidFromKey(`kiotviet-supplier-debt:purchase:${p.code}`),
+            supplier_id: p.supplierId,
+            supplier_name: p.supplierName,
+            date: p.date,
+            type: 'purchase',
+            amount: Math.round(p.payable),
+            description: `Nhập hàng KiotViet ${p.code}`,
+          },
+        ];
+        if (p.paid > 0) {
+          records.push({
+            id: stableUuidFromKey(`kiotviet-supplier-debt:payment:${p.code}`),
+            supplier_id: p.supplierId,
+            supplier_name: p.supplierName,
+            date: p.date,
+            type: 'payment',
+            amount: Math.round(p.paid),
+            description: `Thanh toán KiotViet ${p.code}`,
+          });
+        }
+        return records;
+      });
+
+      const skippedSupplierDebtColumns = await upsertWithSchemaFallback(
+        supabase,
+        'supplier_debts',
+        debtRecords,
+        BATCH,
+        OPTIONAL_SUPPLIER_DEBT_COLUMNS
+      );
+
+      res.json({
+        success: true,
+        detailRows,
+        suppliers: suppliersToUpsert.length,
+        purchases: transactionsToUpsert.length,
+        debtRecords: debtRecords.length,
+        items: transactionsToUpsert.reduce((sum, p) => sum + (Array.isArray(p.items) ? p.items.length : 0), 0),
+        skippedByStatus: Object.fromEntries(skippedByStatus),
+        skippedSupplierColumns,
+        skippedInventoryTransactionColumns,
+        skippedSupplierDebtColumns,
+        stockUpdated: false,
+      });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-purchase-details]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa toàn bộ hàng hóa + giao dịch kho (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-products', requireAuth, async (_req, res) => {
     try {
-      const { error } = await supabase.from('pos_products').delete().not('id', 'is', null);
-      if (error) throw error;
+      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
+      const [r1, r2] = await Promise.all([del('inventory_transactions'), del('pos_products')]);
+      const err = r1.error || r2.error;
+      if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
-  // Xóa toàn bộ doanh thu (dùng khi chuyển từ app test sang app thật)
+  // Xóa toàn bộ doanh thu + đơn hàng POS + nhóm hàng (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-revenue', requireAuth, async (_req, res) => {
     try {
-      const { error } = await supabase.from('revenue_records').delete().not('id', 'is', null);
-      if (error) throw error;
+      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
+      const [r1, r2, r3, r4] = await Promise.all([
+        del('pos_orders'),
+        del('revenue_records'),
+        del('product_group_revenue'),
+        del('product_groups'),
+      ]);
+      const err = r1.error || r2.error || r3.error || r4.error;
+      if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });

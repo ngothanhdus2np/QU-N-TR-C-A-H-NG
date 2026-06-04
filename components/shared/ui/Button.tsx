@@ -16,20 +16,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm disabled:bg-indigo-400',
-  secondary: 'bg-slate-600 text-white hover:bg-slate-700 shadow-sm disabled:bg-slate-400',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 shadow-sm disabled:bg-rose-400',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:bg-emerald-400',
-  ghost: 'bg-transparent text-slate-700 hover:bg-slate-100 disabled:text-slate-400',
-  outline: 'bg-transparent border-2 border-slate-300 text-slate-700 hover:bg-slate-50 disabled:border-slate-200 disabled:text-slate-400',
+  primary:   'bg-indigo-600 text-white hover:bg-indigo-700 border border-transparent shadow-sm disabled:bg-indigo-400',
+  secondary: 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 disabled:text-slate-400',
+  danger:    'bg-rose-600 text-white hover:bg-rose-700 border border-transparent shadow-sm disabled:bg-rose-400',
+  success:   'bg-emerald-600 text-white hover:bg-emerald-700 border border-transparent shadow-sm disabled:bg-emerald-400',
+  ghost:     'bg-transparent text-slate-600 hover:bg-slate-100 border border-transparent disabled:text-slate-400',
+  outline:   'bg-transparent border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:border-slate-200 disabled:text-slate-400',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  xs: 'px-2 py-1 text-[9px] rounded-lg',
-  sm: 'px-3 py-1.5 text-xs rounded-lg',
+  xs: 'px-2.5 py-1.5 text-2xs rounded-lg',
+  sm: 'px-3 py-2 text-xs rounded-lg',
   md: 'px-4 py-2 text-sm rounded-xl',
-  lg: 'px-6 py-3 text-sm rounded-xl',
-  xl: 'px-8 py-4 text-sm rounded-2xl',
+  lg: 'px-5 py-2.5 text-sm rounded-xl',
+  xl: 'px-6 py-3 text-sm rounded-2xl',
 };
 
 const iconSizes: Record<ButtonSize, number> = {
@@ -57,7 +57,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 font-normal transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-indigo-500';
     const widthStyles = fullWidth ? 'w-full' : '';
     const textStyles = uppercase ? 'uppercase tracking-wide' : '';
     const disabledStyles = (disabled || loading) ? 'cursor-not-allowed opacity-60' : '';

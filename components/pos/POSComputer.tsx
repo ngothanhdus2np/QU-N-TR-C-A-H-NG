@@ -18,6 +18,7 @@ import {
   POSOrder,
   POSOrderItem,
   CustomerDebtRecord,
+  Employee,
   BrandProfile,
   POSInventorySettings,
   POSKeyboardSettings,
@@ -36,6 +37,7 @@ import ProcessOrdersModal from './ProcessOrdersModal';
 import ProcessRepairsModal from './ProcessRepairsModal';
 import ShortcutsModal from './ShortcutsModal';
 import SelectInvoiceModal from './SelectInvoiceModal';
+import { useToast } from '../ui/Toast';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
@@ -48,11 +50,18 @@ function useIsMobile() {
 }
 
 const SKU_COLLATOR = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+const EMPTY_SPLIT_PAYMENT = { cash: 0, bank: 0, card: 0, momo: 0 } as const;
+const DEFAULT_POS_STAFF = [
+  { id: 'ngo-thanh-du', name: 'Ngô Thành Du', kiotvietId: '3458a3f9-2a12-551f-88b5-3b710078f807' },
+  { id: 'pham-thi-vui', name: 'Phạm Thị Vui', kiotvietId: '50e28d1c-e011-5dac-acf2-7a84c9e1b48a' },
+];
+const STAFF_STORAGE_KEYS = ['cfo_current_staff_id', 'cfo_staff_id', 'current_staff_id'];
 
 interface POSComputerProps {
   products: POSProduct[];
   productGroups?: ProductGroup[];
   customers: POSCustomer[];
+  employees?: Employee[];
   orders: POSOrder[];
   onPlaceOrder: (
     order: POSOrder,
@@ -72,15 +81,17 @@ interface POSComputerProps {
   paymentSettings?: POSPaymentSettings;
   inventorySettings?: POSInventorySettings;
   currentStaffName?: string;
-  offlinePendingCount?: number;
+  offlineOrderPendingCount?: number;
   isDraining?: boolean;
   isActive?: boolean;
+  onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
 }
 
 const POSComputer: React.FC<POSComputerProps> = ({
   products,
   productGroups = [],
   customers,
+  employees = [],
   orders,
   onPlaceOrder,
   onReturnOrder,
@@ -89,10 +100,12 @@ const POSComputer: React.FC<POSComputerProps> = ({
   brandProfile,
   paymentSettings,
   inventorySettings,
-  offlinePendingCount = 0,
+  offlineOrderPendingCount = 0,
   isDraining = false,
   isActive = true,
+  onDrainOfflineQueue,
 }) => {
+  const { showToast } = useToast();
   // Use custom hook for all state management
   const posState = usePOSState({ paymentSettings, isActive });
 
@@ -183,8 +196,65 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const returnDiscount = activeTab.returnDiscount || 0;
   const returnFee = activeTab.returnFee || 0;
   const returnOtherRefund = activeTab.returnOtherRefund || 0;
-  const splitPayment = activeTab.splitPayment || { cash: 0, bank: 0, card: 0, momo: 0 };
+  const splitPayment = activeTab.splitPayment || EMPTY_SPLIT_PAYMENT;
   const allowSellOutOfStock = inventorySettings?.allowSellOutOfStock ?? false;
+  const [currentStaffId, setCurrentStaffId] = useState(() => {
+    const stored = getCurrentStaffId();
+    return stored === 'unknown' ? DEFAULT_POS_STAFF[0].id : stored;
+  });
+  const activeEmployees = useMemo(
+    () => employees.filter(employee => !employee.resignedDate),
+    [employees]
+  );
+  const fixedStaffOptions = useMemo(
+    () =>
+      DEFAULT_POS_STAFF.map(staff => {
+        const matchedEmployee = employees.find(employee => employee.name === staff.name);
+        return {
+          id: matchedEmployee?.id || staff.id,
+          name: staff.name,
+          position: matchedEmployee?.position || '',
+          joinDate: matchedEmployee?.joinDate || '',
+        };
+      }),
+    [employees]
+  );
+  const defaultStaffByFallbackId = DEFAULT_POS_STAFF.find(staff => staff.id === currentStaffId);
+  const currentSalesperson =
+    fixedStaffOptions.find(employee => employee.id === currentStaffId) ||
+    (defaultStaffByFallbackId
+      ? fixedStaffOptions.find(employee => employee.name === defaultStaffByFallbackId.name)
+      : undefined) ||
+    activeEmployees.find(employee => employee.id === currentStaffId) ||
+    employees.find(employee => employee.id === currentStaffId);
+  const defaultSalespersonName =
+    currentSalesperson?.name || (currentStaffId === 'unknown' ? 'Nhân viên' : currentStaffId);
+  const salespersonOptions = fixedStaffOptions;
+
+  const withDefaultSalesperson = React.useCallback(
+    (items: POSOrderItem[], lineType: POSOrderItem['lineType'] = 'sale') =>
+      items.map(item => ({
+        ...item,
+        salespersonId: item.salespersonId || currentStaffId,
+        salespersonName: item.salespersonName || defaultSalespersonName,
+        lineType,
+      })),
+    [currentStaffId, defaultSalespersonName]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    STAFF_STORAGE_KEYS.forEach(key => localStorage.setItem(key, currentStaffId));
+  }, [currentStaffId]);
+
+  useEffect(() => {
+    const fallbackStaff = DEFAULT_POS_STAFF.find(staff => staff.id === currentStaffId);
+    if (!fallbackStaff) return;
+    const matchedEmployeeOption = fixedStaffOptions.find(staff => staff.name === fallbackStaff.name);
+    if (matchedEmployeeOption && matchedEmployeeOption.id !== currentStaffId) {
+      setCurrentStaffId(matchedEmployeeOption.id);
+    }
+  }, [currentStaffId, fixedStaffOptions]);
 
   // Refs for DOM and stale closure fixes
   const productSearchRef = useRef<HTMLInputElement>(null);
@@ -346,6 +416,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
                 price: product.salePrice,
                 discount: 0,
                 total: product.salePrice,
+                importPrice: product.importPrice || 0,
+                salespersonId: currentStaffId,
+                salespersonName: defaultSalespersonName,
+                lineType: 'sale',
               },
             ];
           }
@@ -353,7 +427,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         })
       );
     },
-    [activeTabId, activeTab.cart, allowSellOutOfStock]
+    [activeTabId, activeTab.cart, allowSellOutOfStock, currentStaffId, defaultSalespersonName]
   );
 
   usePOSKeyboard({
@@ -391,8 +465,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
               const maxQty = product?.stock ?? Infinity;
               const proposedQty = item.quantity + delta;
 
-              // Validation: Cảnh báo số lượng quá lớn (có thể nhập nhầm)
-              if (proposedQty > 10000) {
+              // Cảnh báo nếu số lượng vượt ngưỡng an toàn (phát hiện nhập nhầm phím)
+              const MAX_QTY_WARN = inventorySettings?.maxQtyWarning ?? 10000;
+              if (proposedQty > MAX_QTY_WARN) {
                 showStockWarning(`Số lượng quá lớn (${proposedQty}), vui lòng kiểm tra lại`);
               }
 
@@ -426,6 +501,61 @@ const POSComputer: React.FC<POSComputerProps> = ({
       );
     },
     [activeTabId]
+  );
+
+  const updateItemSalesperson = React.useCallback(
+    (productId: string, employeeId: string) => {
+      const employee = salespersonOptions.find(item => item.id === employeeId) || employees.find(item => item.id === employeeId);
+      setTabs(prevTabs =>
+        prevTabs.map(t => {
+          if (t.id !== activeTabId) return t;
+          return {
+            ...t,
+            cart: t.cart.map(item =>
+              item.productId === productId
+                ? {
+                    ...item,
+                    salespersonId: employeeId,
+                    salespersonName: employee?.name || employeeId,
+                  }
+                : item
+            ),
+          };
+        })
+      );
+    },
+    [activeTabId, employees, salespersonOptions]
+  );
+
+  const updateCurrentStaff = React.useCallback(
+    (staffId: string) => {
+      const nextStaff = salespersonOptions.find(employee => employee.id === staffId);
+      if (!nextStaff) return;
+      const previousStaffId = currentStaffId;
+      setCurrentStaffId(staffId);
+      setTabs(prevTabs =>
+        prevTabs.map(t => {
+          if (t.id !== activeTabId) return t;
+          return {
+            ...t,
+            cart: t.cart.map(item => {
+              const isUsingPreviousDefault =
+                !item.salespersonId ||
+                item.salespersonId === previousStaffId ||
+                item.salespersonId === 'unknown';
+              return isUsingPreviousDefault
+                ? {
+                    ...item,
+                    salespersonId: nextStaff.id,
+                    salespersonName: nextStaff.name,
+                  }
+                : item;
+            }),
+          };
+        })
+      );
+    },
+    [activeTabId, currentStaffId, salespersonOptions]
   );
 
   const updateItemDiscount = React.useCallback(
@@ -471,7 +601,25 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   const totalDiscount = manualDiscountAmount + autoPromotion;
   const netPayable = Math.max(0, totalBeforeDiscount - totalDiscount + otherFees);
-  const pointsEarned = Math.floor(netPayable / 10000);
+
+  // Tỷ lệ tích điểm lấy từ cấu hình, mặc định 10.000đ/điểm
+  const pointsRate = paymentSettings?.pointsRate ?? 10000;
+
+  // Chỉ tích điểm từ sản phẩm có allowPoints !== false
+  const productById = useMemo(
+    () => new Map(products.map(p => [p.id, p])),
+    [products]
+  );
+  const pointsEligibleAmount = useMemo(
+    () => cart.reduce((sum, item) => {
+      const product = productById.get(item.productId);
+      if (product?.allowPoints === false) return sum;
+      return sum + item.total;
+    }, 0),
+    [cart, productById]
+  );
+  const discountRatio = totalBeforeDiscount > 0 ? netPayable / totalBeforeDiscount : 1;
+  const pointsEarned = Math.floor((pointsEligibleAmount * discountRatio) / pointsRate);
 
   const {
     updateReturnQuantity,
@@ -479,7 +627,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
     totalReturnBeforeDiscount,
     finalReturnAmount,
     amountToPayCustomer,
+    customerPaysDifference,
     handleReturnFast,
+    handleSelectOrderReturn,
   } = usePOSReturnFlow({
     activeTabId,
     tabs,
@@ -546,15 +696,27 @@ const POSComputer: React.FC<POSComputerProps> = ({
       return;
     }
 
+    // Validation: Thanh toán chia nhiều phương thức phải đủ tiền
+    if (useSplitPayment && mode === 'sales' && !isDebtMode) {
+      const splitTotal = splitPayment.cash + splitPayment.bank + splitPayment.card + splitPayment.momo;
+      if (splitTotal < netPayable) {
+        showStockWarning(
+          `Tổng thanh toán còn thiếu ${(netPayable - splitTotal).toLocaleString()}đ — vui lòng điều chỉnh trước khi thanh toán`
+        );
+        return;
+      }
+    }
+
+    // Dùng productById Map (O(1) lookup) thay vì products.find O(n) bên trong cart.find → tránh O(n²)
     const insufficientItem = allowSellOutOfStock
       ? undefined
       : cart.find(item => {
-          const product = products.find(p => p.id === item.productId);
+          const product = productById.get(item.productId);
           return !product || product.stock < item.quantity;
         });
 
     if (insufficientItem) {
-      const product = products.find(p => p.id === insufficientItem.productId);
+      const product = productById.get(insufficientItem.productId);
       showStockWarning(
         `${insufficientItem.name} — không đủ hàng để thanh toán (tồn: ${product?.stock ?? 0}, cần: ${insufficientItem.quantity})`
       );
@@ -563,28 +725,36 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
     setIsCheckoutLocked(true);
     const orderId = generateId();
-    const orderCode = `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString().slice(-6)}`;
+    const orderCode = `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+    const cartWithSalesperson = withDefaultSalesperson(cart, mode === 'return' ? 'exchange' : 'sale');
 
     if (mode === 'return') {
+      const returnedItems = returnCart.map(item => ({ ...item, lineType: 'return' as const }));
       const returnOrder: POSOrder = {
         id: orderId,
         orderCode,
         date: new Date().toISOString(),
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name,
-        items: returnCart,
+        items: [...returnedItems, ...cartWithSalesperson],
         totalAmount: totalReturnBeforeDiscount,
         discount: returnDiscount,
-        finalAmount: finalReturnAmount,
+        finalAmount: -finalReturnAmount,
         paymentMethod,
-        staffId: getCurrentStaffId(),
+        staffId: currentStaffId,
+        staffName: defaultSalespersonName,
+        createdBy: currentStaffId,
+        channel: 'direct',
+        channelName: 'Bán trực tiếp',
+        status: 'completed',
         pointsEarned: 0,
         notes: orderNote,
         isReturn: true,
+        refundAmount: amountToPayCustomer, // tự tính: > 0 → hoàn tiền, 0 → đổi hàng
       };
 
       const returnedByProduct = new Map(returnCart.map(item => [item.productId, item.quantity]));
-      const exchangedByProduct = new Map(cart.map(item => [item.productId, item.quantity]));
+      const exchangedByProduct = new Map(cartWithSalesperson.map(item => [item.productId, item.quantity]));
       const updatedProducts = products.map(product => {
         const returnedQty = returnedByProduct.get(product.id) || 0;
         const exchangedQty = exchangedByProduct.get(product.id) || 0;
@@ -593,7 +763,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       });
 
       try {
-        await onReturnOrder(returnOrder, updatedProducts, returnCart, cart);
+        await onReturnOrder(returnOrder, updatedProducts, returnedItems, cartWithSalesperson);
         setLastOrder(returnOrder);
         if (isAutoPrintEnabled) {
           setShowReceiptModal(true);
@@ -615,18 +785,33 @@ const POSComputer: React.FC<POSComputerProps> = ({
       date: new Date().toISOString(),
       customerId: selectedCustomer?.id,
       customerName: selectedCustomer?.name,
-      items: cart,
+      items: cartWithSalesperson,
       totalAmount: totalBeforeDiscount,
       discount: totalDiscount,
       finalAmount: netPayable,
       paymentMethod: paymentMethod,
-      staffId: getCurrentStaffId(),
+      staffId: currentStaffId,
+      staffName: defaultSalespersonName,
+      createdBy: currentStaffId,
+      channel: 'direct',
+      channelName: 'Bán trực tiếp',
+      status: 'completed',
       pointsEarned: pointsEarned,
       notes: orderNote,
+      // Lưu phân bổ từng phương thức thanh toán khi chia nhiều — phục vụ đối soát dòng tiền
+      ...(useSplitPayment && mode === 'sales' && {
+        splitPayments: {
+          cash: splitPayment.cash || undefined,
+          bank: splitPayment.bank || undefined,
+          card: splitPayment.card || undefined,
+          momo: splitPayment.momo || undefined,
+        },
+      }),
     };
 
+    const cartItemMap = new Map(cartWithSalesperson.map(item => [item.productId, item]));
     const updatedProducts = products.map(p => {
-      const cartItem = cart.find(item => item.productId === p.id);
+      const cartItem = cartItemMap.get(p.id);
       if (cartItem) {
         return { ...p, stock: p.stock - cartItem.quantity };
       }
@@ -722,6 +907,52 @@ const POSComputer: React.FC<POSComputerProps> = ({
     }
   };
 
+  const resetPOSSession = () => {
+    setTabs([
+      {
+        id: 'default',
+        name: 'Hóa đơn 1',
+        mode: 'sales',
+        cart: [],
+        returnCart: [],
+        selectedCustomer: null,
+        discountValue: 0,
+        discountType: 'percent',
+        paymentMethod: paymentSettings?.defaultMethod || 'Cash',
+        orderNote: '',
+        otherFees: 0,
+        cashReceived: 0,
+        isDebtMode: false,
+        returnDiscount: 0,
+        returnFee: 0,
+        returnOtherRefund: 0,
+        splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
+      },
+    ]);
+    setActiveTabId('default');
+    setSearchTerm('');
+    setCustomerSearch('');
+    setShowGridMenu(false);
+    showToast('Đã đăng xuất phiên bán hàng trên máy tính tiền', 'success');
+  };
+
+  const handleManualSync = async () => {
+    if (!onDrainOfflineQueue) {
+      showToast('Đồng bộ offline chưa được cấu hình cho màn hình này.', 'warning');
+      return;
+    }
+    if (isDraining) return;
+    const result = await onDrainOfflineQueue();
+    if (result.failed > 0) {
+      showToast(`Đồng bộ ${result.synced} thao tác, còn ${result.failed} thao tác lỗi.`, 'warning');
+      return;
+    }
+    showToast(
+      result.synced > 0 ? `Đã đồng bộ ${result.synced} thao tác offline.` : 'Không có thao tác offline cần đồng bộ.',
+      'success'
+    );
+  };
+
   const handlePrint = () => {
     if (!lastOrder) return;
 
@@ -735,7 +966,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
               margin: 0; 
               padding: 0; 
               background: white; 
-              font-family: 'Arial', sans-serif; 
+              font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; 
               color: #000; 
               line-height: 1.4; 
               font-size: 12px; 
@@ -780,7 +1011,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
               <div class="flex-between"><span>Số HD:</span><span class="bold">${lastOrder.orderCode}</span></div>
               <div class="flex-between"><span>Ngày:</span><span>${new Date(lastOrder.date).toLocaleString('vi-VN')}</span></div>
               <div class="flex-between"><span>Khách:</span><span class="bold">${lastOrder.customerName || 'KHÁCH VÃNG LAI'}</span></div>
-              <div class="flex-between"><span>Thu ngân:</span><span>${lastOrder.staffId}</span></div>
+              <div class="flex-between"><span>Thu ngân:</span><span>${employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName}</span></div>
             </div>
             
             <table>
@@ -814,10 +1045,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
             <div class="totals">
               <div class="total-row"><span>Tiền hàng:</span><span class="bold">${lastOrder.totalAmount.toLocaleString()}đ</span></div>
               ${lastOrder.discount > 0 ? `<div class="total-row"><span>Chiết khấu:</span><span class="bold">-${lastOrder.discount.toLocaleString()}đ</span></div>` : ''}
-              <div class="total-row grand-total"><span>TỔNG CỘNG:</span><span class="bold">${lastOrder.finalAmount.toLocaleString()}đ</span></div>
+              <div class="total-row grand-total"><span>TỔNG CỘNG:</span><span class="bold">${Math.abs(lastOrder.finalAmount).toLocaleString()}đ</span></div>
               <div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold uppercase">${lastOrder.paymentMethod}</span></div>
-              <div class="total-row"><span>Khách đưa:</span><span class="bold">${(cashReceived || lastOrder.finalAmount).toLocaleString()}đ</span></div>
-              ${(cashReceived || lastOrder.finalAmount) > lastOrder.finalAmount ? `<div class="total-row"><span>Tiền thừa:</span><span class="bold">${((cashReceived || lastOrder.finalAmount) - lastOrder.finalAmount).toLocaleString()}đ</span></div>` : ''}
+              <div class="total-row"><span>Khách đưa:</span><span class="bold">${(cashReceived || Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>
+              ${(cashReceived || Math.abs(lastOrder.finalAmount)) > Math.abs(lastOrder.finalAmount) ? `<div class="total-row"><span>Tiền thừa:</span><span class="bold">${((cashReceived || Math.abs(lastOrder.finalAmount)) - Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>` : ''}
             </div>
             
             <div class="center mt-4">
@@ -843,7 +1074,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       printWindow.document.write(printHtml);
       printWindow.document.close();
     } else {
-      alert('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in hóa đơn.');
+      showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in hóa đơn.', 'warning');
     }
   };
 
@@ -857,7 +1088,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       phone: newCustomerForm.phone,
       email: newCustomerForm.email || undefined,
       address:
-        [newCustomerForm.address, newCustomerForm.ward, newCustomerForm.area]
+        [newCustomerForm.address, newCustomerForm.ward, newCustomerForm.district, newCustomerForm.province]
           .filter(Boolean)
           .join(', ') || undefined,
       notes: newCustomerForm.notes || undefined,
@@ -920,7 +1151,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
           <POSReceiptModal
             order={lastOrder}
             cashReceived={cashReceived}
-            onClose={() => setShowReceiptModal(false)}
+            onClose={() => {
+              handleFinishOrder();
+              setShowCheckoutSheet(false);
+            }}
             onPrint={handlePrint}
             onFinish={() => {
               handleFinishOrder();
@@ -959,7 +1193,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         closeTab={closeTab}
         addNewTab={addNewTab}
         setShowReturnModal={setShowReturnModal}
-        offlinePendingCount={offlinePendingCount}
+        offlinePendingCount={offlineOrderPendingCount}
         isDraining={isDraining}
         isAutoPrintEnabled={isAutoPrintEnabled}
         setIsAutoPrintEnabled={setIsAutoPrintEnabled}
@@ -967,6 +1201,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         setShowGridMenu={setShowGridMenu}
         onGoToManagement={onGoToManagement}
         onViewEODReport={() => setShowEODReport(true)}
+        onManualSync={handleManualSync}
         onProcessOrders={() => {
           setShowGridMenu(false);
           setShowProcessOrdersModal(true);
@@ -983,6 +1218,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
           setShowGridMenu(false);
           setShowSelectInvoiceModal(true);
         }}
+        onShowReturnInvoice={() => {
+          setShowGridMenu(false);
+          setShowReturnModal(true);
+        }}
+        onLogout={resetPOSSession}
       />
 
       <div
@@ -999,6 +1239,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
           setShowConsultant={setShowConsultant}
           products={products}
           productGroups={productGroups}
+          employees={salespersonOptions}
+          currentStaffId={currentStaffId}
           addToCart={addToCart}
           consultantSearchRef={consultantSearchRef}
           onUpdateQuantity={updateQuantity}
@@ -1007,6 +1249,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           onSelectCartItem={idx => setSelectedCartIndex(() => idx)}
           onUpdateReturnQuantity={updateReturnQuantity}
           onRemoveFromReturnCart={removeFromReturnCart}
+          onUpdateSalesperson={updateItemSalesperson}
           onDiscountClick={(productId, price, discount, rect) => {
             setItemDiscountPopup({ productId, price, discount, rect });
           }}
@@ -1037,6 +1280,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           totalReturnBeforeDiscount={totalReturnBeforeDiscount}
           finalReturnAmount={finalReturnAmount}
           amountToPayCustomer={amountToPayCustomer}
+          customerPaysDifference={customerPaysDifference}
           currentCashReceived={currentCashReceived}
           isDebtMode={activeTab.isDebtMode}
           pointsEarned={pointsEarned}
@@ -1046,6 +1290,13 @@ const POSComputer: React.FC<POSComputerProps> = ({
           setUseSplitPayment={setUseSplitPayment}
           splitPayment={splitPayment}
           cashSuggestions={cashSuggestions}
+          staffOptions={salespersonOptions.map(employee => ({
+            id: employee.id,
+            name: employee.name,
+          }))}
+          currentStaffId={currentStaffId}
+          currentStaffName={defaultSalespersonName}
+          onCurrentStaffChange={updateCurrentStaff}
           onUpdateTab={updateActiveTab}
           onBillDiscountClick={rect => {
             setBillDiscountRect(rect);
@@ -1061,7 +1312,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         <POSReceiptModal
           order={lastOrder}
           cashReceived={cashReceived}
-          onClose={() => setShowReceiptModal(false)}
+          onClose={handleFinishOrder}
           onPrint={handlePrint}
           onFinish={handleFinishOrder}
         />
@@ -1091,11 +1342,28 @@ const POSComputer: React.FC<POSComputerProps> = ({
           customers={customers}
           onClose={() => setShowReturnModal(false)}
           onReturnFast={handleReturnFast}
+          onSelectOrder={handleSelectOrderReturn}
         />
       )}
 
       {/* End of Day Report Modal */}
-      {showEODReport && <EndOfDayReport orders={orders} onClose={() => setShowEODReport(false)} />}
+      {showEODReport && (
+        <EndOfDayReport
+          orders={orders}
+          employees={[
+            ...salespersonOptions,
+            // Thêm DEFAULT_POS_STAFF IDs chưa có trong salespersonOptions
+            ...DEFAULT_POS_STAFF
+              .filter(s => !salespersonOptions.some(o => o.id === s.id))
+              .map(s => ({ id: s.id, name: s.name, position: '', joinDate: '' })),
+            // Thêm KiotViet UUID aliases — map UUID KiotViet → cùng tên nhân viên
+            ...DEFAULT_POS_STAFF
+              .filter(s => !!s.kiotvietId)
+              .map(s => ({ id: s.kiotvietId!, name: s.name, position: '', joinDate: '' })),
+          ]}
+          onClose={() => setShowEODReport(false)}
+        />
+      )}
 
       {/* Process Orders Modal */}
       {showProcessOrdersModal && (

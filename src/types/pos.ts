@@ -69,7 +69,13 @@ export interface POSOrderItem {
   price: number;
   discount: number;
   total: number;
+  salespersonId?: string;
+  salespersonName?: string;
+  lineType?: 'sale' | 'return' | 'exchange';
 }
+
+export type POSOrderChannel = 'direct' | 'online' | 'marketplace' | 'other';
+export type POSOrderStatus = 'completed' | 'pending' | 'cancelled' | 'draft';
 
 export interface POSOrder {
   id: string;
@@ -83,6 +89,12 @@ export interface POSOrder {
   finalAmount: number;
   paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
   staffId: string;
+  createdBy?: string;
+  channel?: POSOrderChannel;
+  channelName?: string;
+  priceBookId?: string;
+  priceBookName?: string;
+  status?: POSOrderStatus;
   notes?: string;
   pointsEarned: number;
   isReturn?: boolean;
@@ -135,4 +147,14 @@ export interface POSCustomer {
   totalSpent: number;
   lastVisit?: string;
   tier: 'Standard' | 'Silver' | 'Gold' | 'Diamond';
+  debtAmount?: number;
+  status?: 'active' | 'inactive';
+  customerType?: 'individual' | 'company';
+  gender?: 'male' | 'female';
+  birthday?: string;
+  createdAt?: string;
+  createdBy?: string;
+  taxCode?: string;
+  companyName?: string;
+  facebook?: string;
 }

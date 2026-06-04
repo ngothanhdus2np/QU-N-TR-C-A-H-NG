@@ -40,7 +40,7 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ activeThemeId, onChange }
                 </span>
                 <span className="min-w-0">
                   <span className="block text-xs font-normal">{theme.name}</span>
-                  <span className="block text-[11px] leading-relaxed text-slate-400 mt-0.5">
+                  <span className="block text-xs leading-relaxed text-slate-400 mt-0.5">
                     {theme.description}
                   </span>
                 </span>

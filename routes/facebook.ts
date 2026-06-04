@@ -437,8 +437,14 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     }
   });
 
-  router.get('/api/fb/auto-post/config', (_req, res) => {
-    res.json(autoPostConfig);
+  router.get('/api/fb/auto-post/config', requireAuth, (_req, res) => {
+    const { selectedPageAccessToken, ...rest } = autoPostConfig;
+    res.json({
+      ...rest,
+      selectedPageAccessToken: selectedPageAccessToken
+        ? `***${selectedPageAccessToken.slice(-6)}`
+        : '',
+    });
   });
 
   router.post('/api/fb/auto-post/config', requireAuth, (req, res) => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { POSProduct, InventoryTransaction } from '../../types';
+import { AppDataSurgicalUpdate, POSProduct, InventoryTransaction } from '../../types';
 import { calculateNextImportPrice, generateId, getInventoryCostMethod } from '../../src/lib';
 import { getCurrentStaffId } from '../shared/staff';
 import { PurchaseDiscountType } from './GoodsPurchaseForm';
@@ -17,6 +17,7 @@ type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?:
 interface UseGoodsPurchaseArgs {
   products: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onAddTransaction?: (transaction: InventoryTransaction) => void;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
@@ -24,6 +25,7 @@ interface UseGoodsPurchaseArgs {
 export const useGoodsPurchase = ({
   products,
   onUpdateProducts,
+  onUpdateSurgical,
   onAddTransaction,
   showToast,
 }: UseGoodsPurchaseArgs) => {
@@ -118,10 +120,17 @@ export const useGoodsPurchase = ({
         ? Math.min(itemsNetTotal, Math.round((itemsNetTotal * purchaseDiscountValue) / 100))
         : Math.min(itemsNetTotal, purchaseDiscountValue);
 
+    const surgicalUpdates: AppDataSurgicalUpdate[] = [];
+
     purchaseItems.forEach(item => {
       const idx = updatedProducts.findIndex(product => product.id === item.productId);
       if (idx !== -1) {
         const product = updatedProducts[idx];
+        // Giá vốn thực mỗi đơn vị = (số lượng × giá - chiết khấu dòng) / số lượng
+        const effectiveUnitPrice =
+          item.quantity > 0
+            ? Math.max(0, (item.quantity * item.price - item.discount) / item.quantity)
+            : item.price;
         itemsForTransaction.push({
           productId: product.id,
           sku: product.sku,
@@ -133,15 +142,21 @@ export const useGoodsPurchase = ({
           discount: item.discount,
           costMethod,
         });
-        updatedProducts[idx] = {
+        const updatedProduct: POSProduct = {
           ...product,
           stock: product.stock + item.quantity,
-          importPrice: calculateNextImportPrice(product, item.quantity, item.price, costMethod),
+          importPrice: calculateNextImportPrice(product, item.quantity, effectiveUnitPrice, costMethod),
         };
+        updatedProducts[idx] = updatedProduct;
+        surgicalUpdates.push({ key: 'posProducts', item: updatedProduct });
       }
     });
 
-    onUpdateProducts(updatedProducts);
+    if (onUpdateSurgical && surgicalUpdates.length > 0) {
+      await onUpdateSurgical(surgicalUpdates);
+    } else {
+      onUpdateProducts(updatedProducts);
+    }
     const transactionId = generateId();
     if (onAddTransaction) {
       onAddTransaction({
@@ -149,6 +164,7 @@ export const useGoodsPurchase = ({
         date: new Date().toISOString(),
         type: 'Import',
         staffId: getCurrentStaffId(),
+        supplierName: purchaseSupplier.trim() || undefined,
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
         totalAmount: Math.max(0, itemsNetTotal - purchaseDiscountAmount),

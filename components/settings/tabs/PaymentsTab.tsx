@@ -235,7 +235,7 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
       >
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-[11px] text-slate-500">Phương thức mặc định</span>
+            <span className="text-xs text-slate-500">Phương thức mặc định</span>
             <select
               value={paymentForm.defaultMethod}
               onChange={e =>
@@ -322,7 +322,7 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
             <button
               type="button"
               onClick={() => setPaymentAccountTab('bank')}
-              className={`pb-3 text-sm font-normal ${paymentAccountTab === 'bank' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-600'}`}
+              className={`pb-3 text-sm font-normal ${paymentAccountTab === 'bank' ? 'border-b-2 border-indigo-600 text-blue-600' : 'text-slate-600'}`}
             >
               Tài khoản ngân hàng
               <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
@@ -332,7 +332,7 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
             <button
               type="button"
               onClick={() => setPaymentAccountTab('wallet')}
-              className={`pb-3 text-sm font-normal ${paymentAccountTab === 'wallet' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-600'}`}
+              className={`pb-3 text-sm font-normal ${paymentAccountTab === 'wallet' ? 'border-b-2 border-indigo-600 text-blue-600' : 'text-slate-600'}`}
             >
               Ví điện tử
               <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
@@ -386,7 +386,7 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
       </Section>
 
       {editingAccount && (
-        <div className="fixed inset-0 z-[1010] flex items-center justify-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between px-6 py-5">
               <h3 className="text-2xl font-bold text-slate-900">
@@ -407,14 +407,14 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
               <button
                 type="button"
                 onClick={() => setAccountModalTab('info')}
-                className={`mr-8 py-3 text-base font-normal ${accountModalTab === 'info' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-600'}`}
+                className={`mr-8 py-3 text-base font-normal ${accountModalTab === 'info' ? 'border-b-2 border-indigo-600 text-blue-600' : 'text-slate-600'}`}
               >
                 Thông tin
               </button>
               <button
                 type="button"
                 onClick={() => setAccountModalTab('scope')}
-                className={`py-3 text-base font-normal ${accountModalTab === 'scope' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-600'}`}
+                className={`py-3 text-base font-normal ${accountModalTab === 'scope' ? 'border-b-2 border-indigo-600 text-blue-600' : 'text-slate-600'}`}
               >
                 Phạm vi áp dụng
               </button>
@@ -537,7 +537,7 @@ const PaymentsTab: React.FC<PaymentsTabProps> = ({ settings, onSave }) => {
               <button
                 type="button"
                 onClick={saveEditingAccount}
-                className="rounded-xl bg-blue-600 px-6 py-3 text-base font-normal text-white hover:bg-blue-700"
+                className="rounded-xl bg-indigo-600 px-6 py-3 text-base font-normal text-white hover:bg-indigo-700"
               >
                 Lưu
               </button>

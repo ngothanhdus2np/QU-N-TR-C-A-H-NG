@@ -191,46 +191,32 @@ export function useShopeeInventoryOut({
               status = 'SHIPPING';
 
             const platformFee = cleanVNNumber(
-              obj.phicodinh ||
-                obj.commissionfee ||
-                (salePrice * (shopeeCosts?.platformFeePercent || 0)) / 100
+              obj.phicodinh || obj.commissionfee || 0
             );
             const paymentFee = cleanVNNumber(
-              obj.phithanhtoan ||
-                obj.paymentfee ||
-                (salePrice * (shopeeCosts?.paymentFeePercent || 0)) / 100
+              obj.phithanhtoan || obj.paymentfee || 0
             );
             const freeshipExtra = cleanVNNumber(
-              obj.phidichvu ||
-                obj.servicefee ||
-                obj.freeshipextra ||
-                (salePrice * (shopeeCosts?.freeshipExtraPercent || 0)) / 100
+              obj.phidichvu || obj.servicefee || obj.freeshipextra || 0
             );
             const affiliateFee = cleanVNNumber(
-              obj.phitiepthilienket ||
-                obj.phitiepthilienketshopee ||
-                obj.affiliatefee ||
-                (salePrice * (shopeeCosts?.affiliateFeePercent || 0)) / 100
+              obj.phitiepthilienket || obj.phitiepthilienketshopee || obj.affiliatefee || 0
             );
             const handlingFee = totalVariableCosts;
+            const pishipFee = 0;
+            const vatTax = 0;
             const adsCost = 0;
             const adsTax = 0;
-            const personalIncomeTax = (salePrice * (shopeeCosts?.taxPercent || 0)) / 100;
+            const personalIncomeTax = 0;
 
             const skuData = shopeeSourceData.find(s => s.sku === sku);
             const importPrice = skuData?.importPrice || 0;
+            const platformNet =
+              salePrice - platformFee - pishipFee - freeshipExtra
+              - paymentFee - vatTax - personalIncomeTax - affiliateFee;
             const netProfit =
               status === 'OK' || status === 'SHIPPING'
-                ? salePrice -
-                  platformFee -
-                  paymentFee -
-                  freeshipExtra -
-                  affiliateFee -
-                  handlingFee -
-                  adsCost -
-                  adsTax -
-                  personalIncomeTax -
-                  importPrice
+                ? platformNet - adsCost - adsTax - handlingFee - importPrice
                 : 0;
 
             const customerPaid = cleanVNNumber(
@@ -248,7 +234,7 @@ export function useShopeeInventoryOut({
               trackingNumber,
               sku,
               productName,
-              platform: 'Shopee 2',
+              platform: (String(obj.nentang || obj.platform || 'Shopee 2').trim()) as 'Shopee 1' | 'Shopee 2',
               quantity,
               salePrice,
               customerPaid,
@@ -257,6 +243,8 @@ export function useShopeeInventoryOut({
               freeshipExtra,
               affiliateFee,
               handlingFee,
+              pishipFee,
+              vatTax,
               adsCost,
               adsTax,
               personalIncomeTax,
@@ -326,13 +314,12 @@ export function useShopeeInventoryOut({
     if (recordsForDate.length === 0) return;
 
     const adsPerOrder = totalAds / recordsForDate.length;
-    const adsTaxPercent = shopeeCosts?.adsTaxPercent || 0;
 
     const newList = shopeeInventoryOut.map(r => {
       if (r.date === date) {
-        const adsTax = (adsPerOrder * adsTaxPercent) / 100;
+        const adsTax = 0;
         const skuData = shopeeSourceData.find(s => s.sku === r.sku);
-        const importPrice = skuData?.importPrice || 0;
+        const importPrice = (skuData?.importPrice || 0) * (r.quantity || 1);
         const netProfit =
           r.salePrice -
           r.platformFee -
@@ -342,7 +329,6 @@ export function useShopeeInventoryOut({
           r.handlingFee -
           adsPerOrder -
           adsTax -
-          r.personalIncomeTax -
           importPrice;
         return { ...r, adsCost: adsPerOrder, adsTax, netProfit };
       }
@@ -372,20 +358,15 @@ export function useShopeeInventoryOut({
       (editingInventoryOutId ? 0 : 1);
     const adsCost =
       dailyTotalAds > 0 ? dailyTotalAds / ordersToday : Number(inventoryOutForm.adsCost) || 0;
-    const adsTax = (adsCost * (shopeeCosts?.adsTaxPercent || 0)) / 100;
-    const personalIncomeTax = (salePrice * (shopeeCosts?.taxPercent || 0)) / 100;
+    const adsTax = 0;
+    const personalIncomeTax = 0;
 
+    const quantity = Number(inventoryOutForm.quantity) || 1;
+    const platformNet2 =
+      salePrice - platformFee - freeshipExtra - paymentFee - affiliateFee;
     const netProfit =
-      salePrice -
-      platformFee -
-      paymentFee -
-      freeshipExtra -
-      affiliateFee -
-      handlingFee -
-      adsCost -
-      adsTax -
-      personalIncomeTax -
-      (skuData?.importPrice || 0);
+      platformNet2 - adsCost - adsTax - handlingFee
+      - (skuData?.importPrice || 0) * quantity;
 
     const newRecord: ShopeeInventoryOutRecord = {
       id: editingInventoryOutId || generateId(),
@@ -403,6 +384,8 @@ export function useShopeeInventoryOut({
       freeshipExtra,
       affiliateFee,
       handlingFee,
+      pishipFee: 0,
+      vatTax: 0,
       adsCost,
       adsTax,
       personalIncomeTax,
@@ -419,7 +402,6 @@ export function useShopeeInventoryOut({
     if (onUpdateSurgical) {
       if (dailyTotalAds > 0) {
         const adsPerOrder = dailyTotalAds / ordersToday;
-        const adsTaxPercent = shopeeCosts?.adsTaxPercent || 0;
 
         let workingList = [...shopeeInventoryOut];
         if (editingInventoryOutId) {
@@ -434,7 +416,7 @@ export function useShopeeInventoryOut({
           .map(r => {
             const sData = shopeeSourceData.find(s => s.sku === r.sku);
             const importPrice = sData?.importPrice || 0;
-            const newAdsTax = (adsPerOrder * adsTaxPercent) / 100;
+            const newAdsTax = 0;
             const newNetProfit =
               r.salePrice -
               r.platformFee -
@@ -444,7 +426,6 @@ export function useShopeeInventoryOut({
               r.handlingFee -
               adsPerOrder -
               newAdsTax -
-              r.personalIncomeTax -
               importPrice;
             return {
               key: 'shopeeInventoryOut' as const,
@@ -522,6 +503,7 @@ export function useShopeeInventoryOut({
     await onUpdateShopeeInventoryOut([]);
     setClearAllConfirm(false);
   };
+
 
   const handleUpdateShopeeCostConfig = (updates: Partial<ShopeeCostConfig>) => {
     if (!shopeeCosts || !onUpdateShopeeCosts) return;

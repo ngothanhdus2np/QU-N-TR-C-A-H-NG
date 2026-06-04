@@ -37,15 +37,15 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
   onPrint, 
   onFinish 
 }) => (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-modal flex items-center justify-center p-4">
     <div className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-500 flex flex-col max-h-[90vh]">
       <div className="bg-slate-50 p-6 border-b border-slate-200 flex justify-between items-center shrink-0">
         <div>
-          <h3 className="font-black text-lg text-slate-900 uppercase tracking-tight flex items-center gap-2">
+          <h3 className="font-semibold text-lg text-slate-900 uppercase tracking-tight flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-amber-500" />
             Phiếu đổi hàng
           </h3>
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-[0.2em] mt-1">
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-[0.2em] mt-1">
             {order.orderCode} • {new Date(order.date).toLocaleString('vi-VN')}
           </p>
         </div>
@@ -60,7 +60,7 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
       <div className="flex-1 overflow-y-auto p-8 no-scrollbar print-area">
         {/* Receipt Header */}
         <div className="text-center mb-8 border-b-2 border-dashed border-slate-200 pb-6">
-          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">CFO BRAIN PROFESSIONAL</h1>
+          <h1 className="text-2xl font-semibold text-slate-900 uppercase tracking-tighter">CFO BRAIN PROFESSIONAL</h1>
           <p className="text-xs font-normal text-slate-500 mt-2">123 Đường Công Nghệ, Quận 1, TP. HCM</p>
           <p className="text-xs font-normal text-slate-500">Hotline: 1900 1234</p>
         </div>
@@ -85,15 +85,15 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <div className="h-px flex-1 bg-slate-200"></div>
-            <h4 className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Hàng trả lại</h4>
+            <h4 className="text-2xs font-semibold text-rose-500 uppercase tracking-[0.2em]">Hàng trả lại</h4>
             <div className="h-px flex-1 bg-slate-200"></div>
           </div>
           <table className="w-full text-xs">
             <thead className="border-b border-slate-100">
               <tr>
-                <th className="py-2 font-black text-slate-400 uppercase text-left">Mặt hàng</th>
-                <th className="py-2 font-black text-slate-400 uppercase text-center w-12">SL</th>
-                <th className="py-2 font-black text-slate-400 uppercase text-right w-24">Thành tiền</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-left">Mặt hàng</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-center w-12">SL</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-right w-24">Thành tiền</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -101,9 +101,9 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
                 <tr key={idx}>
                   <td className="py-3">
                     <div className="font-normal text-slate-800 uppercase">{item.name}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
+                    <div className="text-2xs text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
                     {item.reason && (
-                      <div className="text-[10px] text-rose-500 font-normal italic mt-1">Lý do: {item.reason}</div>
+                      <div className="text-2xs text-rose-500 font-normal italic mt-1">Lý do: {item.reason}</div>
                     )}
                   </td>
                   <td className="py-3 text-center font-normal text-slate-800">{item.quantity}</td>
@@ -122,15 +122,15 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <div className="h-px flex-1 bg-slate-200"></div>
-            <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">Hàng mới</h4>
+            <h4 className="text-2xs font-semibold text-emerald-500 uppercase tracking-[0.2em]">Hàng mới</h4>
             <div className="h-px flex-1 bg-slate-200"></div>
           </div>
           <table className="w-full text-xs">
             <thead className="border-b border-slate-100">
               <tr>
-                <th className="py-2 font-black text-slate-400 uppercase text-left">Mặt hàng</th>
-                <th className="py-2 font-black text-slate-400 uppercase text-center w-12">SL</th>
-                <th className="py-2 font-black text-slate-400 uppercase text-right w-24">Thành tiền</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-left">Mặt hàng</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-center w-12">SL</th>
+                <th className="py-2 font-semibold text-slate-400 uppercase text-right w-24">Thành tiền</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -138,7 +138,7 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
                 <tr key={idx}>
                   <td className="py-3">
                     <div className="font-normal text-slate-800 uppercase">{item.name}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
+                    <div className="text-2xs text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
                   </td>
                   <td className="py-3 text-center font-normal text-slate-800">{item.quantity}</td>
                   <td className="py-3 text-right font-normal text-emerald-600">{item.total.toLocaleString()}đ</td>
@@ -172,7 +172,7 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
           )}
           {order.notes && (
             <div className="mt-4 p-3 bg-amber-50 rounded-xl">
-              <p className="text-[10px] font-normal text-slate-400 uppercase tracking-wider mb-1">Ghi chú:</p>
+              <p className="text-2xs font-normal text-slate-400 uppercase tracking-wider mb-1">Ghi chú:</p>
               <p className="text-xs font-normal text-slate-700">{order.notes}</p>
             </div>
           )}
@@ -180,7 +180,7 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
 
         {/* Footer Note */}
         <div className="text-center mt-12 mb-4 italic">
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">Cảm ơn quý khách và hẹn gặp lại!</p>
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest">Cảm ơn quý khách và hẹn gặp lại!</p>
           <p className="text-[9px] font-normal text-slate-300 uppercase tracking-widest mt-2">
             Vui lòng giữ phiếu này để đổi trả trong vòng 7 ngày
           </p>
@@ -190,14 +190,14 @@ const POSExchangeReceiptModal: React.FC<POSExchangeReceiptModalProps> = ({
       <div className="p-8 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-4 shrink-0">
         <button
           onClick={onPrint}
-          className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-4 rounded-[1.5rem] font-normal uppercase text-[10px] tracking-[0.2em] shadow-sm hover:border-indigo-400 hover:text-indigo-600 active:scale-95 transition-all"
+          className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-4 rounded-[1.5rem] font-normal uppercase text-2xs tracking-[0.2em] shadow-sm hover:border-indigo-400 hover:text-indigo-600 active:scale-95 transition-all"
         >
           <Printer className="h-4 w-4" />
           In phiếu
         </button>
         <button
           onClick={onFinish}
-          className="bg-slate-950 text-white py-4 rounded-[1.5rem] font-normal uppercase text-[10px] tracking-[0.2em] shadow-2xl shadow-slate-950/20 active:scale-95 transition-all hover:bg-indigo-600"
+          className="bg-slate-950 text-white py-4 rounded-[1.5rem] font-normal uppercase text-2xs tracking-[0.2em] shadow-2xl shadow-slate-950/20 active:scale-95 transition-all hover:bg-indigo-600"
         >
           Hoàn tất
         </button>

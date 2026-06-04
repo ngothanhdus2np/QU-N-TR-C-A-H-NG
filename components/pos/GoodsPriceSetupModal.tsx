@@ -235,14 +235,14 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
 
   const content = (
     <>
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Thiết lập giá</h2>
-          <p className="text-xs text-slate-500">
-            Chỉnh giá bán chung cho hàng hóa trong bảng giá hiện tại.
-          </p>
-        </div>
-        {mode === 'modal' && (
+      {mode === 'modal' && (
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Thiết lập giá</h2>
+            <p className="text-xs text-slate-500">
+              Chỉnh giá bán chung cho hàng hóa trong bảng giá hiện tại.
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
@@ -250,12 +250,26 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
           >
             <X className="h-5 w-5" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <aside className="hidden w-72 shrink-0 flex-col rounded-lg border border-slate-200 bg-white lg:flex">
-          <div className="border-b border-slate-200 p-4">
+      <div className={`flex min-h-0 flex-1 gap-4 ${mode === 'modal' ? 'p-4' : ''}`}>
+        <aside
+          className={
+            mode === 'page'
+              ? 'w-64 shrink-0 h-full min-h-0 flex flex-col overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white shadow-sm'
+              : 'hidden w-72 shrink-0 flex-col rounded-lg border border-slate-200 bg-white lg:flex'
+          }
+        >
+          {mode === 'page' && (
+            <div className="flex min-h-[58px] flex-col justify-center border-b border-slate-100 px-4">
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-900">
+                Thiết lập giá
+              </h2>
+              <p className="text-2xs uppercase tracking-wide text-slate-400">Hàng hóa</p>
+            </div>
+          )}
+          <div className={`${mode === 'page' ? 'border-b border-slate-100' : 'border-b border-slate-200'} p-4`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900">Bảng giá</h3>
               <button
@@ -342,7 +356,13 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <main
+          className={
+            mode === 'page'
+              ? 'flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm'
+              : 'flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white'
+          }
+        >
           <div className="flex flex-col gap-3 border-b border-slate-200 p-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="relative max-w-xl flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -542,7 +562,7 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
 
       {showCreatePriceListModal && (
         <div
-          className="fixed inset-x-0 bottom-0 top-0 z-[1000] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-5"
+          className="fixed inset-x-0 bottom-0 top-0 z-modal flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-5"
           onClick={closeCreatePriceListModal}
         >
           <div
@@ -862,7 +882,7 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
 
       {showPriceInfoModal && (
         <div
-          className="fixed inset-x-0 bottom-0 top-0 z-[1000] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-5"
+          className="fixed inset-x-0 bottom-0 top-0 z-modal flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-5"
           onClick={() => setShowPriceInfoModal(false)}
         >
           <div
@@ -925,14 +945,14 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
 
   if (mode === 'page') {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
         {content}
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-950/45 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-modal bg-slate-950/45 p-4" onClick={onClose}>
       <div
         className="mx-auto flex h-[calc(100vh-2rem)] max-w-7xl flex-col overflow-hidden rounded-lg bg-slate-50 shadow-2xl"
         onClick={event => event.stopPropagation()}

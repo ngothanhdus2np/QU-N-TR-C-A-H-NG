@@ -43,7 +43,7 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
         </div>
         <div className="flex flex-col">
           <span className="text-[14px] font-normal leading-tight">Giày Dép Phúc Sang</span>
-          <div className="flex items-center gap-1 text-[12px] text-[#65676b] font-normal">
+          <div className="flex items-center gap-1 text-xs text-[#65676b] font-normal">
             <span>{post.date.split('-').reverse().join('/')}</span> • <Globe size={12}/>
           </div>
         </div>
@@ -60,7 +60,7 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
         <div className="flex flex-col items-center justify-center text-center p-10 gap-4">
           <Camera size={60} className="text-slate-200" />
           <div>
-            <span className="text-[10px] font-normal text-indigo-600 uppercase tracking-widest mb-1 block">Gợi ý chụp ảnh</span>
+            <span className="text-2xs font-normal text-indigo-600 uppercase tracking-widest mb-1 block">Gợi ý chụp ảnh</span>
             <p className="text-xs text-slate-400 italic font-normal leading-relaxed max-w-[280px]">
               {post.imageInstruction}
             </p>

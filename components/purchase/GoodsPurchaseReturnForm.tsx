@@ -11,7 +11,7 @@ import {
   Upload,
   User,
 } from 'lucide-react';
-import { InventoryTransaction, POSProduct } from '../../types';
+import { InventoryTransaction, POSProduct, Supplier } from '../../types';
 import { PurchaseDiscountType, PurchaseItem } from '../pos/GoodsPurchaseForm';
 
 interface GoodsPurchaseReturnFormProps {
@@ -31,6 +31,7 @@ interface GoodsPurchaseReturnFormProps {
   applySupplierDebt: boolean;
   setApplySupplierDebt: (value: boolean) => void;
   products: POSProduct[];
+  suppliers: Supplier[];
   transactions: InventoryTransaction[];
   onClickFileInput: () => void;
   onOpenQuickAddProduct: () => void;
@@ -64,6 +65,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
   applySupplierDebt,
   setApplySupplierDebt,
   products,
+  suppliers,
   onClickFileInput,
   onOpenQuickAddProduct,
   onOpenQuickAddSupplier,
@@ -77,6 +79,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
 }) => {
   const [searchFocused, setSearchFocused] = useState(false);
   const [returnSearchTerm, setReturnSearchTerm] = useState('');
+  const [supplierSearchFocused, setSupplierSearchFocused] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const goodsTotal = returnItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
   const lineDiscountTotal = returnItems.reduce((sum, item) => sum + item.discount, 0);
@@ -87,6 +90,24 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
       : Math.min(beforeBillDiscount, returnDiscountValue);
   const supplierMustPay = Math.max(0, beforeBillDiscount - billDiscountAmount);
   const remainingDebt = Math.max(0, supplierMustPay - supplierPaidAmount);
+  const supplierSearchTerm = returnSupplier.trim().toLowerCase();
+  const filteredSuppliers = supplierSearchTerm
+    ? suppliers
+        .filter(supplier => {
+          const haystack = [
+            supplier.name,
+            supplier.code,
+            supplier.phone,
+            supplier.email,
+            supplier.group,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          return haystack.includes(supplierSearchTerm);
+        })
+        .slice(0, 8)
+    : suppliers.filter(supplier => supplier.status !== 'inactive').slice(0, 8);
 
   if (!showReturnForm) return null;
 
@@ -101,7 +122,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="text-xl font-black text-slate-900 whitespace-nowrap">Trả hàng nhập</h1>
+            <h1 className="text-xl font-semibold text-slate-900 whitespace-nowrap">Trả hàng nhập</h1>
 
             <div className="flex-1 max-w-2xl relative">
               <div
@@ -164,26 +185,26 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
             <table className="w-full border-collapse text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="border-b border-slate-200">
-                  <th className="px-3 py-3 text-center font-normal text-[11px] uppercase tracking-widest text-slate-700 w-10 border-r border-slate-100"></th>
-                  <th className="px-3 py-3 text-left font-normal text-[11px] uppercase tracking-widest text-slate-700 w-12 border-r border-slate-100">
+                  <th className="px-3 py-3 text-center font-normal text-xs uppercase tracking-widest text-slate-700 w-10 border-r border-slate-100"></th>
+                  <th className="px-3 py-3 text-left font-normal text-xs uppercase tracking-widest text-slate-700 w-12 border-r border-slate-100">
                     STT
                   </th>
-                  <th className="px-3 py-3 text-left font-normal text-[11px] uppercase tracking-widest text-slate-700 w-32 border-r border-slate-100">
+                  <th className="px-3 py-3 text-left font-normal text-xs uppercase tracking-widest text-slate-700 w-32 border-r border-slate-100">
                     Mã hàng
                   </th>
-                  <th className="px-3 py-3 text-left font-normal text-[11px] uppercase tracking-widest text-slate-700 border-r border-slate-100">
+                  <th className="px-3 py-3 text-left font-normal text-xs uppercase tracking-widest text-slate-700 border-r border-slate-100">
                     Tên hàng
                   </th>
-                  <th className="px-3 py-3 text-left font-normal text-[11px] uppercase tracking-widest text-slate-700 w-24 border-r border-slate-100">
+                  <th className="px-3 py-3 text-left font-normal text-xs uppercase tracking-widest text-slate-700 w-24 border-r border-slate-100">
                     ĐVT
                   </th>
-                  <th className="px-3 py-3 text-center font-normal text-[11px] uppercase tracking-widest text-slate-700 w-28 border-r border-slate-100">
+                  <th className="px-3 py-3 text-center font-normal text-xs uppercase tracking-widest text-slate-700 w-28 border-r border-slate-100">
                     Số lượng
                   </th>
-                  <th className="px-3 py-3 text-right font-normal text-[11px] uppercase tracking-widest text-slate-700 w-32 border-r border-slate-100">
+                  <th className="px-3 py-3 text-right font-normal text-xs uppercase tracking-widest text-slate-700 w-32 border-r border-slate-100">
                     Giá nhập
                   </th>
-                  <th className="px-3 py-3 text-right font-normal text-[11px] uppercase tracking-widest text-slate-700 w-32">
+                  <th className="px-3 py-3 text-right font-normal text-xs uppercase tracking-widest text-slate-700 w-32">
                     Thành tiền
                   </th>
                 </tr>
@@ -193,7 +214,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                   <tr>
                     <td colSpan={8} className="py-20 text-center">
                       <div className="flex flex-col items-center justify-center space-y-4">
-                        <h3 className="text-xl font-black text-slate-800">Thêm sản phẩm từ file excel</h3>
+                        <h3 className="text-xl font-semibold text-slate-800">Thêm sản phẩm từ file excel</h3>
                         <p className="text-sm text-slate-500">
                           (Tải về file mẫu:{' '}
                           <span
@@ -236,7 +257,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                         <td className="px-3 py-2 font-normal text-slate-800 border-r border-slate-50">
                           {item.name}
                           {product && (
-                            <div className="text-[11px] text-slate-400 mt-0.5">Tồn hiện tại: {product.stock}</div>
+                            <div className="text-xs text-slate-400 mt-0.5">Tồn hiện tại: {product.stock}</div>
                           )}
                         </td>
                         <td className="px-3 py-2 border-r border-slate-50">{product?.unit || 'Cái'}</td>
@@ -338,7 +359,34 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                     placeholder="Tìm nhà cung cấp"
                     value={returnSupplier}
                     onChange={event => setReturnSupplier(event.target.value)}
+                    onFocus={() => setSupplierSearchFocused(true)}
+                    onBlur={() => setSupplierSearchFocused(false)}
                   />
+                  {supplierSearchFocused && filteredSuppliers.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                      {filteredSuppliers.map(supplier => (
+                        <button
+                          key={supplier.id}
+                          type="button"
+                          onMouseDown={event => {
+                            event.preventDefault();
+                            setReturnSupplier(supplier.name);
+                            setSupplierSearchFocused(false);
+                          }}
+                          className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-indigo-50"
+                        >
+                          <span className="text-sm font-normal text-slate-800">
+                            {supplier.name}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {[supplier.code, supplier.phone, supplier.group]
+                              .filter(Boolean)
+                              .join(' • ') || 'Nhà cung cấp'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={onOpenQuickAddSupplier}

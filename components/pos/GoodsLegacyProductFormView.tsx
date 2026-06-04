@@ -18,6 +18,7 @@ interface GoodsLegacyProductFormViewProps {
   onBack: () => void;
   onSave: () => void;
   onAddConversionUnit: () => void;
+  allProducts?: POSProduct[];
 }
 
 const TABS: { id: ProductFormTab; label: string; icon: React.ComponentType<any> }[] = [
@@ -38,8 +39,14 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
   setActiveFormTab,
   onBack,
   onSave,
-  onAddConversionUnit
-}) => (
+  onAddConversionUnit,
+  allProducts = [],
+}) => {
+  const relatedProducts = allProducts.filter(
+    p => p.categoryId && p.categoryId === formData.categoryId && p.id !== editingProduct?.id
+  ).slice(0, 20);
+
+  return (
   <div className="h-full flex flex-col bg-white">
     <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
       <div className="flex items-center justify-between">
@@ -164,7 +171,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                     onChange={e => setFormData({ ...formData, sku: e.target.value })}
                     placeholder="Tự động"
                   />
-                  <p className="mt-1 text-[11px] font-normal text-slate-400">
+                  <p className="mt-1 text-xs font-normal text-slate-400">
                     Để trống hoặc nhập “Tự động” để hệ thống cấp mã theo chuẩn SP000001.
                   </p>
                 </div>
@@ -331,14 +338,54 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
         </div>
       )}
 
-      {(activeFormTab === 'related' || activeFormTab === 'channels') && (
+      {activeFormTab === 'related' && (
         <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-lg border border-slate-200 p-6 text-center py-12">
-            <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">Tính năng đang phát triển</p>
+          <div className="bg-white rounded-lg border border-slate-200">
+            <div className="px-5 py-3 border-b border-slate-100">
+              <p className="text-sm text-slate-600">
+                Hàng hóa cùng danh mục{formData.categoryPath ? ` "${formData.categoryPath}"` : ''}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">{relatedProducts.length} sản phẩm</p>
+            </div>
+            {relatedProducts.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm">
+                <Package className="h-8 w-8 mx-auto mb-2 text-slate-200" />
+                Không có sản phẩm cùng danh mục
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {relatedProducts.map(p => (
+                  <div key={p.id} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-800 truncate">{p.name}</p>
+                      <p className="text-xs text-slate-400">{p.sku}</p>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      <p className="text-sm text-slate-900">{p.salePrice.toLocaleString('vi-VN')}đ</p>
+                      <p className="text-xs text-slate-400">Tồn: {p.stock}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeFormTab === 'channels' && (
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Package className="h-6 w-6 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-slate-600 mb-1">Liên kết kênh bán</p>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto">
+              Kết nối sản phẩm với Shopee, Lazada, TikTok Shop và các kênh bán khác. Tính năng sẽ sớm ra mắt.
+            </p>
           </div>
         </div>
       )}
     </div>
   </div>
-);
+  );
+};

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, FileDown, Star, Trash2, FileText, Eye, Upload } from 'lucide-react';
+import { Plus, FileDown, Star, Trash2, FileText, Upload } from 'lucide-react';
 import {
   ListPageLayout,
   ListPageToolbar,
@@ -15,14 +15,19 @@ import {
 } from '../shared';
 import { Supplier } from '../../types';
 import { useToast } from '../ui/Toast';
+import { Modal } from '../shared/ui/Modal';
 
 interface SupplierListPageProps {
   suppliers: Supplier[];
+  viewingSupplier?: Supplier | null;
+  expandedRowContent?: React.ReactNode;
   onCreateSupplier: () => void;
   onViewDetail: (supplier: Supplier) => void;
   onDeleteSupplier: (id: string) => void | Promise<void>;
+  onBulkDeleteSuppliers: (ids: string[]) => Promise<void>;
   onImportFile: () => void;
   onExportSuppliers: (suppliers: Supplier[]) => void;
+  onToggleFavorite: (supplier: Supplier) => Promise<void>;
 }
 
 type SortKey = 'code' | 'name' | 'totalPurchase' | 'currentDebt';
@@ -30,11 +35,15 @@ type SortDirection = 'asc' | 'desc';
 
 const SupplierListPage: React.FC<SupplierListPageProps> = ({
   suppliers,
+  viewingSupplier,
+  expandedRowContent,
   onCreateSupplier,
   onViewDetail,
   onDeleteSupplier,
+  onBulkDeleteSuppliers,
   onImportFile,
   onExportSuppliers,
+  onToggleFavorite,
 }) => {
   const { showToast } = useToast();
 
@@ -49,7 +58,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
 
   // Selection
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
-  const [starredSuppliers, setStarredSuppliers] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Filters
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
@@ -165,6 +174,10 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   }, [sortedSuppliers, currentPage, pageSize]);
 
   const totalPages = Math.ceil(sortedSuppliers.length / pageSize);
+  const totalCurrentDebt = useMemo(
+    () => sortedSuppliers.reduce((sum, supplier) => sum + (supplier.currentDebt || 0), 0),
+    [sortedSuppliers]
+  );
 
   // Handlers
   const handleSort = (key: string) => {
@@ -190,16 +203,13 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
     }
   };
 
-  const handleToggleStar = (id: string) => {
-    setStarredSuppliers(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
+  const handleToggleStar = async (supplier: Supplier) => {
+    try {
+      await onToggleFavorite(supplier);
+    } catch (err) {
+      console.error('[SupplierListPage] Toggle favorite failed', err);
+      showToast('Cập nhật đánh dấu thất bại. Vui lòng thử lại.', 'error');
+    }
   };
 
   const handleClearFilters = () => {
@@ -212,15 +222,19 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
     setCurrentPage(1);
   };
 
-  const handleBulkDelete = async () => {
-    if (confirm(`Xóa ${selectedSuppliers.length} nhà cung cấp đã chọn?`)) {
-      try {
-        await Promise.all(selectedSuppliers.map(id => onDeleteSupplier(id)));
-        setSelectedSuppliers([]);
-      } catch (err) {
-        console.error('[SupplierListPage] Bulk delete failed', err);
-        showToast('Xóa hàng loạt thất bại. Vui lòng thử lại.', 'error');
-      }
+  const handleBulkDelete = () => {
+    if (selectedSuppliers.length === 0) return;
+    setBulkDeleteOpen(true);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setBulkDeleteOpen(false);
+    try {
+      await onBulkDeleteSuppliers(selectedSuppliers);
+      setSelectedSuppliers([]);
+    } catch (err) {
+      console.error('[SupplierListPage] Bulk delete failed', err);
+      showToast('Xóa hàng loạt thất bại. Vui lòng thử lại.', 'error');
     }
   };
 
@@ -284,14 +298,14 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
             placeholder="Từ"
             value={debtRangeMin}
             onChange={e => setDebtRangeMin(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-all"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-colors"
           />
           <input
             type="number"
             placeholder="Đến"
             value={debtRangeMax}
             onChange={e => setDebtRangeMax(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-all"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-colors"
           />
         </div>
       </FilterSection>
@@ -303,14 +317,14 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
             placeholder="Từ"
             value={purchaseRangeMin}
             onChange={e => setPurchaseRangeMin(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-all"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-colors"
           />
           <input
             type="number"
             placeholder="Đến"
             value={purchaseRangeMax}
             onChange={e => setPurchaseRangeMax(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-all"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 transition-colors"
           />
         </div>
       </FilterSection>
@@ -406,12 +420,12 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <button
           onClick={e => {
             e.stopPropagation();
-            handleToggleStar(supplier.id);
+            handleToggleStar(supplier);
           }}
           className="p-1 hover:bg-slate-100 rounded transition-colors"
         >
           <Star
-            className={`h-4 w-4 ${starredSuppliers.has(supplier.id) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+            className={`h-4 w-4 ${supplier.isFavorite ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
           />
         </button>
       ),
@@ -435,7 +449,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <div>
           <div className="font-normal text-slate-800 text-sm">{supplier.name}</div>
           {supplier.group && (
-            <div className="text-[10px] text-slate-400 mt-0.5">{supplier.group}</div>
+            <div className="text-2xs text-slate-400 mt-0.5">{supplier.group}</div>
           )}
         </div>
       ),
@@ -495,24 +509,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         />
       ),
     },
-    {
-      key: 'actions',
-      label: '',
-      width: 'w-12',
-      align: 'center',
-      render: supplier => (
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            onViewDetail(supplier);
-          }}
-          className="p-2 hover:bg-indigo-50 rounded-lg transition-colors text-indigo-600"
-          title="Xem chi tiết"
-        >
-          <Eye className="h-4 w-4" />
-        </button>
-      ),
-    },
   ];
 
   // Pagination
@@ -532,39 +528,85 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   );
 
   return (
-    <div className="h-full">
-      <ListPageLayout
-        sidebarTitle="Nhà cung cấp"
-        sidebar={sidebar}
-        toolbar={toolbar}
-        pagination={pagination}
-        hasActiveFilters={hasActiveFilters}
-        onClearFilters={handleClearFilters}
+    <>
+      <div className="h-full">
+        <ListPageLayout
+          sidebarTitle="Nhà cung cấp"
+          sidebar={sidebar}
+          toolbar={toolbar}
+          pagination={pagination}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={handleClearFilters}
+        >
+          <ListPageTable
+            columns={columns}
+            data={paginatedSuppliers}
+            keyExtractor={supplier => supplier.id}
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onRowClick={supplier => onViewDetail(supplier)}
+            expandedRowId={viewingSupplier?.id}
+            expandedRowContent={expandedRowContent}
+            summaryCells={{
+              name: (
+                <span className="text-xs font-semibold uppercase tracking-widest text-indigo-700">
+                  Tổng cộng
+                </span>
+              ),
+              currentDebt: (
+                <span
+                  className={`text-sm font-semibold ${
+                    totalCurrentDebt > 0 ? 'text-rose-600' : 'text-slate-400'
+                  }`}
+                >
+                  {totalCurrentDebt > 0 ? `${totalCurrentDebt.toLocaleString('vi-VN')}đ` : '—'}
+                </span>
+              ),
+            }}
+            emptyState={
+              <div className="flex flex-col items-center justify-center space-y-4 py-20">
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center">
+                  <FileText className="w-10 h-10 text-slate-300" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-normal text-slate-800">Chưa có nhà cung cấp</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Bấm nút "Nhà cung cấp" để thêm nhà cung cấp mới
+                  </p>
+                </div>
+              </div>
+            }
+          />
+        </ListPageLayout>
+      </div>
+
+      <Modal
+        isOpen={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        title="Xác nhận xóa"
+        size="sm"
       >
-        <ListPageTable
-          columns={columns}
-          data={paginatedSuppliers}
-          keyExtractor={supplier => supplier.id}
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          onRowClick={supplier => onViewDetail(supplier)}
-          emptyState={
-            <div className="flex flex-col items-center justify-center space-y-4 py-20">
-              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center">
-                <FileText className="w-10 h-10 text-slate-300" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-normal text-slate-800">Chưa có nhà cung cấp</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Bấm nút "Nhà cung cấp" để thêm nhà cung cấp mới
-                </p>
-              </div>
-            </div>
-          }
-        />
-      </ListPageLayout>
-    </div>
+        <p className="text-slate-700">
+          Bạn có chắc muốn xóa{' '}
+          <span className="font-semibold">{selectedSuppliers.length} nhà cung cấp</span> đã chọn?
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => setBulkDeleteOpen(false)}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={handleConfirmBulkDelete}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+          >
+            Xóa {selectedSuppliers.length} nhà cung cấp
+          </button>
+        </div>
+      </Modal>
+    </>
   );
 };
 

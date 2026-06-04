@@ -159,7 +159,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       purchase.items.map(item => {
         const withPrice = item as typeof item & { price?: number; discount?: number };
         return {
-          'Mã phiếu': purchase.id,
+          'Mã phiếu': purchase.referenceId || purchase.id,
           'Ngày tạo': new Date(purchase.date).toLocaleString('vi-VN'),
           'Nhà cung cấp': purchase.supplierName || 'NCC vãng lai',
           'Người tạo': purchase.staffId || '',
@@ -198,6 +198,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
   const handlePrintPurchase = (transaction: InventoryTransaction) => {
     const isPurchaseReturn = transaction.type === 'PurchaseReturn';
     const title = isPurchaseReturn ? 'Phiếu trả hàng nhập' : 'Phiếu nhập hàng';
+    const documentCode = transaction.referenceId || transaction.id;
     const rows = transaction.items
       .map(item => {
         const withPrice = item as typeof item & { price?: number; discount?: number };
@@ -213,8 +214,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       .join('');
 
     printToPDF(
-      `${title} ${transaction.id}`,
-      `<h1>${title} ${transaction.id}</h1>
+      `${title} ${documentCode}`,
+      `<h1>${title} ${documentCode}</h1>
        <p class="subtitle">Ngày tạo: ${new Date(transaction.date).toLocaleString('vi-VN')} | NCC: ${transaction.supplierName || 'NCC vãng lai'} | Người tạo: ${transaction.staffId || ''}</p>
        <table>
         <thead><tr><th>SKU</th><th>Tên hàng</th><th class="text-right">SL</th><th class="text-right">Đơn giá</th><th class="text-right">Giảm</th><th class="text-right">Thành tiền</th></tr></thead>
@@ -725,11 +726,6 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       status: supplierData.status || 'active',
     };
 
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
-    } else {
-      await onUpdateData('suppliers', [...(data.suppliers || []), supplier]);
-    }
     if (quickSupplierTarget === 'return') {
       setReturnSupplier(supplier.name);
     } else {
@@ -737,6 +733,12 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     }
     setShowQuickSupplierForm(false);
     showToast('Đã thêm nhanh nhà cung cấp', 'success');
+
+    if (onUpdateSurgical) {
+      await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
+    } else {
+      await onUpdateData('suppliers', [...(data.suppliers || []), supplier]);
+    }
   };
 
   const handleCompletePurchase = async () => {
@@ -778,6 +780,19 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           };
         }),
       };
+      const payableAmount = transaction.totalAmount || 0;
+      const debtRecord: SupplierDebtRecord | null =
+        supplier && payableAmount > 0
+          ? {
+              id: generateId(),
+              supplierId: supplier.id,
+              supplierName,
+              date: transaction.date,
+              type: 'purchase',
+              amount: payableAmount,
+              description: `Công nợ từ phiếu nhập hàng ${transaction.id}`,
+            }
+          : null;
 
       // Update product stock
       const updatedProducts = products.map(product => {
@@ -805,15 +820,28 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           await onUpdateSurgical([
             { key: 'inventoryTransactions', item: transaction },
             ...changedProducts.map(product => ({ key: 'posProducts' as const, item: product })),
+            ...(debtRecord ? [{ key: 'supplierDebts' as const, item: debtRecord }] : []),
           ]);
         } else {
           await onPushBatch?.('inventoryTransactions', [transaction]);
           await onUpdateData('posProducts', updatedProducts);
+          if (debtRecord) {
+            await onUpdateData('supplierDebts', [...(data.supplierDebts || []), debtRecord]);
+          }
         }
       } catch (err) {
         if (onUpdateSurgical) {
           await onUpdateSurgical([
             { key: 'inventoryTransactions', item: { id: transaction.id }, isDelete: true },
+            ...(debtRecord
+              ? [
+                  {
+                    key: 'supplierDebts' as const,
+                    item: { id: debtRecord.id },
+                    isDelete: true,
+                  },
+                ]
+              : []),
             ...purchaseItems
               .map(item => products.find(product => product.id === item.productId))
               .filter((product): product is POSProduct => Boolean(product))
@@ -1022,6 +1050,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             setPurchaseDiscountValue={setPurchaseDiscountValue}
             setPurchaseDiscountType={setPurchaseDiscountType}
             products={data.posProducts || []}
+            suppliers={data.suppliers || []}
             transactions={data.inventoryTransactions || []}
             onClickFileInput={() => purchaseFileInputRef.current?.click()}
             onOpenQuickAddProduct={() => handleQuickAddProduct('purchase')}
@@ -1057,6 +1086,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             applySupplierDebt={returnApplySupplierDebt}
             setApplySupplierDebt={setReturnApplySupplierDebt}
             products={data.posProducts || []}
+            suppliers={data.suppliers || []}
             transactions={data.inventoryTransactions || []}
             onClickFileInput={() => returnFileInputRef.current?.click()}
             onOpenQuickAddProduct={() => handleQuickAddProduct('return')}

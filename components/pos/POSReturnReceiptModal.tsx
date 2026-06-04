@@ -66,15 +66,15 @@ const POSReturnReceiptModal: React.FC<POSReturnReceiptModalProps> = ({
     <div className="mb-6">
       <div className="flex items-center gap-2 mb-3">
         <div className="h-px flex-1 bg-slate-200"></div>
-        <h4 className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Hàng trả lại</h4>
+        <h4 className="text-2xs font-semibold text-rose-500 uppercase tracking-[0.2em]">Hàng trả lại</h4>
         <div className="h-px flex-1 bg-slate-200"></div>
       </div>
       <table className="w-full text-xs">
         <thead className="border-b border-slate-100">
           <tr>
-            <th className="py-2 font-black text-slate-400 uppercase text-left">Mặt hàng</th>
-            <th className="py-2 font-black text-slate-400 uppercase text-center w-12">SL</th>
-            <th className="py-2 font-black text-slate-400 uppercase text-right w-24">Thành tiền</th>
+            <th className="py-2 font-semibold text-slate-400 uppercase text-left">Mặt hàng</th>
+            <th className="py-2 font-semibold text-slate-400 uppercase text-center w-12">SL</th>
+            <th className="py-2 font-semibold text-slate-400 uppercase text-right w-24">Thành tiền</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
@@ -82,9 +82,9 @@ const POSReturnReceiptModal: React.FC<POSReturnReceiptModalProps> = ({
             <tr key={idx}>
               <td className="py-3">
                 <div className="font-normal text-slate-800 uppercase">{item.name}</div>
-                <div className="text-[10px] text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
+                <div className="text-2xs text-slate-400 font-normal">{item.price.toLocaleString()}đ</div>
                 {item.reason && (
-                  <div className="text-[10px] text-rose-500 font-normal italic mt-1">Lý do: {item.reason}</div>
+                  <div className="text-2xs text-rose-500 font-normal italic mt-1">Lý do: {item.reason}</div>
                 )}
               </td>
               <td className="py-3 text-center font-normal text-slate-800">{item.quantity}</td>
@@ -111,7 +111,7 @@ const POSReturnReceiptModal: React.FC<POSReturnReceiptModalProps> = ({
       )}
       {order.notes && (
         <div className="mt-4 p-3 bg-amber-50 rounded-xl">
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-wider mb-1">Ghi chú:</p>
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-wider mb-1">Ghi chú:</p>
           <p className="text-xs font-normal text-slate-700">{order.notes}</p>
         </div>
       )}

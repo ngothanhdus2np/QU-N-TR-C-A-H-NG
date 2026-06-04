@@ -1,13 +1,14 @@
 import React from 'react';
 import { Package, Plus } from 'lucide-react';
-import { InventoryTransaction, POSProduct } from '../../types';
-import { GoodsProductDetailPanel } from './GoodsProductDetailPanel';
+import { InventoryTransaction, POSOrder, POSProduct } from '../../types';
+import { DetailTab, GoodsProductDetailPanel } from './GoodsProductDetailPanel';
 import { ProductRow, VariantRow } from './GoodsProductRow';
 
 interface GoodsProductTableBodyProps {
   currentProducts: POSProduct[];
   variantsByParentId: Map<string, POSProduct[]>;
   transactions?: InventoryTransaction[];
+  orders?: POSOrder[];
   colCount: number;
   selectedIdSet: Set<string>;
   favoriteIdSet: Set<string>;
@@ -36,6 +37,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
   currentProducts,
   variantsByParentId,
   transactions,
+  orders,
   colCount,
   selectedIdSet,
   favoriteIdSet,
@@ -59,6 +61,10 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
   onPurchaseProduct,
   onStopBusiness,
 }) => {
+  const detailActiveTab: DetailTab = activeFormTab === 'related'
+    ? 'channels'
+    : (activeFormTab as DetailTab);
+
   return (
     <tbody className="divide-y divide-slate-50">
       {currentProducts.length === 0 ? (
@@ -89,6 +95,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                 isExpanded={isExpanded}
                 onToggleExpand={onToggleExpanded}
                 visibleColumns={visibleColumns}
+                variants={childVariants}
               />
 
               {isExpanded &&
@@ -103,6 +110,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                       onEdit={onOpenEditor}
                       onView={onToggleView}
                       visibleColumns={visibleColumns}
+                      inGroup
                     />
 
                     {viewingProduct?.id === variant.id && (
@@ -111,7 +119,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                           <GoodsProductDetailPanel
                             product={viewingProduct}
                             transactions={transactions}
-                            activeTab={activeFormTab as any}
+                            orders={orders}
+                            activeTab={detailActiveTab}
                             onTabChange={tab => onChangeDetailTab(tab)}
                             deleteConfirmText="Bạn có chắc muốn xóa biến thể này?"
                             onDelete={() => onDeleteViewed(viewingProduct.id)}
@@ -129,8 +138,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                 ))}
 
               {isExpanded && isParentProduct && (
-                <tr className="bg-slate-50/40">
-                  <td colSpan={colCount} className="px-4 py-3 text-right border-b border-slate-100">
+                <tr className="bg-indigo-50/40">
+                  <td colSpan={colCount} className="px-4 py-3 text-right border-b-2 border-l-2 border-r-2 border-indigo-200">
                     <button
                       onClick={e => {
                         e.stopPropagation();
@@ -151,7 +160,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                     <GoodsProductDetailPanel
                       product={viewingProduct}
                       transactions={transactions}
-                      activeTab={activeFormTab as any}
+                      orders={orders}
+                      activeTab={detailActiveTab}
                       onTabChange={tab => onChangeDetailTab(tab)}
                       deleteConfirmText="Bạn có chắc muốn xóa sản phẩm này?"
                       showSupplierActions

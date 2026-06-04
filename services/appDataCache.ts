@@ -91,6 +91,27 @@ class AppDataCacheService {
   async saveBrandProfile(profile: BrandProfile): Promise<void> {
     await this.putRecord(BRAND_KEY, profile);
   }
+
+  async clearDataKeys(keys: (keyof AppData)[]): Promise<void> {
+    // Clear from IndexedDB
+    const snapshot = await this.getDataSnapshot();
+    if (snapshot) {
+      const updated = { ...snapshot };
+      for (const k of keys) {
+        (updated as Record<string, unknown>)[k] = [];
+      }
+      await this.saveDataSnapshot(updated as AppData);
+    }
+    // Clear from localStorage
+    try {
+      const raw = localStorage.getItem('cfo_brain_local_data');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        for (const k of keys) delete parsed[k];
+        localStorage.setItem('cfo_brain_local_data', JSON.stringify(parsed));
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 export const appDataCache = new AppDataCacheService();

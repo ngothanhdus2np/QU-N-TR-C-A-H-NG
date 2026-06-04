@@ -6,7 +6,11 @@ import {
   ViolationOccurrence,
   ViolationType,
 } from '../../types';
-import { calculateSeniority, determineCurrentPolicy } from '../../src/lib';
+import {
+  calculateSeniority,
+  determineCurrentPolicy,
+  shouldCutAttendanceAllowanceByLeave,
+} from '../../src/lib';
 
 interface BuildPayrollPayslipHtmlArgs {
   payroll: PayrollRecord;
@@ -64,7 +68,8 @@ export const buildPayrollPayslipHtml = ({
       return pStr.includes(keyword);
     });
 
-  const isAttendanceCut = checkPenalty('chuyên cần');
+  const isAttendanceCut =
+    checkPenalty('chuyên cần') || shouldCutAttendanceAllowanceByLeave(monthAttendance);
   const isCleaningCut = checkPenalty('vệ sinh');
   const isCSKHCut = checkPenalty('cskh');
   const isDinnerCut = checkPenalty('ăn tối');
@@ -247,6 +252,19 @@ export const buildPayrollPayslipHtml = ({
                   ${payroll.shortage > 0 ? `<div class="flex-between"><span>- Tiền thiếu:</span><span>${payroll.shortage.toLocaleString()}</span></div>` : ''}
                   ${payroll.advance > 0 ? `<div class="flex-between"><span>- Tạm ứng:</span><span>${payroll.advance.toLocaleString()}</span></div>` : ''}
                 </div>
+              </div>`
+                  : ''
+              }
+
+              ${
+                (payroll.carryForwardDeduction || 0) > 0
+                  ? `
+              <div style="margin-top: 5px; border-top: 1px dashed #000; padding-top: 3px;">
+                <div class="flex-between bold">
+                  <span>Trừ nợ kỳ trước:</span>
+                  <span>-${(payroll.carryForwardDeduction || 0).toLocaleString()}</span>
+                </div>
+                ${(payroll.carryForwardDebtOut || 0) > 0 ? `<div class="indent" style="font-size:9px; opacity:0.7;"><span>Còn nợ kỳ sau: ${(payroll.carryForwardDebtOut || 0).toLocaleString()}đ</span></div>` : ''}
               </div>`
                   : ''
               }

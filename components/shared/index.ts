@@ -18,3 +18,9 @@ export * from './filters';
 // Constants and utilities
 export * from './constants';
 export * from './staff';
+
+// AI
+export { AiInsightPanel } from './AiInsightPanel';
+
+// Filter pickers
+export { ProductGroupFilter } from './ProductGroupFilter';

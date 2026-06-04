@@ -1,20 +1,81 @@
 
 import React, { useState, useEffect } from 'react';
+import { CalendarDays, Facebook, FileText, Settings, Tag } from 'lucide-react';
 import { PromotionPlan, RevenueRecord, GiftTier, ExpenseRecord } from '../types';
 import { generateId } from '../src/lib';
 import PromotionAiPanel from './promotion/PromotionAiPanel';
 import PromotionLedgerTable from './promotion/PromotionLedgerTable';
 import PromotionSetupPanel from './promotion/PromotionSetupPanel';
 import PromotionSubTabNav, { PromotionSubTab } from './promotion/PromotionSubTabNav';
+import { useToast } from './ui/Toast';
 
 interface PromotionManagerProps {
   promotions: PromotionPlan[];
   revenue: RevenueRecord[];
   expenses: ExpenseRecord[];
   onUpdate: (newList: PromotionPlan[], idToRemove?: string) => void;
+  onSelectMainTab?: (tab: string) => void;
 }
 
-const PromotionManager: React.FC<PromotionManagerProps> = ({ promotions, revenue, expenses, onUpdate }) => {
+type MarketingSidebarItem = 'calendar' | 'promotions' | 'list' | 'settings' | 'facebook';
+
+const MARKETING_TAB_META: Record<
+  MarketingSidebarItem,
+  {
+    label: string;
+    description: string;
+    icon: React.ElementType;
+    group: 'Cửa hàng' | 'Facebook';
+  }
+> = {
+  calendar: {
+    label: 'Lịch đăng',
+    description: 'Xem kế hoạch đăng bài theo ngày',
+    icon: CalendarDays,
+    group: 'Facebook',
+  },
+  promotions: {
+    label: 'Khuyến mãi',
+    description: 'Thiết lập chương trình và phân tích hiệu quả',
+    icon: Tag,
+    group: 'Cửa hàng',
+  },
+  list: {
+    label: 'Kho bài',
+    description: 'Quản lý bài đã duyệt và trạng thái đăng',
+    icon: FileText,
+    group: 'Facebook',
+  },
+  settings: {
+    label: 'Chiến lược',
+    description: 'Tỉ lệ nội dung và sản phẩm trọng tâm',
+    icon: Settings,
+    group: 'Facebook',
+  },
+  facebook: {
+    label: 'Facebook API',
+    description: 'Kết nối fanpage và tự động đăng',
+    icon: Facebook,
+    group: 'Facebook',
+  },
+};
+
+const MARKETING_SIDEBAR_ITEMS: MarketingSidebarItem[] = [
+  'promotions',
+  'calendar',
+  'list',
+  'settings',
+  'facebook',
+];
+
+const PromotionManager: React.FC<PromotionManagerProps> = ({
+  promotions,
+  revenue,
+  expenses,
+  onUpdate,
+  onSelectMainTab,
+}) => {
+  const { showToast } = useToast();
   const [activeSubTab, setActiveSubTab] = useState<PromotionSubTab>('setup');
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -73,7 +134,7 @@ const PromotionManager: React.FC<PromotionManagerProps> = ({ promotions, revenue
 
   const handleSave = () => {
     if (!formData.name || !formData.startDate || !formData.endDate) {
-      alert('Vui lòng điền đầy đủ thông tin bắt buộc');
+      showToast('Vui lòng điền đầy đủ thông tin bắt buộc', 'warning');
       return;
     }
 
@@ -208,42 +269,91 @@ Súc tích, dẫn chứng bằng số cụ thể.`;
     // AI analysis is now triggered manually by the user
   }, [activeSubTab]);
 
-  return (
-    <div className="space-y-6">
-      <PromotionSubTabNav activeSubTab={activeSubTab} onChange={setActiveSubTab} />
+  const sidebarGroups = Array.from(
+    new Set(MARKETING_SIDEBAR_ITEMS.map(tab => MARKETING_TAB_META[tab].group))
+  );
 
-      {activeSubTab === 'ai' && (
-        <PromotionAiPanel
-          totalBudget={totalBudget}
-          totalTarget={totalTarget}
-          avgROI={avgROI}
-          aiAnalysis={aiAnalysis}
-          isAnalyzing={isAnalyzing}
-          onRunAnalysis={runAiAnalysis}
-        />
-      )}
-      {activeSubTab === 'setup' && (
-        <PromotionSetupPanel
-          promotions={promotions}
-          editingId={editingId}
-          formData={formData}
-          setFormData={setFormData}
-          setEditingId={setEditingId}
-          suggestedTarget={suggestedTarget}
-          formatCurrency={formatCurrency}
-          parseCurrency={parseCurrency}
-          handleApplySuggestion={handleApplySuggestion}
-          handleSave={handleSave}
-          handleEdit={handleEdit}
-          handleDelete={handleDelete}
-          addGiftTier={addGiftTier}
-          updateGiftTier={updateGiftTier}
-          removeGiftTier={removeGiftTier}
-        />
-      )}
-      {activeSubTab === 'ledger' && (
-        <PromotionLedgerTable promotions={promotions} revenue={revenue} expenses={expenses} />
-      )}
+  return (
+    <div className="flex h-full min-h-0 gap-4">
+      <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+        <div className="px-4 min-h-[60px] border-b border-slate-100 shrink-0 flex flex-col justify-center">
+          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
+            Khuyến mãi
+          </h2>
+          <p className="text-2xs text-slate-400 uppercase tracking-wide">Marketing</p>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+          {sidebarGroups.map(group => (
+            <div key={group} className="space-y-2">
+              <p className="px-2 text-2xs font-normal uppercase tracking-widest text-slate-400">
+                {group}
+              </p>
+              <div className="space-y-1">
+                {MARKETING_SIDEBAR_ITEMS.filter(tab => MARKETING_TAB_META[tab].group === group).map(tab => {
+                  const meta = MARKETING_TAB_META[tab];
+                  const Icon = meta.icon;
+                  const isActive = tab === 'promotions';
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => {
+                        if (tab !== 'promotions') onSelectMainTab?.('marketing');
+                      }}
+                      className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                        isActive
+                          ? 'border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm'
+                          : 'border-transparent text-slate-500 hover:border-slate-100 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-normal uppercase">{meta.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      <section className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto p-6">
+          {activeSubTab === 'ai' && (
+            <PromotionAiPanel
+              totalBudget={totalBudget}
+              totalTarget={totalTarget}
+              avgROI={avgROI}
+              aiAnalysis={aiAnalysis}
+              isAnalyzing={isAnalyzing}
+              onRunAnalysis={runAiAnalysis}
+            />
+          )}
+          {activeSubTab === 'setup' && (
+            <PromotionSetupPanel
+              promotions={promotions}
+              editingId={editingId}
+              formData={formData}
+              setFormData={setFormData}
+              setEditingId={setEditingId}
+              suggestedTarget={suggestedTarget}
+              formatCurrency={formatCurrency}
+              parseCurrency={parseCurrency}
+              handleApplySuggestion={handleApplySuggestion}
+              handleSave={handleSave}
+              handleEdit={handleEdit}
+              handleDelete={handleDelete}
+              addGiftTier={addGiftTier}
+              updateGiftTier={updateGiftTier}
+              removeGiftTier={removeGiftTier}
+            />
+          )}
+          {activeSubTab === 'ledger' && (
+            <PromotionLedgerTable promotions={promotions} revenue={revenue} expenses={expenses} />
+          )}
+        </div>
+      </section>
     </div>
   );
 };

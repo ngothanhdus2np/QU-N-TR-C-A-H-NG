@@ -45,10 +45,10 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
     <div className="bg-white rounded-[3rem] p-10 border border-slate-200 shadow-xl">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+          <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">
             Thác đổ dòng tiền P&L
           </h3>
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mt-1">
             Phân tích dòng tiền từ doanh thu đến lợi nhuận ròng
           </p>
         </div>
@@ -106,10 +106,10 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
     <div className="bg-white rounded-[3rem] p-8 border border-slate-200 shadow-xl flex flex-col">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+          <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">
             Phân bổ chi phí
           </h3>
-          <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mt-1">
+          <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mt-1">
             Cơ cấu chi tiêu theo nhóm cha
           </p>
         </div>
@@ -157,7 +157,7 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
             <button
               key={idx}
               onClick={() => onSelectParentCategory(item.name)}
-              className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
+              className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-colors ${
                 selectedParentCategory === item.name
                   ? 'bg-rose-50 border-rose-200 shadow-md'
                   : 'bg-slate-50 border-transparent hover:border-slate-200'
@@ -168,15 +168,15 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: colors[idx % colors.length] }}
                 />
-                <span className="text-[11px] font-normal text-slate-700 uppercase truncate max-w-[150px]">
+                <span className="text-xs font-normal text-slate-700 uppercase truncate max-w-[150px]">
                   {item.name}
                 </span>
               </div>
               <div className="text-right">
-                <span className="text-[11px] font-normal text-slate-900 block">
+                <span className="text-xs font-normal text-slate-900 block">
                   {item.value.toLocaleString()}đ
                 </span>
-                <span className="text-[10px] font-normal text-slate-400">
+                <span className="text-2xs font-normal text-slate-400">
                   {((item.value / (insights.periodExp || 1)) * 100).toFixed(1)}%
                 </span>
               </div>
@@ -188,13 +188,13 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
       {selectedParentCategory && (
         <div className="mt-4 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="flex items-center justify-between mb-6">
-            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-tight flex items-center gap-2">
               <ChevronRight className="w-4 h-4 text-rose-500" />
               Chi tiết nhóm: {selectedParentCategory}
             </h4>
             <button
               onClick={onClearParentCategory}
-              className="text-[10px] font-normal text-slate-400 uppercase hover:text-slate-600"
+              className="text-2xs font-normal text-slate-400 uppercase hover:text-slate-600"
             >
               Đóng chi tiết
             </button>
@@ -203,16 +203,16 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
                     Ngày
                   </th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
                     Danh mục
                   </th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
                     Nội dung
                   </th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+                  <th className="px-6 py-4 text-2xs font-semibold text-slate-400 uppercase tracking-widest text-right">
                     Số tiền
                   </th>
                 </tr>
@@ -221,16 +221,16 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
                 {detailedExpenses.length > 0 ? (
                   detailedExpenses.map((exp, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 text-[11px] font-normal text-slate-500">{exp.date}</td>
+                      <td className="px-6 py-4 text-xs font-normal text-slate-500">{exp.date}</td>
                       <td className="px-6 py-4">
                         <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-normal uppercase">
                           {exp.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-[11px] font-normal text-slate-700">
+                      <td className="px-6 py-4 text-xs font-normal text-slate-700">
                         {exp.description}
                       </td>
-                      <td className="px-6 py-4 text-[11px] font-normal text-slate-900 text-right">
+                      <td className="px-6 py-4 text-xs font-normal text-slate-900 text-right">
                         {exp.amount.toLocaleString()}đ
                       </td>
                     </tr>
@@ -239,7 +239,7 @@ export const DashboardStructurePanel: React.FC<DashboardStructurePanelProps> = (
                   <tr>
                     <td
                       colSpan={4}
-                      className="px-6 py-12 text-center text-slate-400 font-normal uppercase text-[10px]"
+                      className="px-6 py-12 text-center text-slate-400 font-normal uppercase text-2xs"
                     >
                       Không có dữ liệu chi tiết
                     </td>

@@ -35,7 +35,7 @@ const Section: React.FC<{
 
 const TogglePill: React.FC<{ enabled: boolean }> = ({ enabled }) => (
   <span
-    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
   >
     <span
       className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`}
@@ -130,7 +130,7 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
             {
               name: 'Badge / trạng thái',
               sample: 'Đang bật',
-              className: 'text-[11px] font-normal uppercase tracking-wider text-emerald-700',
+              className: 'text-xs font-normal uppercase tracking-wider text-emerald-700',
               note: 'Dùng màu/icon để nhấn, không lạm dụng bold.',
             },
           ].map(item => (
@@ -197,7 +197,7 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
             {
               name: 'Thông tin',
               token: 'Blue',
-              bg: 'bg-blue-600',
+              bg: 'bg-indigo-600',
               text: 'text-blue-700',
               soft: 'bg-blue-50',
               usage: 'Liên kết, hướng dẫn, trạng thái info.',

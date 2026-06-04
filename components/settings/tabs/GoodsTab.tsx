@@ -15,7 +15,16 @@ interface GoodsTabProps {
 
 type GoodsDetailView = 'units' | 'attributes' | 'categories' | 'brands' | 'locations';
 
-type CatNode = { name: string; path: string; count: number; children: CatNode[] };
+type CategoryRecord = { path: string; location?: string };
+type CatNode = {
+  name: string;
+  path: string;
+  count: number;
+  location?: string;
+  children: CatNode[];
+};
+
+const isChildCategoryPath = (path: string) => path.includes(' >> ');
 
 const Chip: React.FC<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
@@ -44,16 +53,18 @@ const CategoryTreeView: React.FC<{ nodes: CatNode[]; onEdit: (node: CatNode) => 
   const renderNode = (node: CatNode, depth: number): React.ReactNode => {
     const hasChildren = node.children.length > 0;
     const isExpanded = expanded.has(node.path);
+    const canHaveLocation = isChildCategoryPath(node.path);
     return (
       <div key={node.path}>
         <div
-          className="flex items-center rounded-lg transition-colors hover:bg-slate-50 group"
-          style={{ paddingLeft: `${12 + depth * 20}px`, paddingRight: 4 }}
+          className="grid grid-cols-[minmax(0,1fr)_minmax(110px,180px)_72px_32px] items-center rounded-lg transition-colors hover:bg-slate-50 group"
+          style={{ paddingRight: 4 }}
         >
           <button
             type="button"
             onClick={() => hasChildren && toggle(node.path)}
-            className={`flex-1 flex items-center gap-2 py-2.5 text-left text-sm min-w-0 ${hasChildren ? 'cursor-pointer' : 'cursor-default'}`}
+            className={`flex items-center gap-2 py-2.5 text-left text-sm min-w-0 ${hasChildren ? 'cursor-pointer' : 'cursor-default'}`}
+            style={{ paddingLeft: `${12 + depth * 20}px` }}
           >
             <span className="w-4 shrink-0 flex items-center justify-center text-slate-400">
               {hasChildren ? (
@@ -71,8 +82,11 @@ const CategoryTreeView: React.FC<{ nodes: CatNode[]; onEdit: (node: CatNode) => 
             >
               {node.name}
             </span>
-            <span className="shrink-0 text-xs text-slate-400 mr-1">{node.count} SP</span>
           </button>
+          <span className="min-w-0 truncate px-2 text-xs text-slate-500">
+            {canHaveLocation ? node.location?.trim() || 'Chưa gắn' : '-'}
+          </span>
+          <span className="shrink-0 text-right text-xs text-slate-400 mr-1">{node.count} SP</span>
           <button
             type="button"
             onClick={() => onEdit(node)}
@@ -89,13 +103,23 @@ const CategoryTreeView: React.FC<{ nodes: CatNode[]; onEdit: (node: CatNode) => 
     );
   };
 
-  return <div className="-mx-1">{nodes.map(node => renderNode(node, 0))}</div>;
+  return (
+    <div className="-mx-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(110px,180px)_72px_32px] px-3 pb-2 text-xs font-medium uppercase text-slate-400">
+        <span>Nhóm hàng</span>
+        <span>Vị trí</span>
+        <span className="text-right">Số SP</span>
+        <span />
+      </div>
+      {nodes.map(node => renderNode(node, 0))}
+    </div>
+  );
 };
 
 const CategoryEditPopup: React.FC<{
   node: CatNode;
   allNodes: CatNode[];
-  onSave: (oldPath: string, newPath: string) => Promise<void>;
+  onSave: (oldPath: string, newPath: string, location: string) => Promise<void>;
   onClose: () => void;
 }> = ({ node, allNodes, onSave, onClose }) => {
   const parts = node.path.split(' >> ');
@@ -104,8 +128,10 @@ const CategoryEditPopup: React.FC<{
 
   const [name, setName] = useState(currentName);
   const [parentPath, setParentPath] = useState(currentParentPath);
+  const [location, setLocation] = useState(node.location || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const canHaveLocation = Boolean(parentPath);
 
   const parentOptions = useMemo(() => {
     const result: { label: string; value: string; depth: number }[] = [];
@@ -130,7 +156,7 @@ const CategoryEditPopup: React.FC<{
     const newPath = parentPath ? `${parentPath} >> ${trimmed}` : trimmed;
     setSaving(true);
     try {
-      await onSave(node.path, newPath);
+      await onSave(node.path, newPath, canHaveLocation ? location.trim() : '');
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Lỗi lưu');
@@ -139,7 +165,7 @@ const CategoryEditPopup: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="text-sm font-bold text-slate-900">Sửa nhóm hàng</h3>
@@ -169,7 +195,10 @@ const CategoryEditPopup: React.FC<{
             <span className="text-xs font-medium text-slate-700">Nhóm cha</span>
             <select
               value={parentPath}
-              onChange={e => setParentPath(e.target.value)}
+              onChange={e => {
+                setParentPath(e.target.value);
+                if (!e.target.value) setLocation('');
+              }}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
             >
               <option value="">— Không có nhóm cha —</option>
@@ -181,6 +210,18 @@ const CategoryEditPopup: React.FC<{
               ))}
             </select>
           </label>
+          {canHaveLocation && (
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-slate-700">Vị trí nhóm con</span>
+              <input
+                type="text"
+                value={location}
+                onChange={e => setLocation(e.target.value)}
+                placeholder="VD: Kệ A1, Tầng 2..."
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+          )}
           {error && <p className="text-xs text-rose-500">{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50/60">
@@ -208,11 +249,12 @@ const CategoryEditPopup: React.FC<{
 
 const CategoryAddPopup: React.FC<{
   allNodes: CatNode[];
-  onSave: (path: string) => Promise<void>;
+  onSave: (path: string, location: string) => Promise<void>;
   onClose: () => void;
 }> = ({ allNodes, onSave, onClose }) => {
   const [name, setName] = useState('');
   const [parentPath, setParentPath] = useState('');
+  const [location, setLocation] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -254,7 +296,7 @@ const CategoryAddPopup: React.FC<{
     const path = parentPath ? `${parentPath} >> ${trimmed}` : trimmed;
     setSaving(true);
     try {
-      await onSave(path);
+      await onSave(path, parentPath ? location.trim() : '');
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Lỗi lưu');
@@ -263,7 +305,7 @@ const CategoryAddPopup: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="text-sm font-bold text-slate-900">Thêm nhóm hàng</h3>
@@ -319,7 +361,10 @@ const CategoryAddPopup: React.FC<{
             </span>
             <select
               value={parentPath}
-              onChange={e => setParentPath(e.target.value)}
+              onChange={e => {
+                setParentPath(e.target.value);
+                if (!e.target.value) setLocation('');
+              }}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
             >
               <option value="">— Không có (nhóm cha) —</option>
@@ -331,6 +376,18 @@ const CategoryAddPopup: React.FC<{
               ))}
             </select>
           </label>
+          {parentPath && (
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-slate-700">Vị trí nhóm con</span>
+              <input
+                type="text"
+                value={location}
+                onChange={e => setLocation(e.target.value)}
+                placeholder="VD: Kệ A1, Tầng 2..."
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+          )}
           {error && <p className="text-xs text-rose-500">{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50/60">
@@ -406,7 +463,7 @@ const SettingLine: React.FC<{
 
 const TogglePill: React.FC<{ enabled: boolean }> = ({ enabled }) => (
   <span
-    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+    className={`relative inline-flex h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
   >
     <span
       className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`}
@@ -451,14 +508,20 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
   const [goodsDetailView, setGoodsDetailView] = useState<GoodsDetailView | null>(null);
   const [editingNode, setEditingNode] = useState<CatNode | null>(null);
   const [addingCategory, setAddingCategory] = useState(false);
-  const [savedCategories, setSavedCategories] = useState<string[]>([]);
+  const [savedCategories, setSavedCategories] = useState<CategoryRecord[]>([]);
 
   useEffect(() => {
     if (goodsDetailView !== 'categories') return;
     fetch('/api/categories')
       .then(r => r.json())
       .then(d => {
-        if (d.ok) setSavedCategories(d.categories ?? []);
+        if (d.ok) {
+          setSavedCategories(
+            (d.categories ?? []).map((category: string | CategoryRecord) =>
+              typeof category === 'string' ? { path: category } : category
+            )
+          );
+        }
       })
       .catch(() => {});
   }, [goodsDetailView]);
@@ -611,6 +674,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
       name: string;
       path: string;
       count: number;
+      location?: string;
       childMap: Map<string, NodeDraft>;
     };
     const rootMap = new Map<string, NodeDraft>();
@@ -636,8 +700,15 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     const toNodes = (map: Map<string, NodeDraft>): CatNode[] =>
       Array.from(map.values())
         .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }))
-        .map(n => ({ name: n.name, path: n.path, count: n.count, children: toNodes(n.childMap) }));
-    for (const savedPath of savedCategories) {
+        .map(n => ({
+          name: n.name,
+          path: n.path,
+          count: n.count,
+          location: n.location,
+          children: toNodes(n.childMap),
+        }));
+    for (const category of savedCategories) {
+      const savedPath = category.path;
       const parts = String(savedPath)
         .split('>>')
         .map(s => s.trim())
@@ -648,6 +719,9 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
         pathSoFar = pathSoFar ? `${pathSoFar} >> ${part}` : part;
         if (!currentMap.has(part)) {
           currentMap.set(part, { name: part, path: pathSoFar, count: 0, childMap: new Map() });
+        }
+        if (pathSoFar === savedPath && isChildCategoryPath(savedPath)) {
+          currentMap.get(part)!.location = category.location || '';
         }
         currentMap = currentMap.get(part)!.childMap;
       }
@@ -679,26 +753,46 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     onNavigate(id);
   };
 
-  const handleSaveCategory = async (oldPath: string, newPath: string) => {
+  const handleSaveCategory = async (oldPath: string, newPath: string, location: string) => {
     const res = await fetch('/api/categories/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldPath, newPath }),
+      body: JSON.stringify({ oldPath, newPath, location }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Lỗi lưu');
+    setSavedCategories(prev => {
+      const renamed = prev
+        .filter(category => category.path !== oldPath)
+        .map(category =>
+          category.path.startsWith(`${oldPath} >> `)
+            ? {
+                ...category,
+                path: `${newPath}${category.path.slice(oldPath.length)}`,
+              }
+            : category
+        );
+      const nextRecord = { path: newPath, location: isChildCategoryPath(newPath) ? location : '' };
+      const next = [...renamed.filter(category => category.path !== newPath), nextRecord];
+      return next.sort((a, b) => a.path.localeCompare(b.path, 'vi'));
+    });
     onRefresh?.();
   };
 
-  const handleAddCategory = async (path: string) => {
+  const handleAddCategory = async (path: string, location: string) => {
     const res = await fetch('/api/categories/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, location }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Lỗi lưu');
-    setSavedCategories(prev => [...prev, path].sort((a, b) => a.localeCompare(b, 'vi')));
+    setSavedCategories(prev => {
+      const nextRecord = { path, location: isChildCategoryPath(path) ? location : '' };
+      return [...prev.filter(category => category.path !== path), nextRecord].sort((a, b) =>
+        a.path.localeCompare(b.path, 'vi')
+      );
+    });
   };
 
   if (goodsDetailView) {
@@ -825,7 +919,7 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
             <span>{goodsBarcodeManualMode ? 'Bật' : 'Tắt'}</span>
             <span
               className={`relative inline-flex h-5 w-9 rounded transition-colors ${
-                goodsBarcodeManualMode ? 'bg-blue-600' : 'bg-slate-300'
+                goodsBarcodeManualMode ? 'bg-indigo-600' : 'bg-slate-300'
               }`}
             >
               <span

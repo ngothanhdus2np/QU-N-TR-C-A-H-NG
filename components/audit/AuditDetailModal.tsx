@@ -22,13 +22,13 @@ const AuditDetailModal: React.FC<AuditDetailModalProps> = ({
   const totalDiff = transaction.totalDiff || 0;
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-normal text-indigo-500 uppercase tracking-widest">Phiếu kiểm kho</p>
-            <h3 className="text-lg font-black text-slate-900 font-mono">{transaction.id}</h3>
+            <p className="text-2xs font-normal text-indigo-500 uppercase tracking-widest">Phiếu kiểm kho</p>
+            <h3 className="text-lg font-semibold text-slate-900 font-mono">{transaction.id}</h3>
             <p className="text-xs text-slate-500 mt-1">
               Tạo: {formatDateTime(transaction.date)} | Cân bằng: {formatDateTime(transaction.balancedDate)}
             </p>
@@ -89,7 +89,7 @@ const AuditDetailModal: React.FC<AuditDetailModalProps> = ({
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-200">
-                <tr className="text-[10px] font-black uppercase text-slate-400">
+                <tr className="text-2xs font-semibold uppercase text-slate-400">
                   <th className="px-4 py-3">SKU</th>
                   <th className="px-4 py-3">Tên hàng</th>
                   <th className="px-4 py-3 text-right">Tồn HT</th>

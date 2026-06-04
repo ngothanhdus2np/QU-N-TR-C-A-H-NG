@@ -26,6 +26,15 @@ export interface PendingOp {
   retries: number;
 }
 
+const getPayloadId = (payload: unknown): string | null => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const id = (payload as { id?: unknown }).id;
+  return typeof id === 'string' && id.trim() ? id : null;
+};
+
+const canCoalesceItemOp = (opType: PendingOpType) =>
+  opType === 'upsertItem' || opType === 'deleteItem';
+
 class POSOfflineQueueService {
   private db: IDBDatabase | null = null;
   private initPromise: Promise<void> | null = null;
@@ -67,9 +76,79 @@ class POSOfflineQueueService {
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.add(pendingOp);
-      req.onsuccess = () => resolve(id);
-      req.onerror = () => reject(req.error);
+      const addPendingOp = () => {
+        const req = store.add(pendingOp);
+        req.onsuccess = () => resolve(id);
+        req.onerror = () => reject(req.error);
+      };
+
+      if (!canCoalesceItemOp(op.opType)) {
+        addPendingOp();
+        return;
+      }
+
+      const payloadId = getPayloadId(op.payload);
+      if (!payloadId) {
+        addPendingOp();
+        return;
+      }
+
+      // Dùng dataKey index để chỉ scan records cùng key, tránh full-scan toàn queue
+      const dataKeyIndex = store.index('dataKey');
+      const allReq = dataKeyIndex.getAll(op.dataKey);
+      allReq.onerror = () => reject(allReq.error);
+      allReq.onsuccess = () => {
+        const ops = (allReq.result || []) as PendingOp[];
+        const existing = ops
+          .filter(
+            item =>
+              canCoalesceItemOp(item.opType) &&
+              getPayloadId(item.payload) === payloadId
+          )
+          .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+        if (!existing) {
+          addPendingOp();
+          return;
+        }
+
+        // The latest delete wins over an earlier unsynced upsert for the same record.
+        if (existing.opType === 'upsertItem' && op.opType === 'deleteItem') {
+          const putReq = store.put({ ...pendingOp, id: existing.id });
+          putReq.onsuccess = () => resolve(existing.id);
+          putReq.onerror = () => reject(putReq.error);
+          return;
+        }
+
+        // Later edits replace an earlier unsynced upsert for the same record.
+        if (existing.opType === 'upsertItem' && op.opType === 'upsertItem') {
+          const putReq = store.put({
+            ...existing,
+            payload: op.payload,
+            timestamp: pendingOp.timestamp,
+            retries: 0,
+          });
+          putReq.onsuccess = () => resolve(existing.id);
+          putReq.onerror = () => reject(putReq.error);
+          return;
+        }
+
+        // If delete is pending and user recreates/updates the same id, the latest state wins.
+        if (existing.opType === 'deleteItem' && op.opType === 'upsertItem') {
+          const putReq = store.put({ ...pendingOp, id: existing.id });
+          putReq.onsuccess = () => resolve(existing.id);
+          putReq.onerror = () => reject(putReq.error);
+          return;
+        }
+
+        // Duplicate deletes for the same record do not need another queue item.
+        if (existing.opType === 'deleteItem' && op.opType === 'deleteItem') {
+          resolve(existing.id);
+          return;
+        }
+
+        addPendingOp();
+      };
     });
   }
 
@@ -83,6 +162,74 @@ class POSOfflineQueueService {
       const req = index.getAll();
       req.onsuccess = () => resolve((req.result || []).sort((a, b) => a.timestamp - b.timestamp));
       req.onerror = () => reject(req.error);
+    });
+  }
+
+  /** Gộp các thao tác item trùng nhau để queue chỉ giữ trạng thái cuối cùng cần sync */
+  async compactItemOps(): Promise<void> {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const ops = ((req.result || []) as PendingOp[]).sort(
+          (a, b) => a.timestamp - b.timestamp
+        );
+        const latestByRecord = new Map<string, PendingOp>();
+        const itemOpIds = new Set<string>();
+
+        for (const op of ops) {
+          if (!canCoalesceItemOp(op.opType)) continue;
+
+          const payloadId = getPayloadId(op.payload);
+          if (!payloadId) continue;
+
+          itemOpIds.add(op.id);
+          const key = `${op.dataKey}:${payloadId}`;
+          const existing = latestByRecord.get(key);
+
+          if (!existing) {
+            latestByRecord.set(key, op);
+            continue;
+          }
+
+          latestByRecord.set(key, {
+            ...op,
+            id: existing.id,
+            retries: 0,
+          });
+        }
+
+        const compactedOps = Array.from(latestByRecord.values());
+        const retainedIds = new Set(compactedOps.map(op => op.id));
+        const obsoleteIds = Array.from(itemOpIds).filter(id => !retainedIds.has(id));
+        let pending = obsoleteIds.length + compactedOps.length;
+
+        if (pending === 0) {
+          resolve();
+          return;
+        }
+
+        const finishOne = () => {
+          pending -= 1;
+          if (pending === 0) resolve();
+        };
+
+        obsoleteIds.forEach(id => {
+          const deleteReq = store.delete(id);
+          deleteReq.onsuccess = finishOne;
+          deleteReq.onerror = () => reject(deleteReq.error);
+        });
+
+        compactedOps.forEach(op => {
+          const putReq = store.put(op);
+          putReq.onsuccess = finishOne;
+          putReq.onerror = () => reject(putReq.error);
+        });
+      };
     });
   }
 
@@ -124,6 +271,19 @@ class POSOfflineQueueService {
       const tx = this.db!.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const req = store.count();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /** Đếm số thao tác đang chờ theo AppData key */
+  async countByDataKey(dataKey: string): Promise<number> {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const index = store.index('dataKey');
+      const req = index.count(dataKey);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });

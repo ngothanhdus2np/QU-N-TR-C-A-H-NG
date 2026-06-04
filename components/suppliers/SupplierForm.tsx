@@ -1,248 +1,320 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Truck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, ChevronUp, ChevronDown } from 'lucide-react';
 import { Supplier } from '../../types';
 import { useToast } from '../ui/Toast';
 
 interface SupplierFormProps {
-  supplier: Supplier | null; // null = create mode, non-null = edit mode
+  supplier: Supplier | null;
+  groupOptions?: string[];
+  cityOptions?: string[];
+  wardOptions?: string[];
   onSave: (supplier: Supplier) => void | Promise<void>;
   onCancel: () => void;
 }
 
-const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel }) => {
+interface SectionProps {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}
+
+const Section: React.FC<SectionProps> = ({ title, children, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-slate-800">{title}</span>
+        {open ? (
+          <ChevronUp className="h-4 w-4 text-slate-400" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        )}
+      </button>
+      {open && <div className="px-4 pb-4 pt-1 space-y-3 bg-white">{children}</div>}
+    </div>
+  );
+};
+
+const inputCls =
+  'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-colors placeholder:text-slate-400';
+
+const SupplierForm: React.FC<SupplierFormProps> = ({
+  supplier,
+  groupOptions = [],
+  cityOptions = [],
+  wardOptions = [],
+  onSave,
+  onCancel,
+}) => {
   const { showToast } = useToast();
   const isEditMode = supplier !== null;
+  const [isSaving, setIsSaving] = useState(false);
+  const mountedRef = useRef(true);
 
-  const [formData, setFormData] = useState<Omit<Supplier, 'id' | 'totalPurchase' | 'currentDebt'>>({
-    name: '',
-    code: '',
-    phone: '',
-    email: '',
-    address: '',
-    group: '',
-    status: 'active',
-    notes: '',
-  });
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [ward, setWard] = useState('');
+  const [group, setGroup] = useState('');
+  const [notes, setNotes] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [taxCode, setTaxCode] = useState('');
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (supplier) {
-      setFormData({
-        name: supplier.name,
-        code: supplier.code || '',
-        phone: supplier.phone || '',
-        email: supplier.email || '',
-        address: supplier.address || '',
-        group: supplier.group || '',
-        status: supplier.status || 'active',
-        notes: supplier.notes || '',
-      });
+      setName(supplier.name);
+      setCode(supplier.code || '');
+      setPhone(supplier.phone || '');
+      setEmail(supplier.email || '');
+      const addressParts = (supplier.address || '')
+        .split(',')
+        .map(part => part.trim())
+        .filter(Boolean);
+      setStreetAddress(addressParts.length > 2 ? addressParts.slice(0, -2).join(', ') : supplier.address || '');
+      setWard(addressParts.length > 1 ? addressParts[addressParts.length - 2] : '');
+      setCity(addressParts.length > 0 ? addressParts[addressParts.length - 1] : '');
+      setGroup(supplier.group || '');
+      setNotes(supplier.notes || '');
+      setCompanyName(supplier.companyName || '');
+      setTaxCode(supplier.taxCode || '');
+    } else {
+      setName('');
+      setCode('');
+      setPhone('');
+      setEmail('');
+      setStreetAddress('');
+      setCity('');
+      setWard('');
+      setGroup('');
+      setNotes('');
+      setCompanyName('');
+      setTaxCode('');
     }
   }, [supplier]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name.trim()) {
+    if (isSaving) return;
+
+    if (!name.trim()) {
       showToast('Vui lòng nhập tên nhà cung cấp', 'warning');
       return;
     }
-    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       showToast('Email nhà cung cấp không hợp lệ', 'warning');
       return;
     }
-    if (formData.phone.trim() && !/^[0-9+\-\s().]{8,20}$/.test(formData.phone.trim())) {
+    if (phone.trim() && !/^[0-9+\-\s().]{8,20}$/.test(phone.trim())) {
       showToast('Số điện thoại nhà cung cấp không hợp lệ', 'warning');
       return;
     }
 
+    const combinedAddress = [streetAddress, ward, city].map(s => s.trim()).filter(Boolean).join(', ');
+
     const supplierData: Supplier = {
-      id: supplier?.id || '', // Will be generated in container
-      name: formData.name.trim(),
-      code: formData.code?.trim() || undefined,
-      phone: formData.phone?.trim() || undefined,
-      email: formData.email?.trim() || undefined,
-      address: formData.address?.trim() || undefined,
-      group: formData.group?.trim() || undefined,
-      status: formData.status,
-      notes: formData.notes?.trim() || undefined,
+      id: supplier?.id || '',
+      name: name.trim(),
+      code: code.trim() || undefined,
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      address: combinedAddress || undefined,
+      group: group.trim() || undefined,
+      status: supplier?.status || 'active',
+      notes: notes.trim() || undefined,
+      companyName: companyName.trim() || undefined,
+      taxCode: taxCode.trim() || undefined,
+      invoiceCompanyName: supplier?.invoiceCompanyName,
+      invoiceTaxCode: supplier?.invoiceTaxCode,
+      invoicePhone: supplier?.invoicePhone,
+      invoiceAddress: supplier?.invoiceAddress,
     };
 
-    onSave(supplierData);
-  };
-
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    try {
+      setIsSaving(true);
+      await onSave(supplierData);
+    } finally {
+      if (mountedRef.current) setIsSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm pt-20">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <div
+      className="fixed inset-0 z-modal flex items-start justify-center bg-slate-950/60 px-4 pb-4 backdrop-blur-sm overflow-y-auto"
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="mt-[116px] bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-132px)] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-              <Truck className="h-5 w-5 text-indigo-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900">
-                {isEditMode ? 'Sửa nhà cung cấp' : 'Thêm nhà cung cấp mới'}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {isEditMode ? 'Cập nhật thông tin nhà cung cấp' : 'Nhập thông tin nhà cung cấp mới'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onCancel}
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5 text-slate-400" />
+          <h2 className="text-base font-semibold text-slate-900">
+            {isEditMode ? 'Sửa nhà cung cấp' : 'Tạo nhà cung cấp'}
+          </h2>
+          <button onClick={onCancel} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+            <X className="h-4 w-4 text-slate-500" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
-            {/* Thông tin cơ bản */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-3">
+          {/* Top fields — no section header */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide mb-4">
-                Thông tin cơ bản
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Tên nhà cung cấp <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => handleChange('name', e.target.value)}
-                    placeholder="VD: Công ty TNHH ABC"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Mã nhà cung cấp
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    onChange={e => handleChange('code', e.target.value)}
-                    placeholder="VD: NCC001 (tự động nếu để trống)"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Nhóm
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.group}
-                    onChange={e => handleChange('group', e.target.value)}
-                    placeholder="VD: Giày dép, Phụ kiện"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                  />
-                </div>
-              </div>
+              <label className="block text-xs text-slate-600 mb-1">Tên nhà cung cấp</label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Bắt buộc"
+                className={inputCls}
+                required
+              />
             </div>
-
-            {/* Liên hệ */}
             <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide mb-4">
-                Thông tin liên hệ
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Số điện thoại
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={e => handleChange('phone', e.target.value)}
-                    placeholder="VD: 0901234567"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={e => handleChange('email', e.target.value)}
-                    placeholder="VD: contact@abc.com"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block text-sm font-normal text-slate-700 mb-2">
-                    Địa chỉ
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={e => handleChange('address', e.target.value)}
-                    placeholder="VD: 123 Đường ABC, Quận 1, TP.HCM"
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                  />
-                </div>
-              </div>
+              <label className="block text-xs text-slate-600 mb-1">Mã nhà cung cấp</label>
+              <input
+                type="text"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="Tự động"
+                className={inputCls}
+              />
             </div>
-
-            {/* Trạng thái */}
             <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide mb-4">
-                Trạng thái
-              </h3>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="active"
-                    checked={formData.status === 'active'}
-                    onChange={e => handleChange('status', e.target.value)}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm font-normal text-slate-700">Đang hoạt động</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="inactive"
-                    checked={formData.status === 'inactive'}
-                    onChange={e => handleChange('status', e.target.value)}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm font-normal text-slate-700">Ngừng hoạt động</span>
-                </label>
-              </div>
+              <label className="block text-xs text-slate-600 mb-1">Điện thoại</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder=""
+                className={inputCls}
+              />
             </div>
-
-            {/* Ghi chú */}
             <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide mb-4">
-                Ghi chú
-              </h3>
-              <textarea
-                value={formData.notes}
-                onChange={e => handleChange('notes', e.target.value)}
-                placeholder="Ghi chú thêm về nhà cung cấp..."
-                rows={4}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+              <label className="block text-xs text-slate-600 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="email@gmail.com"
+                className={inputCls}
               />
             </div>
           </div>
+
+          {/* Địa chỉ */}
+          <Section title="Địa chỉ">
+            <div>
+              <label className="block text-xs text-slate-600 mb-1">Địa chỉ</label>
+              <input
+                type="text"
+                value={streetAddress}
+                onChange={e => setStreetAddress(e.target.value)}
+                placeholder="Nhập địa chỉ"
+                className={inputCls}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Khu vực</label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={e => setCity(e.target.value)}
+                  placeholder="Chọn Tỉnh/Thành phố"
+                  list="supplier-city-options"
+                  className={inputCls}
+                />
+                <datalist id="supplier-city-options">
+                  {cityOptions.map(option => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Phường/Xã</label>
+                <input
+                  type="text"
+                  value={ward}
+                  onChange={e => setWard(e.target.value)}
+                  placeholder="Chọn Phường/Xã"
+                  list="supplier-ward-options"
+                  className={inputCls}
+                />
+                <datalist id="supplier-ward-options">
+                  {wardOptions.map(option => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              </div>
+            </div>
+          </Section>
+
+          {/* Nhóm & Ghi chú */}
+          <Section title="Nhóm nhà cung cấp, ghi chú">
+            <div>
+              <label className="block text-xs text-slate-600 mb-1">Nhóm nhà cung cấp</label>
+              <input
+                type="text"
+                value={group}
+                onChange={e => setGroup(e.target.value)}
+                placeholder="Chọn nhóm nhà cung cấp"
+                list="supplier-group-options"
+                className={inputCls}
+              />
+              <datalist id="supplier-group-options">
+                {groupOptions.map(option => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-600 mb-1">Ghi chú</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Nhập ghi chú"
+                rows={3}
+                className={`${inputCls} resize-none`}
+              />
+            </div>
+          </Section>
+
+          {/* Thông tin xuất hóa đơn */}
+          <Section title="Thông tin xuất hóa đơn" defaultOpen={false}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Tên công ty</label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={e => setCompanyName(e.target.value)}
+                  placeholder="Nhập tên công ty"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Mã số thuế</label>
+                <input
+                  type="text"
+                  value={taxCode}
+                  onChange={e => setTaxCode(e.target.value)}
+                  placeholder="Nhập mã số thuế"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          </Section>
         </form>
 
         {/* Footer */}
@@ -250,17 +322,18 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ supplier, onSave, onCancel 
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 bg-slate-100 rounded-xl font-normal text-xs uppercase text-slate-600 hover:bg-slate-200 transition-colors"
+            disabled={isSaving}
+            className="px-5 py-2 rounded-xl border border-slate-200 text-sm font-normal text-slate-600 hover:bg-slate-50 transition-colors"
           >
-            Hủy
+            Bỏ qua
           </button>
           <button
             type="submit"
             onClick={handleSubmit}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-normal text-xs uppercase tracking-wide shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors"
+            disabled={isSaving}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-normal hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 transition-colors"
           >
-            <Save className="h-4 w-4" />
-            {isEditMode ? 'Cập nhật' : 'Thêm mới'}
+            {isSaving ? 'Đang lưu...' : 'Lưu'}
           </button>
         </div>
       </div>

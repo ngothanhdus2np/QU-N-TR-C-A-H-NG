@@ -86,8 +86,12 @@ CREATE TABLE IF NOT EXISTS shopee_inventory_out (
   net_profit NUMERIC DEFAULT 0,
   address TEXT,
   shipping_unit TEXT,
+  platform TEXT DEFAULT 'Shopee 2',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Migration: thêm cột platform cho bảng đã tồn tại
+-- ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'Shopee 2';
 
 -- 6. POS Products
 CREATE TABLE IF NOT EXISTS pos_products (
@@ -147,6 +151,13 @@ CREATE TABLE IF NOT EXISTS pos_orders (
   final_amount NUMERIC DEFAULT 0,
   payment_method TEXT,
   staff_id TEXT,
+  created_by TEXT,
+  channel TEXT DEFAULT 'direct',
+  channel_name TEXT DEFAULT 'Bán trực tiếp',
+  price_book_id TEXT,
+  price_book_name TEXT,
+  status TEXT DEFAULT 'completed',
+  is_return BOOLEAN DEFAULT false,
   notes TEXT,
   points_earned NUMERIC DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -188,9 +199,11 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
 -- Create policies (Allow all for simplicity in dev, adjust for production)
 -- CREATE POLICY "Allow all" ON shopee_revenue_records FOR ALL USING (true);
 -- CREATE POLICY "Allow all" ON shopee_product_group_revenue FOR ALL USING (true);
--- CREATE POLICY "Allow all" ON shopee_source_data FOR ALL USING (true);
 -- CREATE POLICY "Allow all" ON shopee_inventory_in FOR ALL USING (true);
 -- CREATE POLICY "Allow all" ON shopee_inventory_out FOR ALL USING (true);
+
+-- FIX: shopee_source_data có RLS bật nhưng thiếu policy anon — chạy lệnh này nếu app không đọc được source data
+CREATE POLICY IF NOT EXISTS "Allow all anon" ON shopee_source_data FOR ALL TO anon USING (true) WITH CHECK (true);
 
 
 -- Audit Logs (thêm vào Supabase để bật tính năng audit trail)
@@ -264,30 +277,30 @@ BEGIN
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon upload'
   ) THEN
-    CREATE POLICY "knowledge-files anon upload"
+    CREATE POLICY "knowledge-files auth upload"
     ON storage.objects FOR INSERT
-    TO anon
+    TO authenticated
     WITH CHECK (bucket_id = 'knowledge-files');
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon update'
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files auth update'
   ) THEN
-    CREATE POLICY "knowledge-files anon update"
+    CREATE POLICY "knowledge-files auth update"
     ON storage.objects FOR UPDATE
-    TO anon
+    TO authenticated
     USING (bucket_id = 'knowledge-files')
     WITH CHECK (bucket_id = 'knowledge-files');
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files anon delete'
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge-files auth delete'
   ) THEN
-    CREATE POLICY "knowledge-files anon delete"
+    CREATE POLICY "knowledge-files auth delete"
     ON storage.objects FOR DELETE
-    TO anon
+    TO authenticated
     USING (bucket_id = 'knowledge-files');
   END IF;
 END $$;
@@ -325,7 +338,7 @@ BEGIN
   ) THEN
     CREATE POLICY "pos_products_allow_insert"
       ON pos_products FOR INSERT
-      TO anon, authenticated
+      TO authenticated
       WITH CHECK (true);
   END IF;
 
@@ -337,7 +350,7 @@ BEGIN
   ) THEN
     CREATE POLICY "pos_products_allow_update"
       ON pos_products FOR UPDATE
-      TO anon, authenticated
+      TO authenticated
       USING (true)
       WITH CHECK (true);
   END IF;
@@ -350,7 +363,7 @@ BEGIN
   ) THEN
     CREATE POLICY "pos_products_allow_delete"
       ON pos_products FOR DELETE
-      TO anon, authenticated
+      TO authenticated
       USING (true);
   END IF;
 END $$;
@@ -364,6 +377,13 @@ END $$;
 --    DEFAULT 'main' → tương thích ngược với dữ liệu cũ
 ALTER TABLE pos_products        ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
 ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'direct';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS channel_name TEXT DEFAULT 'Bán trực tiếp';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS price_book_id TEXT;
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS price_book_name TEXT;
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';
+ALTER TABLE pos_orders          ADD COLUMN IF NOT EXISTS is_return BOOLEAN DEFAULT false;
 ALTER TABLE pos_customers       ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
 ALTER TABLE revenue_records     ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
@@ -381,6 +401,10 @@ ALTER TABLE expense_records     ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL
 -- 3. Index cho branch_id để query multi-branch hiệu quả
 CREATE INDEX IF NOT EXISTS idx_pos_products_branch        ON pos_products(branch_id);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_branch          ON pos_orders(branch_id);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_status          ON pos_orders(status);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_channel         ON pos_orders(channel);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_price_book      ON pos_orders(price_book_id);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_created_by      ON pos_orders(created_by);
 CREATE INDEX IF NOT EXISTS idx_revenue_records_branch     ON revenue_records(branch_id);
 CREATE INDEX IF NOT EXISTS idx_expense_records_branch     ON expense_records(branch_id);
 
@@ -448,6 +472,10 @@ ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS code TEXT;
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS supplier_group TEXT;
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_company_name TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_tax_code TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_phone TEXT;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_address TEXT;
 
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS supplier_id TEXT;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS supplier_name TEXT;
@@ -695,8 +723,10 @@ NOTIFY pgrst, 'reload schema';
 -- User-defined categories (independent of products, allows pre-defining structure)
 CREATE TABLE IF NOT EXISTS categories (
   path TEXT PRIMARY KEY,
+  location TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS location TEXT;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_all" ON categories FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
@@ -751,3 +781,74 @@ CREATE TABLE IF NOT EXISTS customer_debt_history (
 );
 ALTER TABLE customer_debt_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_all" ON customer_debt_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- =============================================================================
+-- SECURITY MIGRATION: Restrict write access to authenticated users only
+-- Chạy block này trên Supabase Dashboard nếu database đã được tạo trước đây.
+-- =============================================================================
+
+-- Fix pos_products: xóa policy cũ cho phép anon ghi, tạo lại chỉ cho authenticated
+DROP POLICY IF EXISTS "pos_products_allow_insert" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_allow_update" ON pos_products;
+DROP POLICY IF EXISTS "pos_products_allow_delete" ON pos_products;
+
+CREATE POLICY "pos_products_allow_insert"
+  ON pos_products FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "pos_products_allow_update"
+  ON pos_products FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "pos_products_allow_delete"
+  ON pos_products FOR DELETE TO authenticated USING (true);
+
+REVOKE INSERT, UPDATE, DELETE ON pos_products FROM anon;
+
+-- Fix knowledge-files storage: xóa policy cũ cho phép anon ghi
+DROP POLICY IF EXISTS "knowledge-files anon upload" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files anon update" ON storage.objects;
+DROP POLICY IF EXISTS "knowledge-files anon delete" ON storage.objects;
+
+CREATE POLICY "knowledge-files auth upload"
+  ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'knowledge-files');
+CREATE POLICY "knowledge-files auth update"
+  ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'knowledge-files') WITH CHECK (bucket_id = 'knowledge-files');
+CREATE POLICY "knowledge-files auth delete"
+  ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'knowledge-files');
+
+-- ============================================================
+-- Carry-forward debt system (vòng 4) — 2026-05-26
+-- Theo dõi nợ lương âm chuyển sang kỳ tiếp theo
+-- ============================================================
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS carry_forward_debt NUMERIC DEFAULT 0;
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS carry_forward_deduction NUMERIC DEFAULT 0;
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS carry_forward_debt_out NUMERIC DEFAULT 0;
+
+-- ============================================================
+-- Product Cost History — 2026-05-31
+-- Lưu lịch sử giá vốn theo thời gian để tính COGS chính xác
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_cost_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku TEXT NOT NULL,
+  product_id TEXT,
+  import_price NUMERIC NOT NULL DEFAULT 0,
+  effective_date TEXT NOT NULL,
+  source TEXT DEFAULT 'purchase',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pch_sku_date ON product_cost_history(sku, effective_date DESC);
+CREATE INDEX IF NOT EXISTS idx_pch_product_date ON product_cost_history(product_id, effective_date DESC);
+
+ALTER TABLE product_cost_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "product_cost_history auth all" ON product_cost_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+
+-- ============================================================
+-- Refund Amount — 2026-06-01
+-- Tiền trả lại khách khi trả hàng (> 0 = hoàn tiền, 0 = đổi hàng)
+-- ============================================================
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS refund_amount NUMERIC DEFAULT 0;
+
+-- Tên nhân viên thô từ KiotViet (staff_id lưu UUID, staff_name lưu tên gốc)
+-- ============================================================
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS staff_name TEXT;

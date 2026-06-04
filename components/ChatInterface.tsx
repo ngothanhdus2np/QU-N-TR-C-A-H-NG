@@ -15,6 +15,7 @@ import {
   Users,
   Megaphone,
   Wrench,
+  Star,
 } from 'lucide-react';
 import { AppData, ChatMessage } from '../types';
 import { marked } from 'marked';
@@ -95,6 +96,16 @@ const AGENT_META: Record<
       'Tóm tắt phiên bán hàng POS hôm nay — doanh thu, số hóa đơn, phương thức thanh toán.',
       'Nhà cung cấp nào đang có công nợ chưa thanh toán quá hạn?',
       'Công nợ tổng với các NCC hiện tại là bao nhiêu?',
+    ],
+  },
+  customers: {
+    label: 'Customer Agent',
+    color: 'violet',
+    icon: Star,
+    questions: [
+      'Phân loại tệp khách hàng theo hạng VIP — bao nhiêu khách Gold, Diamond?',
+      'Top 10 khách hàng chi tiêu nhiều nhất là ai?',
+      'Tổng điểm tích lũy và công nợ khách hàng hiện tại là bao nhiêu?',
     ],
   },
 };
@@ -361,12 +372,127 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           orderCount: orders.length,
           returnCount: returns.length,
           totalRevenue: orders.reduce((s, o) => s + o.finalAmount, 0),
-          totalReturns: returns.reduce((s, o) => s + o.finalAmount, 0),
+          totalReturns: returns.reduce((s, o) => s + Math.abs(o.finalAmount), 0),
           cashOrders: orders.filter(o => o.paymentMethod === 'Cash').length,
           bankOrders: orders.filter(o => o.paymentMethod === 'Bank').length,
           topProducts: Array.from(productMap.values())
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 5),
+        };
+      }
+
+      case 'query_pos_orders': {
+        const { startDate: s, endDate: e, topN: n = 10 } = args || {};
+        const orders = (data.posOrders || []).filter(
+          o => !o.isReturn && o.status !== 'cancelled' && o.date >= s && o.date <= e
+        );
+        const returns = (data.posOrders || []).filter(
+          o => o.isReturn && o.date >= s && o.date <= e
+        );
+        const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+        for (const o of orders) {
+          for (const item of o.items) {
+            const cur = productMap.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
+            cur.quantity += item.quantity;
+            cur.revenue += item.total;
+            productMap.set(item.productId, cur);
+          }
+        }
+        const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0);
+        const totalReturns = returns.reduce((sum, o) => sum + Math.abs(o.finalAmount), 0);
+        return {
+          period: `${s} đến ${e}`,
+          orderCount: orders.length,
+          returnCount: returns.length,
+          totalRevenue,
+          totalReturns,
+          netRevenue: totalRevenue - totalReturns,
+          avgOrderValue: orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0,
+          paymentBreakdown: {
+            Cash: orders.filter(o => o.paymentMethod === 'Cash').reduce((sum, o) => sum + o.finalAmount, 0),
+            Bank: orders.filter(o => o.paymentMethod === 'Bank').reduce((sum, o) => sum + o.finalAmount, 0),
+            Momo: orders.filter(o => o.paymentMethod === 'Momo').reduce((sum, o) => sum + o.finalAmount, 0),
+            Other: orders.filter(o => o.paymentMethod === 'Other').reduce((sum, o) => sum + o.finalAmount, 0),
+          },
+          topProducts: Array.from(productMap.values())
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, n),
+        };
+      }
+
+      case 'get_product_details': {
+        const { query: q, stockFilter = 'all', activeOnly = true } = args || {};
+        let products = (data.posProducts || []);
+        if (activeOnly) products = products.filter(p => p.status === 'Active');
+        if (q) {
+          const lower = q.toLowerCase();
+          products = products.filter(
+            p => p.name.toLowerCase().includes(lower) || p.sku.toLowerCase().includes(lower)
+          );
+        }
+        if (stockFilter === 'out_of_stock') products = products.filter(p => p.stock <= 0);
+        else if (stockFilter === 'low_stock') products = products.filter(p => p.stock > 0 && p.stock <= (p.minStock ?? 5));
+        else if (stockFilter === 'in_stock') products = products.filter(p => p.stock > 0);
+        return {
+          totalFound: products.length,
+          products: products.slice(0, 30).map(p => ({
+            name: p.name,
+            sku: p.sku,
+            salePrice: p.salePrice,
+            importPrice: p.importPrice,
+            stock: p.stock,
+            minStock: p.minStock,
+            unit: p.unit,
+            status: p.status,
+          })),
+        };
+      }
+
+      case 'get_customer_stats': {
+        const topN = args?.topN ?? 10;
+        const customers = data.posCustomers || [];
+        const tierCount: Record<string, number> = { Standard: 0, Silver: 0, Gold: 0, Diamond: 0 };
+        for (const c of customers) tierCount[c.tier] = (tierCount[c.tier] ?? 0) + 1;
+        return {
+          totalCustomers: customers.length,
+          tierBreakdown: tierCount,
+          totalPoints: customers.reduce((s, c) => s + c.points, 0),
+          totalDebt: customers.reduce((s, c) => s + (c.debtAmount ?? 0), 0),
+          topBySpending: customers
+            .filter(c => c.totalSpent > 0)
+            .sort((a, b) => b.totalSpent - a.totalSpent)
+            .slice(0, topN)
+            .map(c => ({
+              name: c.name,
+              phone: c.phone,
+              tier: c.tier,
+              totalSpent: c.totalSpent,
+              points: c.points,
+              lastVisit: c.lastVisit,
+            })),
+        };
+      }
+
+      case 'get_product_group_revenue': {
+        const { startDate: gs, endDate: ge } = args || {};
+        const records = (data.productGroupRevenue || []).filter(
+          r => r.date >= gs && r.date <= ge
+        );
+        const groupMap = new Map<string, { name: string; revenue: number; netRevenue: number; quantity: number }>();
+        for (const r of records) {
+          const cur = groupMap.get(r.groupId) || { name: r.groupName, revenue: 0, netRevenue: 0, quantity: 0 };
+          cur.revenue += r.amount;
+          cur.netRevenue += r.netRevenue ?? r.amount;
+          cur.quantity += r.quantity ?? 0;
+          groupMap.set(r.groupId, cur);
+        }
+        const totalRevenue = Array.from(groupMap.values()).reduce((s, v) => s + v.revenue, 0);
+        return {
+          period: `${gs} đến ${ge}`,
+          totalRevenue,
+          groups: Array.from(groupMap.values())
+            .sort((a, b) => b.revenue - a.revenue)
+            .map(g => ({ ...g, pct: totalRevenue > 0 ? +((g.revenue / totalRevenue) * 100).toFixed(1) : 0 })),
         };
       }
 
@@ -486,12 +612,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <BrainCircuit className="w-8 h-8" />
           </div>
           <div>
-            <h4 className="font-black text-base uppercase tracking-[0.2em] flex items-center gap-2">
+            <h4 className="font-semibold text-base uppercase tracking-[0.2em] flex items-center gap-2">
               AI CFO SUPREME <Sparkles className="w-4 h-4 text-amber-400" />
             </h4>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+              <span className="text-2xs font-normal text-slate-400 uppercase tracking-widest">
                 Logic Brain Matrix Active
               </span>
             </div>
@@ -504,7 +630,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           return (
             <div className="flex items-center gap-2 bg-slate-700 px-4 py-2 rounded-xl border border-slate-600">
               <AgentIcon className="w-3.5 h-3.5 text-slate-300" />
-              <span className="text-[10px] font-normal text-slate-300 uppercase tracking-widest">
+              <span className="text-2xs font-normal text-slate-300 uppercase tracking-widest">
                 {meta.label}
               </span>
             </div>
@@ -556,7 +682,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     key={i}
                     onClick={() => setInput(q)}
-                    className="p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-normal hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left text-slate-600 italic leading-relaxed"
+                    className="p-4 bg-white border border-slate-200 rounded-2xl text-2xs font-normal hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left text-slate-600 italic leading-relaxed"
                   >
                     {q}
                   </button>
@@ -604,13 +730,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="w-12 h-12 rounded-[1.25rem] bg-white border-2 border-slate-100 flex items-center justify-center shadow-md">
                 <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
               </div>
-              <div className="px-8 py-5 rounded-[2rem] bg-white border border-slate-100 text-slate-400 italic text-[10px] font-normal uppercase tracking-widest shadow-sm">
+              <div className="px-8 py-5 rounded-[2rem] bg-white border border-slate-100 text-slate-400 italic text-2xs font-normal uppercase tracking-widest shadow-sm">
                 AI CFO đang{' '}
                 {isQuerying ? 'tự động truy vấn sổ sách...' : 'phân tích dữ liệu chuyên sâu...'}
               </div>
             </div>
             {isQuerying && currentTool && (
-              <div className="ml-16 flex items-center gap-2 text-indigo-500 text-[10px] font-normal uppercase tracking-widest animate-pulse">
+              <div className="ml-16 flex items-center gap-2 text-indigo-500 text-2xs font-normal uppercase tracking-widest animate-pulse">
                 <Database className="w-4 h-4" /> Truy xuất: {currentTool}
               </div>
             )}

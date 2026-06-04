@@ -30,7 +30,7 @@ export const ExpenseMetricCard = ({ title, value, icon: Icon, color, desc }: Exp
     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl flex flex-col justify-between transition-all hover:-translate-y-1">
       <div>
         <div className={`p-4 rounded-2xl ${colorMap[color] || 'bg-slate-50 text-slate-600'} w-fit mb-6 shadow-sm`}><Icon className="w-6 h-6" /></div>
-        <p className="text-[10px] font-normal text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+        <p className="text-2xs font-normal text-slate-400 uppercase tracking-widest mb-1">{title}</p>
         <h4 className="text-xl font-normal text-slate-900 tabular-nums">{value}</h4>
       </div>
       {desc && <p className="text-[9px] text-slate-400 font-normal mt-4 pt-4 border-t border-slate-50 uppercase tracking-tighter">{desc}</p>}

@@ -39,9 +39,11 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
   popupPlacement = 'bottom',
 }) => {
   const pickerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
+  const [rightPopupPosition, setRightPopupPosition] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,6 +57,26 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isOpen]);
+
+  const updateRightPopupPosition = () => {
+    if (popupPlacement !== 'right' || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setRightPopupPosition({
+      top: rect.top,
+      left: rect.right + 12,
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen || popupPlacement !== 'right') return;
+    updateRightPopupPosition();
+    window.addEventListener('resize', updateRightPopupPosition);
+    window.addEventListener('scroll', updateRightPopupPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateRightPopupPosition);
+      window.removeEventListener('scroll', updateRightPopupPosition, true);
+    };
+  }, [isOpen, popupPlacement]);
 
   // Build tree structure (same logic as ProductGroupTreeTab)
   const treeNodes = useMemo(() => {
@@ -186,18 +208,25 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
 
   const popupClassName =
     popupPlacement === 'right'
-      ? 'absolute left-full top-0 z-30 ml-3 w-[440px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl'
+      ? 'fixed z-toast w-[440px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl'
       : 'absolute right-0 top-full z-30 mt-2 w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl';
+
+  const popupStyle =
+    popupPlacement === 'right'
+      ? { top: rightPopupPosition.top, left: rightPopupPosition.left }
+      : undefined;
 
   return (
     <div ref={pickerRef} className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => {
+          if (!isOpen) updateRightPopupPosition();
           setIsOpen(prev => !prev);
           setSearchTerm('');
         }}
-        className="flex h-12 min-w-52 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 text-left text-sm font-normal text-slate-500 transition-all hover:border-indigo-300 hover:text-slate-800"
+        className="flex h-12 w-full min-w-52 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 text-left text-sm font-normal text-slate-500 transition-all hover:border-indigo-300 hover:text-slate-800"
       >
         <span className={selectedPaths.length > 0 ? 'text-slate-800' : ''}>
           {displayText}
@@ -206,7 +235,7 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
       </button>
 
       {isOpen && (
-        <div className={popupClassName}>
+        <div className={popupClassName} style={popupStyle}>
           {/* Search Header */}
           <div className="border-b border-slate-100 p-3">
             <div className="relative">

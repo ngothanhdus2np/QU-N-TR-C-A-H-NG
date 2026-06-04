@@ -17,7 +17,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
   onResolveConflicts,
   formatNumber,
 }) => (
-  <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+  <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}></div>
     <div className="relative bg-white w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[3rem] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col">
       <div className="p-8 border-b border-slate-100 bg-rose-50 flex items-center justify-between">
@@ -26,7 +26,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+            <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">
               Đối Soát Sai Lệch
             </h3>
           </div>
@@ -45,7 +45,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
         <div className="rounded-3xl border border-slate-200 overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase border-b border-slate-200">
+              <tr className="bg-slate-50 text-2xs font-semibold text-slate-500 uppercase border-b border-slate-200">
                 <th className="px-6 py-4">Ngày tháng</th>
                 <th className="px-6 py-4">Hạng mục</th>
                 <th className="px-6 py-4 text-right">App</th>
@@ -104,7 +104,7 @@ export const RevenueAuditModal: React.FC<RevenueAuditModalProps> = ({
         </button>
         <button
           onClick={onResolveConflicts}
-          className="px-12 py-4 bg-slate-900 text-white rounded-2xl font-normal text-[10px] uppercase shadow-xl"
+          className="px-12 py-4 bg-slate-900 text-white rounded-2xl font-normal text-2xs uppercase shadow-xl"
         >
           XÁC NHẬN ĐỐI SOÁT
         </button>

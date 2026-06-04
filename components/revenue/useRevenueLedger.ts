@@ -54,16 +54,23 @@ export function useRevenueLedger({
           alert('Không tìm thấy tiêu đề hợp lệ.');
           return;
         }
+        // KiotViet xuất file theo giao dịch: mỗi đơn hàng 1 dòng, nhưng cột tổng ngày
+        // (Tổng tiền hàng, Giảm giá, Giá trị trả...) lặp lại giống nhau cho mọi dòng cùng ngày.
+        // Nhận biết qua cột "Mã giao dịch" → chỉ lấy dòng đầu tiên mỗi ngày, bỏ qua các dòng sau.
+        const isTransactionLevel = results.length > 0 && 'magiaodich' in results[0];
         const groupedByDate: Record<string, RevenueRecord> = {};
         results.forEach(r => {
           const date = parseVNDate(r.thoigian || r.ngay || r.time);
           if (!date) return;
           const tg = cleanVNNumber(r.tongtienhang || r.totalgrossrevenue || r.tongtien);
           const gg = cleanVNNumber(r.giamgia || r.discount || r.chietkhau);
-          const th = cleanVNNumber(r.giatritra || r.returnsvalue || r.trahang);
+          // Lưu returns dương để nhất quán với công thức net = gross - |discount| - |returns|
+          const th = Math.abs(cleanVNNumber(r.giatritra || r.returnsvalue || r.trahang));
           const gv = cleanVNNumber(r.tonggiavon || r.totalcogs || r.giavon);
-          const dt = cleanVNNumber(r.doanhthu || r.revenue || r.doanhthuthuan);
+          // Ưu tiên "Doanh thu thuần" (sau trả hàng) trước "Doanh thu" (chưa trừ trả hàng)
+          const dt = cleanVNNumber(r.doanhthuthuan || r.doanhthu || r.revenue);
           const ln = cleanVNNumber(r.loinhuangop || r.grossprofit);
+          const discountAbs = Math.abs(gg);
           if (!groupedByDate[date]) {
             groupedByDate[date] = {
               id: generateId(),
@@ -72,19 +79,21 @@ export function useRevenueLedger({
               discount: gg,
               revenueOther: 0,
               returnsValue: th,
-              netRevenue: dt || tg - gg - th,
+              netRevenue: dt || tg - discountAbs - th,
               totalCogs: gv,
-              grossProfit: ln || (dt || tg - gg - th) - gv,
+              grossProfit: ln || (dt || tg - discountAbs - th) - gv,
             };
-          } else {
+          } else if (!isTransactionLevel) {
+            // File daily-summary: mỗi dòng là dữ liệu riêng biệt → cộng dồn
             const existing = groupedByDate[date];
             existing.totalGrossRevenue += tg;
             existing.discount += gg;
             existing.returnsValue += th;
-            existing.netRevenue += dt || tg - gg - th;
+            existing.netRevenue += dt || tg - discountAbs - th;
             existing.totalCogs += gv;
-            existing.grossProfit += ln || (dt || tg - gg - th) - gv;
+            existing.grossProfit += ln || (dt || tg - discountAbs - th) - gv;
           }
+          // File transaction-level: tổng ngày đã đúng ở dòng đầu → bỏ qua dòng trùng
         });
 
         const conflicts: RevenueAuditConflict[] = [];
@@ -127,8 +136,8 @@ export function useRevenueLedger({
             if (isModified) {
               current.netRevenue =
                 (current.totalGrossRevenue || 0) -
-                (current.discount || 0) -
-                (current.returnsValue || 0);
+                Math.abs(current.discount || 0) -
+                Math.abs(current.returnsValue || 0);
               current.grossProfit =
                 current.netRevenue + (current.revenueOther || 0) - (current.totalCogs || 0);
               updatedFullList[existingIdx] = current;
@@ -179,8 +188,8 @@ export function useRevenueLedger({
           finalRecords[idx][conflict.columnKey] = conflict.newValue;
           finalRecords[idx].netRevenue =
             (finalRecords[idx].totalGrossRevenue || 0) -
-            (finalRecords[idx].discount || 0) -
-            (finalRecords[idx].returnsValue || 0);
+            Math.abs(finalRecords[idx].discount || 0) -
+            Math.abs(finalRecords[idx].returnsValue || 0);
           finalRecords[idx].grossProfit =
             finalRecords[idx].netRevenue +
             (finalRecords[idx].revenueOther || 0) -
