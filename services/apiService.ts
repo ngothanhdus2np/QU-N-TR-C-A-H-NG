@@ -466,6 +466,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_META_LIMIT = 5000;
 const SUPABASE_PAGE_SIZE = 1000;
+const POS_ORDER_BOOTSTRAP_DAYS = 90;
 const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'id',
   'sku',
@@ -532,8 +533,10 @@ const fetchAllRows = async (
   }
 };
 
-const fetchPosOrdersFromYear = async (year: number) => {
-  const fromDate = `${year}-01-01`;
+const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
+  const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
   const allRows: any[] = [];
   let offset = 0;
   while (true) {
@@ -798,7 +801,7 @@ export const apiService = {
         options.skipPosProducts
           ? skippedResult
           : fetchAllRows('pos_products', 'id', undefined, POS_PRODUCT_BOOTSTRAP_COLUMNS),
-        fetchPosOrdersFromYear(new Date().getFullYear()),
+        fetchRecentPosOrders(),
         supabase.from('pos_customers').select('*').limit(2000),
         supabase
           .from('inventory_transactions')
