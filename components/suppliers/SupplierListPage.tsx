@@ -24,7 +24,7 @@ interface SupplierListPageProps {
   onCreateSupplier: () => void;
   onViewDetail: (supplier: Supplier) => void;
   onDeleteSupplier: (id: string) => void | Promise<void>;
-  onBulkDeleteSuppliers: (ids: string[]) => Promise<void>;
+  onBulkDeleteSuppliers: (ids: string[], onSuccess: () => void) => Promise<void>;
   onImportFile: () => void;
   onExportSuppliers: (suppliers: Supplier[]) => void;
   onToggleFavorite: (supplier: Supplier) => Promise<void>;
@@ -196,10 +196,12 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   };
 
   const handleToggleSelectAll = () => {
-    if (selectedSuppliers.length === paginatedSuppliers.length) {
-      setSelectedSuppliers([]);
+    const allCurrentSelected = paginatedSuppliers.every(s => selectedSuppliers.includes(s.id));
+    if (allCurrentSelected) {
+      setSelectedSuppliers(prev => prev.filter(id => !paginatedSuppliers.some(s => s.id === id)));
     } else {
-      setSelectedSuppliers(paginatedSuppliers.map(s => s.id));
+      const newIds = paginatedSuppliers.map(s => s.id).filter(id => !selectedSuppliers.includes(id));
+      setSelectedSuppliers(prev => [...prev, ...newIds]);
     }
   };
 
@@ -230,8 +232,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   const handleConfirmBulkDelete = async () => {
     setBulkDeleteOpen(false);
     try {
-      await onBulkDeleteSuppliers(selectedSuppliers);
-      setSelectedSuppliers([]);
+      await onBulkDeleteSuppliers(selectedSuppliers, () => setSelectedSuppliers([]));
     } catch (err) {
       console.error('[SupplierListPage] Bulk delete failed', err);
       showToast('Xóa hàng loạt thất bại. Vui lòng thử lại.', 'error');
@@ -335,7 +336,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   const toolbar = (
     <ListPageToolbar
       searchTerm={searchTerm}
-      onSearchChange={setSearchTerm}
+      onSearchChange={term => { setSearchTerm(term); setCurrentPage(1); }}
       searchPlaceholder="Tìm mã, tên, số điện thoại..."
       rightActions={
         <>
@@ -396,7 +397,8 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         <input
           type="checkbox"
           checked={
-            selectedSuppliers.length === paginatedSuppliers.length && paginatedSuppliers.length > 0
+            paginatedSuppliers.length > 0 &&
+            paginatedSuppliers.every(s => selectedSuppliers.includes(s.id))
           }
           onChange={handleToggleSelectAll}
           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"

@@ -45,6 +45,7 @@ export interface ShopeeInventoryOutRecord {
   id: string;
   date: string;
   orderId: string;
+  orderCode?: string;
   sku: string;
   productName?: string;
   platform?: string;
@@ -56,6 +57,8 @@ export interface ShopeeInventoryOutRecord {
   freeshipExtra: number;
   affiliateFee: number;
   handlingFee: number;
+  pishipFee: number;
+  vatTax: number;
   adsCost: number;
   adsTax: number;
   personalIncomeTax: number;

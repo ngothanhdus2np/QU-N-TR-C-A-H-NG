@@ -97,44 +97,51 @@ export function usePOSKeyboard({
     const handleKeyDown = (e: KeyboardEvent) => {
       const shortcuts = loadShortcuts(keyboardSettings);
 
-      if (matchesShortcut(e, 'focusSearch', shortcuts)) {
+      const target = e.target as Element;
+      const isInputFocused =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        (target as HTMLElement).isContentEditable;
+
+      // Focus shortcuts — cho phép khi đang ở input (để thoát ra ngoài)
+      if (matchesShortcut(e, 'focusSearch', shortcuts) && !isInputFocused) {
         e.preventDefault();
         productSearchRef.current?.focus();
         return;
       }
 
-      if (matchesShortcut(e, 'openConsultant', shortcuts)) {
+      if (matchesShortcut(e, 'openConsultant', shortcuts) && !isInputFocused) {
         e.preventDefault();
         setShowConsultant(true);
         setTimeout(() => consultantSearchRef.current?.focus(), 100);
         return;
       }
 
-      if (matchesShortcut(e, 'focusCustomer', shortcuts)) {
+      if (matchesShortcut(e, 'focusCustomer', shortcuts) && !isInputFocused) {
         e.preventDefault();
         customerSearchRef.current?.focus();
         return;
       }
 
-      if (matchesShortcut(e, 'checkout', shortcuts) && cartLengthRef.current > 0) {
+      if (matchesShortcut(e, 'checkout', shortcuts) && cartLengthRef.current > 0 && !isInputFocused) {
         e.preventDefault();
         checkoutRef.current();
         return;
       }
 
-      if (matchesShortcut(e, 'addTab', shortcuts)) {
+      if (matchesShortcut(e, 'addTab', shortcuts) && !isInputFocused) {
         e.preventDefault();
         addNewTabRef.current?.();
         return;
       }
 
-      if (matchesShortcut(e, 'toggleAutoPrint', shortcuts)) {
+      if (matchesShortcut(e, 'toggleAutoPrint', shortcuts) && !isInputFocused) {
         e.preventDefault();
         setIsAutoPrintEnabled?.(!isAutoPrintEnabledRef?.current);
         return;
       }
 
-      if (matchesShortcut(e, 'toggleFullscreen', shortcuts)) {
+      if (matchesShortcut(e, 'toggleFullscreen', shortcuts) && !isInputFocused) {
         e.preventDefault();
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen().catch(() => {});
@@ -145,12 +152,6 @@ export function usePOSKeyboard({
       }
 
       // Cart navigation — only when no text input is focused
-      const target = e.target as Element;
-      const isInputFocused =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        (target as HTMLElement).isContentEditable;
-
       if (!isInputFocused) {
         const cart = cartItemsRef?.current ?? [];
         const idx = selectedCartIndexRef?.current ?? -1;

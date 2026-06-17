@@ -19,6 +19,7 @@ import { validationService } from '../services/validationService';
 import { incrementPending, getPendingCount, clearPending } from '../services/syncService';
 import { useOfflineSync } from './useOfflineSync';
 import { appDataCache } from '../services/appDataCache';
+import { markLocalWrite } from './useRealtimeSync';
 
 const localTodayStr = new Date().toLocaleDateString('sv-SE');
 type IdentifiableItem = { id: string };
@@ -90,6 +91,53 @@ const isIdentifiableItem = (item: unknown): item is IdentifiableItem =>
   'id' in item &&
   typeof (item as { id?: unknown }).id === 'string';
 
+function buildSurgicalRollbackUpdates(
+  data: AppData,
+  updates: AppDataSurgicalUpdate[]
+): AppDataSurgicalUpdate[] {
+  const rollback: AppDataSurgicalUpdate[] = [];
+  for (const update of updates) {
+    if (!isIdentifiableItem(update.item)) continue;
+    const currentList = Array.isArray(data[update.key]) ? data[update.key] : [];
+    const existing = currentList.find(item => isIdentifiableItem(item) && item.id === update.item.id);
+
+    if (update.isDelete) {
+      if (existing) rollback.push({ key: update.key, item: existing } as AppDataSurgicalUpdate);
+    } else if (existing) {
+      rollback.push({ key: update.key, item: existing } as AppDataSurgicalUpdate);
+    } else {
+      rollback.push({
+        key: update.key,
+        item: { id: update.item.id },
+        isDelete: true,
+      } as AppDataSurgicalUpdate);
+    }
+  }
+  return rollback.reverse();
+}
+
+function applySurgicalUpdatesToSnapshot(
+  data: Partial<AppData>,
+  updates: AppDataSurgicalUpdate[]
+): Partial<AppData> {
+  const nextData: Record<string, unknown> = { ...data };
+  for (const update of updates) {
+    if (!isIdentifiableItem(update.item)) continue;
+    const key = update.key as string;
+    const existingItems = Array.isArray(nextData[key]) ? [...nextData[key] as IdentifiableItem[]] : [];
+    const idx = existingItems.findIndex(item => item.id === update.item.id);
+    if (update.isDelete) {
+      if (idx > -1) existingItems.splice(idx, 1);
+    } else if (idx > -1) {
+      existingItems[idx] = { ...existingItems[idx], ...update.item };
+    } else {
+      existingItems.push(update.item as IdentifiableItem);
+    }
+    nextData[key] = existingItems;
+  }
+  return nextData as Partial<AppData>;
+}
+
 const isSystemKnowledgeArticle = (item: unknown) =>
   isIdentifiableItem(item) && item.id.startsWith('system-doc-');
 
@@ -98,6 +146,18 @@ function sanitizeAppDataSnapshot<T extends Partial<AppData> | AppData>(data: T):
   const knowledgeBase = data.knowledgeBase.filter(item => !isSystemKnowledgeArticle(item));
   if (knowledgeBase.length === data.knowledgeBase.length) return data;
   return { ...data, knowledgeBase } as T;
+}
+
+const SYNC_COOLDOWN_MS = 10 * 60 * 1000; // 10 phút
+const SYNC_LAST_KEY = 'cfo_brain_last_cloud_sync';
+
+function isSyncOnCooldown(): boolean {
+  const last = Number(localStorage.getItem(SYNC_LAST_KEY) || 0);
+  return Date.now() - last < SYNC_COOLDOWN_MS;
+}
+
+function markSyncDone() {
+  localStorage.setItem(SYNC_LAST_KEY, String(Date.now()));
 }
 
 const LOCAL_STORAGE_DROPPED_KEYS: (keyof AppData)[] = [
@@ -214,6 +274,16 @@ const isNetworkSyncError = (err: unknown) =>
     .toLowerCase()
     .includes('network');
 
+const canReachLocalServer = async (): Promise<boolean> => {
+  if (typeof window === 'undefined') return true;
+  try {
+    const res = await fetch('/health', { method: 'HEAD', cache: 'no-store' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
 const loadBundledPosProducts = async (): Promise<PosSeedProduct[]> => {
   if (typeof window === 'undefined') return [];
 
@@ -231,9 +301,14 @@ const POS_PRODUCTS_SEED_KEY = 'cfo_brain_pos_products_seed_version';
 const POS_PRODUCTS_SEED_VERSION = 'kiotviet_2026-05-06_12739';
 const normalizeActiveTab = (tab: string) => (tab === 'dashboard' ? 'overview' : tab);
 
+const getInitialTab = () => {
+  const path = window.location.pathname.replace(/^\//, '').trim();
+  return normalizeActiveTab(path || 'pos');
+};
+
 const initialState: AppState = {
   data: INITIAL_APP_DATA,
-  activeTab: 'pos',
+  activeTab: getInitialTab(),
   brandProfile: DEFAULT_BRAND,
   chatMessages: [],
   isSyncing: false,
@@ -297,6 +372,23 @@ export function useAppData() {
     (date: string) => dispatch({ type: 'SET_DIAG_END_DATE', payload: date }),
     []
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshReachability = async () => {
+      const reachable = await canReachLocalServer();
+      if (!cancelled) {
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: reachable });
+      }
+    };
+
+    refreshReachability();
+    const intervalId = window.setInterval(refreshReachability, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const suggestedFocusProducts = useMemo(() => {
     const nextMonthNum = new Date().getMonth() + 2;
@@ -367,14 +459,24 @@ export function useAppData() {
       if (Object.keys(configOverrides).length > 0) {
         localData = { ...(localData || {}), ...configOverrides };
       }
+      // Manual sync luôn fetch lại posProducts để nhận thay đổi từ DB (tên, giá, v.v.)
       const skipPosProducts =
+        !isManual &&
         Array.isArray(localData?.posProducts) && localData.posProducts.length > 0;
 
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const browserReportsOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (browserReportsOffline && !(await canReachLocalServer())) {
         const offlineMessage = 'Đang offline — dùng dữ liệu cache, bỏ qua tải cloud.';
         dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
         dispatch({ type: 'SET_SYNC_ERRORS', payload: [offlineMessage] });
         if (localData) dispatch({ type: 'SET_DATA', payload: localData });
+        return;
+      }
+
+      // Cooldown 10 phút: bỏ qua fetch cloud nếu vừa sync gần đây (trừ khi user bấm thủ công)
+      if (!isManual && isSyncOnCooldown()) {
+        if (localData) dispatch({ type: 'SET_DATA', payload: localData });
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
         return;
       }
 
@@ -544,6 +646,8 @@ export function useAppData() {
       await saveDataSnapshot(newState);
       dispatch({ type: 'SET_CLOUD_CONNECTED', payload: !hasFetchErrors });
 
+      if (!hasFetchErrors) markSyncDone();
+
       // Tự động tính lại COGS từ pos_orders sau mỗi lần sync, tối đa 1 lần/giờ
       if (!hasFetchErrors) {
         const COGS_RECALC_KEY = 'cogs_recalc_last_run';
@@ -599,6 +703,7 @@ export function useAppData() {
       const cachedData = await loadCachedDataSnapshot();
       if (cachedData) dispatch({ type: 'SET_DATA', payload: cachedData });
       const message = err instanceof Error ? err.message : 'Kiểm tra kết nối và cấu trúc bảng';
+      dispatch({ type: 'SET_SYNC_ERRORS', payload: [`LỖI ĐỒNG BỘ: ${message}`] });
       if (isManual) alert(`LỖI ĐỒNG BỘ: ${message}`);
     } finally {
       dispatch({ type: 'SET_SYNCING', payload: false });
@@ -723,9 +828,16 @@ export function useAppData() {
     []
   );
 
+  const mergeRemoteUpdate = useCallback((updates: AppDataSurgicalUpdate[]) => {
+    dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
+  }, []);
+
   const updateSurgical = useCallback(
     async (updates: AppDataSurgicalUpdate[]) => {
+      // Đánh dấu để useRealtimeSync bỏ qua echo từ Supabase Realtime
+      updates.forEach(u => { if ('id' in u.item) markLocalWrite(u.item.id as string); });
       dispatch({ type: 'SET_SYNCING', payload: true });
+      const localRollbackUpdates = buildSurgicalRollbackUpdates(state.data, updates);
       dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
 
       // Durable Save: Update localStorage immediately before Cloud push
@@ -862,8 +974,20 @@ export function useAppData() {
             }
           }
         } else {
-          // DON'T throw - data is already saved locally
-          console.warn('Sync failed but data saved locally:', err);
+          if (localRollbackUpdates.length > 0) {
+            dispatch({ type: 'UPDATE_SURGICAL', payload: localRollbackUpdates });
+            try {
+              const cachedData = await loadCachedDataSnapshot();
+              const rolledBackSnapshot = applySurgicalUpdatesToSnapshot(
+                { ...state.data, ...(cachedData || {}) },
+                localRollbackUpdates
+              );
+              await saveDataSnapshot(rolledBackSnapshot);
+            } catch (rollbackCacheErr) {
+              console.error('[Sync] Không thể rollback cache local:', rollbackCacheErr);
+            }
+          }
+          throw err;
         }
       } finally {
         dispatch({ type: 'SET_SYNCING', payload: false });
@@ -991,6 +1115,7 @@ export function useAppData() {
     silentSync,
     updateData,
     updateSurgical,
+    mergeRemoteUpdate,
     pushBatch,
     syncErrors,
     lastSyncTime,

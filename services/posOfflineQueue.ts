@@ -24,6 +24,7 @@ export interface PendingOp {
   /** Payload gốc (chưa sanitize) */
   payload: unknown;
   retries: number;
+  lastError?: string;
 }
 
 const getPayloadId = (payload: unknown): string | null => {
@@ -246,7 +247,7 @@ class POSOfflineQueueService {
   }
 
   /** Cập nhật số lần retry */
-  async incrementRetry(id: string): Promise<void> {
+  async incrementRetry(id: string, lastError?: string): Promise<void> {
     await this.init();
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(STORE_NAME, 'readwrite');
@@ -256,6 +257,7 @@ class POSOfflineQueueService {
         const op = getReq.result as PendingOp;
         if (!op) { resolve(); return; }
         op.retries = (op.retries || 0) + 1;
+        op.lastError = lastError;
         const putReq = store.put(op);
         putReq.onsuccess = () => resolve();
         putReq.onerror = () => reject(putReq.error);

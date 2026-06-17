@@ -52,6 +52,8 @@ interface GoodsPurchaseFormProps {
     updates: Partial<{ quantity: number; price: number; discount: number }>
   ) => void;
   onRemovePurchaseItem: (id: string) => void;
+  purchaseReferenceId?: string;
+  setPurchaseReferenceId?: (v: string) => void;
   onCompletePurchase: () => void;
   onSaveDraft?: () => void;
   onDownloadTemplate: () => void;
@@ -83,6 +85,8 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
   onAddProductToPurchase,
   onUpdatePurchaseItem,
   onRemovePurchaseItem,
+  purchaseReferenceId = '',
+  setPurchaseReferenceId,
   onCompletePurchase,
   onSaveDraft,
   onDownloadTemplate,
@@ -171,8 +175,10 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     {products
                       .filter(
                         p =>
-                          p.name.toLowerCase().includes(purchaseSearchTerm.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(purchaseSearchTerm.toLowerCase())
+                          !p.isParent &&
+                          p.status !== 'Inactive' &&
+                          (p.name.toLowerCase().includes(purchaseSearchTerm.toLowerCase()) ||
+                          p.sku.toLowerCase().includes(purchaseSearchTerm.toLowerCase()))
                       )
                       .map(p => (
                         <div
@@ -294,11 +300,12 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                             </button>
                             <input
                               type="number"
+                              min={1}
                               className="w-full text-center py-1 outline-none font-normal"
                               value={item.quantity}
                               onChange={e =>
                                 onUpdatePurchaseItem(item.productId, {
-                                  quantity: Number(e.target.value),
+                                  quantity: Math.max(1, Number(e.target.value) || 1),
                                 })
                               }
                             />
@@ -329,11 +336,12 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                         <td className="px-3 py-2 border-r">
                           <input
                             type="number"
+                            min={0}
                             className="w-full text-right outline-none bg-transparent"
                             value={item.discount}
                             onChange={e =>
                               onUpdatePurchaseItem(item.productId, {
-                                discount: Number(e.target.value),
+                                discount: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
                           />
@@ -440,19 +448,14 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                   <input
                     className="text-right text-sm border-b border-dashed outline-none focus:border-indigo-500 font-normal"
                     placeholder="Mã phiếu tự động"
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-normal text-slate-600">Mã đặt hàng nhập</span>
-                  <input
-                    className="text-right text-sm border-b border-dashed outline-none focus:border-indigo-500 font-normal"
-                    placeholder="Nhập mã đặt hàng"
+                    value={purchaseReferenceId}
+                    onChange={e => setPurchaseReferenceId?.(e.target.value)}
                   />
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-normal text-slate-600">Trạng thái</span>
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-normal">
-                    Phiếu tạm
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-normal">
+                    Đang nhập
                   </span>
                 </div>
               </div>
@@ -661,7 +664,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                         <td className="p-4 text-slate-500">
                           {new Date(t.date).toLocaleString('vi-VN')}
                         </td>
-                        <td className="p-4 font-normal">{t.note?.split('từ ')[1] || '---'}</td>
+                        <td className="p-4 font-normal">{t.supplierName || '---'}</td>
                         <td className="p-4 text-right font-normal text-emerald-600">
                           {(
                             t.totalAmount ||

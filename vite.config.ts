@@ -29,6 +29,7 @@ export default defineConfig(() => {
       test: {
         environment: 'node',
         include: ['**/*.test.ts'],
+        exclude: ['supabase/**', 'node_modules/**'],
       },
     };
 });

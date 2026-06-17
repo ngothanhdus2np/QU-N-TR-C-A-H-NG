@@ -1,19 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { usePosOrders } from '../../hooks/usePosOrders';
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronsLeft,
-  ChevronsRight,
-  DownloadCloud,
   FileText,
-  Maximize2,
-  Printer,
-  Redo2,
-  RefreshCw,
-  Search,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
 import type { Employee, POSOrder } from '../../types';
 import {
@@ -23,6 +12,7 @@ import {
 } from '../../src/lib/reportCalculations';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import ReportDropdownFilter, { getReportDropdownOptions } from './ReportDropdownFilter';
+import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
 
 interface ChannelReportPageProps {
   orders: POSOrder[];
@@ -36,7 +26,6 @@ type ViewMode = 'chart' | 'report';
 type DateMode = 'week' | 'custom';
 
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
 
 const formatDate = (value: string) =>
   new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
@@ -45,32 +34,8 @@ const formatDate = (value: string) =>
     year: 'numeric',
   });
 
-const getWeekRange = () => {
-  const today = new Date();
-  const day = today.getDay() || 7;
-  const start = new Date(today);
-  start.setDate(today.getDate() - day + 1);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start: toDateInputValue(start), end: toDateInputValue(end) };
-};
-
 const CHART_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#059669'];
 
-const ToolbarButton: React.FC<{ children: React.ReactNode; label: string; onClick?: () => void }> = ({
-  children,
-  label,
-  onClick,
-}) => (
-  <button
-    aria-label={label}
-    title={label}
-    onClick={onClick}
-    className="inline-flex h-8 w-8 items-center justify-center rounded text-white/85 transition hover:bg-white/10 hover:text-white"
-  >
-    {children}
-  </button>
-);
 
 const SelectButton: React.FC<{ children: React.ReactNode; active?: boolean; disabled?: boolean; onClick?: () => void }> = ({
   children,
@@ -91,7 +56,7 @@ const SelectButton: React.FC<{ children: React.ReactNode; active?: boolean; disa
 );
 
 const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
-  orders,
+  orders: bootstrapOrders,
   employees,
   storeName = 'Chi nhánh trung tâm',
 }) => {
@@ -102,6 +67,17 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
   const [endDate, setEndDate] = useState(weekRange.end);
   const [staffQuery, setStaffQuery] = useState('');
   const [channelQuery, setChannelQuery] = useState('');
+  const { orders, isLoading: ordersLoading } = usePosOrders(bootstrapOrders, startDate, endDate);
+  useEffect(() => {
+    if (dateMode === 'custom') return;
+    if (orders.length === 0 || hasOrdersInDateRange(orders, startDate, endDate)) return;
+    const latestDate = getLatestOrderDate(orders);
+    if (!latestDate) return;
+    const nextRange = getWeekRange(new Date(`${latestDate}T00:00:00`));
+    setStartDate(nextRange.start);
+    setEndDate(nextRange.end);
+    setDateMode('week');
+  }, [endDate, orders, startDate]);
   const createdAt = useMemo(
     () =>
       new Date().toLocaleString('vi-VN', {
@@ -140,7 +116,6 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
     setEndDate(weekRange.end);
   };
 
-  const handlePrint = () => window.print();
 
   const handleDownload = () => {
     const header = ['Kênh bán hàng', 'Doanh thu', 'Giá trị trả', 'Doanh thu thuần'];
@@ -166,7 +141,7 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
   const circ = 2 * Math.PI * R;
   let cumulativeArc = 0;
   const chartSegments = rows.map((row, i) => {
-    const fraction = totals.netRevenue > 0 ? row.netRevenue / totals.netRevenue : 0;
+    const fraction = totals.netRevenue > 0 ? Math.max(0, row.netRevenue) / totals.netRevenue : 0;
     const arc = fraction * circ;
     const seg = { key: row.key, channelName: row.channelName, fraction, arc, offset: cumulativeArc, color: CHART_COLORS[i % CHART_COLORS.length] };
     cumulativeArc += arc;
@@ -266,7 +241,10 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <h1 className="mb-5 text-2xl font-bold">Báo cáo kênh bán hàng</h1>
+          <h1 className="mb-5 flex items-center gap-3 text-2xl font-bold">
+            Báo cáo kênh bán hàng
+            {ordersLoading && <span className="text-sm font-normal text-slate-400">Đang tải...</span>}
+          </h1>
           {viewMode === 'chart' ? (
             <div className="min-h-0 flex-1 bg-white px-6 py-5">
               <h2 className="text-center text-lg font-medium text-slate-700">
@@ -314,67 +292,15 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#748090]">
-              <div className="flex h-10 shrink-0 items-center justify-center gap-2 bg-[#748090] text-white">
-                <ToolbarButton label="Hoàn tác">
-                  <Undo2 className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Làm lại">
-                  <Redo2 className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tải lại">
-                  <RefreshCw className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Trang đầu">
-                  <ChevronsLeft className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Trang trước">
-                  <ChevronLeft className="h-4 w-4" />
-                </ToolbarButton>
-                <div className="flex items-center gap-1 text-sm font-bold">
-                  <span className="flex h-8 w-11 items-center justify-center rounded-md bg-white text-slate-700">
-                    1
-                  </span>
-                  <span>/ 1</span>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div className="mb-5 text-center">
+                <div className="mb-1 text-xs text-slate-400">Ngày lập: {createdAt}</div>
+                <h2 className="text-xl font-bold text-slate-800">Báo cáo bán hàng theo kênh</h2>
+                <div className="mt-2 space-y-0.5 text-sm text-slate-500">
+                  <p>Từ ngày {formatDate(startDate)} đến ngày {formatDate(endDate)}</p>
+                  <p>Chi nhánh: {storeName}</p>
                 </div>
-                <ToolbarButton label="Trang sau">
-                  <ChevronsRight className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tài liệu">
-                  <FileText className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tải xuống" onClick={handleDownload}>
-                  <DownloadCloud className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="In" onClick={handlePrint}>
-                  <Printer className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Thu nhỏ">
-                  <ZoomOut className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tìm kiếm">
-                  <Search className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Phóng to">
-                  <ZoomIn className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Toàn màn hình">
-                  <Maximize2 className="h-4 w-4" />
-                </ToolbarButton>
               </div>
-
-              <div className="min-h-0 flex-1 overflow-auto px-8 pb-10">
-                <article className="mx-auto min-h-[820px] w-full max-w-[820px] bg-white px-4 pb-12 pt-5 shadow-sm">
-                  <div className="px-1 text-xs text-slate-700">Ngày lập: {createdAt}</div>
-                  <h2 className="mt-2 text-center text-2xl font-bold">
-                    Báo cáo bán hàng theo kênh
-                  </h2>
-                  <div className="mt-4 space-y-3 text-center text-sm text-slate-800">
-                    <p>
-                      Từ ngày {formatDate(startDate)} đến ngày {formatDate(endDate)}
-                    </p>
-                    <p>Chi nhánh: {storeName}</p>
-                  </div>
 
                   <table className="mt-10 w-full border-collapse text-sm">
                     <thead>
@@ -442,8 +368,7 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
                       )}
                     </tbody>
                   </table>
-                </article>
-              </div>
+                
             </div>
           )}
         </section>

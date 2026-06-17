@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, ShoppingCart, Users, RotateCcw, Zap } from 'l
 import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 
 interface Props {
   data: AppData;
@@ -39,8 +40,8 @@ const AnalysisEfficiencyPage: React.FC<Props> = ({ data }) => {
     const todayOrders = orders.filter(o => o.date === today);
     const yesterdayOrders = orders.filter(o => o.date === yesterday);
 
-    const totalRevenue30 = last30.reduce((s, o) => s + o.finalAmount, 0);
-    const totalRevenuePrev30 = prev30.reduce((s, o) => s + o.finalAmount, 0);
+    const totalRevenue30 = last30.reduce((s, o) => s + calcOrderRevenue(o), 0);
+    const totalRevenuePrev30 = prev30.reduce((s, o) => s + calcOrderRevenue(o), 0);
 
     const avgOrderValue = last30.length > 0 ? totalRevenue30 / last30.length : 0;
     const avgOrderValuePrev = prev30.length > 0 ? totalRevenuePrev30 / prev30.length : 0;
@@ -50,8 +51,8 @@ const AnalysisEfficiencyPage: React.FC<Props> = ({ data }) => {
 
     const returnRate = orders.length > 0 ? (returns.length / (orders.length + returns.length)) * 100 : 0;
 
-    const todayRevenue = todayOrders.reduce((s, o) => s + o.finalAmount, 0);
-    const yesterdayRevenue = yesterdayOrders.reduce((s, o) => s + o.finalAmount, 0);
+    const todayRevenue = todayOrders.reduce((s, o) => s + calcOrderRevenue(o), 0);
+    const yesterdayRevenue = yesterdayOrders.reduce((s, o) => s + calcOrderRevenue(o), 0);
 
     // Top staff by revenue (last 30 days)
     const employeeNameMap = new Map<string, string>(
@@ -64,7 +65,7 @@ const AnalysisEfficiencyPage: React.FC<Props> = ({ data }) => {
       const rawId = (o as any).createdBy || (o as any).staffId || '';
       const key = resolveStaff(rawId) || 'Không rõ';
       const cur = staffMap.get(key) || { revenue: 0, orders: 0 };
-      staffMap.set(key, { revenue: cur.revenue + o.finalAmount, orders: cur.orders + 1 });
+      staffMap.set(key, { revenue: cur.revenue + calcOrderRevenue(o), orders: cur.orders + 1 });
     });
     const topStaff = Array.from(staffMap.entries())
       .map(([name, v]) => ({ name, ...v, avgValue: v.orders > 0 ? v.revenue / v.orders : 0 }))
@@ -76,7 +77,7 @@ const AnalysisEfficiencyPage: React.FC<Props> = ({ data }) => {
     last30.forEach(o => {
       const key = o.channelName || (o.channel === 'direct' ? 'Trực tiếp' : o.channel === 'online' ? 'Online' : o.channel === 'marketplace' ? 'Sàn TMĐT' : 'Khác');
       const cur = channelMap.get(key) || { revenue: 0, orders: 0 };
-      channelMap.set(key, { revenue: cur.revenue + o.finalAmount, orders: cur.orders + 1 });
+      channelMap.set(key, { revenue: cur.revenue + calcOrderRevenue(o), orders: cur.orders + 1 });
     });
     const channels = Array.from(channelMap.entries())
       .map(([name, v]) => ({ name, ...v }))

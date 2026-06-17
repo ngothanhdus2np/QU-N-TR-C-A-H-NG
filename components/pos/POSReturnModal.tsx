@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, ChevronDown, ChevronRight, Undo2 } from 'lucide-react';
 import { POSOrder, POSCustomer } from '../../types';
 
@@ -28,19 +28,27 @@ interface POSReturnModalProps {
   onSelectOrder: (order: POSOrder) => void;
 }
 
+const PAGE_SIZE = 20;
+
 const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onClose, onReturnFast, onSelectOrder }) => {
   const [returnSearch, setReturnSearch] = useState({
     invoiceId: '',
-    trackingId: '',
     customer: '',
     productId: '',
     productName: '',
-    fromDate: '2026-04-04',
+    fromDate: '',
     toDate: ''
   });
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [orders, returnSearch, customers]);
 
   const filteredReturnOrders = useMemo(() => {
     return orders.filter(order => {
+      if (order.isReturn) return false;
+
       const matchInvoiceId = !returnSearch.invoiceId ||
         order.orderCode.toLowerCase().includes(returnSearch.invoiceId.toLowerCase());
 
@@ -48,12 +56,23 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
         (order.customerName && order.customerName.toLowerCase().includes(returnSearch.customer.toLowerCase())) ||
         (order.customerId && customers.find(c => c.id === order.customerId)?.phone.includes(returnSearch.customer));
 
-      const matchDate = (!returnSearch.fromDate || new Date(order.date) >= new Date(returnSearch.fromDate)) &&
-                        (!returnSearch.toDate || new Date(order.date) <= new Date(returnSearch.toDate));
+      // [FIX m5] So sánh theo local date string — tránh miss đơn do lệch timezone UTC vs VN (+7)
+      const orderLocalDate = new Date(order.date).toLocaleDateString('en-CA');
+      const matchDate = (!returnSearch.fromDate || orderLocalDate >= returnSearch.fromDate) &&
+                        (!returnSearch.toDate || orderLocalDate <= returnSearch.toDate);
 
-      return matchInvoiceId && matchCustomer && matchDate;
+      const matchProduct = (!returnSearch.productId && !returnSearch.productName) ||
+        order.items.some(item =>
+          (!returnSearch.productId || (item.sku || item.productId || '').toLowerCase().includes(returnSearch.productId.toLowerCase())) &&
+          (!returnSearch.productName || item.name.toLowerCase().includes(returnSearch.productName.toLowerCase()))
+        );
+
+      return matchInvoiceId && matchCustomer && matchDate && matchProduct;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [orders, returnSearch, customers]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReturnOrders.length / PAGE_SIZE));
+  const pagedOrders = filteredReturnOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-6">
@@ -83,7 +102,6 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
               <section className="space-y-2">
                 <p className="text-2xs font-semibold text-slate-400 uppercase tracking-widest px-0.5">Tìm kiếm</p>
                 <ReturnInput value={returnSearch.invoiceId} onChange={val => setReturnSearch(prev => ({ ...prev, invoiceId: val }))} placeholder="Theo mã hóa đơn" />
-                <ReturnInput value={returnSearch.trackingId} onChange={val => setReturnSearch(prev => ({ ...prev, trackingId: val }))} placeholder="Theo mã vận đơn bán" />
                 <ReturnInput value={returnSearch.customer} onChange={val => setReturnSearch(prev => ({ ...prev, customer: val }))} placeholder="Theo khách hàng hoặc ĐT" />
                 <ReturnInput value={returnSearch.productId} onChange={val => setReturnSearch(prev => ({ ...prev, productId: val }))} placeholder="Theo mã hàng" />
                 <ReturnInput value={returnSearch.productName} onChange={val => setReturnSearch(prev => ({ ...prev, productName: val }))} placeholder="Theo tên hàng" />
@@ -130,11 +148,11 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredReturnOrders.map((inv) => (
+                  {pagedOrders.map((inv) => (
                     <tr key={inv.id} className="hover:bg-indigo-50/40 transition-colors">
                       <td className="px-4 py-3 font-normal text-indigo-600 cursor-pointer hover:underline">{inv.orderCode}</td>
                       <td className="px-4 py-3 font-normal text-slate-500">{new Date(inv.date).toLocaleString('vi-VN')}</td>
-                      <td className="px-4 py-3 font-normal text-slate-600">{inv.staffId}</td>
+                      <td className="px-4 py-3 font-normal text-slate-600">{inv.staffName || inv.staffId}</td>
                       <td className="px-4 py-3 font-normal text-slate-600">{inv.customerName || 'Khách lẻ'}</td>
                       <td className="px-4 py-3 font-normal text-slate-800 text-right">{inv.finalAmount.toLocaleString()}</td>
                       <td className="px-4 py-3 text-center">
@@ -161,16 +179,18 @@ const POSReturnModal: React.FC<POSReturnModalProps> = ({ orders, customers, onCl
             {/* Pagination + action */}
             <div className="px-5 py-3 border-t border-slate-100 bg-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-1">
-                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5 rotate-180" />} />
-                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5 rotate-180" />} />
+                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5 rotate-180" />} onClick={() => setPage(1)} />
+                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5 rotate-180" />} onClick={() => setPage(p => Math.max(1, p - 1))} />
                 <div className="flex items-center gap-1">
-                  {[1,2,3,4,5].map(n => (
-                    <button key={n} className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition-colors ${n === 1 ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{n}</button>
-                  ))}
-                  <span className="text-slate-300 mx-1 text-xs">...</span>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const n = Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
+                    return (
+                      <button key={n} onClick={() => setPage(n)} className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition-colors ${n === page ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{n}</button>
+                    );
+                  })}
                 </div>
-                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5" />} />
-                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5" />} />
+                <PaginationButton icon={<ChevronRight className="h-3.5 w-3.5" />} onClick={() => setPage(p => Math.min(totalPages, p + 1))} />
+                <PaginationButton icon={<Undo2 className="h-3.5 w-3.5" />} onClick={() => setPage(totalPages)} />
               </div>
 
               <div className="flex items-center gap-3">

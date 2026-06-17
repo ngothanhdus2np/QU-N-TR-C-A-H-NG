@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { InventoryTransaction, POSOrder, POSProduct } from '../../types';
+import { GoodsChannelLinksTab } from './GoodsChannelLinksTab';
 
 export type DetailTab = 'info' | 'desc' | 'warranty' | 'units' | 'channels';
 
@@ -148,9 +149,16 @@ const getQuantityChange = (
   return quantity;
 };
 
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  full: 'Đủ HĐ',
+  partial: 'HĐ một phần',
+  memo_only: 'Phiếu ghi nhận',
+  none: 'Chưa khai báo',
+};
+
 const getInvoiceStatus = (transaction: InventoryTransaction) => {
   if (transaction.type !== 'Import' && transaction.type !== 'PurchaseReturn') return '—';
-  return 'Chưa khai báo';
+  return INVOICE_STATUS_LABELS[transaction.invoiceStatus || 'none'] ?? 'Chưa khai báo';
 };
 
 const buildStockCardRows = (
@@ -712,11 +720,11 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 font-normal mb-2 block">Giá vốn</label>
-                  <div className="text-sm font-normal text-slate-900">{product.importPrice.toLocaleString()}</div>
+                  <div className="text-sm font-normal text-slate-900">{(Number(product.importPrice) || 0).toLocaleString()}</div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 font-normal mb-2 block">Giá bán</label>
-                  <div className="text-sm font-normal text-slate-900">{product.salePrice.toLocaleString()}</div>
+                  <div className="text-sm font-normal text-slate-900">{(Number(product.salePrice) || 0).toLocaleString()}</div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 font-normal mb-2 block">Thương hiệu</label>
@@ -773,15 +781,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         )}
 
         {activeTab === 'channels' && (
-          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-              <Package className="h-6 w-6 text-slate-400" />
-            </div>
-            <p className="text-sm font-medium text-slate-600 mb-1">Liên kết kênh bán</p>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto">
-              Kết nối sản phẩm với Shopee, Lazada, TikTok Shop và các kênh bán khác. Tính năng sẽ sớm ra mắt.
-            </p>
-          </div>
+          <GoodsChannelLinksTab product={product} />
         )}
       </div>
 

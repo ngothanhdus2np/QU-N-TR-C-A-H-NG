@@ -1612,9 +1612,12 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
                   <main
                     className="sheet"
                     dangerouslySetInnerHTML={{
-                      __html: barcodeLabelPreviewItems
-                        .map(item => renderBarcodeLabelHtml(item))
-                        .join(''),
+                      __html: DOMPurify.sanitize(
+                        barcodeLabelPreviewItems
+                          .map(item => renderBarcodeLabelHtml(item))
+                          .join(''),
+                        { ADD_TAGS: ['svg', 'rect', 'path'], ADD_ATTR: ['viewBox', 'xmlns', 'fill', 'stroke', 'width', 'height', 'd', 'x', 'y'] }
+                      ),
                     }}
                   />
                 </div>

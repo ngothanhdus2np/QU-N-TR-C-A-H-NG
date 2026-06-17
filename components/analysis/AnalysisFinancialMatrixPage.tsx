@@ -39,6 +39,16 @@ const AnalysisFinancialMatrixPage: React.FC<Props> = ({ data }) => {
   const [selectedTrendMonth, setSelectedTrendMonth] = useState<string | null>(null);
 
 
+  // Tránh double-count lương: nếu payroll module có data thì loại salary ra khỏi expenses
+  const salaryKws = ['luong', 'hoa hong', 'thu nhap nhan su', 'nhan su', 'thuong doanh so'];
+  const normVNMatrix = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const isSalaryMatrix = (cat: string) => salaryKws.some(kw => normVNMatrix(cat).includes(kw));
+  const payrollModuleTotal = (data.payroll || []).reduce((s, p) => s + (Number(p.netPay) || 0), 0);
+  const nonSalaryExpenses = payrollModuleTotal > 0
+    ? (data.expenses || []).filter(e => !isSalaryMatrix(e.category))
+    : (data.expenses || []);
+
   const monthlyTrendData = useMemo(() => {
     const months: Record<string, { month: string; revenue: number; grossProfit: number; netProfit: number }> = {};
     data.revenue.forEach(r => {
@@ -47,7 +57,7 @@ const AnalysisFinancialMatrixPage: React.FC<Props> = ({ data }) => {
       months[k].revenue += (Number(r.netRevenue) || 0) + (Number(r.revenueOther) || 0);
       months[k].grossProfit += Number(r.grossProfit) || 0;
     });
-    data.expenses.forEach(e => {
+    nonSalaryExpenses.forEach(e => {
       const k = e.date.substring(0, 7);
       if (!months[k]) months[k] = { month: k, revenue: 0, grossProfit: 0, netProfit: 0 };
       months[k].netProfit -= Number(e.amount);
@@ -59,7 +69,7 @@ const AnalysisFinancialMatrixPage: React.FC<Props> = ({ data }) => {
     });
     Object.keys(months).forEach(k => { months[k].netProfit += months[k].grossProfit; });
     return Object.values(months).sort((a, b) => a.month.localeCompare(b.month));
-  }, [data.revenue, data.expenses, data.payroll]);
+  }, [data.revenue, nonSalaryExpenses, data.payroll]);
 
   const dailyTrendData = useMemo(() => {
     if (!selectedTrendMonth) return [];
@@ -69,13 +79,13 @@ const AnalysisFinancialMatrixPage: React.FC<Props> = ({ data }) => {
       days[r.date].revenue += (Number(r.netRevenue) || 0) + (Number(r.revenueOther) || 0);
       days[r.date].grossProfit += Number(r.grossProfit) || 0;
     });
-    data.expenses.filter(e => e.date.startsWith(selectedTrendMonth)).forEach(e => {
+    nonSalaryExpenses.filter(e => e.date.startsWith(selectedTrendMonth)).forEach(e => {
       if (!days[e.date]) days[e.date] = { date: e.date, revenue: 0, grossProfit: 0, netProfit: 0 };
       days[e.date].netProfit -= Number(e.amount);
     });
     Object.keys(days).forEach(k => { days[k].netProfit += days[k].grossProfit; });
     return Object.values(days).sort((a, b) => a.date.localeCompare(b.date));
-  }, [data.revenue, data.expenses, selectedTrendMonth]);
+  }, [data.revenue, nonSalaryExpenses, selectedTrendMonth]);
 
   const currentYear = new Date().getFullYear();
   const isValidYear = (y: string) =>

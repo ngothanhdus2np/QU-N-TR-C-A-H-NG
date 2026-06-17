@@ -21,7 +21,7 @@ process.on('uncaughtException', (err, origin) => {
   console.error(`Uncaught Exception: ${err}\n` + `Exception origin: ${origin}`);
 });
 
-import express, { NextFunction, Request, Response } from 'express';
+import express, { NextFunction, Request, RequestHandler, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import path from 'path';
@@ -30,13 +30,90 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import react from '@vitejs/plugin-react';
 
 import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
+import { readFile } from 'fs/promises';
 import { createAiRouter } from './routes/ai';
+import { createAuthRouter } from './routes/auth';
 import { createDataRouter } from './routes/data';
 import { createFacebookRouter } from './routes/facebook';
 import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
+import { createStoreRouter } from './routes/store';
+
+/**
+ * Kiểm tra schema local Supabase qua REST API.
+ * Nếu phát hiện cột bị thiếu → in SQL cần chạy vào console để user biết.
+ */
+async function syncLocalSchema(): Promise<void> {
+  const localUrl = 'http://192.168.1.3:8000';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  // Danh sách cột quan trọng cần kiểm tra: { table, column, sql }
+  const requiredColumns: { table: string; column: string; sql: string }[] = [
+    { table: 'pos_orders', column: 'cash_received',  sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS cash_received NUMERIC DEFAULT 0;" },
+    { table: 'pos_orders', column: 'split_payments', sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS split_payments JSONB;" },
+    { table: 'pos_orders', column: 'staff_name',     sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS staff_name TEXT;" },
+    { table: 'pos_orders', column: 'refund_amount',  sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS refund_amount NUMERIC DEFAULT 0;" },
+    { table: 'pos_orders', column: 'is_return',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS is_return BOOLEAN DEFAULT false;" },
+    { table: 'pos_orders', column: 'points_earned',  sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS points_earned NUMERIC DEFAULT 0;" },
+    { table: 'pos_orders', column: 'channel',        sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'direct';" },
+    { table: 'pos_orders', column: 'channel_name',   sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS channel_name TEXT DEFAULT 'Bán trực tiếp';" },
+    { table: 'pos_orders', column: 'price_book_id',  sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS price_book_id TEXT;" },
+    { table: 'pos_orders', column: 'price_book_name',sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS price_book_name TEXT;" },
+    { table: 'pos_orders', column: 'status',         sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';" },
+    { table: 'pos_orders', column: 'created_by',     sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS created_by TEXT;" },
+    { table: 'pos_orders', column: 'branch_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';" },
+    { table: 'pos_orders', column: 'tenant_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';" },
+  ];
+
+  try {
+    // Kiểm tra bằng cách query thử với tất cả cột cần thiết
+    const colList = [...new Set(requiredColumns.map(c => c.column))].join(',');
+    const testUrl = `${localUrl}/rest/v1/pos_orders?select=id,${colList}&limit=0`;
+    const resp = await fetch(testUrl, {
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        Accept: 'application/json',
+        'Range-Unit': 'items',
+        'Range': '0/-1',
+        Prefer: 'count=none',
+      },
+    });
+
+    if (resp.ok) {
+      console.log('[Schema Sync] ✅ Local Supabase schema đã đồng bộ');
+      return;
+    }
+
+    // 400 = thiếu cột — thử từng cột để tìm cái nào thiếu
+    const missingSql: string[] = [];
+    for (const col of requiredColumns) {
+      const r = await fetch(
+        `${localUrl}/rest/v1/${col.table}?select=id,${col.column}&limit=0`,
+        { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
+      );
+      if (!r.ok) missingSql.push(col.sql);
+    }
+
+    if (missingSql.length === 0) {
+      console.log('[Schema Sync] ✅ Local Supabase schema OK');
+    } else {
+      console.warn(`\n╔══════════════════════════════════════════════════════╗`);
+      console.warn(`║  [Schema Sync] ⚠️  ${missingSql.length} CỘT BỊ THIẾU TRÊN LOCAL SUPABASE  ║`);
+      console.warn(`║  Mở http://192.168.1.3:8000 → SQL Editor → paste:   ║`);
+      console.warn(`╚══════════════════════════════════════════════════════╝`);
+      console.warn('\n-- Copy từ đây --');
+      missingSql.forEach(s => console.warn(s));
+      console.warn('-- Đến đây --\n');
+    }
+  } catch {
+    // Không kết nối được — bỏ qua, server vẫn chạy bình thường
+  }
+}
 
 function getLocalIPs(): string[] {
   const ips: string[] = [];
@@ -46,6 +123,22 @@ function getLocalIPs(): string[] {
     }
   }
   return ips;
+}
+
+function normalizeRemoteAddress(address?: string): string {
+  if (!address) return '';
+  return address.startsWith('::ffff:') ? address.slice('::ffff:'.length) : address;
+}
+
+function isPrivateLanAddress(address: string): boolean {
+  const ip = normalizeRemoteAddress(address);
+  if (ip === '127.0.0.1' || ip === '::1') return true;
+  if (ip.startsWith('10.')) return true;
+  if (ip.startsWith('192.168.')) return true;
+
+  const parts = ip.split('.').map(part => Number(part));
+  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part))) return false;
+  return parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
 }
 
 const app = express();
@@ -64,7 +157,10 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   if (!IS_PROD) console.error(`[STARTUP] Server is listening on port ${PORT}`);
 });
 
-app.get('/health', (_req, res) => res.send('OK'));
+const healthHandler: RequestHandler = (_req, res) => res.send('OK');
+
+app.get('/health', healthHandler);
+app.head('/health', healthHandler);
 app.get('/', (req, res, next) => {
   if (!viteReady && process.env.NODE_ENV !== 'production') {
     return res.send(`
@@ -100,6 +196,10 @@ async function startServer() {
       `http://localhost:${PORT}`,
       `http://127.0.0.1:${PORT}`,
       process.env.APP_URL,
+      'https://phucsang.com.vn',
+      'https://www.phucsang.com.vn',
+      'https://cfobrain.phucsang.com.vn',
+      'https://app.phucsang.com.vn',
       ...(!IS_PROD ? getLocalIPs().map(ip => `http://${ip}:${PORT}`) : []),
     ].filter(Boolean) as string[];
 
@@ -109,10 +209,11 @@ async function startServer() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002"],
-          fontSrc: ["'self'", "data:"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.3:8000", "ws://192.168.1.3:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn"],
+          upgradeInsecureRequests: null,
+          fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           objectSrc: ["'self'", "blob:"],
           mediaSrc: ["'self'"],
           frameSrc: ["'self'", "blob:"],
@@ -144,13 +245,14 @@ async function startServer() {
     });
 
     app.use('/api/', apiLimiter);
-    app.use('/api/auth/', authLimiter);
+    app.use('/api/auth/register', authLimiter);
 
     app.use(
       cors({
         origin: (origin, callback) => {
           if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-          callback(new Error('Not allowed by CORS'));
+          // [FIX] callback(null, false) thay vì callback(Error) — tránh stack trace rác trong log
+          callback(null, false);
         },
         methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
@@ -159,6 +261,36 @@ async function startServer() {
     );
     app.use(express.json({ limit: '30mb' }));
     app.use(cookieParser());
+
+    // Supabase Proxy — forward /auth/v1, /rest/v1, /storage/v1 về Supabase nội bộ
+    // Cho phép truy cập Supabase từ bất kỳ đâu qua app.phucsang.com.vn
+    const SUPABASE_INTERNAL = 'http://192.168.1.3:8000';
+    app.use(['/auth/v1', '/rest/v1', '/storage/v1'], async (req: Request, res: Response) => {
+      const targetUrl = `${SUPABASE_INTERNAL}${req.originalUrl}`;
+      const headers: Record<string, string> = {};
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (key === 'host' || key === 'connection' || key === 'content-length') continue;
+        headers[key] = Array.isArray(value) ? value.join(', ') : value;
+      }
+      try {
+        const hasBody = req.body && Object.keys(req.body).length > 0;
+        if (hasBody) headers['content-type'] = 'application/json';
+        const upstream = await fetch(targetUrl, {
+          method: req.method,
+          headers,
+          body: hasBody ? JSON.stringify(req.body) : undefined,
+        });
+        upstream.headers.forEach((value, key) => {
+          if (key === 'transfer-encoding' || key === 'connection') return;
+          res.setHeader(key, value);
+        });
+        res.status(upstream.status);
+        const buf = await upstream.arrayBuffer();
+        res.end(Buffer.from(buf));
+      } catch (err) {
+        res.status(502).json({ error: 'Supabase không khả dụng', message: String(err) });
+      }
+    });
 
     if (!IS_PROD) {
       app.use((req, _res, next) => {
@@ -176,8 +308,8 @@ async function startServer() {
                 throw new Error('SESSION_SECRET required');
               })()
             : 'dev-only-insecure-secret'),
-        resave: true,
-        saveUninitialized: true,
+        resave: false,
+        saveUninitialized: false, // [FIX] không tạo session cho request chưa login — giảm bloat
         proxy: true,
         name: 'fb_session',
         cookie: {
@@ -189,9 +321,8 @@ async function startServer() {
       })
     );
 
-    app.get('/health', (_req, res) => {
-      res.send('OK');
-    });
+    app.get('/health', healthHandler);
+    app.head('/health', healthHandler);
 
     if (!IS_PROD) {
       app.use('/api', (req, _res, next) => {
@@ -200,7 +331,7 @@ async function startServer() {
       });
     }
 
-    const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+    const requireAuth: RequestHandler = async (req, res, next) => {
       const apiKey = req.headers['x-api-key'] as string;
       const internalKey = process.env.INTERNAL_API_KEY;
       const requestOrigin = req.headers.origin;
@@ -219,10 +350,7 @@ async function startServer() {
       // Also ensuring no proxy forwarding headers (X-Forwarded-For, X-Forwarded-Host) are present, which prevents
       // bypassing auth when accessed through external tunnels like Cloudflare Tunnel or ngrok.
       const remoteIp = req.socket.remoteAddress;
-      const isLocalhost =
-        remoteIp === '127.0.0.1' ||
-        remoteIp === '::1' ||
-        remoteIp === '::ffff:127.0.0.1';
+      const isTrustedDevNetwork = isPrivateLanAddress(remoteIp);
 
       const hasForwardedHeader = !!(
         req.headers['x-forwarded-for'] ||
@@ -232,7 +360,7 @@ async function startServer() {
 
       const isTrustedDevBrowserRequest =
         !IS_PROD &&
-        isLocalhost &&
+        isTrustedDevNetwork &&
         !hasForwardedHeader &&
         ((typeof requestOrigin === 'string' && allowedOrigins.includes(requestOrigin)) ||
           (typeof refererOrigin === 'string' && allowedOrigins.includes(refererOrigin)));
@@ -240,31 +368,75 @@ async function startServer() {
       if (isTrustedDevBrowserRequest) {
         return next();
       }
-      
-      if (!internalKey) {
-        console.error('[AUTH] INTERNAL_API_KEY not configured - all requests will be rejected');
-        return res.status(500).json({ error: 'Server configuration error' });
-      }
-      
+
       if (apiKey && apiKey === internalKey) {
         return next();
       }
+
+      const authHeader = req.headers.authorization;
+      const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (jwt) {
+        const { data: { user }, error } = await supabase.auth.getUser(jwt);
+        if (!error && user) return next();
+      }
       
-      return res.status(401).json({ error: 'Unauthorized - Valid API key required' });
+      return res.status(401).json({ error: 'Unauthorized - Supabase session or server API key required' });
     };
 
     const facebookRoutes = createFacebookRouter({ supabase, requireAuth, configDir: __dirname });
     app.use(facebookRoutes.router);
+    app.use(createAuthRouter(supabase));
     app.use(createAiRouter(requireAuth));
     app.use(createDataRouter(supabase, requireAuth));
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
+    app.use(createStoreRouter(supabase));
+
+    // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
+    if (!IS_PROD) {
+      try {
+        const localUrl = 'http://192.168.1.3:8000';
+        const remoteUrl = 'https://app.phucsang.com.vn';
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 1500);
+          await fetch(`${localUrl}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
+          // Dùng localhost:PORT thay vì IP trực tiếp để tránh CORS trong browser
+          // (proxy /auth/v1, /rest/v1 đã được setup ở trên để forward về localUrl)
+          process.env.VITE_SUPABASE_URL = `http://localhost:${PORT}`;
+          console.log('[Config] Mạng nội bộ → dùng proxy localhost:', `http://localhost:${PORT}`);
+          // Tự động sync schema lên local Supabase để tránh thiếu cột
+          syncLocalSchema().catch(e =>
+            console.warn('[Schema Sync] Lỗi sync schema local:', e.message)
+          );
+        } catch {
+          process.env.VITE_SUPABASE_URL = remoteUrl;
+          console.log('[Config] Mạng ngoài → dùng', remoteUrl);
+        }
+      } catch {}
+    }
 
     if (!IS_PROD) {
       try {
         const { createServer: createViteServer } = await import('vite');
         const vite = await createViteServer({
-          server: { middlewareMode: true, hmr: { server }, allowedHosts: true },
+          configFile: false,
+          root: __dirname,
+          base: '/',
+          plugins: [react()],
+          resolve: {
+            alias: {
+              '@': path.resolve(__dirname, '.'),
+              '@/lib': path.resolve(__dirname, './src/lib'),
+              '@/components': path.resolve(__dirname, './components'),
+              '@/hooks': path.resolve(__dirname, './hooks'),
+              '@/services': path.resolve(__dirname, './services'),
+              '@/constants': path.resolve(__dirname, './constants'),
+              '@/types': path.resolve(__dirname, './types'),
+            },
+          },
+          server: { middlewareMode: true, hmr: false, allowedHosts: true },
           appType: 'spa',
         });
         app.use(vite.middlewares);

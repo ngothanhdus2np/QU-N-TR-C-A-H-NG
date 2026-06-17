@@ -3,7 +3,819 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-17 — Rewrite ShopeeProductsPage.tsx — nguồn dữ liệu mới shopee_inventory_out
+
+- **Rewrite hoàn toàn `components/website/ShopeeProductsPage.tsx`**: bỏ interfaces cũ (ShopeeShop, ShopeeProduct, ShopeeVariant, RootRow, EditingVariant), thay bằng `InventoryVariant` + `ParentRow`.
+- **loadData() mới**: paginated fetch `shopee_inventory_out` (1000 rows/page), group by (sku, platform) với weighted avg price, batch fetch `pos_products` 200 SKU/batch, build virtual parent cho SKU không match.
+- **Bỏ CreateModal + VariantEditPanel**: không cần tạo mới khi nguồn là order history — nút Sửa giữ placeholder.
+- **Fix error handling**: Supabase error object không phải `instanceof Error` → extract `.message` thay vì `String(err)` (tránh toast `[object Object]`).
+- **TypeScript clean** (0 lỗi).
+- **Lưu ý dev**: lỗi "Lỗi tải dữ liệu" trên MacBook là do mạng không kết nối được Supabase iMac — không phải bug, sẽ hoạt động đúng trên iMac quầy.
+- Files: `components/website/ShopeeProductsPage.tsx`
+
+### 2026-06-17 — Kiểm tra & làm sạch dữ liệu shopee_inventory_out
+
+- **So sánh Excel XUAT KHO vs DB**: 2.391 dòng Excel ↔ 2.359 dòng DB, khớp 99.9% (3 đơn thiếu trong DB, lý do ngày lỗi trong Excel).
+- **So sánh files gốc Shopee (shopee_exports/Shop1+2) vs DB**: 0 đơn trong file gốc bị thiếu trong DB — DB đầy đủ hơn files.
+- **Phát hiện & xóa 2 file nhầm folder**: `Order.all.20260401_20260425.xlsx` và `Order.all.20260426_20260526.xlsx` bị đặt vào Shop1 nhưng thực ra là dữ liệu Shopee 2 — đã xóa khỏi `shopee_exports/Shop1/`.
+- **Fix 17 đơn sai platform**: cập nhật `platform = 'Shopee 1'` cho 17 đơn mã SPXVN bị gán nhầm vào Shopee 2 trong DB.
+- **Xác nhận 106 đơn chỉ trong DB**: import thủ công ngày 2026-05-29, mã hợp lệ (SPXVN + GY/Giao Hàng Nhanh), giữ lại.
+- **Kết luận**: `shopee_inventory_out` đủ điều kiện làm nguồn dữ liệu duy nhất.
+- Files: `scripts/fix_platform_mismatch.sql` (đã chạy), `shopee_exports/Shop1/` (đã xóa 2 file thừa)
+
+### 2026-06-16 — Catalog Online: fix cha-con grouping + thêm tab liên kết kênh + di chuyển migration tool
+
+- **Fix `OnlineCatalogPage.tsx` logic nhóm cha-con**: rewrite `loadData` để gom đúng theo `pos_products.parent_id` — xử lý cả 2 trường hợp: channel tables liên kết tới sản phẩm cha hoặc sản phẩm con; mỗi sản phẩm chỉ hiển thị 1 dòng với cột "Nền tảng" tổng hợp (Website + Shopee).
+- **Tạo mới `components/pos/GoodsChannelLinksTab.tsx`**: tab "Kênh bán" trong GoodsInventory — toggle Website / Shopee bằng switch; auto-tạo `store_products`/`shopee_products` nếu chưa có; áp dụng cho tất cả biến thể con khi bật/tắt từ sản phẩm cha.
+- **Cập nhật `GoodsProductDetailPanel.tsx`**: render `GoodsChannelLinksTab` trong tab `channels` (thay placeholder "Tính năng sẽ sớm ra mắt").
+- **Di chuyển "Nhập từ nguồn cũ"**: xóa nút khỏi `ShopeeProductsPage.tsx`, thêm section "Nhập từ dữ liệu nguồn cũ" vào `MigrationTab.tsx` (Cài đặt → Chuyển dữ liệu).
+- TypeScript clean (0 lỗi).
+- Files: `components/website/OnlineCatalogPage.tsx`, `components/pos/GoodsChannelLinksTab.tsx`, `components/pos/GoodsProductDetailPanel.tsx`, `components/settings/tabs/MigrationTab.tsx`, `components/website/ShopeeProductsPage.tsx`
+
+### 2026-06-16 — Fix hạ tầng Supabase + workflow huỷ/hoàn hàng đơn website
+
+- **Fix gốc lỗi `PGRST205`**: xác minh trực tiếp qua `psql` (không qua PostgREST) thấy `shopee_products` + `shopee_product_variants` **chưa từng được tạo thật** trong database (không phải lỗi cache như chẩn đoán ban đầu) — chạy `CREATE TABLE` cho cả 2 bảng + index + RLS policy `authenticated` trực tiếp qua `docker exec supabase-db psql` (user không nhớ mật khẩu Supabase Studio nên dùng terminal trên iMac). Verify lại bằng curl: cả 2 bảng đã được PostgREST nhận diện.
+- **Thêm cột `pos_orders.updated_at`** — cột này chưa từng tồn tại trong schema gốc, khiến mọi lệnh `update({status, updated_at})` trước đó âm thầm lỗi.
+- **Fix RPC `create_store_order`**: đổi `status = 'Pending'` → `'pending'` (fix bug case-mismatch với `WebsiteOrdersPage.tsx` lọc bằng chữ thường).
+- **RPC mới `update_website_order_status`**: atomic — đổi status đơn + tự cộng lại tồn kho nếu chuyển sang `cancelled`/`returned`; không cộng khi `return_requested` (hàng chưa thực về kho).
+- **`WebsiteOrdersPage.tsx`**: thêm trạng thái `return_requested` ("Đang hoàn hàng") + `returned` ("Đã hoàn hàng"); tách rõ 2 luồng huỷ — huỷ thẳng khi chưa giao ĐVVC (cộng tồn ngay) vs yêu cầu hoàn hàng khi đã `shipping`/`completed` (chỉ cộng tồn sau khi nhân viên xác nhận đã nhận lại hàng); đổi `updateStatus` gọi RPC mới; **fix bug query bảng `pos_order_items` không tồn tại** — đổi sang đọc thẳng cột JSONB `items` có sẵn trong `pos_orders`.
+- Tất cả SQL mới đã viết vào `supabase_setup.sql` và đã chạy thành công trên Supabase self-host (xác nhận qua terminal + curl).
+- TypeScript clean, `npm test` 286/286 pass.
+- Files: `supabase_setup.sql`, `components/website/WebsiteOrdersPage.tsx`
+
+### 2026-06-16 — Fix bug import Shopee + viết lại OnlineCatalogPage giống layout Hàng hoá
+
+- **Fix bug "Nhập từ Dữ liệu nguồn cũ" lỗi duplicate key**: `ImportFromSourceModal.tsx` query `pos_products` không phân trang, bị giới hạn 1000 dòng của PostgREST nên không thấy SKU cha đã tồn tại (14,245 dòng) → cố insert lại → lỗi `pos_products_sku_key`. Thêm hàm `fetchAllPages()` phân trang `.range()` cho cả `pos_products` và `shopee_product_variants`.
+- **Dọn dữ liệu rác**: xoá 30 sản phẩm cha rỗng (`variant_count=0`, `stock=0`, tạo lúc 2026-06-16 05:43) do lần import lỗi trước đó tạo ra trong `pos_products`.
+- **Phát hiện bug hạ tầng**: bảng `shopee_products` + `shopee_product_variants` bị lỗi `PGRST205` (PostgREST chưa nhận diện bảng, dù đã tạo SQL từ trước) — cần `docker restart supabase-rest` hoặc `NOTIFY pgrst, 'reload schema'` trên iMac self-host, **chưa được chạy** tính đến cuối phiên.
+- **Viết lại hoàn toàn `OnlineCatalogPage.tsx`** (mục Online → Catalog sản phẩm): layout clone 100% từ `GoodsFilterSidebar` + `GoodsToolbar` + `GoodsProductTableHeader` (sidebar w-64, 6 mục lọc, toolbar tìm kiếm + toggle bảng/lưới). Cột bảng: Mã hàng → Nhóm hàng (chỉ hiện nhóm con cuối cùng) → Giá vốn → Tồn kho → Vị trí → Thương hiệu → **Nền tảng** (badge Website/Shopee, cột mới). Cha-con expand/collapse + bảng chi tiết 5 tab (Thông tin/Mô tả/Thẻ kho/Tồn kho/Liên kết kênh bán) clone từ `GoodsProductRow.tsx` + `GoodsProductDetailPanel.tsx`.
+- Nối fetch dữ liệu thật: đọc `store_product_variants` + `shopee_product_variants` (is_published=true, mỗi bảng try/catch riêng để 1 bảng lỗi không sập trang) → join `pos_products` (cha qua `parent_id`) → dựng cấu trúc cha-con + map nền tảng theo SKU.
+- TypeScript clean, không cần `npm test` (không đổi `businessLogic.ts`).
+- Files: `components/website/ImportFromSourceModal.tsx`, `components/website/OnlineCatalogPage.tsx`
+
+### 2026-06-16 — Giai đoạn 8 (tiếp): ShopeeProductsPage + WebsiteProductsPage — UI kiểu SourceTab với inline panel
+
+- Viết lại `ShopeeProductsPage.tsx`: bỏ form modal → list table + click row mở panel inline bên dưới có 4 tabs (Thông tin / Ảnh & Mô tả / SEO / SKU liên kết). "Thêm sản phẩm" vẫn dùng modal. Badge "Chưa lưu" khi có thay đổi, nút "Lưu thay đổi" save toàn bộ 1 lần.
+- Viết lại `WebsiteProductsPage.tsx`: cùng pattern SourceTab-style, thêm field slug + nhãn (is_featured/is_new/is_best_seller) + website_price_override cho từng SKU. Quick toggle "Hiển thị/Đang ẩn" vẫn giữ trong bảng. Tab Nhãn thay thế tab SEO.
+- TypeScript check: 0 lỗi
+- Files: `components/website/ShopeeProductsPage.tsx`, `components/website/WebsiteProductsPage.tsx`
+
+### 2026-06-16 — Giai đoạn 8: OnlineCatalogPage — UI kiểu GoodsInventory, lọc theo kênh liên kết
+
+- Viết lại hoàn toàn `OnlineCatalogPage.tsx` dùng `ListPageLayout` + `ListPageToolbar` + `ListPagePagination` + `FilterSection` từ shared
+- Chỉ hiện SKU đã được link vào `store_product_variants` HOẶC `shopee_product_variants` (sản phẩm đang bán online)
+- Sidebar filter: Kênh bán (Tất cả / Website / Shopee / Cả hai) + Tồn kho (Còn hàng / Sắp hết / Hết hàng)
+- Bảng phẳng có sort: SKU, Tên, Giá bán, Giá vốn, Tồn kho, Kênh bán
+- Click hàng → mở panel chi tiết inline (3 tab: Thông tin / Thẻ kho / Kênh bán)
+- TypeScript clean
+- Files: OnlineCatalogPage.tsx
+
+### 2026-06-16 — Giai đoạn 7: OnlineCatalogPage — list + inline detail panel với tabs
+
+- Viết lại `components/website/OnlineCatalogPage.tsx` theo đúng pattern SourceTab + SourceDetailPage: bảng list nhóm theo parent SKU (expandable, sort, paginate), click SKU → mở panel inline bên dưới hàng, có 2 tab: Thông tin và Kênh bán
+- Tab Thông tin: ảnh, SKU, tên, giá bán, tồn kho, màu/size (parse từ SKU), kênh bán
+- Tab Kênh bán: load realtime từ store_product_variants + shopee_product_variants, hiển thị trạng thái xuất bản + link navigate sang trang quản lý
+- Indigo border khi expand (giống SourceTab), panel đóng khi click lại hàng đó
+- TypeScript clean
+- Files: OnlineCatalogPage.tsx
+
+### 2026-06-16 — Giai đoạn 6: ShopeeProductsPage + OnlineCatalog dual-channel
+
+- Tạo `components/website/ShopeeProductsPage.tsx` — quản lý ảnh, mô tả, SEO sản phẩm Shopee (CRUD, liên kết SKU qua shopee_product_variants)
+- Cập nhật `components/MainContent.tsx` — lazy import ShopeeProductsPage, render khi `onlineShopeeSubTab === 'source'` thay vì RevenueManager
+- Cập nhật `components/online/OnlineSidebarNav.tsx` — đổi label sub-tab 'source' từ 'Dữ liệu nguồn' → 'Sản phẩm Shopee'
+- Cập nhật `components/website/OnlineCatalogPage.tsx` — join cả 2 nguồn (store_product_variants + shopee_product_variants), chỉ hiện sản phẩm có ít nhất 1 kênh liên kết, hiển thị tag [Website] [Shopee], bộ lọc theo kênh
+- SQL cho `shopee_products` + `shopee_product_variants` đã có trong `supabase_setup.sql` — **cần chạy thủ công trên Supabase dashboard**
+- TypeScript clean, deploy thành công
+- Files: ShopeeProductsPage.tsx (mới), MainContent.tsx, OnlineSidebarNav.tsx, OnlineCatalogPage.tsx
+
+### 2026-06-16 — Giai đoạn 5: Gộp "Website" vào "Online" — sidebar đa kênh
+
+- Tạo `components/website/OnlineCatalogPage.tsx` — trang Catalog sản phẩm online (pos_products + trạng thái xuất bản website), nút điều hướng sang quản lý sản phẩm website
+- Cập nhật `components/website/WebsiteProductsPage.tsx` — thêm `navigationSlot` prop, đổi layout thành grid 2 cột (sidebar 280px + main), sửa lỗi thiếu closing `</div>` main content
+- Cập nhật `components/website/WebsiteOrdersPage.tsx` — thêm `navigationSlot` prop, đổi layout thành grid 2 cột
+- Cập nhật `components/online/OnlineSidebarNav.tsx` — thêm mục "Catalog sản phẩm" (online-catalog), thêm nhóm "Website PHÚC SANG" với 2 sub-item: Sản phẩm và Đơn hàng; xử lý logic active state cho website tabs
+- Cập nhật `constants/navigation.ts` — xóa section "Website" riêng biệt, thêm `online-catalog` + `website-products` + `website-orders` vào section "Online"
+- Cập nhật `components/MainContent.tsx` — lazy import OnlineCatalogPage, extend `isOnlineActive`, thêm case `online-catalog`, truyền `navigationSlot={renderOnlineNav()}` vào WebsiteProductsPage và WebsiteOrdersPage
+- TypeScript clean, deploy thành công
+- Files: OnlineCatalogPage.tsx (mới), WebsiteProductsPage.tsx, WebsiteOrdersPage.tsx, OnlineSidebarNav.tsx, navigation.ts, MainContent.tsx
+
+### 2026-06-16 — Store API + Kết nối website (Giai đoạn 1 & 2)
+
+- Tạo 8 bảng Supabase mới: store_products, store_product_variants, store_collections, store_product_collections, store_order_addresses, shipments, store_preorder_requests, store_contacts — tất cả có RLS + service_role_all policies
+- Tạo PostgreSQL function `create_store_order` (SECURITY DEFINER, FOR UPDATE atomic stock deduction)
+- Tạo `routes/store.ts` — 4 endpoint: GET /api/store/products, GET /api/store/products/:slug, POST /api/store/orders, POST /api/store/preorders, POST /api/store/orders/lookup
+- Thêm `pos_product_id` vào mapVariant output để frontend dùng khi đặt hàng
+- Tạo `store-api.js` cho website: API client với fallback sang data tĩnh khi API chưa có dữ liệu
+- Cập nhật `all-products.js`: async loadCatalog() thay vì đọc trực tiếp window.productCatalog
+- Cập nhật `product-detail.js`: async getProduct() với fallback
+- Cập nhật `checkout.js`: gọi storeApi.createOrder() nếu có posProductId, fallback lưu local
+- Thêm store-api.js vào products.html, product.html, checkout.html
+- Files app: routes/store.ts, server.ts | Files website: store-api.js, all-products.js, product-detail.js, checkout.js, products.html, product.html, checkout.html
+
+### 2026-06-15 — AUDIT HOÀN THÀNH — Pass 3 sạch (0 bugs), tổng 3 pass (22+5+0)
+
+- Toàn bộ 10 module đã qua 3 pass liên tiếp, pass 3 không tìm thấy bug mới nào
+- Kết quả tổng: 27 bugs đã fix qua 2 pass đầu, codebase sạch hoàn toàn
+- Files: docs/05-process/AUDIT_LOG.md (đánh dấu AUDIT HOÀN THÀNH)
+
+### 2026-06-15 — Audit Pass 2 hoàn thành — 5 bugs mới, bắt đầu Pass 3
+
+- Pass 2 pattern chính: filter sidebar gọi setter trực tiếp không kèm setCurrentPage(1) → trang 2+ trống
+- BUG-P2-1/2: PurchaseOrdersPage + PurchaseReturnsPage — 4 filter loại (status, date, supplier, creator)
+- BUG-O2-1: OrderReturns checkbox filter returnType/status không reset page
+- BUG-F2-1: CashLedgerPage handleVoucherCheck không reset page
+- BUG-PY2-1: PayrollManager bulk undo bỏ sót expense "Quyết toán lương nghỉ việc"
+- Files: PurchaseOrdersPage.tsx, PurchaseReturnsPage.tsx, OrderReturns.tsx, CashLedgerPage.tsx, PayrollManager.tsx
+
+### 2026-06-15 — Audit logic toàn app hoàn thành (components/reports/ + tổng kết)
+
+- Kiểm tra 12 file reports: tất cả read-only analytics, 0 bugs
+- Tổng kết: 22 bugs tìm và fix trên 10 module, 9 files sửa
+- Pattern chính: onUpdateSurgical không await → lỗi Supabase im lặng (mọi module đều có)
+- Audit log đầy đủ tại: docs/05-process/AUDIT_LOG.md
+
+### 2026-06-15 — Audit logic module Doanh thu (components/revenue/)
+
+- Kiểm tra 16 file: useRevenueLedger, useShopeeInventoryOut, SourceDetailPage, và các file còn lại
+- BUG-R1a/b: handleAddInventoryOut sync gọi onUpdateSurgical không await (2 nhánh) → fix async + await + try/catch
+- BUG-R2: handleRemoveInventoryOut có await nhưng thiếu try/catch → fix bọc try/catch
+- useRevenueLedger tất cả clean ✅
+- Files: useShopeeInventoryOut.ts
+
+### 2026-06-15 — Audit logic module Chi phí (components/expense/)
+
+- Kiểm tra 10 file: ExpenseLedgerTab, ExpenseCategoriesPage, useExpenseRecurring, và các file còn lại
+- BUG-E1: Delete button trong ExpenseLedgerTab gọi onUpdateSurgical không await → fix async onClick + try/catch
+- BUG-E2 (critical): handlePostRecurring trong useExpenseRecurring cập nhật lastPostedMonth kể cả khi Supabase save thất bại → expense định kỳ mất luôn trong tháng → fix async + await + return sớm trong catch
+- Files: ExpenseLedgerTab.tsx, useExpenseRecurring.ts
+
+### 2026-06-15 — Audit logic module Phân tích (components/analysis/)
+
+- Kiểm tra 11 file: AnalysisContainer + 10 trang phân tích
+- Read-only analytics, tất cả handleAiRun có try/catch/finally đúng chuẩn
+- 0 bugs tìm được
+- Files: không thay đổi
+
+### 2026-06-15 — Audit logic module Lương (components/payroll/ + PayrollManager.tsx)
+
+- Kiểm tra 9 tab files (presentation) + PayrollManager.tsx (container với toàn bộ mutation logic)
+- handleFinalizeIndividual, handleSettlementAndResignation, handleRecalculateCarryForwardDebt: đã có try/catch
+- Phát hiện 1 bug logic: handleUndoPayroll dùng sai expense description format cho settlement payrolls
+- **BUG-PY1** `PayrollManager.tsx:351` — handleUndoPayroll chỉ tìm expense format "Chi lương tháng" nhưng settlement expense dùng "Quyết toán lương nghỉ việc" → undo bỏ sót orphan expense → fix: tìm cả 2 format khi filter
+- TypeScript: clean (0 lỗi)
+- Files: PayrollManager.tsx
+
+### 2026-06-15 — Audit logic module Tổng quan (components/overview/)
+
+- Kiểm tra 1 file: OverviewPage.tsx
+- Component read-only (không có mutation), không có async ops để audit
+- 0 bugs tìm được
+- Files: không thay đổi
+
+### 2026-06-15 — Audit logic module Sổ quỹ (components/finance/)
+
+- Kiểm tra 1 file: CashLedgerPage.tsx
+- Không có async onUpdateSurgical call (props sync), không có pagination reset bug
+- Phát hiện 1 bug thiết kế: businessFilter không có tác dụng
+- **BUG-F1** `CashLedgerPage.tsx:421` — businessFilter có UI + hasActiveFilters + clearFilters nhưng KHÔNG được apply trong filtered useMemo → filter "Hạch toán kết quả kinh doanh" vô tác dụng. Root cause: LedgerEntry không có field tương ứng, cần schema change
+- Không có code fix (cần quyết định schema); ghi nhận để xử lý riêng
+- TypeScript: không thay đổi code → skip check
+- Files: không thay đổi
+
+### 2026-06-15 — Audit logic module Đơn hàng (components/orders/)
+
+- Kiểm tra 4 file có mutation + 2 file read-only
+- Phát hiện và fix 5 bugs: thiếu try/catch hoặc thiếu catch block
+- **BUG-O1** `OrderInvoices.tsx:376` — handleSaveOrder await persistOrder không try/catch → bọc try/catch/alert
+- **BUG-O2** `OrderInvoices.tsx:393` — handleCancelInvoice await persistOrder không try/catch → tương tự BUG-O1
+- **BUG-O3** `OrderInvoices.tsx:530` — handleCreateReturn có try nhưng không có catch → thêm catch block với alert
+- **BUG-O4** `OrderReturns.tsx:625` — handleCancelReturn await onUpdateSurgical không try/catch → bọc try/catch/alert
+- **BUG-O5** `OrderReturns.tsx:648` — handleSaveReturn await onUpdateSurgical không try/catch → bọc try/catch/alert
+- TypeScript: clean (0 lỗi)
+- Files: OrderInvoices.tsx, OrderReturns.tsx
+
+### 2026-06-15 — Audit logic module Khách hàng (components/customers/)
+
+- Kiểm tra 2 file: CustomerListPage.tsx, CustomerDetailPage.tsx
+- Phát hiện và fix 4 bugs: tất cả là lỗi thiếu try/catch khi gọi onUpdateSurgical async
+- **BUG-C1** `CustomerListPage.tsx:347` — handleSave không await onUpdateSurgical → async thành công, chuyển thành async + try/catch
+- **BUG-C2** `CustomerListPage.tsx:384` — handleSaveFromPOS không await onUpdateSurgical → tương tự BUG-C1
+- **BUG-C3** `CustomerListPage.tsx:435` — handleDelete không await onUpdateSurgical → tương tự BUG-C1
+- **BUG-C4** `CustomerListPage.tsx:444` — handleToggleStatus không await onUpdateSurgical → tương tự BUG-C1
+- TypeScript: clean (0 lỗi)
+- Files: CustomerListPage.tsx
+
+### 2026-06-15 — Audit logic module Nhập hàng (components/purchase/)
+
+- Kiểm tra 5 file trong components/purchase/
+- Phát hiện và fix 6 bugs: 4 lỗi thiếu try/catch async, 1 lỗi toast success trước khi lưu, 2 lỗi search không reset page
+- **BUG-P1** `PurchaseOrdersContainer.tsx:442` — handleSaveDraft thiếu try/catch → bọc try/catch/toast error
+- **BUG-P2** `PurchaseOrdersContainer.tsx:490` — handleSaveReturnDraft thiếu try/catch → bọc try/catch/toast error
+- **BUG-P3** `PurchaseOrdersContainer.tsx:745` — handleSaveQuickProduct thiếu try/catch → bọc try/catch, return false khi lỗi
+- **BUG-P4** `PurchaseOrdersContainer.tsx:808` — handleSaveQuickSupplier toast success hiện trước await → di chuyển toast vào sau await, thêm try/catch
+- **BUG-P5** `PurchaseOrdersPage.tsx:364` — search không reset currentPage → thêm setCurrentPage(1)
+- **BUG-P6** `PurchaseReturnsPage.tsx:309` — search không reset currentPage → thêm setCurrentPage(1)
+- TypeScript: clean (0 lỗi)
+- Files: PurchaseOrdersContainer.tsx, PurchaseOrdersPage.tsx, PurchaseReturnsPage.tsx
+
+### 2026-06-15 — Audit & fix toàn bộ logic giá vốn (COGS)
+
+- Audit 9 luồng ảnh hưởng giá vốn: nhập hàng, bán POS, trả hàng mua, POS return, Excel import, KiotViet import, bán Shopee, quick purchase, xóa phiếu nhập
+- 6/9 luồng đúng — phát hiện 3 vấn đề cần fix
+- **Fix 1** `components/pos/useGoodsExcelImport.ts` — Excel import thiếu InventoryTransaction → `buildCostHistory` không đọc được tồn kho ban đầu. Fix: tạo 1 transaction 'Import' + status 'completed' với `nextImportPrice` cho mọi sản phẩm có stock > 0
+- **Fix 2B** `routes/import.ts:1643` — KiotViet purchase import thiếu field `nextImportPrice` trong items → `buildCostHistory` bỏ qua toàn bộ lịch sử giá vốn KiotViet. Fix: thêm `nextImportPrice: importPrice` khi tạo item
+- **Fix 2C** `routes/import.ts:1721-1745` — KiotViet purchase import không cập nhật `pos_products.import_price`. Fix: sau khi upsert transactions, update `import_price` theo giá mua mới nhất per SKU
+- **Fix 2A** `routes/import.ts:1538` — Sửa type `costMethod: 'fixed'` thành `'fixed' | 'average'` cho linh hoạt sau này
+- TypeScript clean (0 lỗi), 286/286 tests pass
+- Files: `components/pos/useGoodsExcelImport.ts`, `routes/import.ts`
+
+### 2026-06-15 — Fix 2 logic accuracy bugs (phân tích tài chính + audit trail)
+
+- **BUG-FIN-01** `AnalysisFinancialMatrixPage.tsx` — `monthlyTrendData` và `dailyTrendData` double-count chi phí lương khi dùng cả payroll module và sổ chi phí có dòng lương. Fix: thêm `nonSalaryExpenses` filter loại salary ra trước khi trừ (giống pattern đã có ở `AnalysisBusinessProfitPage.tsx`)
+- **BUG-INV-AUDIT** `OrderReturns.tsx:handleProcessReturn` — transaction ghi vào lịch sử thiếu `previousStock`/`newStock`. Fix: thêm lookup `products.find()` trong `.map()` để ghi đúng trước/sau
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `components/analysis/AnalysisFinancialMatrixPage.tsx`, `components/orders/OrderReturns.tsx`
+
+### 2026-06-15 — Audit toàn bộ logic tồn kho + fix bug GoodsInternalUse
+
+- Kiểm tra 15 luồng ảnh hưởng tồn kho: nhập hàng (NCC + phiếu nhập), bán POS, trả hàng (bán + mua), kiểm kho, xuất dùng nội bộ, hủy hàng, hóa đơn, Shopee, Excel import
+- 14/15 luồng đúng — 1 bug phát hiện tại `GoodsInternalUse.tsx:handleSave`
+- **BUG-INV-01** `GoodsInternalUse.tsx:207` — thiếu `Math.max(0, ...)` → tồn kho có thể âm nếu stock giảm giữa lúc mở form và lúc bấm Lưu. Fix: thêm `Math.max(0, ...)` + validation re-check stock trước khi ghi (báo lỗi cụ thể nếu không đủ tồn)
+- Files: `components/inventory/GoodsInternalUse.tsx`
+
+### 2026-06-15 — Fix 4 bugs còn sót trang Nhà cung cấp (lần 2)
+
+- **BUG-S4** `SupplierForm.tsx:85` — Địa chỉ bị nhân đôi khi sửa NCC có đúng 2 phần địa chỉ. Fix: `setStreetAddress(length > 2 ? slice : '')` thay vì gán cả chuỗi ban đầu
+- **BUG-M3** `SupplierListPage.tsx` — Gõ search không reset `currentPage` về 1 → trang > 1 hiện empty state sai. Fix: `onSearchChange={term => { setSearchTerm(term); setCurrentPage(1); }}`
+- **BUG-M4** `SupplierContainer.tsx:handleToggleFavorite` — Rethrow sau khi đã bắt lỗi và show toast → gây double toast. Fix: xóa `throw err`
+- **BUG-N3** `SupplierContainer.tsx + SupplierListPage.tsx` — Selection bị xóa trước khi user xác nhận unsafe bulk delete; nếu hủy dialog, selection đã mất. Fix: truyền `onSuccess` callback qua `handleBulkDeleteSuppliers`, gọi sau khi delete thực sự thành công (kể cả path unsafe)
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `SupplierForm.tsx`, `SupplierListPage.tsx`, `SupplierContainer.tsx`
+
+### 2026-06-15 — Fix 7 bugs trang Nhà cung cấp
+
+- **BUG-S1** `SupplierContainer.tsx:handleSaveSupplier` — Toast success hiển thị trước `await onUpdateSurgical` → nếu lỗi user thấy 2 toast mâu thuẫn. Fix: di chuyển `showToast` + `setShowSupplierForm(false)` vào sau `await`
+- **BUG-S2** `SupplierContainer.tsx:handleBulkDeleteSuppliers` — Dùng `window.confirm` cho cảnh báo NCC có công nợ. Fix: thêm state `unsafeBulkDeleteDialog`, render Modal xác nhận chuẩn, thêm handler `handleConfirmUnsafeBulkDelete`
+- **BUG-S3** `SupplierContainer.tsx:handleSupplierFileImport` — `window.confirm` trong `rows.forEach` (synchronous loop, UX xấu). Fix: đổi sang logic skip tự động, ghi vào `skippedRows` để báo toast
+- **BUG-M1** `SupplierListPage.tsx:handleToggleSelectAll` — So sánh `length` không đúng khi multi-page selection. Fix: dùng `.every(s => selectedSuppliers.includes(s.id))`, cập nhật cả `checked` prop của checkbox header
+- **BUG-M2** `SupplierContainer.tsx:handleSupplierFileImport` — Status từ file không validate → có thể nhận giá trị không hợp lệ. Fix: check `['active','inactive'].includes(val)` trước khi cast
+- **BUG-N1** `SupplierDetailView.tsx` — Tab active dùng `border-blue-500 text-blue-600` không nhất quán với toàn app (indigo). Fix: đổi sang `border-indigo-500 text-indigo-600`
+- **BUG-N2** `SupplierContainer.tsx:debtBelongsToSupplier` — Chỉ match theo `supplier.name`, không match theo `supplier.code` như `transactionBelongsToSupplier`. Fix: thêm `|| supplierText === normalizeSupplierKey(supplier.code)`
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `components/suppliers/SupplierContainer.tsx`, `components/suppliers/SupplierListPage.tsx`, `components/suppliers/SupplierDetailView.tsx`
+
+### 2026-06-15 — Fix 5 bugs trang Hàng hóa (audit lần 3)
+
+- **BUG-A** `GoodsInventory.tsx:handleStopBusiness` — `onConfirm` async không có try/catch → bọc try/catch/finally, `closeConfirm()` vào finally để dialog luôn đóng dù lỗi
+- **BUG-B** `GoodsInventory.tsx:handleBulkStopBusiness` — tương tự, bọc try/catch/finally
+- **BUG-C** `GoodsInventory.tsx:handleConfirmChangeGroup` — `await onUpdateSurgical` không có try/catch → bọc try/catch
+- **BUG-D** `GoodsInventory.tsx:handleCreateGroup` — `await onPushBatch` không có try/catch → bọc try/catch
+- **BUG-E** `GoodsInventory.tsx` — `onDelete` callback của `GoodsGridDetailModal` không có try/catch → bọc try/catch, `setGridDetailProduct(null)` chỉ chạy khi thành công
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `GoodsInventory.tsx`
+
+### 2026-06-15 — Fix 6 bugs trang Hàng hóa (audit lần 2)
+
+- **Bug 1** `useGoodsProductEditor.ts` — 3 lần gọi `onUpdateSurgical` không có `.catch()` → thêm `.catch(err => showToast(..., 'error'))` cho cả 3 case (edit, tạo biến thể, tạo đơn giản)
+- **Bug 2** `useGoodsVariantWorkflow.ts` — 3 lần gọi `onUpdateSurgical` không xử lý lỗi → thêm `.catch()` cho `handleAddUnitInViewMode`, `handleAddAttributeInViewMode`, `doSave` trong `handleSaveMoreVariants`
+- **Bug 3** `GoodsInventory.tsx:handleDeleteViewed` — `setViewingProduct(null)` chạy kể cả khi `onUpdateSurgical` thất bại → bọc trong try/catch, chuyển `setViewingProduct(null)` vào try block
+- **Bug 4** `useGoodsPurchase.ts:handleCompletePurchase` — toàn bộ async logic không có try/catch → bọc trong try/catch với `showToast(..., 'error')` khi lỗi
+- **Bug 5** `GoodsInventory.tsx:onSavePrices` — gọi `onUpdateSurgical` không `await` và không xử lý lỗi → đổi callback thành `async`, thêm `await` + try/catch
+- **Bug 6** `GoodsPurchaseForm.tsx` — dropdown tìm kiếm nhập hàng không lọc sản phẩm `Inactive` → thêm `p.status !== 'Inactive'` vào filter
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `useGoodsProductEditor.ts`, `useGoodsVariantWorkflow.ts`, `GoodsInventory.tsx`, `useGoodsPurchase.ts`, `GoodsPurchaseForm.tsx`
+
+### 2026-06-15 — Fix 4 bugs trang Trả hàng nhập (audit lần 3)
+
+- **Bug D1** `PurchaseOrdersContainer.tsx:handleDeleteReturn` — `.find()` chỉ xóa 1 trong 2 debt records khi trả hàng → đổi thành `.filter()`, xóa tất cả records khớp `id` bằng `Set`, cả surgical và fallback path
+- **Bug D2** `PurchaseReturnsPage.tsx` — Cột mã trả hàng luôn hiện UUID thay vì `referenceId` → đổi thành `transaction.referenceId || transaction.id.slice(0, 12)`
+- **Bug D3** `PurchaseOrderDetailModal.tsx` — Trạng thái hiển thị raw English ("completed"/"draft"/"cancelled") → localize thành "Đã nhập hàng"/"Đã trả hàng"/"Phiếu tạm"/"Đã hủy"
+- **Bug D4** `PurchaseOrdersContainer.tsx:handleAddProductToReturn` — Thêm sản phẩm trùng không kiểm tra tồn kho → thêm `Math.min(product.stock, item.quantity + 1)`
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `PurchaseOrdersContainer.tsx`, `PurchaseReturnsPage.tsx`, `PurchaseOrderDetailModal.tsx`
+
+### 2026-06-15 — Fix 5 bugs trang Trả hàng nhập (audit lần 2)
+
+- **Bug R1** `PurchaseReturnsPage.tsx` — Search không tìm theo `referenceId` → thêm `transaction.referenceId?.toLowerCase().includes(term)`
+- **Bug R2** `PurchaseReturnsPage.tsx:handleBulkDelete` — Xóa hàng loạt không track fail → sửa thành track từng phiếu, giữ lại phiếu fail trong selection, toast rõ số thất bại
+- **Bug R3** `GoodsPurchaseReturnForm.tsx` + `PurchaseOrdersContainer.tsx` + `usePurchaseFormState.ts` — Input "Mã trả hàng nhập" không kết nối state → thêm `returnReferenceId`/`setReturnReferenceId` vào hook, Container, form prop; gán vào cả `handleCompleteReturn` và `handleSaveReturnDraft`
+- **Bug R4** `GoodsPurchaseReturnForm.tsx` — Badge "Phiếu tạm" hardcode → đổi thành "Đang trả hàng" màu indigo
+- **Bug R5** `GoodsPurchaseReturnForm.tsx` — Nút + không giới hạn max → thêm `Math.min(product?.stock, item.quantity + 1)`
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `PurchaseReturnsPage.tsx`, `GoodsPurchaseReturnForm.tsx`, `PurchaseOrdersContainer.tsx`, `hooks/usePurchaseFormState.ts`
+
+### 2026-06-15 — Fix 6 bugs trang Nhập hàng (audit)
+
+- **Bug 1** `PurchaseOrdersPage.tsx` — Search không tìm theo `referenceId` → thêm `order.referenceId?.toLowerCase().includes(term)` vào filter
+- **Bug 2** `PurchaseOrdersContainer.tsx:handleCompleteReturn` — `returnSupplierPaidAmount` (NCC trả tiền mặt) không được ghi vào debt ledger → thêm `cashPaymentRecord` type `'payment'`, tách thành `cashPaymentRecord` + `debtOffsetRecord`, rollback cả hai khi lỗi
+- **Bug 3** `GoodsPurchaseForm.tsx` — Input giảm giá dòng sản phẩm chấp nhận số âm → thêm `Math.max(0, ...)` + attr `min={0}`
+- **Bug 4** `PurchaseOrdersPage.tsx:handleBulkDelete` — Xóa hàng loạt không rollback khi lỗi giữa chừng → sửa thành track từng phiếu fail, giữ lại trong selection, báo toast rõ số thất bại
+- **Bug 5** `GoodsPurchaseForm.tsx` — Badge "Phiếu tạm" hardcode trong form tạo mới → đổi thành "Đang nhập" với màu indigo
+- **Bug 6** `PurchaseOrdersContainer.tsx` — Toast import file chỉ báo số lượng bỏ qua, không liệt kê SKU → hiển thị tối đa 5 SKU bị bỏ qua trong toast
+- TypeScript: clean (npx tsc --noEmit)
+- Files: `components/purchase/PurchaseOrdersPage.tsx`, `components/purchase/PurchaseOrdersContainer.tsx`, `components/pos/GoodsPurchaseForm.tsx`
+
+
 ---
+
+### 2026-06-15 — Fix 4 bugs còn lại trang máy tính tiền (audit Round 8)
+
+- `types.ts`: Thêm field `returnOtherRefund?: number` vào type `POSOrder`
+- `POSComputer.tsx:returnOrder`: Lưu `returnOtherRefund` vào POSOrder để đối soát về sau
+- `POSReceiptModal.tsx`: Thêm dòng "Hoàn trả thu khác" trong totals khi `returnOtherRefund > 0`
+- `POSComputer.tsx` (print): Thêm dòng "Hoàn trả thu khác" trong bản in giấy
+- `POSComputer.tsx` (print): Sửa 2 dòng "Thanh toán" chồng nhau khi ghi nợ → chỉ hiện 1 dòng "GHI NỢ"
+- `usePOSReturnFlow.ts:addToReturnCart`: Fast return không còn giới hạn `maxQuantity` theo tồn kho hiện tại
+- `POSCheckout.tsx`: Xóa checkbox "Giao hàng" dummy trong return mode
+- Files: `types.ts`, `POSComputer.tsx`, `POSReceiptModal.tsx`, `usePOSReturnFlow.ts`, `POSCheckout.tsx`
+
+### 2026-06-15 — Fix 10 bugs trang máy tính tiền (audit Round 7)
+
+- BUG-1 — `POSComputer.tsx:handleFinishOrder`: Sau checkout reset tab về `paymentMethod: 'Cash'` thay vì `paymentSettings?.defaultMethod` → đổi thành đọc defaultMethod
+- BUG-2 — `POSComputer.tsx:handleCheckout` (return): `debtAmount` giảm tự động khi trả hàng dù đơn gốc có thể không phải ghi nợ → bỏ field debtAmount khỏi returnUpdatedCustomer (Phương án A)
+- BUG-3 — `POSComputer.tsx:addToCart`: Kiểm tra stock dùng stale closure `activeTab.cart` → chuyển vào trong `setTabs(prevTabs => ...)` functional updater, dùng `setTimeout` để fire warning
+- BUG-4 — `POSComputer.tsx:handleFinishOrder`: Đọc `tabs` từ stale closure khi modal hiển thị → thêm `tabsRef` và dùng `tabsRef.current`
+- BUG-5 — `POSReceiptModal.tsx`: Items return/exchange hiển thị như nhau → thêm prefix `[TRẢ]`/`[ĐỔI]` và màu sắc theo lineType
+- BUG-6 — `POSReceiptModal.tsx`: Không hiển thị `returnFee` → thêm dòng "Phí trả hàng" trong totals section
+- BUG-7 — `POSCheckout.tsx` + `POSComputer.tsx`: Giảm giá/Phí trả/Hoàn trả thu khác hardcode "0", không có UI nhập → thêm 3 props mới, làm rows clickable mở prompt
+- BUG-8 — `POSCheckout.tsx:hasCheckoutItems`: Button THANH TOÁN enabled dù returnCart có items nhưng quantity = 0 → đổi `length > 0` thành `some(item => item.quantity > 0)`
+- BUG-9 — `POSCheckout.tsx:copyPaymentInfo`: Dùng `window.alert` → đổi sang `useToast`
+- BUG-10 — `POSComputer.tsx:cashSuggestions`: While loop có điều kiện `result.length < 5` sai → bỏ điều kiện thừa
+- TypeScript: clean
+- Files: `components/pos/POSComputer.tsx`, `components/pos/POSCheckout.tsx`, `components/pos/POSReceiptModal.tsx`
+
+---
+
+### 2026-06-15 — Fix 2 lỗi còn lại sau audit toàn diện
+
+- Bug 1 — `services/dataMapper.ts:posCustomers`: Thiếu `debtAmount: Number(c.debt_amount || 0)` → nợ khách hàng reset về 0 khi load từ Supabase trên thiết bị mới → đã thêm field vào mapping
+- Bug 2 — `components/finance/CashLedgerPage.tsx:orderToEntry`: `amount: o.finalAmount ?? 0` không dùng `Math.abs` → đơn trả cũ có finalAmount âm làm sai số dư sổ quỹ → đổi thành `Math.abs(o.finalAmount ?? 0)`
+- Files: `services/dataMapper.ts`, `components/finance/CashLedgerPage.tsx`
+
+---
+
+### 2026-06-15 — Fix 4 lỗi logic nghiệp vụ (báo cáo & lương)
+
+- Bug A — `reportCalculations.ts:getSalesProfitRowsByDate`: Không dùng `Math.abs` khi trừ revenue của đơn trả → nếu `totalAmount` âm (KiotViet import), lợi nhuận báo cáo bị tăng ảo → thêm `Math.abs`
+- Bug B — `reportCalculations.ts:getEndOfDayReportRows`: Cùng pattern `Math.abs` thiếu cho cột revenue/actual của đơn trả cuối ngày → thêm `Math.abs`
+- Bug C — `businessLogic.revenue.ts:calculateExecutiveInsights`: Double-count chi phí lương khi dùng cả payroll module lẫn expense ledger → thêm filter salary ra khỏi ledger khi `projectedPayroll > 0`
+- Bug D — `businessLogic.payroll.ts:calculateEmployeePayroll`: `hasTetCommitment` hardcoded `true` → sửa thành `tetTotal > 0 || Boolean(tetConfig)`
+- TypeScript: clean, Tests: 286/286 pass
+- Files: `src/lib/reportCalculations.ts`, `src/lib/businessLogic.revenue.ts`, `src/lib/businessLogic.payroll.ts`
+
+---
+
+### 2026-06-15 — Fix 3 lỗi logic tồn kho
+
+- Bug 1 — `useGoodsPurchase.ts`: Nhập nhanh từ GoodsInventory không tạo `SupplierDebtRecord` → thêm tạo debt và bundle vào `onUpdateSurgical` cùng batch với product updates
+- Bug 2 — `usePOSReturnFlow.ts:addToReturnCart`: Trả hàng nhanh không có `maxQuantity` → tồn kho có thể tăng vô hạn → thêm `maxQuantity: product.stock` khi thêm sản phẩm mới vào giỏ trả
+- Bug 3 — `PurchaseOrdersContainer.tsx:handleDeletePurchase`: Xóa phiếu nhập khi đã bán → tồn kho âm bị cắt về 0 âm thầm → thêm dialog cảnh báo + confirm trước khi xóa
+- TypeScript: clean, Tests: 286/286 pass
+- Files: `components/pos/useGoodsPurchase.ts`, `components/pos/usePOSReturnFlow.ts`, `components/purchase/PurchaseOrdersContainer.tsx`
+
+---
+
+### 2026-06-15 — Fix 5 vấn đề logic giá vốn
+
+- Fix 1 — `types.ts`: Thêm `previousImportPrice?: number` vào `InventoryTransaction.items` để lưu giá vốn trước khi nhập
+- Fix 1 — `PurchaseOrdersContainer.tsx:handleDeletePurchase`: Rollback `importPrice` về `item.previousImportPrice` khi xóa phiếu nhập completed (trước đây chỉ rollback stock)
+- Fix 1 — `PurchaseOrdersContainer.tsx:handleCompletePurchase` + `useGoodsPurchase.ts:handleCompletePurchase`: Gán `previousImportPrice: product.importPrice` vào từng transaction item
+- Fix 2 — `businessLogic.inventory.ts`: Extract `calcEffectiveUnitPrice` thành hàm export dùng chung; cả hai luồng nhập hàng giờ dùng cùng một hàm thay vì viết lại
+- Fix 3 — `PurchaseOrdersContainer.tsx`: Ưu tiên `data.posInventorySettings?.costMethod` thay vì chỉ đọc localStorage; `useGoodsPurchase.ts` thêm prop `inventoryCostMethod` với fallback localStorage
+- Fix 3 — `GoodsInventory.tsx`: Thêm prop `inventoryCostMethod`, truyền từ `MainContent.tsx` qua `data.posInventorySettings?.costMethod`
+- Fix 4 — `businessLogic.inventory.ts`: Thêm JSDoc cho `calculateNextImportPrice` và `calcEffectiveUnitPrice`
+- Fix 5 — `reportCalculations.ts`: Thêm comment giải thích tại sao dùng `inventoryTransactions` thay vì bảng `product_cost_history`
+- TypeScript: clean (npx tsc --noEmit), Tests: 279/279 pass
+- Files: `types.ts`, `src/lib/businessLogic.inventory.ts`, `src/lib/reportCalculations.ts`, `components/purchase/PurchaseOrdersContainer.tsx`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsInventory.tsx`, `components/MainContent.tsx`
+
+---
+
+### 2026-06-15 — Fix 6 lỗi logic tính giá vốn
+
+- Fix 1 — `PurchaseOrdersContainer.tsx`: discount toàn đơn (`billDiscountAmount`) chưa được phân bổ vào `effectiveUnitPrice` → tách hàm `calcEffectiveUnitPrice`, áp dụng nhất quán cho cả `transaction.items` và `updatedProducts`
+- Fix 2 — `tests/unit/businessLogic.inventory.test.ts`: thêm 15 unit tests cho `calculateNextImportPrice` (method `fixed` + `average`, lần nhập đầu, tồn kho âm, qty=0, làm tròn, edge cases)
+- Fix 3 — `reportCalculations.ts`: COGS trong báo cáo lợi nhuận dùng giá vốn lịch sử thay vì snapshot hiện tại — thêm hàm `buildCostHistory`/`getHistoricalCost`, thêm param tùy chọn `inventoryTransactions` vào `getSalesProfitRowsByDate`, cập nhật `SalesReportPage` + `MainContent`
+- Fix 4 — `useGoodsPurchase.ts`: transaction nhập hàng nhanh thiếu `supplierId` — thêm `suppliers` prop, resolve supplier từ tên, ghi đúng `supplierId` và `supplierName` chuẩn hóa
+- Fix 5 — `types.ts` + `GoodsTab.tsx`: `costMethod` chỉ lưu localStorage → thêm vào `POSInventorySettings`, sync lên Supabase khi thay đổi, ưu tiên đọc từ Supabase khi load lần đầu
+- Fix 6 — `GoodsTab.tsx`: làm rõ mô tả method `fixed` (giá vốn không tự cập nhật khi nhập giá mới) và `average` (ghi rõ AVCO)
+- Files: `components/purchase/PurchaseOrdersContainer.tsx`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsInventory.tsx`, `src/lib/reportCalculations.ts`, `components/reports/SalesReportPage.tsx`, `components/MainContent.tsx`, `types.ts`, `components/settings/tabs/GoodsTab.tsx`, `tests/unit/businessLogic.inventory.test.ts`
+- TypeScript: clean (npx tsc --noEmit), Tests: 279/279 pass
+
+### 2026-06-15 — Fix hệ thống thanh toán Thẻ (paymentMethod 'Card')
+
+- Thêm `'Card'` vào `POSPaymentMethod` và `POSOrder.paymentMethod` trong `types.ts`
+- Fix `POSCheckout.tsx`: phương thức Thẻ dùng `method: 'Card'` thay vì `'Other'`; tương thích ngược với `enabledMethods` cũ chứa `'Other'`
+- Fix `POSReceiptModal.tsx`: hiển thị chi tiết từng PTTT khi đơn có `splitPayments`
+- Fix `SalesReportPage.tsx`: thêm filter "Thẻ" (Card); giữ filter "Khác" (Other) cho dữ liệu cũ
+- Cập nhật label/filter "Card → Thẻ" trong: `EndOfDayReport.tsx`, `OrderInvoices.tsx`, `PendingOrdersPage.tsx`
+- Cập nhật type tại: `pos/types.ts`, `POSMobileCheckoutSheet.tsx`, `CashLedgerPage.tsx`
+- Files: `types.ts`, `components/pos/types.ts`, `POSCheckout.tsx`, `POSReceiptModal.tsx`, `POSMobileCheckoutSheet.tsx`, `EndOfDayReport.tsx`, `orders/OrderInvoices.tsx`, `orders/PendingOrdersPage.tsx`, `finance/CashLedgerPage.tsx`, `reports/SalesReportPage.tsx`
+
+### 2026-06-15 — Implement Supabase Realtime sync (2 POS + quản lý từ xa)
+
+- Tạo `hooks/useRealtimeSync.ts` — subscribe `pos_orders`, `pos_products`, `revenue_records` via WebSocket
+- Echo prevention: `markLocalWrite(id)` đánh dấu ID vừa ghi local → bỏ qua Realtime event trong 3s
+- Mapper inline: `mapOrderRow`, `mapProductRow`, `mapRevenueRow` (snake_case DB → app camelCase)
+- `hooks/useAppData.ts` — thêm `mergeRemoteUpdate` (dispatch-only, không ghi lại Supabase), gọi `markLocalWrite` trong `updateSurgical`
+- `App.tsx` — gọi `useRealtimeSync(mergeRemoteUpdate)` sau `useAppData()`
+- TypeScript: 0 lỗi ✅
+- **Bước thủ công còn lại**: bật Realtime toggle cho 3 bảng trên Supabase Dashboard
+- Files: `hooks/useRealtimeSync.ts` (new), `hooks/useAppData.ts`, `App.tsx`
+
+---
+
+### 2026-06-15 — Chạy SQL pending trên Supabase Cloud
+
+- Tạo bảng `product_cost_history` (đã tồn tại từ trước, bỏ qua CREATE TABLE)
+- `ALTER TABLE pos_orders` — thêm 4 cột: `refund_amount`, `staff_name`, `split_payments`, `cash_received`
+- Bật RLS cho 6 bảng: `employees`, `payroll_records`, `revenue_records`, `pos_customers`, `pos_orders`, `audit_logs`
+- Tất cả policy dùng `IF NOT EXISTS` guard, chạy thành công ✅
+
+---
+
+### 2026-06-15 — Audit POS round 6: fix BUG-47, BUG-48 (trang máy tính tiền)
+
+- **BUG-47** `ProcessOrdersModal.tsx` — hardcode `products={[]}` `revenue={[]}`, thiếu `onUpdateSurgical` → fast return từ modal "Xử lý đặt hàng" không cập nhật tồn kho, COGS sai, không lưu được. Fix: thêm props `products`, `revenue`, `onUpdateSurgical` vào `ProcessOrdersModal`; truyền từ `POSComputer`; truyền `updateSurgical`+`data.revenue` từ `MainContent`
+- **BUG-48** `POSReturnModal.tsx` — `setPage(1)` gọi bên trong `useMemo` (anti-pattern, có thể double-render Strict Mode). Fix: chuyển sang `useEffect` riêng với deps `[orders, returnSearch, customers]`
+- Files: `ProcessOrdersModal.tsx`, `POSComputer.tsx`, `MainContent.tsx`, `POSReturnModal.tsx`
+- TypeScript check: 0 errors ✅
+
+---
+
+### 2026-06-15 — Audit POS round 5: fix BUG-29 đến BUG-46 (trang hàng hóa & thiết lập giá)
+
+- **BUG-29** `GoodsPriceSetupModal.tsx` — `handleSavePagePrices` không lọc giá 0 → lưu salePrice=0 ghi đè giá cũ. Fix: thêm `.filter(([, salePrice]) => salePrice > 0)`
+- **BUG-30** `GoodsProductRow.tsx` — crash khi variant hoặc product chưa có giá (undefined). Fix: wrap `Number(x) || 0` cho salePrice/importPrice
+- **BUG-31** `useGoodsAudit.ts` — `onAddTransaction` gọi trước khi `onUpdateSurgical` resolve xong → race condition. Fix: đưa vào trong try block sau await
+- **BUG-32** `useGoodsFilters.ts` — filter "Còn hàng" sai cho sản phẩm cha (stock=0 nhưng variants có hàng). Fix: thêm `parentTotalStock` useMemo, dùng `effectiveStock` trong matchStock
+- **BUG-34** `GoodsPriceSetupModal.tsx` — cột "Giá nhập cuối" duplicate cột "Giá vốn" (cùng field `importPrice`). Fix: xóa cột thừa
+- **BUG-35** `GoodsPriceSetupModal.tsx` — filter priceCondition/comparePrice không áp dụng vào filteredProducts. Fix: thêm logic `matchesPrice` vào useMemo
+- **BUG-36** `GoodsProductRow.tsx` — cột stock của sản phẩm cha hiển thị 0 thay vì tổng variants. Fix: tính `totalVariantStock` từ variants
+- **BUG-37** `useGoodsAudit.ts` — kiểm kho ghi đè stock=0 cho sản phẩm cha. Fix: `if (product.isParent) return`
+- **BUG-38** `useGoodsFilters.ts` — `sellableSkuCount` dùng `!p.isParent` không nhất quán với `filteredProducts` (dùng `!p.parentId`). Fix: đổi thành `!p.parentId`
+- **BUG-39** `useGoodsFilters.ts` — `categoryMatchesSelection` có lastPart fallback nguy hiểm (match nhầm nhóm cùng tên). Fix: xóa fallback
+- **BUG-40** `useGoodsVariantWorkflow.ts` — `variantCount` cộng thêm vào giá trị cũ (có thể sai). Fix: tính lại từ `existingVariants.length + newVariants.length`
+- **BUG-41** `useGoodsSelection.ts` — toast xóa dùng `selectedIds.length` thay vì `idsToDelete.size` (bỏ sót variants của cha). Fix: đổi thành `idsToDelete.size`
+- **BUG-42** `GoodsPriceSetupModal.tsx` — 2 ô filter trong bảng (mã/tên) dùng chung state `searchTerm`. Fix: tách thành `tableSearchSku` và `tableSearchName`
+- **BUG-43** `useGoodsAudit.ts` — toast kiểm kho không hiển thị chênh lệch. Fix: thêm `diffNote` "(tăng/giảm X đơn vị)"
+- **BUG-44** `useGoodsFilters.ts` — biến `parentSkuFallback` trong `variantsByParentId` shadowing biến ngoài. Fix: rename thành `variantParentSkuFallback`
+- **BUG-45** `useGoodsVariantWorkflow.ts` — validation attribute khi thêm variant chỉ check `length === 1`. Fix: mở rộng thành `length > 0` + kiểm tra toàn bộ attributes
+- **BUG-46** `useGoodsSelection.ts` — `selectedIds` không sync khi filter thay đổi → checkbox sai. Fix: thêm useEffect sync với `filteredProducts`
+- TypeScript check: 0 errors
+- Files: `GoodsPriceSetupModal.tsx`, `GoodsProductRow.tsx`, `useGoodsAudit.ts`, `useGoodsFilters.ts`, `useGoodsSelection.ts`, `useGoodsVariantWorkflow.ts`
+
+---
+
+### 2026-06-14 (ca 6) — Fix 2 lỗi audit POS tiếp theo (POSCart + POSReceiptModal)
+
+- **[Bug POS-4]** `components/pos/POSCart.tsx:185` — exchange search trong tab trả hàng thiếu filter `!p.isParent && p.status === 'Active' && p.salePrice > 0` → sản phẩm cha và ngừng bán hiện trong dropdown. Fix: thêm 3 điều kiện vào filter
+- **[Bug POS-5]** `components/pos/POSReceiptModal.tsx:31-33` — tên cửa hàng, địa chỉ, hotline bị hardcode ("CFO BRAIN PROFESSIONAL / 1900 1234"). Fix: thêm prop `brandProfile?: BrandProfile`, dùng trong JSX; truyền `brandProfile` từ cả 2 chỗ gọi (desktop + mobile) trong POSComputer.tsx
+- Files: `components/pos/POSCart.tsx`, `components/pos/POSReceiptModal.tsx`, `components/pos/POSComputer.tsx`
+
+---
+
+### 2026-06-14 (ca 5) — Fix 3 lỗi audit màn hình POS (posOrderService + POSComputer + POSCheckout)
+
+- **[Bug POS-1]** `services/posOrderService.ts:323` — `autoUpsertStaffSalesForDate` nằm trong main try/catch của `processPlaceOrder` → nếu staff update lỗi toàn đơn hàng bị rollback sai. Fix: tách ra ngoài main try/catch, wrap riêng (giống cách `processReturnOrder` đã làm)
+- **[Bug POS-2]** `components/pos/POSComputer.tsx:1416` — desktop `POSReceiptModal` truyền `cashReceived={cashReceived}` (tab state = 0 cho tab trả hàng), không nhất quán với mobile. Fix: đổi thành `cashReceived={lastOrder.cashReceived ?? cashReceived}`
+- **[Bug POS-3]** `components/pos/POSCheckout.tsx:465` — `hasPointsEligibleProducts` filter `allowPoints === true` bỏ sót sản phẩm chưa set flag (undefined). Fix: đổi thành `allowPoints !== false` khớp với logic tính điểm trong POSComputer
+- Files: `services/posOrderService.ts`, `components/pos/POSComputer.tsx`, `components/pos/POSCheckout.tsx`
+
+---
+
+### 2026-06-14 (ca 4) — Fix 3 lỗi audit nhập hàng
+
+- **[Bug 1]** `GoodsPurchaseForm.tsx:441-452` — ô "Mã phiếu nhập" là UI giả (uncontrolled, không lưu) → thêm state `purchaseReferenceId` vào `usePurchaseFormState`, wire prop vào form, lưu `referenceId` trên `InventoryTransaction` khi hoàn thành và khi lưu tạm
+- **[Bug 2]** `GoodsPurchaseForm.tsx:666` — tên NCC parse từ `note.split('từ ')` → thay bằng `t.supplierName`
+- **[Bug 3]** `PurchaseOrdersContainer.tsx` — `handleCompleteReturn` thiếu rollback khi thất bại → thêm inner try/catch khôi phục transaction, debtRecord, và stock về trạng thái ban đầu
+- Files: `hooks/usePurchaseFormState.ts`, `components/pos/GoodsPurchaseForm.tsx`, `components/purchase/PurchaseOrdersContainer.tsx`
+
+---
+
+### 2026-06-14 (ca 3) — Fix 3 lỗi POS audit lần 2
+
+- **[Bug 1]** `POSCheckout.tsx:715` — điều kiện `netPayable > 0` ẩn dòng "Tiền trả khách" khi chỉ trả thuần (không đổi) → đổi thành `finalReturnAmount > 0`
+- **[Bug 2]** `POSReceiptModal.tsx` — modal hiện "Hoàn trả khách: 0đ" khi khách đổi hàng đắt hơn → tính `exchangeTotal` từ `items.filter(lineType=exchange)`, phân nhánh hiện "Khách thanh toán" (indigo) hoặc "Hoàn trả khách" (rose)
+- **[Bug 3]** `POSReceiptModal.tsx:44` — tên thu ngân hiện `staffId` thay vì `staffName` → `staffName || staffId`
+- TypeScript clean (0 errors)
+- Files: `POSCheckout.tsx`, `POSReceiptModal.tsx`
+
+---
+
+### 2026-06-14 (ca 2) — Fix 5 lỗi POS audit
+
+- **[Fix A]** `POSComputer.tsx` — `totalSpent` không cộng `customerPaysDifference` khi khách đổi sang hàng đắt hơn → sửa công thức đúng: `totalSpent + customerPaysDifference - amountToPayCustomer`
+- **[Fix B]** `POSComputer.tsx:handlePrint` — đơn đổi hàng hiện thêm dòng "Tiền hàng đổi", hiển thị "KHÁCH THANH TOÁN" khi khách trả thêm hoặc "HOÀN TRẢ KHÁCH" khi shop hoàn tiền; dùng `refundAmount` thay vì `finalAmount`
+- **[Fix C]** `POSReceiptModal.tsx` — modal xác nhận: đơn trả hàng hiện tiêu đề "Hóa đơn trả hàng", hiện dòng "Hoàn trả khách" màu đỏ với `refundAmount`, ẩn "Khách đưa"/"Tiền thừa"
+- **[Fix D]** `POSCheckout.tsx` — xóa dòng "Tổng giá gốc hàng mua" trùng lặp với "Tổng tiền hàng trả" trong sidebar trả hàng
+- **[Fix E]** `POSReturnModal.tsx` — cột Nhân viên hiển thị `staffName` thay vì `staffId`
+- TypeScript clean (0 errors), `npx tsc --noEmit` pass
+- Files: `POSComputer.tsx`, `POSReceiptModal.tsx`, `POSCheckout.tsx`, `POSReturnModal.tsx`
+
+---
+
+### 2026-06-14 — Fix 4 lỗi luồng trả hàng POS
+
+- **[Fix #1]** `POSComputer.tsx` — `returnUpdatedCustomer` thiếu `totalSpent` giảm khi trả hàng → thêm `totalSpent: Math.max(0, totalSpent - amountToPayCustomer)`, tránh khách ở tier cao hơn thực tế dài hạn
+- **[Fix #2]** `types.ts` — thêm field `returnFee?: number` vào `POSOrder`; `POSComputer.tsx` — lưu `returnFee` vào `returnOrder`; `posOrderService.ts:processReturnOrder` — cộng `returnFee` vào `revenueOther` trong `revenue_records` thay vì bỏ mất
+- **[Fix #3]** `POSComputer.tsx:handlePrint` — items trong đơn trả/đổi có prefix `[TRẢ]` màu đỏ và `[ĐỔI]` màu xanh, phân biệt rõ ràng trên hóa đơn in
+- **[Fix #4]** `POSComputer.tsx:handlePrint` — đơn trả hiển thị đúng: label "Tiền hàng trả", "Phí trả hàng" (nếu có), "HOÀN TRẢ KHÁCH" thay vì "Tiền hàng"/"TỔNG CỘNG"/"Khách đưa"
+- TypeScript clean (0 errors)
+- Files: `types.ts`, `components/pos/POSComputer.tsx`, `services/posOrderService.ts`
+
+---
+
+### 2026-06-13 (ca 2) — Hệ thống phân quyền 3 cấp + quản lý tài khoản trong Settings
+
+- Thêm `role` (cashier/manager/owner) vào `user_metadata` Supabase khi đăng ký
+- Trang đăng nhập: bỏ tab đăng ký, chỉ giữ đăng nhập với 2 sub-tab (Thu ngân / Quản lý·Chủ)
+- Tạo `LauncherPage.tsx`: màn hình chọn chế độ sau đăng nhập — thu ngân chỉ thấy nút Bán hàng, quản lý/chủ thấy 2 nút Bán hàng + Quản lý
+- App.tsx: thu ngân bị redirect về /pos nếu cố vào trang quản lý
+- Cài đặt: thêm tab "Quản lý tài khoản" (AccountsTab) — xem danh sách, tạo mới, reset mật khẩu, xóa tài khoản
+- Backend: 3 API mới `/api/auth/accounts` (GET), `/api/auth/accounts/:id/password` (PATCH), `/api/auth/accounts/:id` (DELETE)
+- Files: `routes/auth.ts`, `services/auth.ts`, `components/LoginPage.tsx`, `components/LauncherPage.tsx`, `index.tsx`, `App.tsx`, `components/settings/SettingsCenter.tsx`, `components/settings/tabs/AccountsTab.tsx`
+
+---
+
+### 2026-06-13 — Auth, UI đăng nhập, schema sync local Supabase
+
+**Auth & Logout:**
+- **[AuthGate.tsx]** Fix logout không ra trang đăng nhập: luôn đăng ký `onAuthStateChange`, dev mode dùng dummy session bypass, chỉ phản hồi `SIGNED_OUT`
+- **[POSComputer.tsx]** Nút Đăng xuất POS giờ gọi `signOut()` thật thay vì chỉ reset cart
+- **[components/LoginPage.tsx]** Tạo mới — trang đăng nhập riêng tại `/login`, logo lớn hơn (`w-4/5`), nền trắng cột trái, card `w-[70vw] min-h-[70vh]`
+- **[index.tsx]** Thêm route `/login` → `<LoginPage />`
+- **[routes/auth.ts]** Tạo mới — `POST /api/auth/register` dùng Admin API, bypass email confirmation
+- **[components/LoginPage.tsx]** Đăng ký bằng tên đăng nhập (không cần email), tự ghép `@cfobrain.local`
+
+**Schema sync local Supabase:**
+- **[server.ts]** Thêm `syncLocalSchema()` — mỗi khi khởi động ở mạng nội bộ, tự kiểm tra cột thiếu trên local Supabase qua REST API, in SQL cần chạy vào console nếu phát hiện thiếu
+- **[package.json]** Thêm `pg`, `@types/pg` dependency
+- Files: `AuthGate.tsx`, `LoginPage.tsx` (new), `POSComputer.tsx`, `index.tsx`, `routes/auth.ts` (new), `server.ts`
+
+---
+
+### 2026-06-13 — Fix lỗi logout không ra trang đăng nhập
+
+- **[AuthGate.tsx]** Đăng ký `onAuthStateChange` ở mọi môi trường (trước: chỉ PROD) — dev không có listener nên sign out không có effect
+- **[AuthGate.tsx]** Khởi tạo `session` = dummy truthy trong dev để giữ bypass auth, chỉ phản hồi sự kiện `SIGNED_OUT` trong dev
+- **[AuthGate.tsx]** Đơn giản hoá render condition: `if (session)` thay vì `if (!PROD || session)`
+- Files: `components/AuthGate.tsx`
+
+---
+
+### 2026-06-13 — Hoàn tất production readiness — app sẵn sàng go-live
+
+- Đã chạy SQL trên Supabase Dashboard: RLS 5 bảng Shopee + ALTER TABLE carry-forward debt
+- Xác nhận `.gitignore` đã có `.env.local`, `excelSafety.ts` đã validate xlsx đúng
+- TypeScript clean, 266 tests pass
+- **Trạng thái: APP SẴN SÀNG DÙNG THỰC TẾ** ✅
+
+---
+
+### 2026-06-13 — Production readiness: fix 2 vấn đề security, chuẩn bị SQL Supabase
+
+- **[server.ts]** `saveUninitialized: true` → `false`, `resave: true` → `false` — không tạo session rác cho request chưa đăng nhập
+- **[supabase_setup.sql]** Bỏ comment, bật RLS cho 5 bảng Shopee + thêm `CREATE POLICY authenticated` (DO $$ IF NOT EXISTS $$) — sẵn sàng chạy trên Supabase Dashboard
+- Ghi nhận: `.gitignore` đã đúng, `excelSafety.ts` đã có validation xlsx, TypeScript clean, 266 tests pass
+- Files: `server.ts`, `supabase_setup.sql`
+
+---
+
+### 2026-06-13 — Audit vòng 2: fix 10 lỗi còn sót sau vòng 1
+
+**Critical (3 lỗi):**
+- **[D1]** `POSComputer.tsx:623` — `discountRatio` âm khi discount lớn → `pointsEarned` âm → điểm bị trừ khi mua. Fix: `Math.max(0, ...)`
+- **[C1-POS]** `usePOSReturnFlow.ts:139` — `handleSelectOrderReturn` load cả `lineType='exchange'` vào returnCart → cho phép trả ngược hàng đổi. Fix: filter chỉ giữ items `sale`
+- **[D3]** `POSComputer.tsx:607` — `pointsRate = 0` → chia cho 0 → `pointsEarned = Infinity`. Fix: `Math.max(1, pointsRate)`
+
+**Major (4 lỗi):**
+- **[F2]** `usePOSReturnFlow.ts:166` — `customers` thiếu trong `useCallback` deps → stale closure → fix M4 auto-fill không hoạt động sau khi customers cập nhật
+- **[B1]** `posOrderService.ts:buildRevenueUpdate` — `netRevenue > totalGrossRevenue` khi có `otherFees`. Fix: tách `otherFees` vào `revenueOther`, `netRevenue = totalAmount - discount`
+- **[M2-INV]** `posOrderService.ts:processReturnOrder` — rollback bước 3 không xóa inventoryTransactions. Fix: kết hợp inventory deletions + stock revert trong 1 `updateSurgical` call
+- **[M3-INV]** `useGoodsPurchase.ts:162` — `onAddTransaction` thiếu `await` → lỗi bị nuốt silently. Fix: thêm `await`
+
+**Minor (3 lỗi):**
+- **[E1]** `POSComputer.tsx` — `isCheckoutLocked` kẹt nếu modal không render. Fix: `useEffect` timeout 30s tự reset
+- **[m4-INV]** `posOrderService.ts:485` — `autoUpsertStaffSalesForDate` ngoài try/catch trong `processReturnOrder`. Fix: bọc trong try/catch riêng
+- **[m3-INV]** `routes/data.ts:678,826` — `item.importPrice` miss nếu DB lưu `import_price`. Fix: check cả 2 key
+
+- TypeScript clean, 266 tests pass
+- Files: `components/pos/POSComputer.tsx`, `components/pos/usePOSReturnFlow.ts`, `services/posOrderService.ts`, `components/pos/useGoodsPurchase.ts`, `routes/data.ts`
+
+---
+
+### 2026-06-13 — Audit & fix 15 lỗi logic POS và tồn kho
+
+**Critical (6 lỗi):**
+- **[C1]** `posOrderService.ts:buildRevenueUpdate` — đổi `totalAmount - discount` → `finalAmount` (bao gồm otherFees/phụ phí)
+- **[C2]** `POSComputer.tsx:761` — `finalAmount` đơn trả từ âm → dương (`isReturn: true` đã phân biệt)
+- **[C3]** `POSComputer.tsx` — chặn checkout khi toàn bộ returnCart có quantity = 0
+- **[I1]** `posOrderService.ts:262` — tách inventory transaction và stock update thành 2 `updateSurgical` call riêng + thêm rollback cho transaction
+- **[I2/M3]** Cải thiện checkout lock: giải phóng localStorage lock ngay sau khi order confirmed (không chờ modal đóng)
+
+**Major (6 lỗi):**
+- **[M1/M2]** `usePOSReturnFlow.ts` — `item.total` trong returnCart tính `qty × (price - discount)` thay vì `qty × price` — tránh hoàn tiền nhiều hơn thực thu, và điểm trừ đúng
+- **[M4]** `usePOSReturnFlow.ts:handleSelectOrderReturn` — auto-fill `selectedCustomer` từ đơn gốc (thêm `customers` param) — tránh điểm không bị thu hồi khi trả
+- **[M6]** `useGoodsExcelImport.ts` — `Math.max(0, ...)` cho stock khi import — không cho import tồn kho âm
+- **[M10]** `routes/data.ts:financial-matrix` — COGS dùng giá lịch sử (`product_cost_history`) thay vì giá hiện tại — nhất quán với `recalculate-cogs`
+
+**Minor (3 lỗi):**
+- **[m2]** `POSComputer.tsx` — `discountRatio` cho `pointsEarned` loại trừ `otherFees` (`Math.min(1, ...)`)
+- **[m5]** `POSReturnModal.tsx` — so sánh ngày dùng `toLocaleDateString('en-CA')` thay vì Date object UTC — fix miss đơn do lệch timezone
+- **[m6]** `useGoodsExcelImport.ts` — filter tên sản phẩm loại trừ `''`, `'null'`, `'undefined'`
+- **[m7]** `POSComputer.tsx` — validate `returnFee >= 0` trước khi checkout
+
+- TypeScript clean, 266 tests pass
+- Files: `services/posOrderService.ts`, `services/posOrderService.test.ts`, `components/pos/POSComputer.tsx`, `components/pos/usePOSReturnFlow.ts`, `components/pos/useGoodsExcelImport.ts`, `components/pos/POSReturnModal.tsx`, `routes/data.ts`
+
+---
+
+### 2026-06-07 — Logic audit & fix 6 bugs tính toán doanh thu
+
+- **BUG 1** `reportCalculations.ts:getSalesProfitRowsByDate` — đổi `finalAmount` → `calcOrderRevenue(order)` cho đơn bán (tránh undercount khi KH dùng điểm)
+- **BUG 2** `reportCalculations.ts:getSalesStaffRows` — đổi `finalAmount` → `calcOrderRevenue(order)` cho doanh số nhân viên
+- **BUG 3** `posOrderService.ts:buildRevenueUpdate` — đổi `netRevenue = finalAmount` → `totalAmount - discount` (chuẩn KiotViet); bảo vệ `discount` null bằng `Number(order.discount) || 0`
+- **BUG 4** `EndOfDayReport.tsx:handlePrint` — fix bản in: `mDoanhThu = Σ calcOrderRevenue` thay vì gross mTienHang; `mGiamGia` derived từ `mTienHang - mDoanhThu`; `mThucThu = mDoanhThu` (nhất quán với UI live)
+- **BUG 5** `OverviewPage.tsx:lastMonthSameDay` — đổi `finalAmount` → `calcOrderRevenue(o)` để % tăng trưởng không bị lệch
+- **BUG 6** `EndOfDayReport.tsx:returnRevenue` — thêm `Math.abs()` tránh cộng âm khi totalAmount trả hàng là số âm
+- TypeScript clean, 266 tests pass
+- Files: `src/lib/reportCalculations.ts`, `services/posOrderService.ts`, `components/pos/EndOfDayReport.tsx`, `components/overview/OverviewPage.tsx`
+
+---
+
+### 2026-06-07 — Logic audit vòng 4: fix 13 bug từ 4 agent song song
+
+**routes/data.ts (3 critical):**
+- `financial-matrix:694` — `agg.net` đổi `final_amount` → `totalAmount - discount` (bán) / `-totalAmount` (trả)
+- `recalculate-revenue-from-orders:740-773` — rewrite dùng `total_amount`: tính đúng `grossRev`, `returnsGross`, `discountSum`; `returns_value` không còn hardcode 0
+- `sync-from-orders:807` — `totalSpent = Σ(totalAmount-discount)bán - ΣtotalAmount trả`; thêm `total_amount, discount` vào select
+
+**EndOfDayReport.tsx (2):**
+- `totalAllOrders:65` — chỉ cộng đơn bán (không cộng đơn trả) → cột Tổng không bị phình
+- `thucThu:139` — `thucThu = doanhThu - traHang` trong methodSummaries (sub-group PTTT)
+
+**usePosOrders.ts (1):**
+- `merge:84-86` — local-only orders được filter theo date range khi merge với remote → tránh đơn ngoài range lọt vào báo cáo
+
+**OrderReturns.tsx (3):**
+- `handleCancelReturn:555` — hoàn `netRevenue += returnValue` (totalAmount) thay vì `refundValue` (finalAmount) → đối xứng với khi tạo
+- `returnProfitImpact:839` — dùng `absMoney(order.totalAmount)` thay `finalAmount`
+- `summary.refunded:245` — đơn bị huỷ không được tính vào "đã trả khách"
+
+**OrderInvoices.tsx (2):**
+- `handleCreateReturn:367,378` — `netRevenue` trừ `orderRevenue = totalAmount - discount` thay vì `finalAmount`
+
+**Report pages (3):**
+- `OrderReportPage:123` — bỏ filter status sai; `getOrderedGoodsReportRows` tự xử lý qua `statusFilter`
+- `ChannelReportPage:144` — `fraction = Math.max(0, row.netRevenue) / totals.netRevenue` tránh arc âm
+- `SupplierReportPage:74` — thêm guard `if (dateMode === 'custom') return;`
+
+- 266 tests pass, TypeScript clean
+- Files: `routes/data.ts`, `components/pos/EndOfDayReport.tsx`, `hooks/usePosOrders.ts`, `components/orders/OrderReturns.tsx`, `components/orders/OrderInvoices.tsx`, `components/reports/OrderReportPage.tsx`, `components/reports/ChannelReportPage.tsx`, `components/reports/SupplierReportPage.tsx`
+
+---
+
+### 2026-06-07 — Logic audit vòng 3: fix 8 bug từ 4 agent song song
+
+- **routes/data.ts:692** — financial-matrix: `agg.returns` đổi `final_amount` → `total_amount` (chuẩn KiotViet)
+- **businessLogic.revenue.ts:43** — `calculateExecutiveInsights`: `projectedNetProfit` giờ trừ `projectedPayroll` (trước đó bỏ quên → lợi nhuận báo cáo cao hơn thực tế)
+- **EndOfDayReport.tsx:831** — UI: cột "Doanh thu" từng dòng đổi `totalAmount` → `calcOrderRevenue(order)` (đã trừ giảm giá)
+- **EndOfDayReport.tsx:362** — Print: cột "Doanh thu" từng dòng in ra cũng fix tương tự, thêm `doanhThuOrder = calcOrderRevenue(order)`
+- **posSalesAttribution.ts:117-119** — Đơn bán có bill discount: doanh số NV dùng `orderNetRevenue = totalAmount - discount` thay `finalAmount` (tránh mất doanh số khi khách trả bằng điểm)
+- **OverviewPage.tsx:742-743** — Sidebar "Hoạt động gần đây": đổi `finalAmount` → `calcOrderRevenue(o)` cho đơn bán, `Math.abs(totalAmount)` cho đơn trả
+- **AnalysisBusinessProfitPage.tsx:135** — `totalExpenses` dedup salary: khi `payrollTotal > 0` thì lọc salary expenses khỏi ledger trước khi cộng, tránh double-count lương
+- **routes/import.ts:1903** — Route duplicate `/api/import/kiotviet-invoices` v2 shadowed bởi route v1: đổi tên thành `/api/import/kiotviet-invoices-v2`; thêm inline `inferIsReturnOrder` (trước đó undefined → crash nếu route được gọi)
+- 266 tests pass, TypeScript clean
+- Files: `routes/data.ts`, `src/lib/businessLogic.revenue.ts`, `components/pos/EndOfDayReport.tsx`, `src/lib/posSalesAttribution.ts`, `components/overview/OverviewPage.tsx`, `components/analysis/AnalysisBusinessProfitPage.tsx`, `routes/import.ts`
+
+---
+
+### 2026-06-07 — Logic audit vòng 2: fix 3 bug doanh thu còn sót
+
+- **BUG 1** `FinanceReportPage.tsx:financeRows` — đổi `finalAmount` → `totalAmount - discount` cho netRevenue (báo cáo tài chính tháng); returnsValue dùng `Math.abs(totalAmount)`; bảo vệ discount null
+- **BUG 2** `AnalysisEfficiencyPage.tsx:68,80` — staffMap và channelMap dùng `calcOrderRevenue(o)` thay `o.finalAmount`
+- **BUG 3** `posSalesAttribution.ts:67` — `extraPaid` đơn đổi hàng tính từ `exchangeTotal - returnTotal` (item.total) thay vì finalAmount (luôn = 0 khi đổi hàng đắt hơn trong native POS); fallback sang finalAmount cho KiotViet imports
+- 266 tests pass, TypeScript clean
+- Files: `components/reports/FinanceReportPage.tsx`, `components/analysis/AnalysisEfficiencyPage.tsx`, `src/lib/posSalesAttribution.ts`
+
+---
+
+### 2026-06-06 — Batch 2: Chuẩn hóa calcOrderRevenue cho CustomerListPage + ChatInterface
+
+- `CustomerListPage`: `orderStats` sold dùng `calcOrderRevenue(o)`, returned dùng `Math.abs(totalAmount)`; `spentInRangeMap` dùng `calcOrderRevenue`
+- `ChatInterface`: 2 tool handlers (`get_daily_summary`, `query_pos_orders`) — tất cả `o.finalAmount` → `calcOrderRevenue(o)`, `totalReturns` dùng `Math.abs(totalAmount)`, payment breakdown đồng bộ
+- 266 tests pass
+- Files: `components/customers/CustomerListPage.tsx`, `components/ChatInterface.tsx`
+
+### 2026-06-06 — Batch 1: Chuẩn hóa calcOrderRevenue cho 4 trang Phân tích
+
+- `AnalysisCustomersOverviewPage`: đổi `o.finalAmount` → `calcOrderRevenue(o)` tại 4 chỗ (leRevenue, moiRevenue, cuRevenue, dayRevenue)
+- `AnalysisCustomersClassifyPage`: `c.monetary` dùng `calcOrderRevenue(o)`; `c.returnValue` đổi `Math.abs(finalAmount)` → `Math.abs(totalAmount)` đúng chuẩn
+- `AnalysisEfficiencyPage`: thay toàn bộ `o.finalAmount` → `calcOrderRevenue(o)` (5 chỗ: totalRevenue30, prev30, today, staff map, channel map)
+- `AnalysisGoodsOverviewPage`: fix daily sparkline revenue dùng `calcOrderRevenue(o)`
+- 4 trang còn lại (BusinessPage, BusinessProfitPage, GoodsClassify, GoodsStock) đã đúng — không cần sửa
+- TypeScript clean, 266 tests pass
+- Files: 4 Analysis pages
+
+### 2026-06-06 — Chuẩn hóa công thức doanh thu thuần toàn app
+
+- Root cause: 3 nơi dùng 3 công thức khác nhau (addOrderAmount dùng totalAmount-discount, EndOfDayReport dùng totalAmount, OverviewPage dùng finalAmount)
+- Export hàm `calcOrderRevenue(order)` từ `reportCalculations.ts` — 1 công thức duy nhất: đơn bán = `totalAmount - discount`, đơn trả = `-totalAmount` (chuẩn KiotViet)
+- `EndOfDayReport.tsx`: salesRevenue, methodSummaries đều dùng `calcOrderRevenue`; salesDiscount giờ derived từ `salesGross - salesRevenue`; bỏ double-subtract ở newThucthu
+- `OverviewPage.tsx`: `netOrderAmount` đổi từ `finalAmount` sang `calcOrderRevenue`
+- `reportCalculations.ts`: `addOrderAmount` refactor dùng `calcOrderRevenue`
+- TypeScript clean, 266 tests pass
+- Files: `src/lib/reportCalculations.ts`, `components/pos/EndOfDayReport.tsx`, `components/overview/OverviewPage.tsx`
+
+### 2026-06-06 — Auto-reload sau deploy (Service Worker)
+
+- Root cause: `CACHE_NAME = 'cfo-brain-v1.0.2'` hardcode → browser không phát hiện SW mới sau deploy
+- Root cause 2: `confirm()` dialog trong `showUpdatePrompt` vô dụng vì SW đã `skipWaiting()` tự động → `registration.waiting` luôn null
+- Fix `registerServiceWorker.ts`: Xóa `confirm()`, thêm `controllerchange` listener → tự `window.location.reload()` khi SW mới activate; poll update mỗi 5 phút thay vì 1 giờ
+- Fix `scripts/deploy-imac.sh`: Inject timestamp `cfo-brain-vYYYYMMDDHHMMSS` vào `public/service-worker.js` trước khi build → mỗi deploy browser luôn thấy file SW khác byte
+- Sau fix: deploy xong → browser tự reload trong vòng 5 phút, không cần thao tác thủ công
+- Files: `registerServiceWorker.ts`, `scripts/deploy-imac.sh`
+
+### 2026-06-06 — Full audit 6 vai trò + fix 10 vấn đề
+
+- **Logic**: Fix `posOrderService.ts:367,381` — đổi dấu `+` → `-` khi update `netRevenue` sau trả hàng (doanh thu bị phình lên trước đây)
+- **QA/UX**: Fix `POSComputer.tsx:handlePrint` — dùng `brandProfile` thay vì hardcode "CFO Brain Professional"; thêm `escapeHtml()` cho tên KH, sản phẩm, nhân viên
+- **QA/UX**: Fix `POSComputer.tsx:handleAddQuickCustomer` — thêm toast báo lỗi khi tên/SĐT trống thay vì silent fail
+- **Security**: Fix `PrintTemplatesTab.tsx:1614` — thêm `DOMPurify.sanitize()` cho barcode preview HTML
+- **Code Review**: Fix `SalesReportPage.tsx` — thêm `dateMode` vào useEffect deps array
+- **Performance**: Fix `apiService.ts:buildPosOrdersPageQuery` — đổi `select('*')` → `POS_ORDER_BOOTSTRAP_COLUMNS` (bỏ cột `items` JSON lớn)
+- **Security**: Thêm RLS cho 6 bảng nhạy cảm vào `supabase_setup.sql` (employees, payroll_records, revenue_records, pos_customers, pos_orders, audit_logs)
+- **Security**: Đổi `shopee_source_data` policy từ `anon` → `authenticated`
+- **Code Quality**: Xóa 6 `console.log` debug trong `OfflineIndicator.tsx` và `ShippingOrders.tsx`
+- TypeScript clean (exit 0), 238 tests pass
+- Files: `services/posOrderService.ts`, `components/pos/POSComputer.tsx`, `components/settings/tabs/PrintTemplatesTab.tsx`, `components/reports/SalesReportPage.tsx`, `services/apiService.ts`, `supabase_setup.sql`, `components/OfflineIndicator.tsx`, `components/orders/ShippingOrders.tsx`
+
+### 2026-06-06 — Báo cáo tự fetch Supabase theo date range (không giới hạn bootstrap)
+
+- Thêm `fetchPosOrdersByDateRange(startDate, endDate)` vào `apiService.ts`
+- Tạo hook `usePosOrders(bootstrapOrders, startDate, endDate)`: tự detect khi range nằm ngoài bootstrap 90 ngày và fetch trực tiếp Supabase
+- Áp dụng hook cho 6 trang báo cáo: SalesReport, OrderReport, GoodsReport, CustomerReport, StaffReport, ChannelReport
+- Thêm guard `if (dateMode === 'custom') return;` vào fallback useEffect tránh override ngày tháng user đã chọn
+- Thêm loading indicator "Đang tải..." khi đang fetch
+- 266 tests pass
+- Files: `services/apiService.ts`, `hooks/usePosOrders.ts`, 6 report pages
+
+### 2026-06-06 — Thêm cột "Tiền trả khách" vào báo cáo bán hàng
+
+- Thêm field `returnRefund` vào `SalesHorizontalReportRow` interface
+- Tính `returnRefund = SUM(|finalAmount|)` cho return orders (= "Cần trả khách" KiotViet)
+- Hiển thị cột "Tiền trả khách" trong bảng ngang và bảng trả hàng của `SalesReportPage`
+- Fix import route `kiotviet-returns`: đọc đúng cột "Tổng tiền hàng trả" / "Cần trả khách" thay vì fallback sai
+- 266 tests pass
+- Files: `src/lib/reportCalculations.ts`, `components/reports/SalesReportPage.tsx`, `routes/import.ts`
+
+### 2026-06-06 — Chuẩn hóa công thức tính giá trị trả hàng theo KiotViet
+
+- Root cause: app dùng `finalAmount` ("Cần trả khách") cho giá trị trả → sai với KiotViet vốn dùng `totalAmount` ("Tổng tiền hàng trả")
+- Sự khác biệt: đơn đổi hàng có `totalAmount > 0` nhưng `finalAmount = 0` (không hoàn tiền mặt)
+- Fix `addOrderAmount` trong `reportCalculations.ts`: returns dùng `totalAmount`
+- Fix `getSalesProfitRowsByDate` trong `reportCalculations.ts`: returns dùng `totalAmount`
+- Fix `netOrderAmount`, `netOrderProfit`, `todayReturnAmt` trong `OverviewPage.tsx`
+- 266 tests pass
+- Files: `src/lib/reportCalculations.ts`, `components/overview/OverviewPage.tsx`
+
+### 2026-06-06 — Fix trang Tổng quát và Báo cáo không có dữ liệu
+
+- Root cause: `split_payments` nằm trong `POS_ORDER_BOOTSTRAP_COLUMNS` nhưng không có trong schema `pos_orders` → Supabase lỗi "column not found" → `fetchRecentPosOrders` trả về `[]` → `data.posOrders` rỗng → toàn bộ báo cáo/tổng quát trống
+- Fix: xóa `split_payments` khỏi `POS_ORDER_BOOTSTRAP_COLUMNS` trong `apiService.ts`
+- Bonus fix: OverviewPage thêm `useEffect` fallback tự chuyển sang "tháng trước" khi tháng hiện tại không có đơn
+- Bonus fix: tăng `POS_ORDER_BOOTSTRAP_DAYS` 60 → 90 ngày
+- Thêm `ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS split_payments JSONB` vào `supabase_setup.sql`
+- Files: `services/apiService.ts`, `components/overview/OverviewPage.tsx`, `supabase_setup.sql`
+
+---
+
+### 2026-06-06 — Deploy app lên iMac + domain phucsang.com.vn
+
+- Cài Node.js + tsx trên iMac, copy app lên iMac qua rsync
+- Build app production trên iMac, chạy tại port 3000
+- Setup Cloudflare Tunnel: phucsang.com.vn → iMac:3000
+- Fix CORS + CSP cho domain phucsang.com.vn
+- Setup SSH key không cần password cho deploy
+- Tạo `scripts/deploy-imac.sh` + `npm run deploy` — 1 lệnh deploy hoàn toàn tự động
+- Auto-detect Supabase URL: nội bộ dùng IP, bên ngoài dùng app.phucsang.com.vn
+- Files: `server.ts`, `scripts/deploy-imac.sh`, `scripts/watch-and-sync.sh`, `package.json`
+
+### 2026-06-06 — Migrate database từ Supabase Cloud sang iMac cá nhân
+
+- Cài Docker Desktop + Homebrew + libpq + cloudflared trên iMac cá nhân
+- Chạy Supabase self-hosted (11 services) trên iMac cá nhân (192.168.1.3)
+- Export toàn bộ data từ Supabase Cloud (48 bảng, 68,184 đơn hàng)
+- Import schema + data vào Supabase local thành công
+- Setup Cloudflare Quick Tunnel (neural-korean-vermont-hang.trycloudflare.com)
+- Cập nhật `.env.local`: SUPABASE_URL → http://192.168.1.3:8000 + keys mới
+- Fix CSP trong `server.ts`: thêm IP nội bộ, trycloudflare.com, tắt upgradeInsecureRequests
+- Setup auto-start: Docker Desktop login startup + brew services cloudflared
+- Xóa Fly.io apps (cfobrain-supabase, cfobrain-db) tiết kiệm chi phí
+- Fix import KiotViet: sửa logic isReturn sai (bỏ check Mã trả hàng)
+- Thêm route + UI import phiếu trả hàng (`/api/import/kiotviet-returns`)
+- Files: `server.ts`, `.env.local`, `routes/import.ts`, `components/settings/tabs/MigrationTab.tsx`
 
 ### 2026-06-04 — Performance fix: EndOfDayReport
 

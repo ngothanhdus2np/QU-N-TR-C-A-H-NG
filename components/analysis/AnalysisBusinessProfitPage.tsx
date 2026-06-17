@@ -119,8 +119,6 @@ const AnalysisBusinessProfitPage: React.FC<Props> = ({ data }) => {
     // Expenses
     const currExp = (data.expenses || []).filter(e => inCurr(e.date));
     const prevExp = (data.expenses || []).filter(e => inPrev(e.date));
-    const expenseOnly = currExp.reduce((s, e) => s + e.amount, 0);
-    const prevExpenseOnly = prevExp.reduce((s, e) => s + e.amount, 0);
 
     // Payroll — dùng field `month` (YYYY-MM), so sánh với startDate/endDate theo tiền tố năm-tháng
     const startYM = startDate.slice(0, 7);
@@ -132,6 +130,31 @@ const AnalysisBusinessProfitPage: React.FC<Props> = ({ data }) => {
     const payrollTotal = currPayroll.reduce((s, p) => s + (p.netPay ?? 0), 0);
     const prevPayrollTotal = prevPayroll.reduce((s, p) => s + (p.netPay ?? 0), 0);
 
+    // Tách salary khỏi ledger trước để tránh double-count khi payroll module đã có dữ liệu
+    const expCats = data.expenseCategories || [];
+    const SALARY_LABELS = ['Nhân sự', 'Nhân viên', 'Lương'];
+    let ledgerSalary = 0;
+    const nonSalaryExp = currExp.filter(e => {
+      const top = getTopLevelCategory(e.category, expCats);
+      if (SALARY_LABELS.includes(top)) { ledgerSalary += e.amount; return false; }
+      return true;
+    });
+    let prevLedgerSalary = 0;
+    const prevNonSalaryExp = prevExp.filter(e => {
+      const top = getTopLevelCategory(e.category, expCats);
+      if (SALARY_LABELS.includes(top)) { prevLedgerSalary += e.amount; return false; }
+      return true;
+    });
+
+    // Khi payroll module có dữ liệu → dùng nonSalaryExp (tránh double-count lương)
+    // Khi chỉ có ledger → dùng toàn bộ currExp (ledgerSalary tính vào)
+    const expenseOnly = payrollTotal > 0
+      ? nonSalaryExp.reduce((s, e) => s + e.amount, 0)
+      : currExp.reduce((s, e) => s + e.amount, 0);
+    const prevExpenseOnly = prevPayrollTotal > 0
+      ? prevNonSalaryExp.reduce((s, e) => s + e.amount, 0)
+      : prevExp.reduce((s, e) => s + e.amount, 0);
+
     const totalExpenses = expenseOnly + payrollTotal;
     const prevTotalExp = prevExpenseOnly + prevPayrollTotal;
 
@@ -141,9 +164,10 @@ const AnalysisBusinessProfitPage: React.FC<Props> = ({ data }) => {
 
     const chg = (c: number, p: number) => (p > 0 ? ((c - p) / p) * 100 : null);
 
-    // Expense categories for pie + table
+    // Expense categories for pie + table (dùng nonSalaryExp khi có payroll module)
+    const expForPie = payrollTotal > 0 ? nonSalaryExp : currExp;
     const catMap = new Map<string, number>();
-    currExp.forEach(e => {
+    expForPie.forEach(e => {
       catMap.set(e.category, (catMap.get(e.category) ?? 0) + e.amount);
     });
     if (payrollTotal > 0) catMap.set('Lương nhân viên', payrollTotal);
@@ -159,14 +183,6 @@ const AnalysisBusinessProfitPage: React.FC<Props> = ({ data }) => {
     }
 
     // ── Structure charts: waterfall + expense pie ──────────────────
-    const expCats = data.expenseCategories || [];
-    const SALARY_LABELS = ['Nhân sự', 'Nhân viên', 'Lương'];
-    let ledgerSalary = 0;
-    const nonSalaryExp = currExp.filter(e => {
-      const top = getTopLevelCategory(e.category, expCats);
-      if (SALARY_LABELS.includes(top)) { ledgerSalary += e.amount; return false; }
-      return true;
-    });
     const personnelTotal = payrollTotal > 0 ? payrollTotal : ledgerSalary;
     let varCosts = 0;
     let fixedCosts2 = personnelTotal;

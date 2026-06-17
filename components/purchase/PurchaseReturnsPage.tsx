@@ -83,13 +83,14 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
       result = result.filter(
         transaction =>
           transaction.id.toLowerCase().includes(term) ||
+          transaction.referenceId?.toLowerCase().includes(term) ||
           transaction.supplierName?.toLowerCase().includes(term) ||
           transaction.note?.toLowerCase().includes(term)
       );
     }
 
-    if (dateRange.start) result = result.filter(transaction => transaction.date >= dateRange.start);
-    if (dateRange.end) result = result.filter(transaction => transaction.date <= dateRange.end);
+    if (dateRange.start) result = result.filter(transaction => transaction.date.slice(0, 10) >= dateRange.start);
+    if (dateRange.end) result = result.filter(transaction => transaction.date.slice(0, 10) <= dateRange.end);
     if (statusFilter.length > 0) {
       result = result.filter(transaction => statusFilter.includes(transaction.status || 'completed'));
     }
@@ -210,12 +211,21 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
 
   const handleBulkDelete = async () => {
     if (confirm(`Xóa ${selectedReturns.length} phiếu trả hàng nhập đã chọn?`)) {
-      try {
-        await Promise.all(selectedReturns.map(id => onDeleteReturn(id)));
+      const failed: string[] = [];
+      for (const id of selectedReturns) {
+        try {
+          await onDeleteReturn(id);
+        } catch (err) {
+          console.error('[PurchaseReturnsPage] Bulk delete item failed', id, err);
+          failed.push(id);
+        }
+      }
+      if (failed.length > 0) {
+        showToast(`Xóa thất bại ${failed.length}/${selectedReturns.length} phiếu. Các phiếu còn lại đã xóa.`, 'error');
+        setSelectedReturns(failed);
+      } else {
         setSelectedReturns([]);
-      } catch (err) {
-        console.error('[PurchaseReturnsPage] Bulk delete failed', err);
-        showToast('Xóa hàng loạt thất bại. Vui lòng thử lại.', 'error');
+        showToast(`Đã xóa ${selectedReturns.length} phiếu trả hàng nhập`, 'success');
       }
     }
   };
@@ -247,7 +257,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
             },
           ]}
           selected={statusFilter}
-          onChange={setStatusFilter}
+          onChange={v => { setStatusFilter(v); setCurrentPage(1); }}
           searchable={false}
         />
       </FilterSection>
@@ -256,8 +266,8 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
         <FilterDateRange
           startDate={dateRange.start}
           endDate={dateRange.end}
-          onStartDateChange={date => setDateRange(prev => ({ ...prev, start: date }))}
-          onEndDateChange={date => setDateRange(prev => ({ ...prev, end: date }))}
+          onStartDateChange={date => { setDateRange(prev => ({ ...prev, start: date })); setCurrentPage(1); }}
+          onEndDateChange={date => { setDateRange(prev => ({ ...prev, end: date })); setCurrentPage(1); }}
         />
       </FilterSection>
 
@@ -272,7 +282,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
             ).length,
           }))}
           selected={supplierFilter}
-          onChange={setSupplierFilter}
+          onChange={v => { setSupplierFilter(v); setCurrentPage(1); }}
         />
       </FilterSection>
 
@@ -285,7 +295,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
             count: purchaseReturns.filter(transaction => transaction.staffId === creator).length,
           }))}
           selected={creatorFilter}
-          onChange={setCreatorFilter}
+          onChange={v => { setCreatorFilter(v); setCurrentPage(1); }}
           searchable={false}
         />
       </FilterSection>
@@ -295,7 +305,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
   const toolbar = (
     <ListPageToolbar
       searchTerm={searchTerm}
-      onSearchChange={setSearchTerm}
+      onSearchChange={term => { setSearchTerm(term); setCurrentPage(1); }}
       searchPlaceholder="Tìm mã phiếu trả hoặc nhà cung cấp..."
       rightActions={
         <>
@@ -384,7 +394,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
       width: 'w-40',
       sortable: true,
       render: transaction => (
-        <span className="font-mono text-xs font-normal text-indigo-600">{transaction.id.slice(0, 12)}</span>
+        <span className="font-mono text-xs font-normal text-indigo-600">{transaction.referenceId || transaction.id.slice(0, 12)}</span>
       ),
     },
     {

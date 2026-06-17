@@ -356,7 +356,7 @@ const SupplierDetailView: React.FC<SupplierDetailViewProps> = ({
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-3 text-sm font-normal border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
+                    ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
               >

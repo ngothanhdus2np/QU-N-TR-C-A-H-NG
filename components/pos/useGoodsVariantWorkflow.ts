@@ -20,6 +20,7 @@ interface UseGoodsVariantWorkflowArgs {
   viewingProduct: POSProduct | null;
   setViewingProduct: React.Dispatch<React.SetStateAction<POSProduct | null>>;
   showToast: (message: string, type?: 'success' | 'error') => void;
+  showConfirm?: (message: string, onConfirm: () => void) => void;
 }
 
 const emptyAttribute = (): ViewModeAttribute => ({
@@ -107,7 +108,7 @@ const buildPreviewVariants = (
       attributes: variantAttributes,
       importPrice: referenceProduct.importPrice || 0,
       salePrice: referenceProduct.salePrice || 0,
-      stock: referenceProduct.stock || 0,
+      stock: 0,
     };
   });
 };
@@ -119,6 +120,7 @@ export const useGoodsVariantWorkflow = ({
   viewingProduct,
   setViewingProduct,
   showToast,
+  showConfirm,
 }: UseGoodsVariantWorkflowArgs) => {
   const [showAddUnitInView, setShowAddUnitInView] = React.useState(false);
   const [showAddAttributeInView, setShowAddAttributeInView] = React.useState(false);
@@ -139,7 +141,7 @@ export const useGoodsVariantWorkflow = ({
 
   const handleAddUnitInViewMode = (addMore: boolean = false) => {
     if (!viewModeNewUnit.name || !viewingProduct) {
-      alert('Vui lòng nhập tên đơn vị!');
+      showToast('Vui lòng nhập tên đơn vị!', 'error');
       return;
     }
 
@@ -157,7 +159,9 @@ export const useGoodsVariantWorkflow = ({
     };
 
     if (onUpdateSurgical) {
-      onUpdateSurgical([{ key: 'posProducts', item: updatedProduct }]);
+      onUpdateSurgical([{ key: 'posProducts', item: updatedProduct }]).catch(err =>
+        showToast(`Lỗi lưu đơn vị: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      );
     } else {
       onUpdateProducts(
         products.map(product => (product.id === viewingProduct.id ? updatedProduct : product))
@@ -196,6 +200,7 @@ export const useGoodsVariantWorkflow = ({
       attributes: newAttributes,
       isParent: true,
       sku: '',
+      stock: 0,
       variantCount: previewVariants.length,
     };
 
@@ -228,7 +233,9 @@ export const useGoodsVariantWorkflow = ({
     const allProducts = [parentProduct, ...variants];
 
     if (onUpdateSurgical) {
-      onUpdateSurgical(allProducts.map(product => ({ key: 'posProducts', item: product })));
+      onUpdateSurgical(allProducts.map(product => ({ key: 'posProducts', item: product }))).catch(err =>
+        showToast(`Lỗi tạo biến thể: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      );
     } else {
       onUpdateProducts([
         ...products.filter(product => product.id !== viewingProduct.id),
@@ -324,7 +331,7 @@ export const useGoodsVariantWorkflow = ({
     }
 
     if (!addingToParentId) {
-      alert('Vui lòng tạo ít nhất 1 biến thể!');
+      showToast('Vui lòng tạo ít nhất 1 biến thể!', 'error');
       return;
     }
 
@@ -332,15 +339,15 @@ export const useGoodsVariantWorkflow = ({
     if (!parentProduct) return;
 
     const existingAttributeNames = getExistingAttributeNamesForParent(products, addingToParentId);
-    if (addMoreVariantSource === 'table' && existingAttributeNames.length === 1) {
-      const onlyAttributeName = existingAttributeNames[0];
-      const usesOnlyExistingAttribute =
-        committedAttributes.length === 1 &&
-        normalizeKey(committedAttributes[0].type) === normalizeKey(onlyAttributeName);
-
-      if (!usesOnlyExistingAttribute) {
+    // BUG-45: mở rộng validation cho nhiều attributes, không chỉ khi length === 1
+    if (addMoreVariantSource === 'table' && existingAttributeNames.length > 0) {
+      const normalizedExisting = new Set(existingAttributeNames.map(normalizeKey));
+      const allNewMatchExisting = committedAttributes.every(
+        a => normalizedExisting.has(normalizeKey(a.type))
+      );
+      if (!allNewMatchExisting) {
         showToast(
-          `Nhóm hàng này chỉ dùng thuộc tính ${onlyAttributeName}. Vui lòng chỉ thêm giá trị cho thuộc tính này.`,
+          `Nhóm hàng này chỉ dùng thuộc tính: ${existingAttributeNames.join(', ')}. Vui lòng chỉ thêm giá trị cho các thuộc tính này.`,
           'error'
         );
         return;
@@ -353,7 +360,7 @@ export const useGoodsVariantWorkflow = ({
         : buildPreviewVariants(parentProduct, committedAttributes);
 
     if (variantsToSave.length === 0) {
-      alert('Vui lòng tạo ít nhất 1 biến thể!');
+      showToast('Vui lòng tạo ít nhất 1 biến thể!', 'error');
       return;
     }
 
@@ -394,14 +401,6 @@ export const useGoodsVariantWorkflow = ({
         );
       })
     );
-    if (
-      hasDetailLevelOverlap &&
-      !confirm(
-        'Đã có biến thể dùng một phần thuộc tính giống nhau. Bạn vẫn muốn thêm biến thể mới cùng cấp dưới sản phẩm cha?'
-      )
-    ) {
-      return;
-    }
 
     const nextSKU = getNextSKUNumber(products);
     const newVariants: POSProduct[] = variantsToSave.map((preview, index) => ({
@@ -448,25 +447,42 @@ export const useGoodsVariantWorkflow = ({
         name,
         values: Array.from(values),
       })),
-      variantCount: (parentProduct.variantCount || 0) + newVariants.length,
+      // BUG-40: tính lại từ đầu thay vì cộng thêm vào variantCount cũ (có thể sai)
+      variantCount: existingVariants.length + newVariants.length,
     };
 
-    if (onUpdateSurgical) {
-      onUpdateSurgical([
-        { key: 'posProducts', item: updatedParent },
-        ...newVariants.map(
-          (variant): AppDataSurgicalUpdate => ({ key: 'posProducts', item: variant })
-        ),
-      ]);
-    } else {
-      onUpdateProducts([
-        ...products.filter(product => product.id !== addingToParentId),
-        updatedParent,
-        ...newVariants,
-      ]);
+    const doSave = () => {
+      if (onUpdateSurgical) {
+        onUpdateSurgical([
+          { key: 'posProducts', item: updatedParent },
+          ...newVariants.map(
+            (variant): AppDataSurgicalUpdate => ({ key: 'posProducts', item: variant })
+          ),
+        ]).catch(err =>
+          showToast(`Lỗi lưu biến thể: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        );
+      } else {
+        onUpdateProducts([
+          ...products.filter(product => product.id !== addingToParentId),
+          updatedParent,
+          ...newVariants,
+        ]);
+      }
+      closeAddMoreVariantsModal();
+    };
+
+    if (hasDetailLevelOverlap) {
+      if (showConfirm) {
+        showConfirm(
+          'Đã có biến thể dùng một phần thuộc tính giống nhau. Bạn vẫn muốn thêm biến thể mới cùng cấp dưới sản phẩm cha?',
+          doSave
+        );
+        return;
+      }
+      if (!confirm('Đã có biến thể dùng một phần thuộc tính giống nhau. Bạn vẫn muốn thêm biến thể mới cùng cấp dưới sản phẩm cha?')) return;
     }
 
-    closeAddMoreVariantsModal();
+    doSave();
   };
 
   return {

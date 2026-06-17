@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { ExpenseRecord, InventoryTransaction, PayrollRecord, POSOrder, POSProduct } from '../../types';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import ReportDropdownFilter from './ReportDropdownFilter';
 
 interface FinanceReportPageProps {
@@ -269,9 +270,8 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
       const key = monthKeyFromDate(order.date);
       const row = map.get(key);
       if (!row) return;
-      const amount = Number(order.finalAmount) || 0;
       if (order.isReturn) {
-        row.returnsValue += amount;
+        row.returnsValue += Math.abs(Number(order.totalAmount) || 0);
         order.items.forEach(item => {
           const unitCost =
             productCostById.get(item.productId) ??
@@ -282,9 +282,14 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
           row.cogs -= unitCost * (Number(item.quantity) || 0);
         });
       } else {
-        row.grossRevenue += Number(order.totalAmount) || amount;
-        row.discount += Number(order.discount) || 0;
-        row.netRevenue += amount;
+        const totalAmt = Number(order.totalAmount) || 0;
+        const finalAmt = Number(order.finalAmount) || 0;
+        const disc = order.discount != null
+          ? Math.abs(Number(order.discount))
+          : Math.max(0, totalAmt - finalAmt);
+        row.grossRevenue += totalAmt;
+        row.discount += disc;
+        row.netRevenue += totalAmt - disc; // chuẩn KiotViet: không trừ điểm tích lũy
         order.items.forEach(item => {
           const unitCost =
             productCostById.get(item.productId) ??

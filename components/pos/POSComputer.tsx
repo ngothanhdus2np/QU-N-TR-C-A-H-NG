@@ -12,7 +12,9 @@ import POSToasts from './POSToasts';
 import POSQuickCustomerModal, { QuickCustomerForm } from './POSQuickCustomerModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCurrentStaffId } from '../shared/staff';
+import { signOut } from '../../services/auth';
 import {
+  AppDataSurgicalUpdate,
   POSProduct,
   POSCustomer,
   POSOrder,
@@ -24,6 +26,7 @@ import {
   POSKeyboardSettings,
   POSPaymentSettings,
   ProductGroup,
+  RevenueRecord,
   DEFAULT_POS_KEYBOARD_SHORTCUTS,
 } from '../../types';
 import { InvoiceTab } from './types';
@@ -73,7 +76,8 @@ interface POSComputerProps {
     order: POSOrder,
     updatedProducts: POSProduct[],
     returnedItems: POSOrderItem[],
-    exchangeItems: POSOrderItem[]
+    exchangeItems: POSOrderItem[],
+    updatedCustomer?: POSCustomer
   ) => Promise<void>;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
@@ -85,6 +89,8 @@ interface POSComputerProps {
   isDraining?: boolean;
   isActive?: boolean;
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
+  onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  revenue?: RevenueRecord[];
 }
 
 const POSComputer: React.FC<POSComputerProps> = ({
@@ -104,6 +110,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
   isDraining = false,
   isActive = true,
   onDrainOfflineQueue,
+  onUpdateSurgical,
+  revenue = [],
 }) => {
   const { showToast } = useToast();
   // Use custom hook for all state management
@@ -257,6 +265,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
   }, [currentStaffId, fixedStaffOptions]);
 
   // Refs for DOM and stale closure fixes
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
   const productSearchRef = useRef<HTMLInputElement>(null);
   const consultantSearchRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
@@ -374,39 +384,33 @@ const POSComputer: React.FC<POSComputerProps> = ({
     (product: POSProduct) => {
       if (product.isParent) return;
 
-      // Validation: Giá bán phải > 0
       if (product.salePrice <= 0) {
         showStockWarning(`${product.name} — chưa có giá bán, vui lòng cập nhật giá`);
         return;
       }
 
-      // Check stock outside setTabs to avoid side effects inside state updater
-      const currentCart = activeTab.cart;
-      const existingItem = currentCart.find(item => item.productId === product.id);
-      const qtyInCart = existingItem?.quantity ?? 0;
-      if (!allowSellOutOfStock && (product.stock <= 0 || qtyInCart >= product.stock)) {
-        showStockWarning(`${product.name} — không đủ hàng (tồn: ${product.stock})`);
-        return;
-      }
+      // Kiểm tra stock bên trong functional updater để tránh stale closure khi scan nhanh liên tiếp
+      setTabs(prevTabs => {
+        const tab = prevTabs.find(t => t.id === activeTabId);
+        if (!tab) return prevTabs;
 
-      setTabs(prevTabs =>
-        prevTabs.map(t => {
-          if (t.id !== activeTabId) return t;
-          const prevCart = t.cart;
-          const existing = prevCart.find(item => item.productId === product.id);
-          let newCart;
-          if (existing) {
-            newCart = prevCart.map(item =>
+        const existingItem = tab.cart.find(item => item.productId === product.id);
+        const qtyInCart = existingItem?.quantity ?? 0;
+
+        if (!allowSellOutOfStock && (product.stock <= 0 || qtyInCart >= product.stock)) {
+          setTimeout(() => showStockWarning(`${product.name} — không đủ hàng (tồn: ${product.stock})`), 0);
+          return prevTabs;
+        }
+
+        const prevCart = tab.cart;
+        const existing = prevCart.find(item => item.productId === product.id);
+        const newCart = existing
+          ? prevCart.map(item =>
               item.productId === product.id
-                ? {
-                    ...item,
-                    quantity: item.quantity + 1,
-                    total: (item.quantity + 1) * (item.price - item.discount),
-                  }
+                ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * (item.price - item.discount) }
                 : item
-            );
-          } else {
-            newCart = [
+            )
+          : [
               ...prevCart,
               {
                 productId: product.id,
@@ -419,15 +423,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
                 importPrice: product.importPrice || 0,
                 salespersonId: currentStaffId,
                 salespersonName: defaultSalespersonName,
-                lineType: 'sale',
+                lineType: 'sale' as const,
               },
             ];
-          }
-          return { ...t, cart: newCart };
-        })
-      );
+
+        return prevTabs.map(t => (t.id !== activeTabId ? t : { ...t, cart: newCart }));
+      });
     },
-    [activeTabId, activeTab.cart, allowSellOutOfStock, currentStaffId, defaultSalespersonName]
+    [activeTabId, allowSellOutOfStock, currentStaffId, defaultSalespersonName, showStockWarning]
   );
 
   usePOSKeyboard({
@@ -594,7 +597,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   const manualDiscountAmount = useMemo(() => {
     if (discountType === 'percent') {
-      return (totalBeforeDiscount * discountValue) / 100;
+      return Math.round((totalBeforeDiscount * discountValue) / 100);
     }
     return discountValue;
   }, [totalBeforeDiscount, discountValue, discountType]);
@@ -603,7 +606,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const netPayable = Math.max(0, totalBeforeDiscount - totalDiscount + otherFees);
 
   // Tỷ lệ tích điểm lấy từ cấu hình, mặc định 10.000đ/điểm
-  const pointsRate = paymentSettings?.pointsRate ?? 10000;
+  // [FIX D3] Math.max(1,...) tránh chia cho 0 nếu pointsRate bị cấu hình sai = 0
+  const pointsRate = Math.max(1, paymentSettings?.pointsRate ?? 10000);
 
   // Chỉ tích điểm từ sản phẩm có allowPoints !== false
   const productById = useMemo(
@@ -618,7 +622,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
     }, 0),
     [cart, productById]
   );
-  const discountRatio = totalBeforeDiscount > 0 ? netPayable / totalBeforeDiscount : 1;
+  // [FIX m2] Tính discountRatio không tính otherFees — phụ phí không được tích điểm
+  // [FIX D1] Math.max(0,...) tránh discountRatio âm khi discount > totalAmount + otherFees
+  const discountRatio = totalBeforeDiscount > 0
+    ? Math.min(1, Math.max(0, (netPayable - otherFees) / totalBeforeDiscount))
+    : 1;
   const pointsEarned = Math.floor((pointsEligibleAmount * discountRatio) / pointsRate);
 
   const {
@@ -641,6 +649,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setTabs,
     setActiveTabId,
     setShowReturnModal,
+    customers, // [FIX M4] auto-fill customer khi load đơn trả
   });
 
   // Dynamic Cash Suggestions based on Vietnamese Currency
@@ -669,8 +678,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     // Fill if fewer than 6
     while (result.length < 6) {
       const last = result[result.length - 1] || netPayable;
-      // If we don't have 500k yet and it's greater than last, add it
-      if (!result.includes(500000) && 500000 > last && result.length < 5) {
+      if (!result.includes(500000) && 500000 > last) {
         result.push(500000);
       } else {
         result.push(last + 50000);
@@ -689,10 +697,29 @@ const POSComputer: React.FC<POSComputerProps> = ({
     if (isCheckoutLocked) return;
     if (mode === 'sales' && cart.length === 0) return;
     if (mode === 'return' && returnCart.length === 0 && cart.length === 0) return;
+    // [FIX C3] Chặn đơn trả khi tất cả items có quantity = 0
+    if (mode === 'return' && returnCart.length > 0 && returnCart.every(item => item.quantity === 0) && cart.length === 0) {
+      showStockWarning('Vui lòng chọn số lượng hàng cần trả');
+      return;
+    }
 
     // Validation: Tổng tiền phải > 0
     if (mode === 'sales' && netPayable <= 0) {
       showStockWarning('Tổng tiền thanh toán phải lớn hơn 0');
+      return;
+    }
+
+    // [FIX m7] Phí trả hàng không được âm
+    if (mode === 'return' && returnFee < 0) {
+      showStockWarning('Phí trả hàng không được âm');
+      return;
+    }
+
+    // Validation: Tiền khách đưa phải đủ (chỉ khi đã nhập rõ ràng)
+    if (!useSplitPayment && !isDebtMode && mode === 'sales' && cashReceived > 0 && cashReceived < netPayable) {
+      showStockWarning(
+        `Tiền khách đưa (${cashReceived.toLocaleString()}đ) chưa đủ — cần thêm ${(netPayable - cashReceived).toLocaleString()}đ`
+      );
       return;
     }
 
@@ -723,6 +750,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
       return;
     }
 
+    // Guard đa tab: nếu tab khác đang checkout trong 10 giây qua → bỏ qua
+    const LOCK_KEY = 'pos_checkout_lock';
+    const LOCK_TTL = 10_000;
+    const existingLock = Number(localStorage.getItem(LOCK_KEY) || 0);
+    if (Date.now() - existingLock < LOCK_TTL) {
+      showStockWarning('Đang có giao dịch khác đang xử lý, vui lòng thử lại');
+      return;
+    }
+    localStorage.setItem(LOCK_KEY, String(Date.now()));
+
     setIsCheckoutLocked(true);
     const orderId = generateId();
     const orderCode = `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
@@ -739,7 +776,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         items: [...returnedItems, ...cartWithSalesperson],
         totalAmount: totalReturnBeforeDiscount,
         discount: returnDiscount,
-        finalAmount: -finalReturnAmount,
+        finalAmount: finalReturnAmount, // [FIX C2] Dương — isReturn:true đã phân biệt ngữ nghĩa
         paymentMethod,
         staffId: currentStaffId,
         staffName: defaultSalespersonName,
@@ -751,6 +788,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
         notes: orderNote,
         isReturn: true,
         refundAmount: amountToPayCustomer, // tự tính: > 0 → hoàn tiền, 0 → đổi hàng
+        returnFee: returnFee > 0 ? returnFee : undefined,
+        returnOtherRefund: returnOtherRefund > 0 ? returnOtherRefund : undefined,
       };
 
       const returnedByProduct = new Map(returnCart.map(item => [item.productId, item.quantity]));
@@ -762,8 +801,29 @@ const POSComputer: React.FC<POSComputerProps> = ({
         return { ...product, stock: product.stock + returnedQty - exchangedQty };
       });
 
+      // Trừ điểm tích lũy tương ứng hàng trả, giảm nợ nếu có
+      let returnUpdatedCustomer: POSCustomer | undefined;
+      if (selectedCustomer) {
+        const returnPointsDeduction = Math.floor(
+          returnedItems.reduce((sum, item) => {
+            const product = productById.get(item.productId);
+            if (product?.allowPoints === false) return sum;
+            return sum + item.total;
+          }, 0) / pointsRate
+        );
+        returnUpdatedCustomer = {
+          ...selectedCustomer,
+          points: Math.max(0, (selectedCustomer.points || 0) - returnPointsDeduction),
+          // Không tự động giảm debtAmount — không biết đơn gốc có phải ghi nợ không
+          // Cashier điều chỉnh nợ qua module quản lý nợ riêng nếu cần
+          totalSpent: Math.max(0, (selectedCustomer.totalSpent || 0) + customerPaysDifference - amountToPayCustomer),
+        };
+      }
+
       try {
-        await onReturnOrder(returnOrder, updatedProducts, returnedItems, cartWithSalesperson);
+        await onReturnOrder(returnOrder, updatedProducts, returnedItems, cartWithSalesperson, returnUpdatedCustomer);
+        // [FIX m1] Giải phóng lock ngay sau khi order confirmed — không chờ modal đóng
+        localStorage.removeItem('pos_checkout_lock');
         setLastOrder(returnOrder);
         if (isAutoPrintEnabled) {
           setShowReceiptModal(true);
@@ -798,6 +858,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
       status: 'completed',
       pointsEarned: pointsEarned,
       notes: orderNote,
+      // Snapshot cashReceived để in lại hóa đơn đúng dù đã chuyển tab
+      cashReceived: currentCashReceived,
       // Lưu phân bổ từng phương thức thanh toán khi chia nhiều — phục vụ đối soát dòng tiền
       ...(useSplitPayment && mode === 'sales' && {
         splitPayments: {
@@ -845,6 +907,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
     try {
       await onPlaceOrder(newOrder, updatedProducts, updatedCustomer, debtRecord);
+      // [FIX m1] Giải phóng lock ngay sau khi order confirmed — không chờ modal đóng
+      localStorage.removeItem('pos_checkout_lock');
 
       // Set last order for receipt and show modal IF auto-print is enabled
       setLastOrder(newOrder);
@@ -858,6 +922,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       setSearchTerm('');
       setCustomerSearch('');
     } catch (err) {
+      localStorage.removeItem('pos_checkout_lock');
       setIsCheckoutLocked(false);
       showStockWarning(err instanceof Error ? err.message : 'Không thể xử lý thanh toán');
     }
@@ -871,14 +936,26 @@ const POSComputer: React.FC<POSComputerProps> = ({
     cartItemsRef.current = activeTab.cart;
   });
 
+  // [FIX E1] Failsafe: tự reset lock sau 30s nếu modal không render được (hot reload, JS error)
+  useEffect(() => {
+    if (!isCheckoutLocked) return;
+    const timer = setTimeout(() => {
+      setIsCheckoutLocked(false);
+      localStorage.removeItem('pos_checkout_lock');
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [isCheckoutLocked]);
+
   const handleFinishOrder = () => {
+    localStorage.removeItem('pos_checkout_lock');
     setShowReceiptModal(false);
     setLastOrder(null);
     setIsCheckoutLocked(false);
 
-    // Reset or Switch tab after checkout completion
-    if (tabs.length > 1) {
-      const remainingTabs = tabs.filter(t => t.id !== activeTabId);
+    // Dùng tabsRef để tránh stale closure khi modal đang hiển thị
+    const latestTabs = tabsRef.current;
+    if (latestTabs.length > 1) {
+      const remainingTabs = latestTabs.filter(t => t.id !== activeTabId);
       setTabs(remainingTabs);
       setActiveTabId(remainingTabs[0].id);
     } else {
@@ -892,7 +969,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           selectedCustomer: null,
           discountValue: 0,
           discountType: 'percent',
-          paymentMethod: 'Cash',
+          paymentMethod: (paymentSettings?.defaultMethod || 'Cash') as InvoiceTab['paymentMethod'],
           orderNote: '',
           otherFees: 0,
           cashReceived: 0,
@@ -907,7 +984,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     }
   };
 
-  const resetPOSSession = () => {
+  const resetPOSSession = async () => {
     setTabs([
       {
         id: 'default',
@@ -933,7 +1010,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setSearchTerm('');
     setCustomerSearch('');
     setShowGridMenu(false);
-    showToast('Đã đăng xuất phiên bán hàng trên máy tính tiền', 'success');
+    await signOut();
   };
 
   const handleManualSync = async () => {
@@ -952,6 +1029,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
       'success'
     );
   };
+
+  const escapeHtml = (str: string) =>
+    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const handlePrint = () => {
     if (!lastOrder) return;
@@ -1000,18 +1080,18 @@ const POSComputer: React.FC<POSComputerProps> = ({
         <body>
           <div class="receipt">
             <div class="center">
-              <h1 style="font-size: 18px; margin: 0; font-weight: 900;">CFO BRAIN PROFESSIONAL</h1>
-              <p style="font-size: 10px; margin: 4px 0;">123 Đường Công Nghệ, Quận 1, TP. HCM</p>
-              <p style="font-size: 10px; margin: 0;">Hotline: 1900 1234</p>
+              <h1 style="font-size: 18px; margin: 0; font-weight: 900;">${escapeHtml(brandProfile?.name || 'CỬA HÀNG')}</h1>
+              <p style="font-size: 10px; margin: 4px 0;">${escapeHtml(brandProfile?.address || '')}</p>
+              <p style="font-size: 10px; margin: 0;">${brandProfile?.phone ? `Hotline: ${escapeHtml(brandProfile.phone)}` : ''}</p>
             </div>
             
             <div class="dashed-border"></div>
             
             <div style="font-size: 11px;">
-              <div class="flex-between"><span>Số HD:</span><span class="bold">${lastOrder.orderCode}</span></div>
+              <div class="flex-between"><span>Số HD:</span><span class="bold">${escapeHtml(lastOrder.orderCode)}</span></div>
               <div class="flex-between"><span>Ngày:</span><span>${new Date(lastOrder.date).toLocaleString('vi-VN')}</span></div>
-              <div class="flex-between"><span>Khách:</span><span class="bold">${lastOrder.customerName || 'KHÁCH VÃNG LAI'}</span></div>
-              <div class="flex-between"><span>Thu ngân:</span><span>${employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName}</span></div>
+              <div class="flex-between"><span>Khách:</span><span class="bold">${escapeHtml(lastOrder.customerName || 'KHÁCH VÃNG LAI')}</span></div>
+              <div class="flex-between"><span>Thu ngân:</span><span>${escapeHtml(employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName)}</span></div>
             </div>
             
             <table>
@@ -1025,30 +1105,57 @@ const POSComputer: React.FC<POSComputerProps> = ({
               <tbody>
                 ${lastOrder.items
                   .map(
-                    item => `
+                    item => {
+                      const isReturnLine = item.lineType === 'return';
+                      const isExchangeLine = item.lineType === 'exchange';
+                      const linePrefix = isReturnLine ? '[TRẢ] ' : isExchangeLine ? '[ĐỔI] ' : '';
+                      const lineColor = isReturnLine ? 'color:#dc2626;' : isExchangeLine ? 'color:#2563eb;' : '';
+                      return `
                   <tr>
                     <td>
-                      <div class="bold uppercase">${item.name}</div>
+                      <div class="bold uppercase" style="${lineColor}">${linePrefix}${escapeHtml(item.name)}</div>
                       <div style="font-size: 10px; color: #666;">${item.price.toLocaleString()}đ</div>
                     </td>
-                    <td style="text-align: center;">${item.quantity}</td>
-                    <td style="text-align: right;" class="bold">${item.total.toLocaleString()}đ</td>
+                    <td style="text-align: center; ${lineColor}">${item.quantity}</td>
+                    <td style="text-align: right; ${lineColor}" class="bold">${item.total.toLocaleString()}đ</td>
                   </tr>
-                `
+                `;
+                    }
                   )
                   .join('')}
               </tbody>
             </table>
-            
+
             <div class="dashed-border"></div>
-            
+
             <div class="totals">
+              ${lastOrder.isReturn ? (() => {
+                const exchangeTotal = lastOrder.items
+                  .filter(item => item.lineType === 'exchange')
+                  .reduce((sum, item) => sum + item.total, 0);
+                const customerPays = exchangeTotal > 0
+                  ? Math.max(0, exchangeTotal - lastOrder.finalAmount)
+                  : 0;
+                const actualRefund = lastOrder.refundAmount ?? Math.max(0, lastOrder.finalAmount - exchangeTotal);
+                return `
+              <div class="total-row"><span>Tiền hàng trả:</span><span class="bold">${lastOrder.totalAmount.toLocaleString()}đ</span></div>
+              ${lastOrder.discount > 0 ? `<div class="total-row"><span>Giảm giá:</span><span class="bold">-${lastOrder.discount.toLocaleString()}đ</span></div>` : ''}
+              ${(lastOrder.returnFee ?? 0) > 0 ? `<div class="total-row"><span>Phí trả hàng:</span><span class="bold">-${lastOrder.returnFee!.toLocaleString()}đ</span></div>` : ''}
+              ${(lastOrder.returnOtherRefund ?? 0) > 0 ? `<div class="total-row"><span>Hoàn trả thu khác:</span><span class="bold" style="color:#16a34a;">+${lastOrder.returnOtherRefund!.toLocaleString()}đ</span></div>` : ''}
+              ${exchangeTotal > 0 ? `<div class="total-row"><span>Tiền hàng đổi:</span><span class="bold">-${exchangeTotal.toLocaleString()}đ</span></div>` : ''}
+              ${customerPays > 0
+                ? `<div class="total-row grand-total"><span>KHÁCH THANH TOÁN:</span><span class="bold" style="color:#dc2626;">${customerPays.toLocaleString()}đ</span></div>`
+                : `<div class="total-row grand-total"><span>HOÀN TRẢ KHÁCH:</span><span class="bold" style="color:#dc2626;">${actualRefund.toLocaleString()}đ</span></div>`
+              }`;
+              })() : `
               <div class="total-row"><span>Tiền hàng:</span><span class="bold">${lastOrder.totalAmount.toLocaleString()}đ</span></div>
               ${lastOrder.discount > 0 ? `<div class="total-row"><span>Chiết khấu:</span><span class="bold">-${lastOrder.discount.toLocaleString()}đ</span></div>` : ''}
               <div class="total-row grand-total"><span>TỔNG CỘNG:</span><span class="bold">${Math.abs(lastOrder.finalAmount).toLocaleString()}đ</span></div>
-              <div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold uppercase">${lastOrder.paymentMethod}</span></div>
-              <div class="total-row"><span>Khách đưa:</span><span class="bold">${(cashReceived || Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>
-              ${(cashReceived || Math.abs(lastOrder.finalAmount)) > Math.abs(lastOrder.finalAmount) ? `<div class="total-row"><span>Tiền thừa:</span><span class="bold">${((cashReceived || Math.abs(lastOrder.finalAmount)) - Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>` : ''}
+              ${lastOrder.cashReceived === 0
+                ? '<div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold" style="color:#dc2626">GHI NỢ</span></div>'
+                : `<div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold uppercase">${lastOrder.paymentMethod}</span></div><div class="total-row"><span>Khách đưa:</span><span class="bold">${(lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>${(lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)) > Math.abs(lastOrder.finalAmount) ? '<div class="total-row"><span>Tiền thừa:</span><span class="bold">' + ((lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)) - Math.abs(lastOrder.finalAmount)).toLocaleString() + 'đ</div>' : ''}`
+              }
+              `}
             </div>
             
             <div class="center mt-4">
@@ -1080,6 +1187,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   const handleAddQuickCustomer = () => {
     if (!newCustomerForm.name || !newCustomerForm.phone) {
+      showToast('Vui lòng nhập tên và số điện thoại khách hàng', 'error');
       return;
     }
     const newCustomer: POSCustomer = {
@@ -1150,7 +1258,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
         {showReceiptModal && lastOrder && (
           <POSReceiptModal
             order={lastOrder}
-            cashReceived={cashReceived}
+            cashReceived={lastOrder.cashReceived ?? cashReceived}
+            brandProfile={brandProfile}
             onClose={() => {
               handleFinishOrder();
               setShowCheckoutSheet(false);
@@ -1281,6 +1390,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
           finalReturnAmount={finalReturnAmount}
           amountToPayCustomer={amountToPayCustomer}
           customerPaysDifference={customerPaysDifference}
+          returnDiscount={returnDiscount}
+          returnFee={returnFee}
+          returnOtherRefund={returnOtherRefund}
           currentCashReceived={currentCashReceived}
           isDebtMode={activeTab.isDebtMode}
           pointsEarned={pointsEarned}
@@ -1311,7 +1423,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
       {showReceiptModal && lastOrder && (
         <POSReceiptModal
           order={lastOrder}
-          cashReceived={cashReceived}
+          cashReceived={lastOrder.cashReceived ?? cashReceived}
+          brandProfile={brandProfile}
           onClose={handleFinishOrder}
           onPrint={handlePrint}
           onFinish={handleFinishOrder}
@@ -1370,8 +1483,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
         <ProcessOrdersModal
           orders={orders}
           customers={customers}
+          products={products}
+          revenue={revenue}
           storeName={brandProfile?.name}
           onClose={() => setShowProcessOrdersModal(false)}
+          onUpdateSurgical={onUpdateSurgical}
         />
       )}
 

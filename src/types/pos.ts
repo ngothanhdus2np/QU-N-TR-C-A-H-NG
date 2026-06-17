@@ -98,6 +98,15 @@ export interface POSOrder {
   notes?: string;
   pointsEarned: number;
   isReturn?: boolean;
+  cashReceived?: number;
+  refundAmount?: number;
+  splitPayments?: {
+    cash?: number;
+    bank?: number;
+    card?: number;
+    momo?: number;
+  };
+  staffName?: string;
 }
 
 export type POSPaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other';

@@ -111,6 +111,9 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       is_return: !!item.isReturn,
       notes: item.notes,
       points_earned: n(item.pointsEarned),
+      refund_amount: n(item.refundAmount),
+      split_payments: item.splitPayments || null,
+      cash_received: item.cashReceived != null ? n(item.cashReceived) : null,
     };
   }
   if (key === 'posCustomers') {
@@ -125,6 +128,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       total_spent: n(item.totalSpent),
       last_visit: item.lastVisit,
       tier: item.tier,
+      debt_amount: n(item.debtAmount),
     };
   }
   if (key === 'inventoryTransactions') {
@@ -466,7 +470,14 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_META_LIMIT = 5000;
 const SUPABASE_PAGE_SIZE = 1000;
-const POS_ORDER_BOOTSTRAP_DAYS = 90;
+export const POS_ORDER_BOOTSTRAP_DAYS = 90;
+const POS_ORDER_BOOTSTRAP_COLUMNS = [
+  'id', 'order_code', 'date', 'customer_id', 'customer_name',
+  'items', 'total_amount', 'discount', 'final_amount', 'payment_method',
+  'staff_id', 'staff_name', 'created_by', 'channel', 'channel_name',
+  'price_book_id', 'price_book_name', 'status', 'notes',
+  'points_earned', 'is_return', 'refund_amount', 'split_payments', 'cash_received',
+].join(',');
 const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'id',
   'sku',
@@ -542,7 +553,7 @@ const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
   while (true) {
     const { data, error } = await supabase
       .from('pos_orders')
-      .select('*')
+      .select(POS_ORDER_BOOTSTRAP_COLUMNS)
       .gte('date', fromDate)
       .order('date', { ascending: false })
       .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
@@ -573,6 +584,8 @@ type PosOrderPageFilters = {
   endDate?: string;
   typeFilter?: string[];
   paymentFilter?: string[];
+  deliveryTypeFilter?: string[];   // 'no-delivery' | 'delivery'
+  statusFilter?: string[];         // 'processing' | 'completed' | 'failed' | 'cancelled'
 };
 
 const inferIsReturnOrder = (orderCode: string, finalAmount: number, explicit?: boolean) =>
@@ -603,25 +616,22 @@ const mapPosOrderRow = (o: any): POSOrder => ({
     Number(o.final_amount || o.finalAmount || 0),
     o.is_return ?? o.isReturn
   ),
+  refundAmount: Number(o.refund_amount || o.refundAmount || 0),
+  cashReceived: (o.cash_received != null || o.cashReceived != null)
+    ? Number(o.cash_received ?? o.cashReceived ?? 0)
+    : undefined,
+  splitPayments: o.split_payments || o.splitPayments || undefined,
+  staffName: o.staff_name || o.staffName || undefined,
 });
 
 const MISSING_POS_ORDER_COLUMN_RE =
   /Could not find the '([^']+)' column of 'pos_orders' in the schema cache/;
 
-const buildPosOrdersPageQuery = (
-  page: number,
-  pageSize: number,
+const applyPosOrderFilters = (
+  query: any,
   filters: PosOrderPageFilters,
   ignoredColumns = new Set<string>()
 ) => {
-  const from = Math.max(0, (page - 1) * pageSize);
-  const to = from + pageSize - 1;
-  let query: any = supabase
-    .from('pos_orders')
-    .select('*', { count: 'exact' })
-    .order('date', { ascending: false })
-    .range(from, to);
-
   const search = filters.search?.trim();
   if (search) {
     const safeSearch = search.replace(/[%_,]/g, '\\$&');
@@ -631,23 +641,71 @@ const buildPosOrdersPageQuery = (
     ].filter(Boolean);
     if (searchColumns.length > 0) query = query.or(searchColumns.join(','));
   }
-  if (filters.startDate) query = query.gte('date', `${filters.startDate}T00:00:00`);
-  if (filters.endDate) query = query.lte('date', `${filters.endDate}T23:59:59`);
+  if (filters.startDate) query = query.gte('date', `${filters.startDate}T00:00:00+07:00`);
+  if (filters.endDate) query = query.lte('date', `${filters.endDate}T23:59:59+07:00`);
   if (filters.typeFilter?.length === 1 && !ignoredColumns.has('is_return')) {
     query = query.eq('is_return', filters.typeFilter[0] === 'return');
   }
-  if (
-    filters.paymentFilter &&
-    filters.paymentFilter.length > 0 &&
-    !ignoredColumns.has('payment_method')
-  ) {
+  if (filters.paymentFilter && filters.paymentFilter.length > 0 && !ignoredColumns.has('payment_method')) {
     query = query.in('payment_method', filters.paymentFilter);
   }
-
+  if (filters.deliveryTypeFilter && filters.deliveryTypeFilter.length === 1 && !ignoredColumns.has('channel')) {
+    if (filters.deliveryTypeFilter[0] === 'delivery') query = query.eq('channel', 'delivery');
+    else if (filters.deliveryTypeFilter[0] === 'no-delivery') query = query.neq('channel', 'delivery');
+  }
+  if (filters.statusFilter && filters.statusFilter.length > 0 && !ignoredColumns.has('status')) {
+    query = query.in('status', filters.statusFilter);
+  }
   return query;
 };
 
+const buildPosOrdersPageQuery = (
+  page: number,
+  pageSize: number,
+  filters: PosOrderPageFilters,
+  ignoredColumns = new Set<string>()
+) => {
+  const from = Math.max(0, (page - 1) * pageSize);
+  const to = from + pageSize - 1;
+  const query = supabase
+    .from('pos_orders')
+    .select(POS_ORDER_BOOTSTRAP_COLUMNS, { count: 'exact' })
+    .order('date', { ascending: false })
+    .range(from, to);
+  return applyPosOrderFilters(query, filters, ignoredColumns);
+};
+
+const buildPosOrdersSummaryQuery = (
+  filters: PosOrderPageFilters,
+  ignoredColumns = new Set<string>()
+) => {
+  const query = supabase
+    .from('pos_orders')
+    .select('total_amount.sum(),discount.sum(),final_amount.sum()');
+  return applyPosOrderFilters(query, filters, ignoredColumns);
+};
+
 export const apiService = {
+  // Fetch orders theo khoảng ngày — dùng cho báo cáo nằm ngoài bootstrap window
+  async fetchPosOrdersByDateRange(startDate: string, endDate: string): Promise<{ data: POSOrder[]; error: any }> {
+    const allRows: any[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('pos_orders')
+        .select(POS_ORDER_BOOTSTRAP_COLUMNS)
+        .gte('date', `${startDate}T00:00:00+07:00`)
+        .lte('date', `${endDate}T23:59:59+07:00`)
+        .order('date', { ascending: false })
+        .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+      if (error) return { data: allRows.map(mapPosOrderRow), error };
+      const page = data || [];
+      allRows.push(...page);
+      if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows.map(mapPosOrderRow), error: null };
+      offset += SUPABASE_PAGE_SIZE;
+    }
+  },
+
   // Fetch riêng shopee_inventory_out (lazy, không block main sync timeout)
   async fetchShopeeInventoryOut() {
     return fetchAllRows('shopee_inventory_out', 'date');
@@ -690,9 +748,27 @@ export const apiService = {
     }
 
     if (error) throw new Error(`Lỗi tải hóa đơn: ${error.message}`);
+
+    // Lấy aggregate totals cho toàn bộ filter (không chỉ trang hiện tại)
+    let summary = { totalAmount: 0, discount: 0, finalAmount: 0 };
+    try {
+      const { data: sumData } = await buildPosOrdersSummaryQuery(filters, ignoredColumns);
+      const row = (sumData as any)?.[0];
+      if (row) {
+        summary = {
+          totalAmount: Number(row.total_amount) || 0,
+          discount: Number(row.discount) || 0,
+          finalAmount: Number(row.final_amount) || 0,
+        };
+      }
+    } catch {
+      // summary là best-effort, không block kết quả chính
+    }
+
     return {
       data: (data ?? []).map(mapPosOrderRow),
       total: count ?? 0,
+      summary,
     };
   },
 
@@ -955,7 +1031,10 @@ export const apiService = {
   },
 
   async applyInventoryTransactionWithStock(transaction: InventoryTransaction) {
-    const payload = sanitizeItem('inventoryTransactions', transaction);
+    const payload = {
+      ...sanitizeItem('inventoryTransactions', transaction),
+      allow_negative_stock: !!transaction.allowNegativeStock,
+    };
     await postDataRoute('/api/data/inventory/apply', {
       transactionId: transaction.id,
       payload,

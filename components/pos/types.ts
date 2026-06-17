@@ -9,7 +9,7 @@ export interface InvoiceTab {
   selectedCustomer: POSCustomer | null;
   discountValue: number;
   discountType: 'fixed' | 'percent';
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
+  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
   orderNote: string;
   otherFees: number;
   cashReceived: number;

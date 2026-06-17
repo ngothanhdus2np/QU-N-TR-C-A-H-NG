@@ -99,6 +99,17 @@ export const useGoodsProductEditor = ({
     setFormData(emptyProductForm(getGoodsBarcodeManualMode() ? '' : AUTO_SKU_PLACEHOLDER));
   };
 
+  const openCreateSameType = (product: POSProduct) => {
+    setEditingProduct(null);
+    setFormData({
+      ...emptyProductForm(getGoodsBarcodeManualMode() ? '' : AUTO_SKU_PLACEHOLDER),
+      categoryId: product.categoryId,
+      unit: product.unit,
+    });
+    setShowCreateModal(true);
+    setCreateModalTab('info');
+  };
+
   const openProductEditor = (product: POSProduct) => {
     setEditingProduct(product);
     setFormData(product);
@@ -121,6 +132,11 @@ export const useGoodsProductEditor = ({
 
     if (!normalizedCategoryId) {
       showToast('Vui lòng chọn hoặc nhập nhóm hàng!', 'error');
+      return;
+    }
+
+    if ((formData.importPrice ?? 0) < 0 || (formData.salePrice ?? 0) < 0) {
+      showToast('Giá vốn và giá bán không được âm!', 'error');
       return;
     }
 
@@ -151,7 +167,9 @@ export const useGoodsProductEditor = ({
 
     if (editingProduct) {
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posProducts', item: { ...editingProduct, ...formData } as POSProduct }]);
+        onUpdateSurgical([{ key: 'posProducts', item: { ...editingProduct, ...formData } as POSProduct }]).catch(err =>
+          showToast(`Lỗi lưu sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        );
       } else {
         onUpdateProducts(products.map(product => product.id === editingProduct.id ? { ...product, ...formData } as POSProduct : product));
       }
@@ -160,6 +178,7 @@ export const useGoodsProductEditor = ({
         ...formData,
         id: generateId(),
         sku: '',
+        stock: 0,
         status: 'Active',
         categoryId: normalizedCategoryId,
         createdAt: new Date().toISOString(),
@@ -175,7 +194,9 @@ export const useGoodsProductEditor = ({
       const allProducts = [parentProduct, ...variants];
 
       if (onUpdateSurgical) {
-        onUpdateSurgical(allProducts.map(product => ({ key: 'posProducts', item: product })));
+        onUpdateSurgical(allProducts.map(product => ({ key: 'posProducts', item: product }))).catch(err =>
+          showToast(`Lỗi tạo sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        );
       } else {
         onUpdateProducts([...products, ...allProducts]);
       }
@@ -188,11 +209,14 @@ export const useGoodsProductEditor = ({
         sku: resolveProductSku(formData.sku, products),
         status: 'Active',
         categoryId: normalizedCategoryId,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        isParent: false,
       } as POSProduct;
 
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posProducts', item: newProduct }]);
+        onUpdateSurgical([{ key: 'posProducts', item: newProduct }]).catch(err =>
+          showToast(`Lỗi tạo sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        );
       } else {
         onUpdateProducts([...products, newProduct]);
       }
@@ -233,7 +257,7 @@ export const useGoodsProductEditor = ({
 
   const handleSaveBaseUnit = (addMore: boolean = false) => {
     if (!newUnitName) {
-      alert('Vui lòng nhập tên đơn vị!');
+      showToast('Vui lòng nhập tên đơn vị!', 'error');
       return;
     }
 
@@ -302,6 +326,7 @@ export const useGoodsProductEditor = ({
     editingProduct,
     setEditingProduct,
     formData,
+    openCreateSameType,
     setFormData,
     showCreateModal,
     setShowCreateModal,

@@ -231,9 +231,13 @@ export const ExpenseLedgerTab: React.FC<ExpenseLedgerTabProps> = ({
                   <td className="px-8 py-5 text-right font-normal text-rose-600 text-sm">{formatNumber(item.amount)}</td>
                   <td className="px-8 py-5 text-center">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (onUpdateSurgical) {
-                          onUpdateSurgical([{ key: 'expenses', item, isDelete: true }]);
+                          try {
+                            await onUpdateSurgical([{ key: 'expenses', item, isDelete: true }]);
+                          } catch (err) {
+                            console.error('[ExpenseLedgerTab] delete expense failed', err);
+                          }
                         } else {
                           onUpdate(sourceList.filter(expense => expense.id !== item.id), item.id);
                         }

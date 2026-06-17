@@ -38,7 +38,7 @@ interface LedgerEntry {
   person: string;
   amount: number;
   status: 'active' | 'cancelled';
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
+  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
 }
 
 const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];
@@ -312,7 +312,7 @@ const orderToEntry = (o: POSOrder): LedgerEntry => ({
   cashOutType: o.isReturn ? 'customer_refund' : undefined,
   description: o.isReturn ? 'Trả hàng khách' : 'Thu tiền khách hàng',
   person: o.customerName || 'Khách lẻ',
-  amount: o.finalAmount ?? 0,
+  amount: Math.abs(o.finalAmount ?? 0),
   status: o.status === 'cancelled' ? 'cancelled' : 'active',
   paymentMethod: o.paymentMethod ?? 'Cash',
 });
@@ -530,6 +530,7 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
   const handleVoucherCheck = (type: 'thu' | 'chi', checked: boolean) => {
     if (!checked) setVoucherType(prev => prev === 'all' ? (type === 'thu' ? 'chi' : 'thu') : 'all');
     else setVoucherType(prev => prev === 'all' ? type : prev !== type ? 'all' : type);
+    setPage(1);
   };
 
   const hasActiveFilters =

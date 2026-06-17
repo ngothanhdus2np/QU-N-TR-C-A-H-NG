@@ -7,6 +7,138 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+---
+
+### [ ] Fix `cfobrain.phucsang.com.vn` bị down + swap subdomain *(phiên tới — cần ở gần iMac)*
+
+> **Context phiên 2026-06-17:** `cfobrain.phucsang.com.vn` không truy cập được. Nguyên nhân chưa xác định (server crash hoặc Cloudflare Tunnel tắt). User không ở gần iMac nên để lại.
+
+**Bước 1 — Fix service đang down (làm trên iMac):**
+```bash
+launchctl list | grep cfobrain   # kiểm tra service có chạy không
+curl http://localhost:3000/health  # kiểm tra app respond không
+tail -50 ~/cfobrain/logs/server.log  # xem lỗi
+launchctl start cfobrain           # nếu service đã stop
+```
+
+**Bước 2 — Swap subdomain (sau khi app đã chạy lại):**
+
+Mục tiêu mới:
+| URL | Vai trò mới |
+|---|---|
+| `localhost:3000` | Dev/test |
+| `app.phucsang.com.vn` | CFO Brain app — người dùng dùng hàng ngày |
+| `cfobrain.phucsang.com.vn` | Supabase backend (Kong port 8000) |
+
+Việc cần làm trong Cloudflare Tunnel:
+1. Tunnel `app` → đổi trỏ sang `localhost:3000` (CFO Brain app)
+2. Tunnel `cfobrain` → đổi trỏ sang `localhost:8000` (Supabase Kong)
+3. Cập nhật `.env.local` MacBook: `VITE_SUPABASE_URL=http://192.168.1.3:8000` (đã đúng rồi, không cần đổi)
+4. Cập nhật `.env.local` trên iMac: `SUPABASE_URL` vẫn giữ `http://localhost:8000`
+
+**Deploy flow sau khi xong:**
+```
+Dev (localhost:3000) → npm run deploy → iMac build lại → app.phucsang.com.vn cập nhật
+```
+
+---
+
+### ✅ Rewrite `ShopeeProductsPage.tsx` — dùng `shopee_inventory_out` làm nguồn dữ liệu *(xong 2026-06-17)*
+
+> **Context:** Bảng `shopee_products` / `shopee_product_variants` đang rỗng (import thất bại do PostgREST schema cache). Chuyển sang dùng `shopee_inventory_out` + `pos_products` thay thế hoàn toàn.
+
+**UI đã chốt (không thay đổi):**
+```
+DBD16                                    ▼ [bấm để mở]
+┌────────────────────────────────────────────────────┐
+│ [🟠 Giày Dép Da Phúc Sang] [⚫ Phúc Sang Đồ Da]   │  ← tab bar
+├────────────────────────────────────────────────────┤
+│ Nội dung tab đang chọn:                            │
+│  DBD16-Đen-38 | 329k | 10 tồn | Đang bán  [Sửa]  │
+│  DBD16-Đen-39 | 329k | 30 tồn | Đang bán  [Sửa]  │
+│  DBD16-Đen-40 | 329k | 0 tồn  | Nháp      [Sửa]  │
+└────────────────────────────────────────────────────┘
+```
+
+**Nguồn dữ liệu mới (đã xác nhận):**
+- `shopee_inventory_out` → biết SKU nào bán ở shop nào + giá bán (avg nếu nhiều giá)
+- `pos_products` → chỉ lấy tồn kho (match theo `sku`)
+- KHÔNG dùng `shopee_products` / `shopee_product_variants`
+
+**Mapping cột:**
+| Cột | Nguồn |
+|-----|-------|
+| SKU variant | `shopee_inventory_out.sku` |
+| Giá bán | `AVG(shopee_inventory_out.sale_price)` group by sku + platform |
+| Tồn kho | `pos_products.stock` (match sku) |
+| Trạng thái | stock > 0 → "Đang bán" / stock = 0 → "Nháp" |
+| Nút Sửa | giữ lại, chức năng xác định sau |
+
+**Hàng cha (parent row):**
+- Group variant SKU theo `pos_products.parent_id`
+- Tên hiển thị: SKU của parent (e.g., "DBD16")
+- Chấm màu: 🟠 nếu có ở Shopee 1, ⚫ nếu có ở Shopee 2
+- Có thể hiện tổng đã bán cả 2 shop
+
+**Thuật toán `loadData()`:**
+```
+1. Fetch toàn bộ shopee_inventory_out (chỉ cần: sku, platform, sale_price, quantity)
+2. Group by (sku, platform):
+   - avgPrice = AVG(sale_price)
+   - totalSold = SUM(quantity)
+3. Collect tất cả unique SKUs → fetch pos_products WHERE sku IN (...)
+4. Với mỗi pos_product tìm được:
+   - Nếu có parent_id → fetch parent pos_product
+   - Nếu is_parent → dùng làm parent
+   - Nếu standalone (không parent, không is_parent) → tự làm parent
+5. Build Map<parentId, { parent, shop1Variants[], shop2Variants[] }>
+6. Sort theo parent.sku
+```
+
+**Interfaces mới (thay hoàn toàn interfaces cũ):**
+```typescript
+interface InventoryVariant {
+  sku: string;
+  platform: 'Shopee 1' | 'Shopee 2';
+  avgPrice: number;
+  totalSold: number;
+  posProduct: PosProduct | null;
+  stock: number;
+}
+
+interface ParentRow {
+  parentId: string;     // pos_products.id của parent
+  parentSku: string;    // e.g., "DBD16"
+  posParent: PosProduct;
+  shop1: InventoryVariant[];
+  shop2: InventoryVariant[];
+}
+```
+
+**File cần sửa:** `components/website/ShopeeProductsPage.tsx` (rewrite toàn bộ phần data loading + interfaces, giữ nguyên phần UI/layout đã có)
+
+**Checklist:**
+- [x] Rewrite interfaces (bỏ ShopeeShop, ShopeeProduct, ShopeeVariant, RootRow, EditingVariant) ✅
+- [x] Rewrite `loadData()` theo thuật toán trên ✅
+- [x] Rewrite `ShopTabContent` dùng `InventoryVariant[]` thay vì `ShopeeProduct` ✅
+- [x] Rewrite hàng cha (`filteredRows`) dùng `ParentRow[]` ✅
+- [x] Bỏ `CreateModal` (không cần tạo mới nếu nguồn là order history) ✅
+- [x] Bỏ `VariantEditPanel` hoặc giữ placeholder cho phiên sau ✅
+- [x] Test: trang hiển thị đúng danh sách cha/con theo đúng shop ✅ (verify trên iMac quầy)
+
+**Lưu ý kỹ thuật:**
+- `shopee_inventory_out` có 2359 rows — fetch 1 lần, không cần pagination
+- SKU match: `pos_products.sku === shopee_inventory_out.sku` (có thể lệch case → normalize toLowerCase)
+- Một số SKU trong `shopee_inventory_out` không match pos_products (đặc biệt SKU dạng "DQND21-Đen-39-Kèm Hộp") → hiển thị bình thường nhưng stock = null
+- SHOP_COLORS: Shopee 1 → `bg-orange-500`, Shopee 2 → `bg-slate-600`
+
+---
+
+- [x] ~~**Audit toàn trang máy tính tiền, Round 6 (BUG-47 → BUG-48)**~~ — fast return modal xử lý đặt hàng + useMemo anti-pattern ✅ *(2026-06-15)*
+- [x] ~~**Fix 10 bugs trang máy tính tiền (Round 7)**~~ — stale closure addToCart, debtAmount return, paymentMethod reset, tabsRef, receipt modal items, returnFee display, return UI fields, hasCheckoutItems, window.alert, cashSuggestions ✅ *(2026-06-15)*
+- [x] ~~**Fix 4 bugs còn lại trang máy tính tiền (Round 8)**~~ — returnOtherRefund lưu vào POSOrder + hiện trên hóa đơn, ghi nợ in 2 dòng trùng, fast return maxQuantity, checkbox Giao hàng dummy ✅ *(2026-06-15)*
+
+
 ### Kiểm tra kỹ thuật
 
 - [x] ~~Chạy `npx tsc --noEmit`~~ — TypeScript clean (1 lỗi pre-existing ở GoodsInventory.tsx không liên quan) ✅ *(2026-05-18)*
@@ -23,7 +155,13 @@
 
 > **Note**: Đã hoàn thành tất cả P0 tasks! 🎉
 
-> **Việc cần làm trên Supabase dashboard**: chạy 3 lệnh ALTER TABLE trong `supabase_setup.sql` (phần cuối file, section "Carry-forward debt system") để thêm cột vào database thực.
+- [x] ~~**Chạy SQL pending trên Supabase dashboard**~~ — ALTER TABLE carry-forward debt + RLS 5 bảng Shopee ✅ *(2026-06-13)*
+- [x] ~~**Chạy SQL pending (Round 2)**~~ — `product_cost_history` index+RLS, 4 cột mới `pos_orders`, RLS 6 bảng nhạy cảm ✅ *(2026-06-15)*
+- [x] ~~**Chạy SQL pending (Round 3)**~~ — `shopee_products` + `shopee_product_variants` tables ✅ *(2026-06-16)*
+- [x] ~~**Audit toàn trang hàng hóa & thiết lập giá (BUG-29 → BUG-46)**~~ — 18 bugs, tất cả đã fix, TypeScript clean ✅ *(2026-06-15)*
+- [x] ~~**Audit lần 2 trang hàng hóa (6 bugs error-handling)**~~ — missing await/catch trong 5 file, lọc Inactive ở dropdown nhập hàng ✅ *(2026-06-15)*
+- [x] ~~**Audit lần 3 trang hàng hóa (5 bugs error-handling)**~~ — 5 handler thiếu try/catch trong GoodsInventory.tsx ✅ *(2026-06-15)*
+- [x] ~~**Fix hệ thống thanh toán: Thẻ/Split payment**~~ — paymentMethod 'Card', split payment trên receipt, filter báo cáo ✅ *(2026-06-15)*
 
 ---
 
@@ -450,6 +588,354 @@ node scripts/backfill.js
 - Script có thể chạy nhiều lần an toàn (chỉ update đơn chưa có fee)
 
 ---
+
+## ✅ HOÀN THÀNH 2026-06-06 — MIGRATE DATABASE: Supabase Cloud → iMac cá nhân (self-hosted)
+
+> **Deadline**: trước 03/07/2026 (Supabase bắt nâng gói)
+> **Lý do**: Supabase free tier vượt quota, self-host tiết kiệm $25/tháng
+> **Môi trường mục tiêu**:
+> - Server: iMac cá nhân 1TB, cùng WiFi với iMac quầy
+> - Cách truy cập từ xa: Cloudflare Tunnel
+> - Chi phí: $0/tháng (chỉ tiền điện ~50-100k/tháng)
+
+---
+
+### Thông tin cần biết trước khi làm
+
+**Supabase Cloud hiện tại:**
+- Project URL: `https://tqouzxlnihfjdyxqlbqs.supabase.co`
+- Database: 0.152GB (152MB), 48 bảng
+- Không dùng Auth, Realtime, Storage (hiện tại)
+
+**Fly.io đã tạo (có thể bỏ sau khi xong):**
+- App: `cfobrain-supabase` (blank app, chưa dùng)
+- Postgres: `cfobrain-db` (đã import 48 bảng — nhưng không dùng vì app cần Supabase API)
+- Cần xóa sau khi migrate xong để khỏi tốn tiền
+
+**File backup data đã có:**
+- `~/Desktop/supabase_backup.sql` — schema gốc từ Supabase
+- `~/Desktop/supabase_backup_clean.sql` — đã làm sạch (bỏ Supabase-specific)
+
+---
+
+### BƯỚC 1 — Chuẩn bị iMac cá nhân
+
+#### 1.1 Cài Docker Desktop
+- Tải tại: https://www.docker.com/products/docker-desktop/
+- Chọn đúng chip: vào **Apple menu → About This Mac** xem Chip (Apple Silicon M1/M2/M3) hay Intel
+- Cài xong mở lên, đợi icon Docker trên thanh menu ngừng loading
+
+#### 1.2 Cài Homebrew (nếu chưa có)
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Sau khi cài xong, thêm vào PATH:
+- **Apple Silicon**: `echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile && eval "$(/opt/homebrew/bin/brew shellenv)"`
+- **Intel**: `echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zprofile && eval "$(/usr/local/bin/brew shellenv)"`
+
+#### 1.3 Cài đặt không tắt màn hình khi chạy server
+- **System Settings → Energy Saver (hoặc Battery)**:
+  - `Prevent Mac from sleeping`: ✅ Bật
+  - `Turn display off after`: 15 phút (tiết kiệm điện)
+  - `Wake for network access`: ✅ Bật
+- **System Settings → Displays → Advanced**: tắt màn hình khi không dùng
+
+#### 1.4 Ghi lại IP nội bộ của iMac cá nhân
+```bash
+ipconfig getifaddr en0
+```
+Lưu lại IP này (ví dụ: `192.168.1.10`) — iMac quầy sẽ kết nối vào địa chỉ này.
+
+---
+
+### BƯỚC 2 — Clone và cấu hình Supabase self-hosted
+
+#### 2.1 Clone repo Supabase
+```bash
+cd ~
+git clone --depth 1 https://github.com/supabase/supabase
+cd supabase/docker
+cp .env.example .env
+```
+
+#### 2.2 Tạo secrets
+Chạy lần lượt các lệnh sau để tạo secrets:
+```bash
+# Tạo JWT secret (32 chars)
+openssl rand -base64 32
+```
+
+Dùng Node.js tạo ANON_KEY và SERVICE_ROLE_KEY:
+```bash
+node -e "
+const jwt_secret = 'PASTE_JWT_SECRET_HERE';
+function base64url(str) {
+  return Buffer.from(str).toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
+function createJWT(payload, secret) {
+  const header = base64url(JSON.stringify({alg:'HS256',typ:'JWT'}));
+  const body = base64url(JSON.stringify(payload));
+  const crypto = require('crypto');
+  const sig = crypto.createHmac('sha256', secret).update(header+'.'+body).digest('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return header+'.'+body+'.'+sig;
+}
+const iat = Math.floor(Date.now()/1000);
+const exp = iat + (10*365*24*60*60);
+console.log('ANON_KEY:', createJWT({role:'anon',iss:'supabase',iat,exp}, jwt_secret));
+console.log('SERVICE_KEY:', createJWT({role:'service_role',iss:'supabase',iat,exp}, jwt_secret));
+"
+```
+
+Tạo password mạnh cho Postgres:
+```bash
+openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24
+```
+
+#### 2.3 Cập nhật file .env
+Mở `~/supabase/docker/.env` và sửa các giá trị sau:
+```env
+POSTGRES_PASSWORD=<password vừa tạo>
+JWT_SECRET=<jwt secret vừa tạo>
+ANON_KEY=<anon key vừa tạo>
+SERVICE_ROLE_KEY=<service role key vừa tạo>
+DASHBOARD_PASSWORD=<đặt password để đăng nhập Supabase Studio>
+SITE_URL=http://localhost:8000
+```
+
+---
+
+### BƯỚC 3 — Khởi động Supabase
+
+#### 3.1 Chạy docker-compose
+```bash
+cd ~/supabase/docker
+docker compose up -d
+```
+
+Lần đầu sẽ tải ~2-3GB Docker images, chờ 5-10 phút.
+
+#### 3.2 Kiểm tra tất cả services đang chạy
+```bash
+docker compose ps
+```
+Tất cả services phải có STATUS = `running` hoặc `healthy`:
+- `supabase-db` (PostgreSQL)
+- `supabase-kong` (API Gateway)
+- `supabase-auth` (GoTrue)
+- `supabase-rest` (PostgREST)
+- `supabase-realtime`
+- `supabase-storage`
+- `supabase-studio`
+
+#### 3.3 Kiểm tra truy cập
+- Mở browser: `http://localhost:8000` → Supabase Studio
+- Đăng nhập bằng `DASHBOARD_PASSWORD` đã set
+
+---
+
+### BƯỚC 4 — Import data từ Supabase Cloud
+
+#### 4.1 Copy file backup lên iMac cá nhân
+Từ MacBook, copy file backup sang iMac cá nhân qua AirDrop hoặc:
+```bash
+scp ~/Desktop/supabase_backup_clean.sql apple@<IP_IMAC>:~/Desktop/
+```
+
+#### 4.2 Tạo roles cần thiết
+```bash
+docker exec -it supabase-db psql -U postgres -c "
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
+"
+```
+
+#### 4.3 Import schema
+```bash
+docker exec -i supabase-db psql -U postgres < ~/Desktop/supabase_backup_clean.sql
+```
+
+#### 4.4 Export và import DATA (rows thực tế)
+Từ MacBook, export data:
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_c9e7702b2e5404754f0f7c9120a872512f6c7e6f npx supabase@2.105.0 db dump --linked --data-only -f ~/Desktop/supabase_data.sql
+```
+
+Copy sang iMac cá nhân rồi import:
+```bash
+docker exec -i supabase-db psql -U postgres < ~/Desktop/supabase_data.sql
+```
+
+#### 4.5 Verify số bảng và row count
+```bash
+docker exec -it supabase-db psql -U postgres -c "\dt public.*" | wc -l
+```
+Phải thấy 48 bảng.
+
+---
+
+### BƯỚC 5 — Lấy URL và Keys của Supabase local
+
+Sau khi chạy xong, Supabase local có:
+- **URL**: `http://<IP_IMAC_CÁ_NHÂN>:8000`
+- **ANON_KEY**: giá trị đã tạo ở Bước 2.2
+- **SERVICE_ROLE_KEY**: giá trị đã tạo ở Bước 2.2
+
+---
+
+### BƯỚC 6 — Cài Cloudflare Tunnel (truy cập từ xa)
+
+#### 6.1 Tạo tài khoản Cloudflare (nếu chưa có)
+- Vào https://cloudflare.com → đăng ký miễn phí
+
+#### 6.2 Cài cloudflared trên iMac cá nhân
+```bash
+brew install cloudflared
+```
+
+#### 6.3 Đăng nhập Cloudflare
+```bash
+cloudflared tunnel login
+```
+Sẽ mở browser, đăng nhập và chọn domain (hoặc dùng domain `.trycloudflare.com` miễn phí).
+
+#### 6.4 Tạo tunnel
+```bash
+cloudflared tunnel create cfobrain
+```
+Lưu lại tunnel ID được tạo ra.
+
+#### 6.5 Tạo file config
+Tạo file `~/.cloudflared/config.yml`:
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /Users/apple/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: cfobrain.yourdomain.com
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
+#### 6.6 Chạy tunnel tự động khi khởi động
+```bash
+cloudflared service install
+```
+
+#### 6.7 Test truy cập từ xa
+Mở điện thoại hoặc MacBook từ mạng khác → vào `https://cfobrain.yourdomain.com` → phải thấy Supabase Studio.
+
+---
+
+### BƯỚC 7 — Cập nhật app kết nối vào Supabase local
+
+#### 7.1 Cập nhật `.env.local` trên MacBook (dev)
+```env
+# Khi dev (cùng mạng WiFi)
+VITE_SUPABASE_URL=http://192.168.1.10:8000
+VITE_SUPABASE_ANON_KEY=<anon key mới>
+SUPABASE_URL=http://192.168.1.10:8000
+SUPABASE_ANON_KEY=<anon key mới>
+SUPABASE_SERVICE_ROLE_KEY=<service role key mới>
+```
+
+#### 7.2 Cập nhật `.env.local` trên iMac quầy (production)
+```env
+# iMac quầy cùng mạng → dùng IP nội bộ
+VITE_SUPABASE_URL=http://192.168.1.10:8000
+VITE_SUPABASE_ANON_KEY=<anon key mới>
+SUPABASE_URL=http://192.168.1.10:8000
+SUPABASE_ANON_KEY=<anon key mới>
+SUPABASE_SERVICE_ROLE_KEY=<service role key mới>
+```
+
+#### 7.3 Nếu truy cập từ xa (MacBook đi lại / điện thoại)
+```env
+# Dùng Cloudflare Tunnel URL
+VITE_SUPABASE_URL=https://cfobrain.yourdomain.com
+```
+
+---
+
+### BƯỚC 8 — Test toàn bộ
+
+- [ ] Mở app trên iMac quầy → đăng nhập, tạo đơn hàng → kiểm tra data trong Supabase Studio
+- [ ] Mở app trên MacBook (cùng mạng) → kiểm tra kết nối
+- [ ] Dùng điện thoại (mạng 4G) → truy cập qua Cloudflare Tunnel → kiểm tra tốc độ
+- [ ] Tắt màn hình iMac cá nhân → kiểm tra app vẫn chạy bình thường
+
+---
+
+### BƯỚC 9 — Dọn dẹp Fly.io (sau khi migrate xong)
+
+Xóa để khỏi tốn tiền:
+```bash
+flyctl apps destroy cfobrain-supabase
+flyctl apps destroy cfobrain-db
+```
+
+---
+
+### Backup tự động (setup sau khi migrate xong)
+
+Tạo cron job backup mỗi đêm 2:00 AM:
+```bash
+crontab -e
+```
+Thêm dòng:
+```
+0 2 * * * docker exec supabase-db pg_dump -U postgres postgres > ~/Backups/supabase_$(date +\%Y\%m\%d).sql
+```
+
+---
+
+### Thông tin quan trọng đã có sẵn
+
+| Thứ | Giá trị |
+|---|---|
+| Supabase Access Token | `sbp_c9e7702b2e5404754f0f7c9120a872512f6c7e6f` |
+| File backup schema | `~/Desktop/supabase_backup_clean.sql` (MacBook) |
+| Supabase Cloud URL | `https://tqouzxlnihfjdyxqlbqs.supabase.co` |
+| Fly.io Postgres password | `4A9smTp8oZj8S4A` (có thể dùng lại làm POSTGRES_PASSWORD) |
+
+---
+
+## 🟠 P1 — Setup backup tự động lên Mega.nz
+
+> Cần làm trên iMac cá nhân. Tài khoản Mega đã có sẵn.
+
+### Các bước thực hiện
+
+1. Cài Rclone trên iMac: `brew install rclone`
+2. Cấu hình Rclone kết nối Mega: `rclone config` → chọn Mega → đăng nhập
+3. Tạo script backup:
+   - Export database: `docker exec supabase-db pg_dump -U postgres postgres > ~/Backups/supabase_$(date +%Y%m%d).sql`
+   - Upload lên Mega: `rclone copy ~/Backups/ mega:cfobrain-backups/`
+   - Xóa backup cũ hơn 7 ngày
+4. Tạo LaunchAgent chạy mỗi đêm 2:00 AM
+
+### Kết quả mong đợi
+- Mỗi đêm 2:00 AM tự động backup lên Mega
+- Giữ 7 ngày gần nhất
+- Dung lượng mỗi file ~1-5MB
+
+---
+
+## 🔴 P0 — Tích hợp website PHÚC SANG
+
+> Context: Kế hoạch đầy đủ ở `KE-HOACH-DATABASE-VA-TICH-HOP-APP.md`. Hai codebase riêng biệt: website tại `/Users/apple/Downloads/website phúc sang/`, app tại thư mục hiện tại.
+
+- [x] ~~**Giai đoạn 1: Tạo bảng Supabase + Store API**~~ — 8 bảng store_*, PostgreSQL function create_store_order, routes/store.ts với 5 endpoint ✅ *(2026-06-16)*
+- [x] ~~**Giai đoạn 2: Kết nối website → Store API**~~ — store-api.js (API client + fallback data tĩnh), cập nhật all-products.js / product-detail.js / checkout.js / 3 HTML files ✅ *(2026-06-16)*
+- [x] ~~**Giai đoạn 3: Fix PostgREST schema cache**~~ — nguyên nhân thật không phải cache mà `shopee_products`+`shopee_product_variants` **chưa từng được tạo** trong DB; chạy `CREATE TABLE` trực tiếp qua `docker exec supabase-db psql` (terminal trên iMac, không cần mật khẩu Studio) → verify lại bằng curl: cả `store_products`, `store_product_variants`, `shopee_products`, `shopee_product_variants` đều đã đọc được (200, `[]`) ✅ *(2026-06-16)*
+- [ ] **Giai đoạn 4: Nhập 43 sản phẩm vào store_products** — cần UI admin hoặc SQL để link pos_products → store_products + store_product_variants; sau đó website tự động dùng live data từ API
+  - Riêng kênh Shopee: hạ tầng đã sẵn sàng, chỉ cần bấm lại "Nhập từ Dữ liệu nguồn cũ" trong trang Sản phẩm Shopee (đã fix bug duplicate-key + bảng đã tồn tại) là chạy được hết — chưa xác nhận đã bấm
+- [ ] **Giai đoạn 5: UI admin "Quản lý Website"** — trang trong app để: thêm/sửa store_products, liên kết variants, quản lý collections, xem đơn website
+- [x] ~~**OnlineCatalogPage.tsx viết lại giống layout Hàng hoá + nối fetch thật**~~ — sidebar/toolbar/table clone GoodsFilterSidebar+GoodsToolbar+GoodsProductTableHeader, cột Mã hàng/Nhóm hàng (leaf)/Giá vốn/Tồn kho/Vị trí/Thương hiệu/Nền tảng, cha-con expand giống GoodsProductRow, bảng chi tiết 5 tab clone GoodsProductDetailPanel, fetch thật từ store_product_variants+shopee_product_variants (mỗi bảng try/catch riêng để không sập trang nếu 1 bảng lỗi) ✅ *(2026-06-16)*
+  - **Vẫn đang rỗng** vì chưa có sản phẩm nào thực sự liên kết — hạ tầng đã sẵn sàng (xem Giai đoạn 3), chỉ còn thiếu Giai đoạn 4
+  - Đã dọn 30 sản phẩm cha rỗng (`variant_count=0`) tạo ra bởi lần "Nhập từ Dữ liệu nguồn cũ" bị lỗi trước đó trong `pos_products`
+- [x] ~~**Workflow huỷ/hoàn hàng đơn website + cộng tồn kho đúng 2 luồng**~~ — RPC `update_website_order_status` (huỷ trước khi giao ĐVVC cộng tồn ngay; hoàn sau khi giao chỉ cộng tồn sau khi nhân viên xác nhận đã nhận lại hàng), fix bug case-mismatch status `'Pending'`→`'pending'`, fix thiếu cột `pos_orders.updated_at`, fix query bảng `pos_order_items` không tồn tại trong `WebsiteOrdersPage.tsx` ✅ *(2026-06-16)*
 
 ## ⏸️ Blocked — Chờ hình mẫu từ user
 

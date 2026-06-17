@@ -1,21 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronsLeft,
-  ChevronsRight,
-  DownloadCloud,
-  FileText,
-  Maximize2,
-  Printer,
-  Redo2,
-  RefreshCw,
-  Search,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { ChevronDown, FileText } from 'lucide-react';
 import type { POSOrder, POSProduct } from '../../types';
+import { usePosOrders } from '../../hooks/usePosOrders';
 import {
   getReportTotals,
   getSalesHorizontalRowsByDate,
@@ -30,11 +16,14 @@ import {
   type SalesTimeRow,
 } from '../../src/lib/reportCalculations';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
+import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
 
 interface SalesReportPageProps {
   orders: POSOrder[];
   products?: POSProduct[];
   storeName?: string;
+  employees?: import('../../types').Employee[];
+  inventoryTransactions?: import('../../types').InventoryTransaction[];
 }
 
 type ViewMode = 'chart' | 'report';
@@ -57,7 +46,6 @@ interface DropdownOption {
 }
 
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
 
 const formatDate = (value: string) =>
   new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
@@ -66,16 +54,6 @@ const formatDate = (value: string) =>
     year: 'numeric',
   });
 
-const getWeekRange = () => {
-  const today = new Date();
-  const day = today.getDay() || 7;
-  const start = new Date(today);
-  start.setDate(today.getDate() - day + 1);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start: toDateInputValue(start), end: toDateInputValue(end) };
-};
-
 const formatCurrencyAxis = (value: number) => {
   if (value >= 1_000_000_000) return `${Number((value / 1_000_000_000).toFixed(1))} tỷ`;
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))} tr`;
@@ -83,20 +61,6 @@ const formatCurrencyAxis = (value: number) => {
   return String(value);
 };
 
-const ToolbarButton: React.FC<{ children: React.ReactNode; label: string; onClick?: () => void }> = ({
-  children,
-  label,
-  onClick,
-}) => (
-  <button
-    aria-label={label}
-    title={label}
-    onClick={onClick}
-    className="inline-flex h-8 w-8 items-center justify-center rounded text-white/85 transition hover:bg-white/10 hover:text-white"
-  >
-    {children}
-  </button>
-);
 
 const getUniqueOptions = (values: Array<string | undefined>): DropdownOption[] =>
   Array.from(new Set(values.map(value => value?.trim()).filter(Boolean) as string[]))
@@ -107,9 +71,11 @@ const getSelectedLabel = (options: DropdownOption[], value: string, placeholder:
   options.find(option => option.value === value)?.label || placeholder;
 
 const SalesReportPage: React.FC<SalesReportPageProps> = ({
-  orders,
+  orders: bootstrapOrders,
   products = [],
   storeName = 'Chi nhánh trung tâm',
+  employees = [],
+  inventoryTransactions = [],
 }) => {
   const weekRange = useMemo(() => getWeekRange(), []);
   const [viewMode, setViewMode] = useState<ViewMode>('chart');
@@ -123,6 +89,19 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
   const [interestMode, setInterestMode] = useState<InterestMode>('time');
   const [reportLayout, setReportLayout] = useState<ReportLayout>('vertical');
   const [openDropdown, setOpenDropdown] = useState<SalesDropdownKey | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+  const { orders, isLoading: ordersLoading } = usePosOrders(bootstrapOrders, startDate, endDate);
+  useEffect(() => {
+    if (dateMode === 'custom') return;
+    if (orders.length === 0 || hasOrdersInDateRange(orders, startDate, endDate)) return;
+    const latestDate = getLatestOrderDate(orders);
+    if (!latestDate) return;
+    const nextRange = getWeekRange(new Date(`${latestDate}T00:00:00`));
+    setStartDate(nextRange.start);
+    setEndDate(nextRange.end);
+    setDateMode('week');
+  }, [endDate, orders, startDate, dateMode]);
   const createdAt = useMemo(
     () =>
       new Date().toLocaleString('vi-VN', {
@@ -153,8 +132,8 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
         channelQuery,
         createdByQuery,
         paymentMethod: paymentMethodFilter,
-      }),
-    [channelQuery, createdByQuery, endDate, orders, paymentMethodFilter, priceBookQuery, products, startDate]
+      }, inventoryTransactions),
+    [channelQuery, createdByQuery, endDate, inventoryTransactions, orders, paymentMethodFilter, priceBookQuery, products, startDate]
   );
 
   const horizontalRows = useMemo<SalesHorizontalReportRow[]>(
@@ -175,7 +154,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
         channelQuery,
         createdByQuery,
         paymentMethod: paymentMethodFilter,
-      }),
+      }, employees),
     [channelQuery, createdByQuery, endDate, orders, paymentMethodFilter, priceBookQuery, startDate]
   );
 
@@ -201,6 +180,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
           revenue: sum.revenue + row.revenue,
           returnOrderCount: sum.returnOrderCount + row.returnOrderCount,
           returnValue: sum.returnValue + row.returnValue,
+          returnRefund: sum.returnRefund + row.returnRefund,
           netRevenue: sum.netRevenue + row.netRevenue,
         }),
         {
@@ -210,6 +190,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
           revenue: 0,
           returnOrderCount: 0,
           returnValue: 0,
+          returnRefund: 0,
           netRevenue: 0,
         }
       ),
@@ -313,6 +294,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
     () => [
       { value: 'Cash', label: 'Tiền mặt' },
       { value: 'Bank', label: 'Chuyển khoản' },
+      { value: 'Card', label: 'Thẻ' },
       { value: 'Momo', label: 'Momo' },
       { value: 'Other', label: 'Khác' },
     ],
@@ -325,13 +307,14 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
     }
   }, [interestMode, viewMode]);
 
+  // Reset về trang 1 khi đổi chế độ hoặc khoảng ngày
+  useEffect(() => { setPage(1); }, [interestMode, reportLayout, startDate, endDate, viewMode]);
+
   const applyWeek = () => {
     setDateMode('week');
     setStartDate(weekRange.start);
     setEndDate(weekRange.end);
   };
-
-  const handlePrint = () => window.print();
 
   const handleDownload = () => {
     const header = ['Thời gian', 'Doanh thu', 'Giá trị trả', 'Doanh thu thuần'];
@@ -421,7 +404,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
             <th
               key={column.key}
               className={`border border-[#a7bac5] px-3 py-3 font-bold ${
-                column.align === 'right' ? 'text-right' : 'text-left'
+                column.align === 'right' ? 'text-center' : 'text-left'
               }`}
             >
               {column.label}
@@ -435,7 +418,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
             <td
               key={column.key}
               className={`border border-[#c3c4ba] px-3 py-3 ${
-                column.align === 'right' ? 'text-right' : 'text-left'
+                column.align === 'right' ? 'text-center' : 'text-left'
               } ${column.key === 'netRevenue' ? 'text-blue-700' : ''}`}
             >
               {column.total ?? ''}
@@ -448,7 +431,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
               <td
                 key={column.key}
                 className={`border-b border-slate-300 px-3 py-3 ${
-                  column.align === 'right' ? 'text-right' : 'text-left'
+                  column.align === 'right' ? 'text-center' : 'text-left'
                 } ${column.key === 'label' || column.key === 'staffName' ? 'text-blue-700' : ''}`}
               >
                 {column.render(row)}
@@ -504,6 +487,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
     { key: 'revenue', label: 'Doanh thu', align: 'right', render: row => formatNumber(row.revenue), total: formatNumber(horizontalTotals.revenue) },
     { key: 'returnOrderCount', label: 'SL đơn trả', align: 'right', render: row => formatNumber(row.returnOrderCount), total: formatNumber(horizontalTotals.returnOrderCount) },
     { key: 'returnValue', label: 'Giá trị trả', align: 'right', render: row => (row.returnValue > 0 ? `-${formatNumber(row.returnValue)}` : '0'), total: horizontalTotals.returnValue > 0 ? `-${formatNumber(horizontalTotals.returnValue)}` : '0' },
+    { key: 'returnRefund', label: 'Tiền trả khách', align: 'right', render: row => (row.returnRefund > 0 ? `-${formatNumber(row.returnRefund)}` : '0'), total: horizontalTotals.returnRefund > 0 ? `-${formatNumber(horizontalTotals.returnRefund)}` : '0' },
     { key: 'netRevenue', label: 'Doanh thu thuần', align: 'right', render: row => formatNumber(row.netRevenue), total: formatNumber(horizontalTotals.netRevenue) },
   ];
 
@@ -536,6 +520,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
     { key: 'label', label: 'Thời gian', render: row => row.label },
     { key: 'returnOrderCount', label: 'SL đơn trả', align: 'right', render: row => formatNumber(row.returnOrderCount), total: formatNumber(horizontalTotals.returnOrderCount) },
     { key: 'returnValue', label: 'Giá trị trả', align: 'right', render: row => (row.returnValue > 0 ? `-${formatNumber(row.returnValue)}` : '0'), total: horizontalTotals.returnValue > 0 ? `-${formatNumber(horizontalTotals.returnValue)}` : '0' },
+    { key: 'returnRefund', label: 'Tiền trả khách', align: 'right', render: row => (row.returnRefund > 0 ? `-${formatNumber(row.returnRefund)}` : '0'), total: horizontalTotals.returnRefund > 0 ? `-${formatNumber(horizontalTotals.returnRefund)}` : '0' },
     { key: 'netRevenue', label: 'Ảnh hưởng doanh thu thuần', align: 'right', render: row => formatNumber(row.netRevenue), total: formatNumber(horizontalTotals.netRevenue) },
   ];
 
@@ -551,11 +536,66 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
   const timeRows = buckets.map(bucket => ({ ...bucket, key: bucket.hour }));
 
   const renderActiveReportTable = () => {
-    if (interestMode === 'discount') return renderReportTable(discountRows, discountColumns);
-    if (interestMode === 'returns') return renderReportTable(horizontalRows, returnsColumns);
-    if (interestMode === 'staff') return renderReportTable(staffRows, staffColumns);
-    if (reportLayout === 'horizontal') return renderReportTable(horizontalRows, horizontalColumns, 'text-xs', 'min-w-[1040px]');
-    return renderReportTable(timeRows, timeVerticalColumns);
+    const start = (page - 1) * PAGE_SIZE;
+    const end = page * PAGE_SIZE;
+
+    let totalRows = 0;
+    let tableJSX: React.ReactNode;
+
+    if (interestMode === 'discount') {
+      totalRows = discountRows.length;
+      tableJSX = renderReportTable(discountRows.slice(start, end), discountColumns);
+    } else if (interestMode === 'returns') {
+      totalRows = horizontalRows.length;
+      tableJSX = renderReportTable(horizontalRows.slice(start, end), returnsColumns);
+    } else if (interestMode === 'staff') {
+      totalRows = staffRows.length;
+      tableJSX = renderReportTable(staffRows.slice(start, end), staffColumns);
+    } else if (reportLayout === 'horizontal') {
+      totalRows = horizontalRows.length;
+      tableJSX = renderReportTable(horizontalRows.slice(start, end), horizontalColumns, 'text-xs', 'min-w-[1040px]');
+    } else {
+      totalRows = timeRows.length;
+      tableJSX = renderReportTable(timeRows.slice(start, end), timeVerticalColumns);
+    }
+
+    const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+
+    return (
+      <>
+        {tableJSX}
+        {totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-3 text-sm">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className={`rounded-md border px-4 py-2 font-semibold transition ${
+                page === 1
+                  ? 'cursor-not-allowed border-slate-200 text-slate-300'
+                  : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              ← Trước
+            </button>
+            <span className="text-slate-500">
+              Trang <span className="font-bold text-slate-800">{page}</span> / {totalPages}
+              <span className="ml-2 text-slate-400">({totalRows} dòng)</span>
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className={`rounded-md border px-4 py-2 font-semibold transition ${
+                page === totalPages
+                  ? 'cursor-not-allowed border-slate-200 text-slate-300'
+                  : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Sau →
+            </button>
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
@@ -677,7 +717,10 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <h1 className="mb-5 text-2xl font-bold">Báo cáo bán hàng</h1>
+          <h1 className="mb-5 flex items-center gap-3 text-2xl font-bold">
+            Báo cáo bán hàng
+            {ordersLoading && <span className="text-sm font-normal text-slate-400">Đang tải...</span>}
+          </h1>
           {viewMode === 'chart' ? (
             <div className="flex min-h-0 flex-1 flex-col gap-5">
               <div className="min-h-[420px] bg-white p-6">
@@ -767,74 +810,16 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#748090]">
-              <div className="flex h-10 shrink-0 items-center justify-center gap-2 bg-[#748090] text-white">
-                <ToolbarButton label="Hoàn tác">
-                  <Undo2 className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Làm lại">
-                  <Redo2 className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tải lại">
-                  <RefreshCw className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Trang đầu">
-                  <ChevronsLeft className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Trang trước">
-                  <ChevronLeft className="h-4 w-4" />
-                </ToolbarButton>
-                <div className="flex items-center gap-1 text-sm font-bold">
-                  <span className="flex h-8 w-11 items-center justify-center rounded-md bg-white text-slate-700">
-                    1
-                  </span>
-                  <span>/ 1</span>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div className="mb-5 text-center">
+                <div className="mb-1 text-xs text-slate-400">Ngày lập: {createdAt}</div>
+                <h2 className="text-xl font-bold text-slate-800">{reportTitle}</h2>
+                <div className="mt-2 space-y-0.5 text-sm text-slate-500">
+                  <p>Từ ngày {formatDate(startDate)} đến ngày {formatDate(endDate)}</p>
+                  <p>Chi nhánh: {storeName}</p>
                 </div>
-                <ToolbarButton label="Trang sau">
-                  <ChevronsRight className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tài liệu">
-                  <FileText className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tải xuống" onClick={handleDownload}>
-                  <DownloadCloud className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="In" onClick={handlePrint}>
-                  <Printer className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Thu nhỏ">
-                  <ZoomOut className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Tìm kiếm">
-                  <Search className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Phóng to">
-                  <ZoomIn className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Toàn màn hình">
-                  <Maximize2 className="h-4 w-4" />
-                </ToolbarButton>
               </div>
-
-              <div className="min-h-0 flex-1 overflow-auto px-8 pb-10">
-                <article className={`mx-auto min-h-[820px] w-full bg-white px-4 pb-12 pt-5 shadow-sm ${
-                  reportLayout === 'horizontal' ? 'max-w-[1180px]' : 'max-w-[820px]'
-                }`}>
-                  <div className="px-1 text-xs text-slate-700">Ngày lập: {createdAt}</div>
-                  <h2 className="mt-2 text-center text-2xl font-bold">
-                    {reportTitle}
-                  </h2>
-                  <div className="mt-4 space-y-3 text-center text-sm text-slate-800">
-                    <p>
-                      Từ ngày {formatDate(startDate)} đến ngày {formatDate(endDate)}
-                    </p>
-                    <p>Chi nhánh: {storeName}</p>
-                    <p>Bảng giá: Tất cả</p>
-                  </div>
-
-                  {renderActiveReportTable()}
-                </article>
-              </div>
+              {renderActiveReportTable()}
             </div>
           )}
         </section>

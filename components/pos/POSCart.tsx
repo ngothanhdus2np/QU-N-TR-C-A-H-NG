@@ -186,7 +186,13 @@ const POSCart: React.FC<POSCartProps> = ({
     if (!deferredExchangeSearch.trim()) return [];
     const q = deferredExchangeSearch.toLowerCase();
     return products
-      .filter(p => (p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
+      .filter(
+        p =>
+          !p.isParent &&
+          p.status === 'Active' &&
+          p.salePrice > 0 &&
+          ((p.name || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
+      )
       .slice(0, 20);
   }, [deferredExchangeSearch, products]);
 

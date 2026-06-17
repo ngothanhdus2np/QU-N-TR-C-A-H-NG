@@ -37,6 +37,12 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     supplierName: string;
     warning?: string;
   } | null>(null);
+  const [unsafeBulkDeleteDialog, setUnsafeBulkDeleteDialog] = useState<{
+    ids: string[];
+    unsafeNames: string[];
+    moreCount: number;
+    onSuccess?: () => void;
+  } | null>(null);
   const supplierFileInputRef = useRef<HTMLInputElement>(null);
 
   const rawSuppliers = data.suppliers || [];
@@ -104,7 +110,11 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   ) => {
     if (debt.supplierId) return debt.supplierId === supplier.id;
     const supplierText = normalizeSupplierKey(debt.supplierName);
-    return supplierText !== '' && supplierText === normalizeSupplierKey(supplier.name);
+    return (
+      supplierText !== '' &&
+      (supplierText === normalizeSupplierKey(supplier.name) ||
+        supplierText === normalizeSupplierKey(supplier.code))
+    );
   };
 
   // Compute totalPurchase and currentDebt for each supplier
@@ -179,10 +189,6 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         code: supplierCode,
       };
 
-      setShowSupplierForm(false);
-      setEditingSupplier(null);
-      showToast(isEdit ? 'Đã cập nhật nhà cung cấp' : 'Đã thêm nhà cung cấp mới', 'success');
-
       if (onUpdateSurgical) {
         await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
       } else {
@@ -191,6 +197,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
           : [...rawSuppliers, supplier];
         await onUpdateData('suppliers', updatedSuppliers);
       }
+
+      setShowSupplierForm(false);
+      setEditingSupplier(null);
+      showToast(isEdit ? 'Đã cập nhật nhà cung cấp' : 'Đã thêm nhà cung cấp mới', 'success');
     } catch (err) {
       console.error('[SupplierContainer] Save failed', err);
       showToast('Lưu thất bại. Vui lòng thử lại.', 'error');
@@ -250,7 +260,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     }
   };
 
-  const handleBulkDeleteSuppliers = async (ids: string[]) => {
+  const handleBulkDeleteSuppliers = async (ids: string[], onSuccess?: () => void) => {
     try {
       const selected = rawSuppliers.filter(supplier => ids.includes(supplier.id));
       const unsafeSuppliers = selected.filter(supplier => {
@@ -268,13 +278,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       });
 
       if (unsafeSuppliers.length > 0) {
-        const names = unsafeSuppliers.slice(0, 5).map(supplier => supplier.name).join(', ');
-        const more =
-          unsafeSuppliers.length > 5 ? ` và ${unsafeSuppliers.length - 5} NCC khác` : '';
-        const confirmed = window.confirm(
-          `Có ${unsafeSuppliers.length} nhà cung cấp đang có công nợ hoặc phiếu nhập/trả hàng: ${names}${more}. Xóa sẽ không xóa lịch sử phát sinh. Bạn vẫn muốn xóa?`
-        );
-        if (!confirmed) return;
+        const unsafeNames = unsafeSuppliers.slice(0, 5).map(s => s.name);
+        const moreCount = Math.max(0, unsafeSuppliers.length - 5);
+        setUnsafeBulkDeleteDialog({ ids, unsafeNames, moreCount, onSuccess });
+        return;
       }
 
       if (onUpdateSurgical) {
@@ -292,9 +299,29 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         setViewingSupplier(null);
       }
 
+      onSuccess?.();
       showToast(`Đã xóa ${ids.length} nhà cung cấp`, 'success');
     } catch (err) {
       console.error('[SupplierContainer] Bulk delete failed', err);
+      showToast('Xóa thất bại. Vui lòng thử lại.', 'error');
+    }
+  };
+
+  const handleConfirmUnsafeBulkDelete = async () => {
+    if (!unsafeBulkDeleteDialog) return;
+    const { ids, onSuccess } = unsafeBulkDeleteDialog;
+    setUnsafeBulkDeleteDialog(null);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical(ids.map(id => ({ key: 'suppliers', item: { id }, isDelete: true })));
+      } else {
+        await onUpdateData('suppliers', rawSuppliers.filter(s => !ids.includes(s.id)));
+      }
+      if (viewingSupplier && ids.includes(viewingSupplier.id)) setViewingSupplier(null);
+      onSuccess?.();
+      showToast(`Đã xóa ${ids.length} nhà cung cấp`, 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Unsafe bulk delete failed', err);
       showToast('Xóa thất bại. Vui lòng thử lại.', 'error');
     }
   };
@@ -359,7 +386,6 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     } catch (err) {
       console.error('[SupplierContainer] Toggle favorite failed', err);
       showToast('Cập nhật đánh dấu thất bại. Vui lòng thử lại.', 'error');
-      throw err;
     }
   };
 
@@ -440,10 +466,9 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         const existing = existingByImportedCode || existingByName.get(name.toLowerCase());
         if (
           existingByImportedCode &&
-          normalizeSupplierKey(existingByImportedCode.name) !== normalizeSupplierKey(name) &&
-          !window.confirm(`Mã ${rawCode} đang thuộc NCC "${existingByImportedCode.name}". Ghi đè bằng tên "${name}"?`)
+          normalizeSupplierKey(existingByImportedCode.name) !== normalizeSupplierKey(name)
         ) {
-          skippedRows.push(`Dòng ${index + 2}: bỏ qua mã ${rawCode}`);
+          skippedRows.push(`Dòng ${index + 2}: mã ${rawCode} đang thuộc NCC "${existingByImportedCode.name}"`);
           return;
         }
 
@@ -475,10 +500,10 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
             String(getCell(row, ['Mã số thuế', 'MST', 'Tax Code']) || existing?.taxCode || '').trim() ||
             undefined,
           isFavorite: existing?.isFavorite || false,
-          status:
-            (String(
-              getCell(row, ['Trạng thái', 'Status']) || existing?.status || 'active'
-            ).trim() as Supplier['status']) || 'active',
+          status: (() => {
+            const raw = String(getCell(row, ['Trạng thái', 'Status']) || '').trim();
+            return (['active', 'inactive'].includes(raw) ? raw : existing?.status || 'active') as Supplier['status'];
+          })(),
         });
       });
 
@@ -595,6 +620,37 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         />
       )}
       {deleteModal}
+      <Modal
+        isOpen={!!unsafeBulkDeleteDialog}
+        onClose={() => setUnsafeBulkDeleteDialog(null)}
+        title="Xác nhận xóa nhà cung cấp"
+        size="sm"
+      >
+        <div className="mb-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+          <span className="mt-0.5 shrink-0">⚠️</span>
+          <span>
+            {unsafeBulkDeleteDialog?.unsafeNames.length} nhà cung cấp có công nợ hoặc phiếu nhập/trả hàng:{' '}
+            <strong>{unsafeBulkDeleteDialog?.unsafeNames.join(', ')}</strong>
+            {unsafeBulkDeleteDialog?.moreCount ? ` và ${unsafeBulkDeleteDialog.moreCount} NCC khác` : ''}
+            . Xóa sẽ không xóa lịch sử phát sinh.
+          </span>
+        </div>
+        <p className="text-slate-700">Bạn vẫn muốn xóa {unsafeBulkDeleteDialog?.ids.length} nhà cung cấp?</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => setUnsafeBulkDeleteDialog(null)}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={handleConfirmUnsafeBulkDelete}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+          >
+            Xóa
+          </button>
+        </div>
+      </Modal>
     </>
   );
 };

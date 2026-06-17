@@ -48,6 +48,12 @@ export const useGoodsSelection = ({
 
   const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
+  // BUG-46: sync selectedIds khi filter thay đổi
+  React.useEffect(() => {
+    const filteredIds = new Set(filteredProducts.map(p => p.id));
+    setSelectedIds(prev => prev.filter(id => filteredIds.has(id)));
+  }, [filteredProducts]);
+
   const toggleSelectAll = () => {
     if (selectedIds.length === filteredProducts.length) {
       setSelectedIds([]);
@@ -88,16 +94,21 @@ export const useGoodsSelection = ({
       confirmLabel: 'Xóa tất cả',
       onConfirm: async () => {
         try {
+          // Thu thập cả variant con của các parent bị xóa để tránh orphan
+          const idsToDelete = new Set(selectedIds);
+          for (const p of products) {
+            if (p.parentId && idsToDelete.has(p.parentId)) idsToDelete.add(p.id);
+          }
           if (onUpdateSurgical) {
-            const updates: AppDataSurgicalUpdate[] = selectedIds.map(id => ({ key: 'posProducts', item: { id }, isDelete: true }));
+            const updates: AppDataSurgicalUpdate[] = [...idsToDelete].map(id => ({ key: 'posProducts', item: { id }, isDelete: true }));
             await onUpdateSurgical(updates);
           } else {
-            const idsToDelete = new Set(selectedIds);
             const updated = products.filter(product => !idsToDelete.has(product.id));
             onUpdateProducts(updated);
           }
           setSelectedIds([]);
-          showToast(`Đã xóa ${selectedIds.length} mặt hàng.`, 'success');
+          // BUG-41: dùng idsToDelete.size (bao gồm variants của cha) thay vì selectedIds.length
+          showToast(`Đã xóa ${idsToDelete.size} mặt hàng.`, 'success');
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           showToast(`Lỗi khi xóa: ${message}`, 'error');

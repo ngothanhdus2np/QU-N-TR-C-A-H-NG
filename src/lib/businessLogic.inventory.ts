@@ -102,7 +102,7 @@ export const generateProductVariants = (
       categoryId: baseProduct.categoryId || '',
       importPrice: baseProduct.importPrice || 0,
       salePrice: baseProduct.salePrice || 0,
-      stock: baseProduct.stock || 0,
+      stock: 0,
       minStock: baseProduct.minStock || 0,
       maxStock: baseProduct.maxStock,
       unit: baseProduct.unit || 'Cái',
@@ -159,6 +159,33 @@ export const getInventoryCostMethod = (): InventoryCostMethod => {
   }
 };
 
+/**
+ * Tính giá vốn đơn vị thực tế sau khi phân bổ chiết khấu toàn đơn vào từng dòng.
+ * @param item - Dòng hàng trong phiếu nhập
+ * @param billDiscountAmount - Tổng chiết khấu toàn hóa đơn (đã tính ra số tiền)
+ * @param itemsNetTotal - Tổng giá trị các dòng trước chiết khấu toàn đơn
+ */
+export const calcEffectiveUnitPrice = (
+  item: { quantity: number; price: number; discount: number },
+  billDiscountAmount: number,
+  itemsNetTotal: number
+): number => {
+  const itemNetAmount = item.quantity * item.price - item.discount;
+  const itemOrderDiscount =
+    itemsNetTotal > 0
+      ? Math.round((itemNetAmount / itemsNetTotal) * billDiscountAmount)
+      : 0;
+  return item.quantity > 0
+    ? Math.max(0, (itemNetAmount - itemOrderDiscount) / item.quantity)
+    : item.price;
+};
+
+/**
+ * Tính giá vốn mới sau khi nhập hàng.
+ * - `fixed`: Giữ nguyên giá vốn hiện tại. Ngoại lệ: nếu giá vốn hiện tại = 0 (sản phẩm mới),
+ *   lấy giá nhập lần đầu để tránh giá vốn = 0 mãi mãi.
+ * - `average` (AVCO): Tính bình quân gia quyền theo số lượng tồn kho.
+ */
 export const calculateNextImportPrice = (
   product: Pick<POSProduct, 'stock' | 'importPrice'>,
   quantity: number,
@@ -174,6 +201,7 @@ export const calculateNextImportPrice = (
     return currentImportPrice > 0 ? currentImportPrice : incomingPrice;
   }
 
+  if (incomingQuantity === 0) return currentImportPrice > 0 ? currentImportPrice : incomingPrice;
   if (currentStock <= 0) return incomingPrice;
   const totalQuantity = currentStock + incomingQuantity;
   if (totalQuantity <= 0) return incomingPrice;

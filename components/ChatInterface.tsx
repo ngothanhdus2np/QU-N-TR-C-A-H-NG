@@ -27,6 +27,7 @@ import {
   calculateDailyBreakEven,
   isStaffActive,
 } from '../src/lib';
+import { calcOrderRevenue } from '../src/lib/reportCalculations';
 
 interface ChatInterfaceProps {
   data: AppData;
@@ -371,8 +372,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           date: sessionDate,
           orderCount: orders.length,
           returnCount: returns.length,
-          totalRevenue: orders.reduce((s, o) => s + o.finalAmount, 0),
-          totalReturns: returns.reduce((s, o) => s + Math.abs(o.finalAmount), 0),
+          totalRevenue: orders.reduce((s, o) => s + calcOrderRevenue(o), 0),
+          totalReturns: returns.reduce((s, o) => s + Math.abs(Number(o.totalAmount) || 0), 0),
           cashOrders: orders.filter(o => o.paymentMethod === 'Cash').length,
           bankOrders: orders.filter(o => o.paymentMethod === 'Bank').length,
           topProducts: Array.from(productMap.values())
@@ -398,8 +399,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             productMap.set(item.productId, cur);
           }
         }
-        const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0);
-        const totalReturns = returns.reduce((sum, o) => sum + Math.abs(o.finalAmount), 0);
+        const totalRevenue = orders.reduce((sum, o) => sum + calcOrderRevenue(o), 0);
+        const totalReturns = returns.reduce((sum, o) => sum + Math.abs(Number(o.totalAmount) || 0), 0);
         return {
           period: `${s} đến ${e}`,
           orderCount: orders.length,
@@ -409,10 +410,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           netRevenue: totalRevenue - totalReturns,
           avgOrderValue: orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0,
           paymentBreakdown: {
-            Cash: orders.filter(o => o.paymentMethod === 'Cash').reduce((sum, o) => sum + o.finalAmount, 0),
-            Bank: orders.filter(o => o.paymentMethod === 'Bank').reduce((sum, o) => sum + o.finalAmount, 0),
-            Momo: orders.filter(o => o.paymentMethod === 'Momo').reduce((sum, o) => sum + o.finalAmount, 0),
-            Other: orders.filter(o => o.paymentMethod === 'Other').reduce((sum, o) => sum + o.finalAmount, 0),
+            Cash: orders.filter(o => o.paymentMethod === 'Cash').reduce((sum, o) => sum + calcOrderRevenue(o), 0),
+            Bank: orders.filter(o => o.paymentMethod === 'Bank').reduce((sum, o) => sum + calcOrderRevenue(o), 0),
+            Momo: orders.filter(o => o.paymentMethod === 'Momo').reduce((sum, o) => sum + calcOrderRevenue(o), 0),
+            Other: orders.filter(o => o.paymentMethod === 'Other').reduce((sum, o) => sum + calcOrderRevenue(o), 0),
           },
           topProducts: Array.from(productMap.values())
             .sort((a, b) => b.revenue - a.revenue)

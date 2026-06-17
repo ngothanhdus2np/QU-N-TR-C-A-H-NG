@@ -41,6 +41,7 @@ interface GoodsInventoryProps {
   orders?: POSOrder[];
   productGroups: ProductGroup[];
   suppliers?: Supplier[];
+  inventoryCostMethod?: 'fixed' | 'average';
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
@@ -144,6 +145,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   orders = [],
   productGroups,
   suppliers = [],
+  inventoryCostMethod,
   onUpdateProducts,
   onUpdateSurgical,
   onPushBatch,
@@ -224,7 +226,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     setInvoiceStatus,
     invoiceFile,
     setInvoiceFile,
-  } = useGoodsPurchase({ products, onUpdateProducts, onUpdateSurgical, onAddTransaction, showToast });
+  } = useGoodsPurchase({ products, suppliers, inventoryCostMethod, onUpdateProducts, onUpdateSurgical, onAddTransaction, showToast });
   const {
     auditSearchTerm,
     setAuditSearchTerm,
@@ -318,6 +320,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     viewingProduct,
     setViewingProduct,
     showToast,
+    showConfirm: (message, onConfirm) => {
+      openConfirm({
+        title: 'Xác nhận',
+        message,
+        confirmLabel: 'Tiếp tục',
+        onConfirm: () => { onConfirm(); closeConfirm(); },
+      });
+    },
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -359,6 +369,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     newUnitDirectSale,
     setNewUnitDirectSale,
     openCreateProduct,
+    openCreateSameType,
     openProductEditor,
     handleSaveProduct,
     handleOpenQuickAddProduct,
@@ -478,14 +489,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
 
   const handleAddSameType = useCallback(
     (product: POSProduct) => {
-      setFormData({
-        categoryId: product.categoryId,
-        unit: product.unit,
-      });
-      setEditingProduct(null);
-      setShowCreateModal(true);
+      openCreateSameType(product);
     },
-    [setFormData, setEditingProduct, setShowCreateModal]
+    [openCreateSameType]
   );
 
   const handlePurchaseProduct = useCallback(
@@ -503,16 +509,28 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         message: `Xác nhận ngừng kinh doanh "${product.name}"?`,
         variant: 'warning',
         confirmLabel: 'Ngừng KD',
-        onConfirm: () => {
-          onUpdateProducts(
-            products.map(p => (p.id === product.id ? { ...p, status: 'Inactive' } : p))
-          );
-          showToast(`Đã ngừng kinh doanh "${product.name}".`);
-          closeConfirm();
+        onConfirm: async () => {
+          try {
+            const affected = products
+              .filter(p => p.id === product.id || p.parentId === product.id)
+              .map(p => ({ ...p, status: 'Inactive' as const }));
+            if (onUpdateSurgical) {
+              await onUpdateSurgical(affected.map(p => ({ key: 'posProducts' as const, item: p })));
+            } else {
+              onUpdateProducts(products.map(p =>
+                p.id === product.id || p.parentId === product.id ? { ...p, status: 'Inactive' } : p
+              ));
+            }
+            showToast(`Đã ngừng kinh doanh "${product.name}".`);
+          } catch (err: unknown) {
+            showToast(`Lỗi ngừng kinh doanh: ${err instanceof Error ? err.message : String(err)}`, 'error');
+          } finally {
+            closeConfirm();
+          }
         },
       });
     },
-    [products, onUpdateProducts, openConfirm, closeConfirm, showToast]
+    [products, onUpdateProducts, onUpdateSurgical, openConfirm, closeConfirm, showToast]
   );
 
   const selectedSellableProducts = React.useMemo(
@@ -575,37 +593,60 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       message: `Xác nhận ngừng kinh doanh ${selectedProducts.length} mặt hàng đã chọn?`,
       variant: 'warning',
       confirmLabel: 'Ngừng KD',
-      onConfirm: () => {
-        const selectedIdSet = new Set(selectedProducts.map(p => p.id));
-        onUpdateProducts(
-          products.map(p => (selectedIdSet.has(p.id) ? { ...p, status: 'Inactive' } : p))
-        );
-        setSelectedIds([]);
-        showToast(`Đã ngừng kinh doanh ${selectedProducts.length} mặt hàng.`);
-        closeConfirm();
+      onConfirm: async () => {
+        try {
+          const selectedIdSet = new Set(selectedProducts.map(p => p.id));
+          const affected = products
+            .filter(p => selectedIdSet.has(p.id) || (p.parentId && selectedIdSet.has(p.parentId)))
+            .map(p => ({ ...p, status: 'Inactive' as const }));
+          if (onUpdateSurgical) {
+            await onUpdateSurgical(affected.map(p => ({ key: 'posProducts' as const, item: p })));
+          } else {
+            onUpdateProducts(products.map(p =>
+              selectedIdSet.has(p.id) || (p.parentId && selectedIdSet.has(p.parentId))
+                ? { ...p, status: 'Inactive' } : p
+            ));
+          }
+          setSelectedIds([]);
+          showToast(`Đã ngừng kinh doanh ${selectedProducts.length} mặt hàng.`);
+        } catch (err: unknown) {
+          showToast(`Lỗi ngừng kinh doanh: ${err instanceof Error ? err.message : String(err)}`, 'error');
+        } finally {
+          closeConfirm();
+        }
       },
     });
-  }, [selectedProducts, products, onUpdateProducts, openConfirm, closeConfirm, showToast, setSelectedIds]);
+  }, [selectedProducts, products, onUpdateProducts, onUpdateSurgical, openConfirm, closeConfirm, showToast, setSelectedIds]);
 
   const handleBulkChangeGroup = useCallback(() => {
     setChangeGroupModal({ isOpen: true, selectedGroupId: '' });
   }, []);
 
-  const handleConfirmChangeGroup = useCallback(() => {
+  const handleConfirmChangeGroup = useCallback(async () => {
     if (!changeGroupModal.selectedGroupId) {
       showToast('Vui lòng chọn nhóm hàng.', 'error');
       return;
     }
-    const selectedIdSet = new Set(selectedProducts.map(p => p.id));
-    onUpdateProducts(
-      products.map(p =>
-        selectedIdSet.has(p.id) ? { ...p, categoryId: changeGroupModal.selectedGroupId } : p
-      )
-    );
-    setSelectedIds([]);
-    setChangeGroupModal({ isOpen: false, selectedGroupId: '' });
-    showToast(`Đã chuyển ${selectedProducts.length} sản phẩm sang nhóm "${changeGroupModal.selectedGroupId}".`);
-  }, [changeGroupModal, selectedProducts, products, onUpdateProducts, setSelectedIds, showToast]);
+    try {
+      const selectedIdSet = new Set(selectedProducts.map(p => p.id));
+      const affected = products
+        .filter(p => selectedIdSet.has(p.id) || (p.parentId && selectedIdSet.has(p.parentId)))
+        .map(p => ({ ...p, categoryId: changeGroupModal.selectedGroupId, categoryPath: undefined }));
+      if (onUpdateSurgical) {
+        await onUpdateSurgical(affected.map(p => ({ key: 'posProducts' as const, item: p })));
+      } else {
+        onUpdateProducts(products.map(p =>
+          selectedIdSet.has(p.id) || (p.parentId && selectedIdSet.has(p.parentId))
+            ? { ...p, categoryId: changeGroupModal.selectedGroupId, categoryPath: undefined } : p
+        ));
+      }
+      setSelectedIds([]);
+      setChangeGroupModal({ isOpen: false, selectedGroupId: '' });
+      showToast(`Đã chuyển ${selectedProducts.length} sản phẩm sang nhóm "${changeGroupModal.selectedGroupId}".`);
+    } catch (err: unknown) {
+      showToast(`Lỗi chuyển nhóm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  }, [changeGroupModal, selectedProducts, products, onUpdateProducts, onUpdateSurgical, setSelectedIds, showToast]);
 
   const handleCreateGroup = useCallback(async () => {
     const trimmed = createGroupModal.name.trim();
@@ -613,12 +654,16 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       showToast('Vui lòng nhập tên nhóm hàng.', 'error');
       return;
     }
-    const fullName = createGroupModal.parentId ? `${createGroupModal.parentId} >> ${trimmed}` : trimmed;
-    const newGroup: ProductGroup = { id: crypto.randomUUID(), name: fullName };
-    await onPushBatch?.('productGroups', [newGroup]);
-    setCreateGroupModal({ isOpen: false, name: '', parentId: '' });
-    setChangeGroupModal(prev => ({ ...prev, selectedGroupId: newGroup.name }));
-    showToast(`Đã tạo nhóm hàng "${fullName}".`);
+    try {
+      const fullName = createGroupModal.parentId ? `${createGroupModal.parentId} >> ${trimmed}` : trimmed;
+      const newGroup: ProductGroup = { id: crypto.randomUUID(), name: fullName };
+      await onPushBatch?.('productGroups', [newGroup]);
+      setCreateGroupModal({ isOpen: false, name: '', parentId: '' });
+      setChangeGroupModal(prev => ({ ...prev, selectedGroupId: newGroup.name }));
+      showToast(`Đã tạo nhóm hàng "${fullName}".`);
+    } catch (err: unknown) {
+      showToast(`Lỗi tạo nhóm hàng: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
   }, [createGroupModal, onPushBatch, showToast]);
 
   const handleGoToWarranty = useCallback(() => {
@@ -662,11 +707,20 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   }, []);
 
   const handleDeleteViewed = useCallback(
-    (id: string) => {
-      onUpdateProducts(products.filter(prod => prod.id !== id));
-      setViewingProduct(null);
+    async (id: string) => {
+      try {
+        if (onUpdateSurgical) {
+          const idsToDelete = [id, ...products.filter(p => p.parentId === id).map(p => p.id)];
+          await onUpdateSurgical(idsToDelete.map(delId => ({ key: 'posProducts' as const, item: { id: delId }, isDelete: true })));
+        } else {
+          onUpdateProducts(products.filter(prod => prod.id !== id && prod.parentId !== id));
+        }
+        setViewingProduct(null);
+      } catch (err: unknown) {
+        showToast(`Lỗi xóa sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      }
     },
-    [onUpdateProducts, products]
+    [onUpdateProducts, onUpdateSurgical, products, showToast]
   );
 
   const handleEditViewed = useCallback(
@@ -813,6 +867,27 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             mode="page"
             onClose={() => setActiveTab('goods')}
             onApplyPrice={() => {}}
+            onSavePrices={async (updates) => {
+              try {
+                if (onUpdateSurgical) {
+                  const existing = new Map(products.map(p => [p.id, p]));
+                  await onUpdateSurgical(
+                    updates
+                      .filter(u => existing.has(u.id))
+                      .map(u => ({ key: 'posProducts', item: { ...existing.get(u.id)!, salePrice: u.salePrice } }))
+                  );
+                } else {
+                  onUpdateProducts(
+                    products.map(p => {
+                      const u = updates.find(x => x.id === p.id);
+                      return u ? { ...p, salePrice: u.salePrice } : p;
+                    })
+                  );
+                }
+              } catch (err: unknown) {
+                showToast(`Lỗi lưu giá: ${err instanceof Error ? err.message : String(err)}`, 'error');
+              }
+            }}
           />
         );
       case 'warranty':
@@ -1153,10 +1228,19 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           setGridDetailSiblings([]);
           openProductEditor(prod);
         }}
-        onDelete={id => {
-          onUpdateProducts(products.filter(p => p.id !== id));
-          setGridDetailProduct(null);
-          setGridDetailSiblings([]);
+        onDelete={async id => {
+          try {
+            if (onUpdateSurgical) {
+              const idsToDelete = [id, ...products.filter(p => p.parentId === id).map(p => p.id)];
+              await onUpdateSurgical(idsToDelete.map(delId => ({ key: 'posProducts' as const, item: { id: delId }, isDelete: true })));
+            } else {
+              onUpdateProducts(products.filter(p => p.id !== id && p.parentId !== id));
+            }
+            setGridDetailProduct(null);
+            setGridDetailSiblings([]);
+          } catch (err: unknown) {
+            showToast(`Lỗi xóa sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+          }
         }}
         onStopBusiness={handleStopBusiness}
         onPrintLabel={handlePrintLabel}

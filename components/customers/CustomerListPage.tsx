@@ -22,6 +22,7 @@ import {
 } from '../shared';
 import type { POSCustomer, POSOrder, CustomerDebtRecord, AppDataSurgicalUpdate } from '../../types';
 import { generateId } from '../../src/lib';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import POSQuickCustomerModal, { type QuickCustomerForm } from '../pos/POSQuickCustomerModal';
 import CustomerDetailPage from './CustomerDetailPage';
 
@@ -145,8 +146,8 @@ const CustomerListPage: React.FC<Props> = ({
     orders.forEach(o => {
       if (!o.customerId) return;
       const cur = map.get(o.customerId) || { sold: 0, returned: 0 };
-      if (o.isReturn) cur.returned += Math.abs(o.finalAmount);
-      else cur.sold += o.finalAmount;
+      if (o.isReturn) cur.returned += Math.abs(Number(o.totalAmount) || 0);
+      else cur.sold += calcOrderRevenue(o);
       map.set(o.customerId, cur);
     });
     return map;
@@ -169,7 +170,7 @@ const CustomerListPage: React.FC<Props> = ({
     if (!spentFrom && !spentTo) return map;
     orders.forEach(order => {
       if (!order.customerId || order.isReturn || !inDateRange(order.date, spentFrom, spentTo)) return;
-      map.set(order.customerId, (map.get(order.customerId) || 0) + order.finalAmount);
+      map.set(order.customerId, (map.get(order.customerId) || 0) + calcOrderRevenue(order));
     });
     return map;
   }, [orders, spentFrom, spentTo]);
@@ -206,18 +207,25 @@ const CustomerListPage: React.FC<Props> = ({
     if (lastTxnFrom || lastTxnTo) {
       list = list.filter(c => inDateRange(c.lastVisit || lastTransactionMap.get(c.id), lastTxnFrom, lastTxnTo));
     }
+    const minS = parseMoney(minSpent);
+    const maxS = parseMoney(maxSpent);
     if (spentFrom || spentTo) {
-      list = list.filter(c => (spentInRangeMap.get(c.id) || 0) > 0);
+      // Khi có date range, minSpent/maxSpent áp dụng cho spending trong khoảng — không phải all-time
+      list = list.filter(c => {
+        const rangeSpent = spentInRangeMap.get(c.id) || 0;
+        if (rangeSpent <= 0) return false;
+        if (minS != null && rangeSpent < minS) return false;
+        if (maxS != null && rangeSpent > maxS) return false;
+        return true;
+      });
+    } else {
+      if (minS != null) list = list.filter(c => c.totalSpent >= minS);
+      if (maxS != null) list = list.filter(c => c.totalSpent <= maxS);
     }
     if (creatorSearch.trim()) {
       const q = creatorSearch.toLowerCase();
       list = list.filter(c => (c.createdBy || '').toLowerCase().includes(q));
     }
-
-    const minS = parseMoney(minSpent);
-    const maxS = parseMoney(maxSpent);
-    if (minS != null) list = list.filter(c => c.totalSpent >= minS);
-    if (maxS != null) list = list.filter(c => c.totalSpent <= maxS);
 
     const minD = parseMoney(minDebt);
     const maxD = parseMoney(maxDebt);
@@ -336,7 +344,7 @@ const CustomerListPage: React.FC<Props> = ({
     setPage(1);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name?.trim()) return;
     if (editCustomer) {
       const updated = customers.map(c =>
@@ -344,7 +352,11 @@ const CustomerListPage: React.FC<Props> = ({
       );
       onUpdateCustomers(updated);
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posCustomers', item: { ...editCustomer, ...formData } }]);
+        try {
+          await onUpdateSurgical([{ key: 'posCustomers', item: { ...editCustomer, ...formData } }]);
+        } catch (err) {
+          console.error('[CustomerListPage] handleSave edit failed', err);
+        }
       }
       setEditCustomer(null);
     } else {
@@ -366,14 +378,18 @@ const CustomerListPage: React.FC<Props> = ({
       };
       onUpdateCustomers([...customers, newCustomer]);
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+        try {
+          await onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+        } catch (err) {
+          console.error('[CustomerListPage] handleSave add failed', err);
+        }
       }
     }
     setFormData(emptyForm());
     setShowAddModal(false);
   };
 
-  const handleSaveFromPOS = () => {
+  const handleSaveFromPOS = async () => {
     if (!posForm.name.trim()) return;
     const addressParts = [posForm.address, posForm.ward, posForm.district, posForm.province].filter(Boolean);
     if (editCustomer) {
@@ -392,7 +408,11 @@ const CustomerListPage: React.FC<Props> = ({
       };
       onUpdateCustomers(customers.map(c => c.id === editCustomer.id ? updated : c));
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+        try {
+          await onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+        } catch (err) {
+          console.error('[CustomerListPage] handleSaveFromPOS edit failed', err);
+        }
       }
       setEditCustomer(null);
     } else {
@@ -417,30 +437,42 @@ const CustomerListPage: React.FC<Props> = ({
       };
       onUpdateCustomers([...customers, newCustomer]);
       if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+        try {
+          await onUpdateSurgical([{ key: 'posCustomers', item: newCustomer }]);
+        } catch (err) {
+          console.error('[CustomerListPage] handleSaveFromPOS add failed', err);
+        }
       }
     }
     setShowPOSModal(false);
     setPosForm(emptyPOSForm());
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
     onUpdateCustomers(customers.filter(c => c.id !== deleteId));
     if (onUpdateSurgical) {
-      onUpdateSurgical([{ key: 'posCustomers', item: { id: deleteId }, isDelete: true }]);
+      try {
+        await onUpdateSurgical([{ key: 'posCustomers', item: { id: deleteId }, isDelete: true }]);
+      } catch (err) {
+        console.error('[CustomerListPage] handleDelete failed', err);
+      }
     }
     setDeleteId(null);
   };
 
-  const handleToggleStatus = (customer: POSCustomer) => {
+  const handleToggleStatus = async (customer: POSCustomer) => {
     const updated: POSCustomer = {
       ...customer,
       status: customer.status === 'inactive' ? 'active' : 'inactive',
     };
     onUpdateCustomers(customers.map(c => (c.id === customer.id ? updated : c)));
     if (onUpdateSurgical) {
-      onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+      try {
+        await onUpdateSurgical([{ key: 'posCustomers', item: updated }]);
+      } catch (err) {
+        console.error('[CustomerListPage] handleToggleStatus failed', err);
+      }
     }
     setDetailCustomer(updated);
   };

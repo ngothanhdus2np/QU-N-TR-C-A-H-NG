@@ -67,7 +67,12 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
               <p className="text-[9px] font-normal uppercase text-slate-400">Trạng thái</p>
-              <p className="text-sm font-normal text-slate-800 mt-1">{transaction.status || 'completed'}</p>
+              <p className="text-sm font-normal text-slate-800 mt-1">
+                {transaction.status === 'draft' ? 'Phiếu tạm'
+                  : transaction.status === 'cancelled' ? 'Đã hủy'
+                  : isPurchaseReturn ? 'Đã trả hàng'
+                  : 'Đã nhập hàng'}
+              </p>
             </div>
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
               <p className="text-[9px] font-normal uppercase text-slate-400">Người tạo</p>

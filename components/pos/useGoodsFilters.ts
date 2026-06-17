@@ -23,9 +23,8 @@ interface UseGoodsFiltersParams {
 }
 
 const getSkuNumber = (sku: string) => {
-  const matches = sku.match(/\d+/g);
-  if (!matches) return 0;
-  return Number(matches.join('')) || 0;
+  const match = sku.match(/\d+/);
+  return match ? Number(match[0]) : 0;
 };
 
 const getSortValue = (
@@ -56,9 +55,7 @@ const categoryMatchesSelection = (productPath: string, selectedPath: string) => 
   if (productPath === normalizedSelectedPath) return true;
   if (productPath.startsWith(normalizedSelectedPath + ' >> ')) return true;
 
-  const selectedParts = splitCategoryPath(normalizedSelectedPath);
-  const lastPart = selectedParts[selectedParts.length - 1];
-  return productPath === lastPart;
+  return false;
 };
 
 const sortProducts = (
@@ -242,11 +239,59 @@ export const useGoodsFilters = ({
     return counts;
   }, [products]);
 
+  // BUG-32: tổng tồn kho từ variants cho từng sản phẩm cha
+  const parentTotalStock = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of products) {
+      if (p.parentId) {
+        map.set(p.parentId, (map.get(p.parentId) ?? 0) + (p.stock || 0));
+      }
+    }
+    return map;
+  }, [products]);
+
+  // Map id → product cho tra cứu nhanh parent
+  const productById = React.useMemo(() => {
+    const map = new Map<string, POSProduct>();
+    for (const p of products) map.set(p.id, p);
+    return map;
+  }, [products]);
+
   const filteredProductCandidates = React.useMemo(() => {
     // Use search index for fast search (10x faster than linear scan)
-    const searchResults = debouncedSearchTerm 
-      ? searchProducts(debouncedSearchTerm)
-      : products;
+    let searchResults: POSProduct[];
+    if (debouncedSearchTerm) {
+      const lowerSearch = debouncedSearchTerm.toLowerCase();
+      const raw = searchProducts(debouncedSearchTerm);
+      const resultSet = new Map<string, POSProduct>();
+
+      // Thêm tất cả kết quả từ index
+      for (const p of raw) resultSet.set(p.id, p);
+
+      // Nếu child match → include parent của nó
+      for (const p of raw) {
+        if (p.parentId) {
+          const parent = productById.get(p.parentId);
+          if (parent) resultSet.set(parent.id, parent);
+        }
+      }
+
+      // Full SKU scan với includes() — tìm parent kể cả khi parent.sku='' trong cache cũ
+      for (const p of products) {
+        const skuMatch = (p.sku?.toLowerCase() || '').includes(lowerSearch);
+        if (!skuMatch) continue;
+        if (p.parentId) {
+          const parent = productById.get(p.parentId);
+          if (parent) resultSet.set(parent.id, parent);
+        } else {
+          resultSet.set(p.id, p);
+        }
+      }
+
+      searchResults = Array.from(resultSet.values());
+    } else {
+      searchResults = products;
+    }
 
     // Apply other filters on search results (much smaller set)
     return searchResults.filter(p => {
@@ -256,14 +301,16 @@ export const useGoodsFilters = ({
         filterCategories.some(fc => categoryMatchesSelection(productCategoryPath, fc));
       const matchBrand =
         !filterBrand || (p.brand || '').toLowerCase().includes(filterBrand.toLowerCase());
+      // BUG-32: dùng tổng stock của variants cho sản phẩm cha
+      const effectiveStock = p.isParent ? (parentTotalStock.get(p.id) ?? 0) : p.stock;
       const matchStock =
         filterStock === 'all'
           ? true
           : filterStock === 'in_stock'
-            ? p.stock > 0
+            ? effectiveStock > 0
             : filterStock === 'out_of_stock'
-              ? p.stock === 0
-              : p.stock > 0 && p.stock <= (p.minStock ?? 5);
+              ? effectiveStock <= 0
+              : effectiveStock > 0 && effectiveStock <= (p.minStock ?? 5);
       const matchLocation =
         !filterLocation || (p.location || '').toLowerCase().includes(filterLocation.toLowerCase());
       const matchAttr =
@@ -277,9 +324,9 @@ export const useGoodsFilters = ({
         filterSupplier.length === 0 ||
         filterSupplier.some(sel => {
           if (productSupplierMap.get(p.id)?.has(sel)) return true;
-          // Dùng pre-built map thay vì products.some() O(n) → tránh O(n²)
           if (!p.parentId) return parentProductSupplierMap.get(p.id)?.has(sel) ?? false;
-          return false;
+          // Variant chưa có phiếu nhập riêng → kiểm tra qua parent
+          return productSupplierMap.get(p.parentId)?.has(sel) ?? parentProductSupplierMap.get(p.parentId)?.has(sel) ?? false;
         });
       return matchCategory && matchBrand && matchStock && matchLocation && matchAttr && matchSupplier;
     });
@@ -287,6 +334,7 @@ export const useGoodsFilters = ({
     searchProducts,
     debouncedSearchTerm,
     products,
+    productById,
     filterCategories,
     filterBrand,
     filterStock,
@@ -295,6 +343,7 @@ export const useGoodsFilters = ({
     filterSupplier,
     productSupplierMap,
     parentProductSupplierMap,
+    parentTotalStock,
   ]);
 
 
@@ -319,8 +368,9 @@ export const useGoodsFilters = ({
     [filteredProductCandidates, sortKey, sortDirection, parentSkuFallback]
   );
 
+  // BUG-38: thống nhất với filteredProducts (lọc !p.parentId = rows bảng)
   const sellableSkuCount = React.useMemo(
-    () => filteredProductCandidates.filter(p => !p.isParent).length,
+    () => filteredProductCandidates.filter(p => !p.parentId).length,
     [filteredProductCandidates]
   );
 
@@ -331,20 +381,21 @@ export const useGoodsFilters = ({
 
   const variantsByParentId = React.useMemo(() => {
     const map = new Map<string, POSProduct[]>();
-    const parentSkuFallback = new Map<string, number>();
+    // BUG-44: đổi tên tránh shadowing biến parentSkuFallback ở outer scope
+    const variantParentSkuFallback = new Map<string, number>();
     for (const p of products) {
       if (p.parentId) {
         const arr = map.get(p.parentId);
         if (arr) arr.push(p);
         else map.set(p.parentId, [p]);
         if (p.sku) {
-          const current = parentSkuFallback.get(p.parentId) ?? 0;
-          parentSkuFallback.set(p.parentId, Math.max(current, getSkuNumber(p.sku)));
+          const current = variantParentSkuFallback.get(p.parentId) ?? 0;
+          variantParentSkuFallback.set(p.parentId, Math.max(current, getSkuNumber(p.sku)));
         }
       }
     }
     map.forEach((items, parentId) => {
-      map.set(parentId, sortProducts(items, sortKey, sortDirection, parentSkuFallback));
+      map.set(parentId, sortProducts(items, sortKey, sortDirection, variantParentSkuFallback));
     });
     return map;
   }, [products, sortKey, sortDirection]);

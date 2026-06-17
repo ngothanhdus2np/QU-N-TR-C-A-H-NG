@@ -1,5 +1,47 @@
 import type { Employee, InventoryTransaction, POSCustomer, POSOrder, POSProduct, Supplier } from '../../types';
 
+// Xây dựng map giá vốn lịch sử: productId → [{date, price}] đã sort tăng dần theo date.
+// Nguồn dữ liệu: item.nextImportPrice từ InventoryTransaction (type='Import').
+// Bảng product_cost_history trên Supabase hiện chưa được dùng — nếu cần audit
+// trail cấp DB thì có thể ghi vào đó khi hoàn tất phiếu nhập và query từ đây.
+function buildCostHistory(
+  transactions: InventoryTransaction[]
+): Map<string, Array<{ date: string; price: number }>> {
+  const map = new Map<string, Array<{ date: string; price: number }>>();
+  transactions
+    .filter(t => t.type === 'Import')
+    .forEach(t => {
+      t.items.forEach(item => {
+        const price = Number(item.nextImportPrice);
+        if (!price || price <= 0) return;
+        const list = map.get(item.productId) ?? [];
+        list.push({ date: t.date, price });
+        map.set(item.productId, list);
+      });
+    });
+  map.forEach((list, key) => {
+    map.set(key, list.sort((a, b) => a.date.localeCompare(b.date)));
+  });
+  return map;
+}
+
+// Lấy giá vốn tại thời điểm gần nhất trước hoặc bằng saleDate
+function getHistoricalCost(
+  costHistory: Map<string, Array<{ date: string; price: number }>>,
+  productId: string,
+  saleDate: string,
+  fallback: number
+): number {
+  const list = costHistory.get(productId);
+  if (!list || list.length === 0) return fallback;
+  let last: number | null = null;
+  for (const entry of list) {
+    if (entry.date <= saleDate) last = entry.price;
+    else break;
+  }
+  return last ?? fallback;
+}
+
 export interface DateRange {
   startDate: string;
   endDate: string;
@@ -39,6 +81,7 @@ export interface SalesHorizontalReportRow {
   revenue: number;
   returnOrderCount: number;
   returnValue: number;
+  returnRefund: number; // Tiền trả khách = "Cần trả khách" KiotViet (tiền mặt thực tế hoàn lại)
   netRevenue: number;
 }
 
@@ -144,7 +187,7 @@ export const filterOrdersByDateRange = (orders: POSOrder[], range: DateRange) =>
 
 export const getOrderChannelName = (order: POSOrder) => order.channelName || 'Bán trực tiếp';
 export const getOrderStatus = (order: POSOrder) => order.status || 'completed';
-export const getOrderCreatedBy = (order: POSOrder) => order.createdBy || order.staffId || '';
+export const getOrderCreatedBy = (order: POSOrder) => order.staffName || order.createdBy || order.staffId || '';
 export const getOrderPriceBookText = (order: POSOrder) =>
   `${order.priceBookId || ''} ${order.priceBookName || ''}`.trim() || 'Bảng giá chung';
 
@@ -174,10 +217,28 @@ export const orderMatchesReportFilters = (
   return true;
 };
 
+/**
+ * Doanh thu 1 đơn hàng theo chuẩn KiotViet:
+ *   Đơn bán  → totalAmount − discount (không trừ điểm tích lũy)
+ *   Đơn trả  → −totalAmount (giá trị hàng trả)
+ * Dùng hàm này ở MỌI nơi cần tính doanh thu để đảm bảo nhất quán.
+ */
+export const calcOrderRevenue = (order: POSOrder): number => {
+  const totalAmount = Math.abs(Number(order.totalAmount) || 0);
+  if (order.isReturn) return -totalAmount;
+  const finalAmount = Number(order.finalAmount) || 0;
+  const discount = order.discount != null
+    ? Math.abs(Number(order.discount))
+    : Math.max(0, totalAmount - finalAmount);
+  return totalAmount - discount;
+};
+
 export const addOrderAmount = <T extends ReportAmountSummary>(target: T, order: POSOrder) => {
-  const amount = Number(order.finalAmount) || 0;
-  if (order.isReturn) target.returned += amount;
-  else target.revenue += amount;
+  if (order.isReturn) {
+    target.returned += Math.abs(Number(order.totalAmount) || 0);
+  } else {
+    target.revenue += calcOrderRevenue(order);
+  }
   target.netRevenue = target.revenue - target.returned;
 };
 
@@ -256,7 +317,8 @@ export const getSalesProfitRowsByDate = (
   orders: POSOrder[],
   products: POSProduct[],
   range: DateRange,
-  filters: OrderReportFilters = {}
+  filters: OrderReportFilters = {},
+  inventoryTransactions?: InventoryTransaction[]
 ): SalesProfitRow[] => {
   const productCostByKey = new Map<string, number>();
   products.forEach(product => {
@@ -265,6 +327,9 @@ export const getSalesProfitRowsByDate = (
     productCostByKey.set(product.id, cost);
     if (product.sku) productCostByKey.set(product.sku, cost);
   });
+
+  // Nếu có lịch sử giao dịch, dùng giá vốn tại thời điểm bán thay vì giá hiện tại
+  const costHistory = inventoryTransactions ? buildCostHistory(inventoryTransactions) : null;
 
   const map = new Map<string, SalesProfitRow>();
   const start = new Date(`${range.startDate}T00:00:00`);
@@ -290,17 +355,19 @@ export const getSalesProfitRowsByDate = (
       cogs: 0,
       profit: 0,
     };
-    const amount = Number(order.finalAmount) || 0;
     const cogs = order.items.reduce((sum, item) => {
-      const unitCost = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
+      const fallback = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
+      const unitCost = costHistory
+        ? getHistoricalCost(costHistory, item.productId, order.date, fallback)
+        : fallback;
       return sum + unitCost * (Number(item.quantity) || 0);
     }, 0);
 
     if (order.isReturn) {
-      row.revenue -= amount;
+      row.revenue -= Math.abs(Number(order.totalAmount) || 0);
       row.cogs -= cogs;
     } else {
-      row.revenue += amount;
+      row.revenue += calcOrderRevenue(order);
       row.cogs += cogs;
     }
     row.profit = row.revenue - row.cogs;
@@ -321,50 +388,38 @@ export const getSalesHorizontalRowsByDate = (
   const start = new Date(`${range.startDate}T00:00:00`);
   const end = new Date(`${range.endDate}T00:00:00`);
 
+  const emptyRow = (key: string, label: string): SalesHorizontalReportRow => ({
+    key, label, saleOrderCount: 0, grossAmount: 0, discount: 0,
+    revenue: 0, returnOrderCount: 0, returnValue: 0, returnRefund: 0, netRevenue: 0,
+  });
+
   for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const key = toReportDate(cursor);
-    map.set(key, {
-      key,
-      label: cursor.toLocaleDateString('vi-VN'),
-      saleOrderCount: 0,
-      grossAmount: 0,
-      discount: 0,
-      revenue: 0,
-      returnOrderCount: 0,
-      returnValue: 0,
-      netRevenue: 0,
-    });
+    map.set(key, emptyRow(key, cursor.toLocaleDateString('vi-VN')));
   }
 
   filterOrdersByDateRange(orders, range).forEach(order => {
     if (!orderMatchesReportFilters(order, filters)) return;
     const key = toReportDate(new Date(order.date));
     const date = new Date(`${key}T00:00:00`);
-    const row = map.get(key) ?? {
-      key,
-      label: date.toLocaleDateString('vi-VN'),
-      saleOrderCount: 0,
-      grossAmount: 0,
-      discount: 0,
-      revenue: 0,
-      returnOrderCount: 0,
-      returnValue: 0,
-      netRevenue: 0,
-    };
+    const row = map.get(key) ?? emptyRow(key, date.toLocaleDateString('vi-VN'));
 
     const totalAmount = Number(order.totalAmount) || 0;
     const finalAmount = Number(order.finalAmount) || 0;
-    // Dùng order.discount nếu đã được set (kể cả = 0), tránh tính lại sai khi discount rõ ràng = 0
-    const discount = order.discount != null ? Number(order.discount) : Math.max(0, totalAmount - finalAmount);
+    // Dùng order.discount nếu đã được set, luôn lấy giá trị tuyệt đối (KiotViet đôi khi export âm)
+    const discount = order.discount != null ? Math.abs(Number(order.discount)) : Math.max(0, totalAmount - finalAmount);
 
     if (order.isReturn) {
       row.returnOrderCount += 1;
-      row.returnValue += finalAmount;
+      row.returnValue += Math.abs(totalAmount);
+      // Tiền trả khách = finalAmount của đơn trả ("Cần trả khách" KiotViet)
+      row.returnRefund += Math.abs(finalAmount);
     } else {
       row.saleOrderCount += 1;
       row.grossAmount += totalAmount;
       row.discount += discount;
-      row.revenue += finalAmount;
+      // KiotViet: Doanh thu = Tổng tiền hàng − Giảm giá HĐ (không trừ giảm giá dòng SP / điểm)
+      row.revenue += totalAmount - discount;
     }
     row.netRevenue = row.revenue - row.returnValue;
     map.set(key, row);
@@ -408,13 +463,17 @@ export const getSalesInvoiceDiscountRowsByDate = (
 export const getSalesStaffRows = (
   orders: POSOrder[],
   range: DateRange,
-  filters: OrderReportFilters = {}
+  filters: OrderReportFilters = {},
+  employees: Employee[] = []
 ): SalesStaffReportRow[] => {
   const map = new Map<string, SalesStaffReportRow>();
+  const employeeById = new Map(employees.map(e => [e.id, e]));
 
   filterOrdersByDateRange(orders, range).forEach(order => {
     if (!orderMatchesReportFilters(order, filters)) return;
-    const staffName = getOrderCreatedBy(order) || UNKNOWN_STAFF;
+    const rawId = order.createdBy || order.staffId || '';
+    const resolved = employeeById.get(rawId)?.name;
+    const staffName = order.staffName || resolved || rawId || UNKNOWN_STAFF;
     const row = map.get(staffName) ?? {
       key: staffName,
       staffName,
@@ -424,13 +483,12 @@ export const getSalesStaffRows = (
       returnValue: 0,
       netRevenue: 0,
     };
-    const amount = Number(order.finalAmount) || 0;
     if (order.isReturn) {
       row.returnOrderCount += 1;
-      row.returnValue += amount;
+      row.returnValue += Math.abs(Number(order.totalAmount) || 0);
     } else {
       row.saleOrderCount += 1;
-      row.revenue += amount;
+      row.revenue += calcOrderRevenue(order);
     }
     row.netRevenue = row.revenue - row.returnValue;
     map.set(staffName, row);
@@ -583,9 +641,9 @@ export const getEndOfDayReportRows = (
       label: 'Trả hàng',
       count: returns.length,
       quantity: sumQuantity(returns),
-      revenue: -returns.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0),
-      discount: -returns.reduce((sum, order) => sum + Math.max(0, (Number(order.totalAmount) || 0) - (Number(order.finalAmount) || 0)), 0),
-      actual: -returns.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0),
+      revenue: -returns.reduce((sum, order) => sum + Math.abs(Number(order.totalAmount) || 0), 0),
+      discount: -returns.reduce((sum, order) => sum + Math.max(0, Math.abs(Number(order.totalAmount) || 0) - Math.abs(Number(order.finalAmount) || 0)), 0),
+      actual: -returns.reduce((sum, order) => sum + Math.abs(Number(order.finalAmount) || 0), 0),
     },
   ];
 };

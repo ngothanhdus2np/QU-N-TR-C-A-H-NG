@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   ChevronDown,
   Palette,
+  LogOut,
 } from 'lucide-react';
 import type { AppThemeId } from '../constants/themes';
 import { APP_THEMES } from '../constants/themes';
@@ -65,6 +66,7 @@ interface TopNavProps {
   onUpdatePaymentSettings: (settings: POSPaymentSettings) => Promise<void>;
   inventorySettings?: POSInventorySettings;
   onUpdateInventorySettings: (settings: POSInventorySettings) => Promise<void>;
+  onSignOut?: () => void;
 }
 
 const ALERT_ICONS: Record<string, React.ElementType> = {
@@ -96,8 +98,10 @@ const TopNav: React.FC<TopNavProps> = ({
   onUpdatePaymentSettings,
   inventorySettings,
   onUpdateInventorySettings,
+  onSignOut,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
@@ -146,6 +150,14 @@ const TopNav: React.FC<TopNavProps> = ({
 
   const errorCount = syncErrors?.length ?? 0;
   const totalBadge = errorCount + alerts.length;
+  const hasOfflineQueue = offlinePendingCount > 0;
+  const syncStatusLabel = isSyncing
+    ? 'Syncing'
+    : isCloudConnected
+      ? hasOfflineQueue
+        ? 'Online'
+        : 'Online'
+      : 'Offline';
 
   const categorizedErrors = useMemo(() => {
     if (!syncErrors) return {};
@@ -188,7 +200,7 @@ const TopNav: React.FC<TopNavProps> = ({
             <span
               className={`text-2xs font-normal uppercase tracking-widest ${isSyncing ? 'text-indigo-600' : isCloudConnected ? 'text-emerald-700' : 'text-rose-600'}`}
             >
-              {isSyncing ? 'Syncing' : isCloudConnected ? 'Online' : 'Offline'}
+              {syncStatusLabel}
             </span>
             {lastSyncTime && !isSyncing && (
               <span className="text-[9px] text-slate-400 font-normal border-l border-slate-200 pl-2.5">
@@ -214,7 +226,7 @@ const TopNav: React.FC<TopNavProps> = ({
               className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-2xs font-normal uppercase tracking-wider transition-all shadow-sm shadow-amber-200 animate-pulse"
             >
               <WifiOff className="w-3 h-3" />
-              {offlinePendingCount} offline
+              {offlinePendingCount} chờ đồng bộ
               <Upload className="w-3 h-3" />
             </button>
           )}
@@ -399,16 +411,41 @@ const TopNav: React.FC<TopNavProps> = ({
 
           {/* User */}
           <div className="flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-100">
-            <div className="hidden xl:block text-right">
-              <p className="text-xs font-normal text-slate-900 tracking-tight leading-none">
-                Ngô Thành Du
-              </p>
-              <p className="text-[9px] text-indigo-500 font-normal uppercase tracking-widest mt-0.5">
-                Admin CFO
-              </p>
-            </div>
-            <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden">
-              <UserCircle className="w-full h-full text-slate-300" />
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(v => !v)}
+                className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 transition-colors"
+              >
+                <div className="hidden xl:block text-right">
+                  <p className="text-xs font-normal text-slate-900 tracking-tight leading-none">
+                    Ngô Thành Du
+                  </p>
+                  <p className="text-[9px] text-indigo-500 font-normal uppercase tracking-widest mt-0.5">
+                    Admin CFO
+                  </p>
+                </div>
+                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden">
+                  <UserCircle className="w-full h-full text-slate-300" />
+                </div>
+              </button>
+
+              {/* Dropdown đăng xuất */}
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 w-44 rounded-xl border border-slate-100 bg-white py-1 shadow-lg">
+                    {onSignOut && (
+                      <button
+                        onClick={() => { setShowUserMenu(false); onSignOut(); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Đăng xuất
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

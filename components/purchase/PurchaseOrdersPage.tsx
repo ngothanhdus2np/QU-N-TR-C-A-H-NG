@@ -113,17 +113,18 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       result = result.filter(
         order =>
           order.id.toLowerCase().includes(term) ||
+          order.referenceId?.toLowerCase().includes(term) ||
           order.supplierName?.toLowerCase().includes(term) ||
           order.note?.toLowerCase().includes(term)
       );
     }
 
-    // Date range
+    // Date range — compare only the date part (order.date is ISO timestamp)
     if (dateRange.start) {
-      result = result.filter(order => order.date >= dateRange.start);
+      result = result.filter(order => order.date.slice(0, 10) >= dateRange.start);
     }
     if (dateRange.end) {
-      result = result.filter(order => order.date <= dateRange.end);
+      result = result.filter(order => order.date.slice(0, 10) <= dateRange.end);
     }
 
     // Status
@@ -250,12 +251,21 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
 
   const handleBulkDelete = async () => {
     if (confirm(`Xóa ${selectedOrders.length} phiếu nhập đã chọn?`)) {
-      try {
-        await Promise.all(selectedOrders.map(id => onDeletePurchase(id)));
+      const failed: string[] = [];
+      for (const id of selectedOrders) {
+        try {
+          await onDeletePurchase(id);
+        } catch (err) {
+          console.error('[PurchaseOrdersPage] Bulk delete item failed', id, err);
+          failed.push(id);
+        }
+      }
+      if (failed.length > 0) {
+        showToast(`Xóa thất bại ${failed.length}/${selectedOrders.length} phiếu. Các phiếu còn lại đã xóa.`, 'error');
+        setSelectedOrders(failed);
+      } else {
         setSelectedOrders([]);
-      } catch (err) {
-        console.error('[PurchaseOrdersPage] Bulk delete failed', err);
-        showToast('Xóa hàng loạt thất bại. Vui lòng thử lại.', 'error');
+        showToast(`Đã xóa ${selectedOrders.length} phiếu nhập`, 'success');
       }
     }
   };
@@ -302,7 +312,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             },
           ]}
           selected={statusFilter}
-          onChange={setStatusFilter}
+          onChange={v => { setStatusFilter(v); setCurrentPage(1); }}
           searchable={false}
         />
       </FilterSection>
@@ -311,8 +321,8 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
         <FilterDateRange
           startDate={dateRange.start}
           endDate={dateRange.end}
-          onStartDateChange={date => setDateRange(prev => ({ ...prev, start: date }))}
-          onEndDateChange={date => setDateRange(prev => ({ ...prev, end: date }))}
+          onStartDateChange={date => { setDateRange(prev => ({ ...prev, start: date })); setCurrentPage(1); }}
+          onEndDateChange={date => { setDateRange(prev => ({ ...prev, end: date })); setCurrentPage(1); }}
         />
       </FilterSection>
 
@@ -326,7 +336,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
               .length,
           }))}
           selected={supplierFilter}
-          onChange={setSupplierFilter}
+          onChange={v => { setSupplierFilter(v); setCurrentPage(1); }}
         />
       </FilterSection>
 
@@ -339,7 +349,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             count: purchaseOrders.filter(o => o.staffId === creator).length,
           }))}
           selected={creatorFilter}
-          onChange={setCreatorFilter}
+          onChange={v => { setCreatorFilter(v); setCurrentPage(1); }}
           searchable={false}
         />
       </FilterSection>
@@ -350,7 +360,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   const toolbar = (
     <ListPageToolbar
       searchTerm={searchTerm}
-      onSearchChange={setSearchTerm}
+      onSearchChange={term => { setSearchTerm(term); setCurrentPage(1); }}
       searchPlaceholder="Tìm mã phiếu nhập hoặc nhà cung cấp..."
       rightActions={
         <>
@@ -499,7 +509,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       sortable: true,
       render: order => {
         const total =
-          order.totalAmount ||
+          order.totalAmount ??
           order.items.reduce((sum, item) => {
             const itemWithPrice = item as typeof item & { price?: number; discount?: number };
             const price = itemWithPrice.price || 0;

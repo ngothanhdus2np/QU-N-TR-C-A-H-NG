@@ -28,6 +28,7 @@ interface OrderReturnsProps {
   orders: AppData['posOrders'];
   products: AppData['posProducts'];
   customers: AppData['posCustomers'];
+  revenue: AppData['revenue'];
   transactions?: AppData['inventoryTransactions'];
   onUpdateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
@@ -38,6 +39,7 @@ interface ReturnItem {
   quantity: number;
   originalPrice: number;
   refundAmount: number;
+  maxQuantity: number;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -85,6 +87,7 @@ export default function OrderReturns({
   orders,
   products,
   customers,
+  revenue,
   transactions = [],
   onUpdateSurgical,
 }: OrderReturnsProps) {
@@ -193,6 +196,40 @@ export default function OrderReturns({
     return map;
   }, [orders, transactions]);
 
+  const getReturnedQuantitiesByProduct = (order: AppData['posOrders'][number]) => {
+    const returned = new Map<string, number>();
+    orders
+      .filter(candidate =>
+        isReturnInvoice(candidate) &&
+        candidate.status !== 'cancelled' &&
+        candidate.notes?.includes(order.orderCode)
+      )
+      .forEach(candidate => {
+        candidate.items.forEach(item => {
+          returned.set(
+            item.productId,
+            (returned.get(item.productId) || 0) + Math.abs(Number(item.quantity) || 0)
+          );
+        });
+      });
+
+    transactions
+      .filter(transaction =>
+        (transaction.type === 'Return' || transaction.type === 'return') &&
+        transaction.status !== 'cancelled' &&
+        (transaction.referenceId === order.id || transaction.note?.includes(order.orderCode))
+      )
+      .forEach(transaction => {
+        transaction.items.forEach(item => {
+          returned.set(
+            item.productId,
+            (returned.get(item.productId) || 0) + Math.abs(Number(item.quantity) || 0)
+          );
+        });
+      });
+    return returned;
+  };
+
   const filteredReturns = useMemo(() => {
     return allReturns.filter(o => {
       const q = searchTerm.toLowerCase();
@@ -240,7 +277,7 @@ export default function OrderReturns({
     () => ({
       total: filteredReturns.reduce((s, o) => s + absMoney(o.totalAmount), 0),
       needRefund: filteredReturns.reduce((s, o) => s + absMoney(o.finalAmount), 0),
-      refunded: filteredReturns.reduce((s, o) => s + absMoney(o.finalAmount), 0),
+      refunded: filteredReturns.reduce((s, o) => s + (o.status === 'cancelled' ? 0 : absMoney(o.finalAmount)), 0),
     }),
     [filteredReturns]
   );
@@ -292,21 +329,29 @@ export default function OrderReturns({
   }, [orders, orderSearch]);
 
   const handleSelectOrder = (order: AppData['posOrders'][0]) => {
+    const returnedQuantities = getReturnedQuantitiesByProduct(order);
     setSelectedOrder(order);
     setReturnItems(
-      order.items.map(item => ({
-        productId: item.productId,
-        productName: item.name,
-        quantity: 0,
-        originalPrice: item.price,
-        refundAmount: 0,
-      }))
+      order.items.map(item => {
+        const maxQuantity = Math.max(
+          0,
+          (Number(item.quantity) || 0) - (returnedQuantities.get(item.productId) || 0)
+        );
+        return {
+          productId: item.productId,
+          productName: item.name,
+          quantity: 0,
+          originalPrice: item.price - (Number(item.discount) || 0),
+          refundAmount: 0,
+          maxQuantity,
+        };
+      })
     );
     setReturnReason('');
   };
 
   const handleUpdateQty = (idx: number, raw: string) => {
-    const max = selectedOrder?.items[idx]?.quantity || 0;
+    const max = returnItems[idx]?.maxQuantity ?? selectedOrder?.items[idx]?.quantity ?? 0;
     const qty = Math.min(Math.max(0, Number(raw) || 0), max);
     setReturnItems(prev => {
       const next = [...prev];
@@ -325,6 +370,10 @@ export default function OrderReturns({
     const itemsToReturn = returnItems.filter(i => i.quantity > 0);
     if (itemsToReturn.length === 0) {
       alert('Vui lòng chọn ít nhất 1 sản phẩm để trả hàng');
+      return;
+    }
+    if (itemsToReturn.some(item => item.quantity > item.maxQuantity)) {
+      alert('Số lượng trả vượt quá số lượng còn được trả của hóa đơn.');
       return;
     }
     if (!returnReason.trim()) {
@@ -350,13 +399,19 @@ export default function OrderReturns({
         item: {
           id: crypto.randomUUID(),
           date: todayStr,
-          type: 'return' as const,
-          items: itemsToReturn.map(i => ({
-            productId: i.productId,
-            productName: i.productName,
-            quantity: i.quantity,
-            price: i.originalPrice,
-          })),
+          type: 'Return' as const,
+          items: itemsToReturn.map(i => {
+            const product = products.find(p => p.id === i.productId);
+            const prevStock = product?.stock ?? 0;
+            return {
+              productId: i.productId,
+              productName: i.productName,
+              quantity: i.quantity,
+              price: i.originalPrice,
+              previousStock: prevStock,
+              newStock: prevStock + i.quantity,
+            };
+          }),
           note: `Trả hàng từ đơn ${selectedOrder.orderCode}. Lý do: ${returnReason}`,
           referenceId: selectedOrder.id,
           staffId: selectedOrder.staffId,
@@ -369,9 +424,10 @@ export default function OrderReturns({
       if (selectedOrder.customerId && selectedOrder.pointsEarned) {
         const customer = customers.find(c => c.id === selectedOrder.customerId);
         if (customer) {
-          const pts = Math.floor(
-            (totalRefund / (selectedOrder.finalAmount || 1)) * (selectedOrder.pointsEarned || 0)
-          );
+          const finalAmt = Number(selectedOrder.finalAmount) || 0;
+          const pts = finalAmt > 0
+            ? Math.floor((totalRefund / finalAmt) * (selectedOrder.pointsEarned || 0))
+            : 0;
           updates.push({
             key: 'posCustomers',
             item: {
@@ -382,6 +438,45 @@ export default function OrderReturns({
             isDelete: false,
           });
         }
+      }
+
+      // Cập nhật revenue: trừ doanh thu, trừ COGS hàng trả về kho
+      const returnDateKey = new Date().toLocaleDateString('en-CA');
+      const existingRevenue = (revenue || []).find(r => r.date === returnDateKey);
+      const returnCogs = itemsToReturn.reduce((sum, ri) => {
+        const product = products.find(p => p.id === ri.productId);
+        return sum + (product?.importPrice || 0) * ri.quantity;
+      }, 0);
+      if (existingRevenue) {
+        const updatedNetRevenue = existingRevenue.netRevenue - totalRefund;
+        const updatedTotalCogs = (existingRevenue.totalCogs || 0) - returnCogs;
+        updates.push({
+          key: 'revenue',
+          item: {
+            ...existingRevenue,
+            returnsValue: (existingRevenue.returnsValue || 0) + totalRefund,
+            netRevenue: updatedNetRevenue,
+            totalCogs: updatedTotalCogs,
+            grossProfit: updatedNetRevenue - updatedTotalCogs,
+          },
+        });
+      } else {
+        const netRevenue = -totalRefund;
+        const totalCogs = -returnCogs;
+        updates.push({
+          key: 'revenue',
+          item: {
+            id: crypto.randomUUID(),
+            date: returnDateKey,
+            totalGrossRevenue: 0,
+            discount: 0,
+            revenueOther: 0,
+            returnsValue: totalRefund,
+            netRevenue,
+            totalCogs,
+            grossProfit: netRevenue - totalCogs,
+          },
+        });
       }
 
       await onUpdateSurgical(updates);
@@ -501,9 +596,39 @@ export default function OrderReturns({
       });
     });
 
+    // Hoàn lại revenue đã trừ khi xử lý phiếu trả
+    const cancelDateKey = new Date(order.date).toLocaleDateString('en-CA');
+    const existingRevenue = (revenue || []).find(r => r.date === cancelDateKey);
+    const cancelReturnCogs = order.items.reduce((sum, item) => {
+      const product = products.find(p => p.id === item.productId);
+      return sum + (product?.importPrice || 0) * Math.abs(Number(item.quantity) || 0);
+    }, 0);
+    const returnValue = absMoney(order.totalAmount);
+    if (existingRevenue && returnValue > 0) {
+      // Khi hủy phiếu trả: hoàn lại netRevenue bằng returnValue (totalAmount)
+      // Đối xứng với handleProcessReturn đã trừ totalRefund (= totalAmount)
+      const updatedNetRevenue = existingRevenue.netRevenue + returnValue;
+      const updatedTotalCogs = (existingRevenue.totalCogs || 0) + cancelReturnCogs;
+      updates.push({
+        key: 'revenue',
+        item: {
+          ...existingRevenue,
+          returnsValue: Math.max(0, (existingRevenue.returnsValue || 0) - returnValue),
+          netRevenue: updatedNetRevenue,
+          totalCogs: updatedTotalCogs,
+          grossProfit: updatedNetRevenue - updatedTotalCogs,
+        },
+      });
+    }
+
     if (updates.length === 0) return;
-    await onUpdateSurgical(updates);
-    setExpandedReturnId(null);
+    try {
+      await onUpdateSurgical(updates);
+      setExpandedReturnId(null);
+    } catch (err) {
+      console.error('[OrderReturns] handleCancelReturn failed', err);
+      alert('Hủy phiếu trả hàng thất bại. Vui lòng thử lại.');
+    }
   };
 
   const handleCopyReturn = async (order: AppData['posOrders'][number]) => {
@@ -523,16 +648,21 @@ export default function OrderReturns({
   };
 
   const handleSaveReturn = async (order: AppData['posOrders'][number]) => {
-    const source = returnSourceMap.get(order.id);
-    if (source === 'order') {
-      await onUpdateSurgical([{ key: 'posOrders', item: order, isDelete: false }]);
-    } else {
-      const transaction = transactions.find(t => t.id === order.id);
-      if (transaction) {
-        await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction, isDelete: false }]);
+    try {
+      const source = returnSourceMap.get(order.id);
+      if (source === 'order') {
+        await onUpdateSurgical([{ key: 'posOrders', item: order, isDelete: false }]);
+      } else {
+        const transaction = transactions.find(t => t.id === order.id);
+        if (transaction) {
+          await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction, isDelete: false }]);
+        }
       }
+      alert('Đã lưu phiếu trả hàng.');
+    } catch (err) {
+      console.error('[OrderReturns] handleSaveReturn failed', err);
+      alert('Lưu phiếu trả hàng thất bại. Vui lòng thử lại.');
     }
-    alert('Đã lưu phiếu trả hàng.');
   };
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -549,7 +679,7 @@ export default function OrderReturns({
             key={value}
             label={label}
             checked={returnTypeFilter.includes(value)}
-            onChange={() => toggleArr(returnTypeFilter, value, setReturnTypeFilter)}
+            onChange={() => { toggleArr(returnTypeFilter, value, setReturnTypeFilter); setCurrentPage(1); }}
           />
         ))}
       </FilterSection>
@@ -564,7 +694,7 @@ export default function OrderReturns({
             key={value}
             label={label}
             checked={statusFilter.includes(value)}
-            onChange={() => toggleArr(statusFilter, value, setStatusFilter)}
+            onChange={() => { toggleArr(statusFilter, value, setStatusFilter); setCurrentPage(1); }}
           />
         ))}
       </FilterSection>
@@ -771,7 +901,7 @@ export default function OrderReturns({
                     const product = productLookup.get(item.productId);
                     return sum + (product?.importPrice || 0) * item.quantity;
                   }, 0);
-                  const returnProfitImpact = absMoney(order.finalAmount) - returnCogs;
+                  const returnProfitImpact = absMoney(order.totalAmount) - returnCogs;
                   const originalOrder = [...orders]
                     .filter(
                       candidate =>

@@ -189,21 +189,41 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS (Optional but recommended)
--- ALTER TABLE shopee_revenue_records ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE shopee_product_group_revenue ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE shopee_source_data ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE shopee_inventory_in ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE shopee_inventory_out ENABLE ROW LEVEL SECURITY;
+-- Enable RLS cho 5 bảng Shopee — [PRODUCTION FIX: đã bỏ comment 2026-06-13]
+ALTER TABLE shopee_revenue_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopee_product_group_revenue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopee_source_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopee_inventory_in ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopee_inventory_out ENABLE ROW LEVEL SECURITY;
 
--- Create policies (Allow all for simplicity in dev, adjust for production)
--- CREATE POLICY "Allow all" ON shopee_revenue_records FOR ALL USING (true);
--- CREATE POLICY "Allow all" ON shopee_product_group_revenue FOR ALL USING (true);
--- CREATE POLICY "Allow all" ON shopee_inventory_in FOR ALL USING (true);
--- CREATE POLICY "Allow all" ON shopee_inventory_out FOR ALL USING (true);
+-- Policies: chỉ authenticated user được đọc/ghi (block anon access)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_revenue_records' AND policyname='Allow authenticated') THEN
+    CREATE POLICY "Allow authenticated" ON shopee_revenue_records FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_product_group_revenue' AND policyname='Allow authenticated') THEN
+    CREATE POLICY "Allow authenticated" ON shopee_product_group_revenue FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_inventory_in' AND policyname='Allow authenticated') THEN
+    CREATE POLICY "Allow authenticated" ON shopee_inventory_in FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_inventory_out' AND policyname='Allow authenticated') THEN
+    CREATE POLICY "Allow authenticated" ON shopee_inventory_out FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- FIX: shopee_source_data có RLS bật nhưng thiếu policy anon — chạy lệnh này nếu app không đọc được source data
-CREATE POLICY IF NOT EXISTS "Allow all anon" ON shopee_source_data FOR ALL TO anon USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_source_data' AND policyname='Allow all authenticated') THEN
+    CREATE POLICY "Allow all authenticated" ON shopee_source_data FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 
 -- Audit Logs (thêm vào Supabase để bật tính năng audit trail)
@@ -852,3 +872,424 @@ ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS refund_amount NUMERIC DEFAULT 0;
 -- Tên nhân viên thô từ KiotViet (staff_id lưu UUID, staff_name lưu tên gốc)
 -- ============================================================
 ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS staff_name TEXT;
+
+-- Phân bổ thanh toán nhiều phương thức (cash/bank/card/momo)
+-- ============================================================
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS split_payments JSONB;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS cash_received NUMERIC DEFAULT 0;
+
+-- ============================================================
+-- STORE WEBSITE — Bảng cho website PHÚC SANG — 2026-06-16
+-- Chạy thủ công trên Supabase Dashboard → SQL Editor
+-- ============================================================
+
+-- Thêm channel vào pos_orders để phân biệt đơn POS vs website
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'pos';
+
+-- Sản phẩm website (tách với pos_products — có thể 1 sản phẩm website = nhiều pos_products theo size)
+CREATE TABLE IF NOT EXISTS store_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  short_description TEXT,
+  description TEXT,
+  material TEXT,
+  sole_material TEXT,
+  origin TEXT,
+  care_instructions TEXT,
+  size_guide TEXT,
+  cover_image_url TEXT,
+  gallery JSONB DEFAULT '[]',
+  video_url TEXT,
+  seo_title TEXT,
+  seo_description TEXT,
+  og_image_url TEXT,
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_new BOOLEAN DEFAULT FALSE,
+  is_best_seller BOOLEAN DEFAULT FALSE,
+  is_published BOOLEAN DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+-- Variants website: mỗi dòng = 1 size/màu, liên kết với pos_products để lấy tồn/giá realtime
+CREATE TABLE IF NOT EXISTS store_product_variants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_product_id UUID NOT NULL REFERENCES store_products(id) ON DELETE CASCADE,
+  pos_product_id UUID NOT NULL REFERENCES pos_products(id),
+  sku TEXT NOT NULL,
+  size TEXT,
+  color_name TEXT,
+  color_hex TEXT,
+  website_price_override NUMERIC,
+  compare_at_price NUMERIC,
+  is_published BOOLEAN DEFAULT TRUE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_product_variants_store_product ON store_product_variants(store_product_id);
+CREATE INDEX IF NOT EXISTS idx_store_product_variants_pos_product ON store_product_variants(pos_product_id);
+
+-- Collections (danh mục website: nam, nữ, sandal, dép, ...)
+CREATE TABLE IF NOT EXISTS store_collections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  cover_image_url TEXT,
+  is_published BOOLEAN DEFAULT TRUE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Nhiều-nhiều: sản phẩm ↔ collection
+CREATE TABLE IF NOT EXISTS store_product_collections (
+  store_product_id UUID NOT NULL REFERENCES store_products(id) ON DELETE CASCADE,
+  collection_id UUID NOT NULL REFERENCES store_collections(id) ON DELETE CASCADE,
+  PRIMARY KEY (store_product_id, collection_id)
+);
+
+-- Địa chỉ giao hàng đính kèm với đơn website (pos_orders.channel = 'website')
+CREATE TABLE IF NOT EXISTS store_order_addresses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
+  recipient_name TEXT,
+  phone TEXT,
+  address_line TEXT NOT NULL,
+  ward TEXT,
+  district TEXT NOT NULL,
+  province TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_order_addresses_order ON store_order_addresses(order_id);
+
+-- Đặt trước khi hết hàng — nhân viên liên hệ khi có hàng
+CREATE TABLE IF NOT EXISTS store_preorder_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  pos_product_id UUID REFERENCES pos_products(id),
+  sku TEXT,
+  size TEXT,
+  note TEXT,
+  status TEXT DEFAULT 'waiting' CHECK (status IN ('waiting', 'contacted', 'converted', 'cancelled')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Vận đơn — dùng cho tra cứu đơn website
+CREATE TABLE IF NOT EXISTS shipments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
+  tracking_code TEXT,
+  provider TEXT,
+  status TEXT DEFAULT 'pending',
+  shipped_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shipments_order ON shipments(order_id);
+
+-- RLS: store_products — đọc public (published), ghi cần authenticated
+ALTER TABLE store_products ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_products' AND policyname='store_products_public_read') THEN
+    CREATE POLICY "store_products_public_read" ON store_products FOR SELECT USING (is_published = true AND deleted_at IS NULL);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_products' AND policyname='store_products_authenticated') THEN
+    CREATE POLICY "store_products_authenticated" ON store_products FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE store_product_variants ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_product_variants' AND policyname='store_product_variants_public_read') THEN
+    CREATE POLICY "store_product_variants_public_read" ON store_product_variants FOR SELECT USING (is_published = true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_product_variants' AND policyname='store_product_variants_authenticated') THEN
+    CREATE POLICY "store_product_variants_authenticated" ON store_product_variants FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- ============================================================
+-- Shopee products content layer (quản lý ảnh, mô tả, SEO cho sản phẩm Shopee)
+-- Không có API chính thức → nhập tay, liên kết SKU qua pos_products
+-- ============================================================
+CREATE TABLE IF NOT EXISTS shopee_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  short_description TEXT,
+  description TEXT,
+  cover_image_url TEXT,
+  gallery JSONB DEFAULT '[]',
+  seo_title TEXT,
+  seo_description TEXT,
+  shopee_item_id TEXT,  -- dùng khi có API chính thức sau này
+  is_published BOOLEAN DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS shopee_product_variants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shopee_product_id UUID NOT NULL REFERENCES shopee_products(id) ON DELETE CASCADE,
+  pos_product_id UUID NOT NULL REFERENCES pos_products(id),
+  sku TEXT NOT NULL,
+  size TEXT,
+  color_name TEXT,
+  is_published BOOLEAN DEFAULT TRUE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopee_product_variants_shopee ON shopee_product_variants(shopee_product_id);
+CREATE INDEX IF NOT EXISTS idx_shopee_product_variants_pos ON shopee_product_variants(pos_product_id);
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_products' AND policyname='shopee_products_authenticated') THEN
+    ALTER TABLE shopee_products ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "shopee_products_authenticated" ON shopee_products FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_product_variants' AND policyname='shopee_product_variants_authenticated') THEN
+    ALTER TABLE shopee_product_variants ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "shopee_product_variants_authenticated" ON shopee_product_variants FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- ============================================================
+-- Shopee shops (thêm 2026-06-17)
+CREATE TABLE IF NOT EXISTS shopee_shops (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_shops' AND policyname='shopee_shops_authenticated') THEN
+    ALTER TABLE shopee_shops ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "shopee_shops_authenticated" ON shopee_shops FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+INSERT INTO shopee_shops (name, slug, display_order) VALUES
+  ('Giày Dép Da Phúc Sang', 'phuc-sang-store', 1),
+  ('Phúc Sang_Đồ Da Cao Cấp 93', 'giaydepphucsang', 2)
+ON CONFLICT (slug) DO NOTHING;
+
+ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES shopee_shops(id);
+CREATE INDEX IF NOT EXISTS idx_shopee_products_shop ON shopee_products(shop_id);
+
+-- ============================================================
+-- PostgreSQL function: create_store_order
+-- Atomic: lock rows → check stock → create pos_order → save address → deduct stock
+-- Server calls via supabase.rpc('create_store_order', {...})
+-- ============================================================
+CREATE OR REPLACE FUNCTION create_store_order(
+  p_customer_name TEXT,
+  p_customer_phone TEXT,
+  p_customer_email TEXT DEFAULT NULL,
+  p_address_line TEXT DEFAULT NULL,
+  p_ward TEXT DEFAULT NULL,
+  p_district TEXT DEFAULT NULL,
+  p_province TEXT DEFAULT NULL,
+  p_payment_method TEXT DEFAULT 'cod',
+  p_note TEXT DEFAULT NULL,
+  p_items JSONB DEFAULT '[]'
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_order_id UUID;
+  v_order_code TEXT;
+  v_customer_id UUID;
+  v_total NUMERIC := 0;
+  v_item JSONB;
+  v_product RECORD;
+  v_qty INTEGER;
+  v_items_json JSONB := '[]'::JSONB;
+BEGIN
+  -- Upsert khách hàng theo SĐT
+  SELECT id INTO v_customer_id FROM pos_customers WHERE phone = p_customer_phone LIMIT 1;
+  IF v_customer_id IS NULL THEN
+    INSERT INTO pos_customers (id, name, phone, email)
+    VALUES (gen_random_uuid(), p_customer_name, p_customer_phone, p_customer_email)
+    RETURNING id INTO v_customer_id;
+  END IF;
+
+  -- Khóa từng sản phẩm (FOR UPDATE), kiểm tra tồn kho
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
+  LOOP
+    v_qty := (v_item->>'quantity')::INTEGER;
+
+    SELECT id, name, sku, sale_price, stock, status
+    INTO v_product
+    FROM pos_products
+    WHERE id = (v_item->>'pos_product_id')::UUID
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('error', 'Sản phẩm không tồn tại');
+    END IF;
+
+    IF v_product.status != 'Active' THEN
+      RETURN jsonb_build_object('error', format('Sản phẩm "%s" hiện không kinh doanh', v_product.name));
+    END IF;
+
+    IF v_product.stock < v_qty THEN
+      RETURN jsonb_build_object('error', format('Sản phẩm "%s" không đủ hàng (còn %s)', v_product.name, v_product.stock));
+    END IF;
+
+    v_total := v_total + (v_product.sale_price * v_qty);
+
+    v_items_json := v_items_json || jsonb_build_array(jsonb_build_object(
+      'productId', v_product.id,
+      'productName', v_product.name,
+      'sku', v_product.sku,
+      'quantity', v_qty,
+      'price', v_product.sale_price,
+      'subtotal', v_product.sale_price * v_qty
+    ));
+  END LOOP;
+
+  -- Sinh mã đơn PSYYMMDDxxxx
+  v_order_code := 'PS' || TO_CHAR(NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYMMDD') ||
+                  LPAD(FLOOR(RANDOM() * 9999 + 1)::TEXT, 4, '0');
+
+  -- Tạo đơn hàng (channel = 'website')
+  INSERT INTO pos_orders (
+    id, order_code, date, customer_id, customer_name,
+    items, total_amount, final_amount, status,
+    payment_method, channel, note, created_at
+  ) VALUES (
+    gen_random_uuid(), v_order_code,
+    TO_CHAR(NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD'),
+    v_customer_id, p_customer_name,
+    v_items_json, v_total, v_total, 'pending',
+    p_payment_method, 'website', p_note, NOW()
+  ) RETURNING id INTO v_order_id;
+
+  -- Lưu địa chỉ giao hàng
+  IF p_address_line IS NOT NULL THEN
+    INSERT INTO store_order_addresses (order_id, recipient_name, phone, address_line, ward, district, province)
+    VALUES (v_order_id, p_customer_name, p_customer_phone, p_address_line, p_ward, p_district, p_province);
+  END IF;
+
+  -- Trừ tồn kho
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
+  LOOP
+    UPDATE pos_products
+    SET stock = stock - (v_item->>'quantity')::INTEGER
+    WHERE id = (v_item->>'pos_product_id')::UUID;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'order_code', v_order_code,
+    'order_id', v_order_id,
+    'total_amount', v_total
+  );
+END;
+$$;
+
+-- ============================================================
+-- PostgreSQL function: update_website_order_status
+-- Atomic: lock đơn → đổi status → nếu chuyển sang 'cancelled' hoặc 'returned'
+-- thì tự cộng lại tồn kho theo items JSONB của đơn (đối xứng với create_store_order).
+-- Chuyển sang 'return_requested' KHÔNG cộng tồn — hàng chưa thực về kho.
+-- Server gọi qua supabase.rpc('update_website_order_status', {...})
+-- ============================================================
+
+-- pos_orders gốc chỉ có created_at, chưa có updated_at — bổ sung để RPC dưới đây chạy được
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+
+CREATE OR REPLACE FUNCTION update_website_order_status(
+  p_order_id UUID,
+  p_new_status TEXT
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_items JSONB;
+  v_item JSONB;
+BEGIN
+  SELECT items INTO v_items FROM pos_orders WHERE id = p_order_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'Đơn hàng không tồn tại');
+  END IF;
+
+  UPDATE pos_orders
+  SET status = p_new_status, updated_at = NOW()
+  WHERE id = p_order_id;
+
+  -- Chỉ cộng lại tồn kho khi huỷ hẳn hoặc xác nhận đã nhận lại hàng hoàn
+  IF p_new_status IN ('cancelled', 'returned') THEN
+    FOR v_item IN SELECT value FROM jsonb_array_elements(COALESCE(v_items, '[]'::JSONB))
+    LOOP
+      UPDATE pos_products
+      SET stock = stock + COALESCE((v_item->>'quantity')::INTEGER, 0)
+      WHERE id = (v_item->>'productId')::UUID;
+    END LOOP;
+  END IF;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- Reload PostgREST schema cache sau khi tạo bảng
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================
+-- RLS — Bật Row Level Security cho bảng nhạy cảm — 2026-06-06
+-- Chạy thủ công trên Supabase Dashboard
+-- ============================================================
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='employees' AND policyname='employees_authenticated') THEN
+    CREATE POLICY "employees_authenticated" ON employees FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE payroll_records ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='payroll_records' AND policyname='payroll_records_authenticated') THEN
+    CREATE POLICY "payroll_records_authenticated" ON payroll_records FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE revenue_records ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='revenue_records' AND policyname='revenue_records_authenticated') THEN
+    CREATE POLICY "revenue_records_authenticated" ON revenue_records FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE pos_customers ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pos_customers' AND policyname='pos_customers_authenticated') THEN
+    CREATE POLICY "pos_customers_authenticated" ON pos_customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE pos_orders ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pos_orders' AND policyname='pos_orders_authenticated') THEN
+    CREATE POLICY "pos_orders_authenticated" ON pos_orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='audit_logs' AND policyname='audit_logs_authenticated') THEN
+    CREATE POLICY "audit_logs_authenticated" ON audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;

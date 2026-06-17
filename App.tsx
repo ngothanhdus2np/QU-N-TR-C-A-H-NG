@@ -1,14 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
 import TopNav from './components/TopNav';
 import MainContent from './components/MainContent';
 import FloatingCFOChat from './components/FloatingCFOChat';
 import OfflineIndicator from './components/OfflineIndicator';
+import AuthGate from './components/AuthGate';
 import { useAppData } from './hooks/useAppData';
+import { useRealtimeSync } from './hooks/useRealtimeSync';
 import { useTheme } from './hooks/useTheme';
 import { SIDEBAR_SECTIONS } from './constants/navigation';
 import { registerServiceWorker } from './registerServiceWorker';
+import { getCurrentSession, signOut } from './services/auth';
+import { supabase } from './services/supabase';
 import type { AppAlert } from './types';
+
+// Tự động thêm Supabase Bearer token cho request API cùng origin.
+// Không dùng VITE_INTERNAL_API_KEY ở client vì biến VITE_* nằm trong bundle public.
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+  if (url.startsWith('/api')) {
+    const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+    if (!headers.has('Authorization')) {
+      const session = await getCurrentSession().catch(() => null);
+      if (session?.access_token) headers.set('Authorization', `Bearer ${session.access_token}`);
+    }
+    return _nativeFetch(input, { ...init, headers });
+  }
+  return _nativeFetch(input, init);
+};
 
 const App: React.FC = () => {
   // Register Service Worker — chỉ bật trong production
@@ -33,8 +54,6 @@ const App: React.FC = () => {
   }, []);
   const {
     data,
-    activeTab,
-    setActiveTab,
     brandProfile,
     setBrandProfile,
     chatMessages,
@@ -55,6 +74,7 @@ const App: React.FC = () => {
     silentSync,
     updateData,
     updateSurgical,
+    mergeRemoteUpdate,
     pushBatch,
     syncErrors,
     lastSyncTime,
@@ -65,8 +85,39 @@ const App: React.FC = () => {
     isDraining,
   } = useAppData();
 
+  useRealtimeSync(mergeRemoteUpdate);
+
   const { themeId, setThemeId } = useTheme();
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
+  const [userRole, setUserRole] = useState<string>('owner');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // activeTab dẫn xuất trực tiếp từ URL — không cần state riêng
+  const rawPath = location.pathname.replace(/^\//, '').trim();
+  const activeTab = rawPath === 'dashboard' ? 'overview' : (rawPath || 'pos');
+
+  // Đọc role từ session Supabase
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const meta = session?.user?.user_metadata || {};
+      setUserRole(meta.role || 'owner');
+    });
+  }, []);
+
+  // Thu ngân: nếu không phải /pos thì redirect về /pos
+  useEffect(() => {
+    if (userRole === 'cashier' && activeTab !== 'pos') {
+      navigate('/pos', { replace: true });
+    }
+  }, [userRole, activeTab, navigate]);
+
+  // Chỉ gọi navigate — URL là nguồn sự thật duy nhất
+  const handleSetActiveTab = useCallback((id: string) => {
+    const normalized = id === 'dashboard' ? 'overview' : id;
+    if (userRole === 'cashier' && normalized !== 'pos') return;
+    navigate(`/${normalized}`);
+  }, [navigate, userRole]);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -99,13 +150,13 @@ const App: React.FC = () => {
         const index = parseInt(e.key) - 1;
         const allItems = SIDEBAR_SECTIONS.flatMap(s => s.items);
         if (allItems[index]) {
-          setActiveTab(allItems[index].id);
+          handleSetActiveTab(allItems[index].id);
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveTab]);
+  }, [handleSetActiveTab]);
 
   const isFixedViewportTab =
     activeTab === 'staff' ||
@@ -117,6 +168,7 @@ const App: React.FC = () => {
     activeTab === 'shipping-orders';
 
   return (
+    <AuthGate>
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <OfflineIndicator />
       <AnimatePresence initial={false}>
@@ -132,7 +184,7 @@ const App: React.FC = () => {
             <TopNav
               sections={SIDEBAR_SECTIONS}
               activeId={activeTab}
-              onSelect={(id: string) => setActiveTab(id)}
+              onSelect={(id: string) => handleSetActiveTab(id)}
               isCloudConnected={isCloudConnected}
               isSyncing={isSyncing || isDraining}
               syncErrors={syncErrors}
@@ -152,6 +204,7 @@ const App: React.FC = () => {
               onUpdatePaymentSettings={settings => updateData('posPaymentSettings', settings)}
               inventorySettings={data.posInventorySettings}
               onUpdateInventorySettings={settings => updateData('posInventorySettings', settings)}
+              onSignOut={() => signOut()}
             />
           </motion.div>
         )}
@@ -176,7 +229,7 @@ const App: React.FC = () => {
       >
         <MainContent
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={handleSetActiveTab}
           data={data}
           brandProfile={brandProfile}
           setBrandProfile={setBrandProfile}
@@ -201,6 +254,7 @@ const App: React.FC = () => {
       </main>
       <FloatingCFOChat data={data} messages={chatMessages} setMessages={setChatMessages} />
     </div>
+    </AuthGate>
   );
 };
 

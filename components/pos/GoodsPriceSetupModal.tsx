@@ -28,6 +28,7 @@ interface GoodsPriceSetupModalProps {
   mode?: 'modal' | 'page';
   onClose: () => void;
   onApplyPrice: (price: number) => void;
+  onSavePrices?: (updates: { id: string; salePrice: number }[]) => void;
 }
 
 type StockFilter = 'all' | 'in_stock' | 'out_of_stock';
@@ -70,8 +71,12 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
   mode = 'modal',
   onClose,
   onApplyPrice,
+  onSavePrices,
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
+  // BUG-42: tách 2 state search riêng cho cột mã và tên trong bảng
+  const [tableSearchSku, setTableSearchSku] = React.useState('');
+  const [tableSearchName, setTableSearchName] = React.useState('');
   const [priceLists, setPriceLists] = React.useState<string[]>([DEFAULT_PRICE_LIST]);
   const [selectedPriceList, setSelectedPriceList] = React.useState(DEFAULT_PRICE_LIST);
   const [categoryFilter, setCategoryFilter] = React.useState('');
@@ -173,19 +178,35 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
 
   const filteredProducts = React.useMemo(() => {
     const query = normalizeText(searchTerm);
+    const skuQuery = normalizeText(tableSearchSku);
+    const nameQuery = normalizeText(tableSearchName);
     return displayProducts.filter(product => {
       const matchesSearch =
         !query ||
         normalizeText(product.sku).includes(query) ||
         normalizeText(product.name).includes(query);
+      // BUG-42: filter riêng theo cột mã và tên
+      const matchesSkuFilter = !skuQuery || normalizeText(product.sku).includes(skuQuery);
+      const matchesNameFilter = !nameQuery || normalizeText(product.name).includes(nameQuery);
       const matchesCategory = productMatchesCategory(product, categoryFilter);
       const matchesStock =
         stockFilter === 'all' ||
         (stockFilter === 'in_stock' && product.stock > 0) ||
         (stockFilter === 'out_of_stock' && product.stock <= 0);
-      return matchesSearch && matchesCategory && matchesStock;
+      // BUG-35: áp dụng filter điều kiện giá
+      let matchesPrice = true;
+      if (priceCondition && comparePrice) {
+        const currentPrice = draftPrices[product.id] ?? product.salePrice ?? 0;
+        const referencePrice = comparePrice === 'importPrice'
+          ? (product.importPrice || 0)
+          : (product.salePrice || 0);
+        if (priceCondition === 'gt') matchesPrice = currentPrice > referencePrice;
+        else if (priceCondition === 'lt') matchesPrice = currentPrice < referencePrice;
+        else if (priceCondition === 'eq') matchesPrice = currentPrice === referencePrice;
+      }
+      return matchesSearch && matchesSkuFilter && matchesNameFilter && matchesCategory && matchesStock && matchesPrice;
     });
-  }, [categoryFilter, displayProducts, searchTerm, stockFilter]);
+  }, [categoryFilter, displayProducts, searchTerm, tableSearchSku, tableSearchName, stockFilter, priceCondition, comparePrice, draftPrices]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / ITEMS_PER_PAGE));
   const visibleProducts = filteredProducts.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -200,6 +221,23 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
     if (product.id === currentRow?.id) {
       onApplyPrice(nextPrice);
     }
+  };
+
+  const draftChangeCount = React.useMemo(
+    () => Object.values(draftPrices).filter(price => price > 0).length,
+    [draftPrices]
+  );
+  const hasDraftChanges = draftChangeCount > 0;
+
+  const handleSavePagePrices = () => {
+    if (!onSavePrices || !hasDraftChanges) return;
+    // BUG-29: bỏ qua giá 0 — không lưu salePrice = 0
+    const updates = Object.entries(draftPrices)
+      .filter(([, salePrice]) => salePrice > 0)
+      .map(([id, salePrice]) => ({ id, salePrice }));
+    if (updates.length === 0) return;
+    onSavePrices(updates);
+    setDraftPrices({});
   };
 
   const openCreatePriceListModal = () => {
@@ -419,9 +457,6 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                   <th className="w-44 border-b border-indigo-100 px-4 py-3">Mã hàng</th>
                   <th className="border-b border-indigo-100 px-4 py-3">Tên hàng</th>
                   <th className="w-36 border-b border-indigo-100 px-4 py-3 text-right">Giá vốn</th>
-                  <th className="w-40 border-b border-indigo-100 px-4 py-3 text-right">
-                    Giá nhập cuối
-                  </th>
                   <th className="w-44 border-b border-indigo-100 px-4 py-3 text-right">
                     Bảng giá chung
                   </th>
@@ -431,9 +466,9 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                 <tr className="bg-white">
                   <td className="px-4 py-2">
                     <input
-                      value={searchTerm}
+                      value={tableSearchSku}
                       onChange={event => {
-                        setSearchTerm(event.target.value);
+                        setTableSearchSku(event.target.value);
                         setPage(1);
                       }}
                       placeholder="Tìm mã hàng"
@@ -442,16 +477,15 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                   </td>
                   <td className="px-4 py-2">
                     <input
-                      value={searchTerm}
+                      value={tableSearchName}
                       onChange={event => {
-                        setSearchTerm(event.target.value);
+                        setTableSearchName(event.target.value);
                         setPage(1);
                       }}
                       placeholder="Tìm tên hàng"
                       className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-indigo-500"
                     />
                   </td>
-                  <td className="px-4 py-2" />
                   <td className="px-4 py-2" />
                   <td className="px-4 py-2" />
                 </tr>
@@ -468,9 +502,6 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                     >
                       <td className="px-4 py-3 text-slate-700">{product.sku}</td>
                       <td className="px-4 py-3 text-slate-800">{product.name}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                        {formatMoney(product.importPrice)}
-                      </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                         {formatMoney(product.importPrice)}
                       </td>
@@ -555,6 +586,28 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
               className="h-10 rounded-lg bg-indigo-600 px-5 text-sm text-white transition-colors hover:bg-indigo-700"
             >
               Áp dụng
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'page' && hasDraftChanges && (
+        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-5 py-3">
+          <p className="text-sm text-slate-600">
+            Có <span className="tabular-nums font-semibold text-slate-900">{draftChangeCount}</span> hàng hóa có thay đổi giá chưa lưu.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDraftPrices({})}
+              className="h-10 rounded-lg border border-slate-300 px-4 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Huỷ
+            </button>
+            <button
+              onClick={handleSavePagePrices}
+              className="h-10 rounded-lg bg-indigo-600 px-5 text-sm text-white transition-colors hover:bg-indigo-700"
+            >
+              Lưu thay đổi
             </button>
           </div>
         </div>

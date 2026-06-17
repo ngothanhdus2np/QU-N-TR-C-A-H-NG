@@ -1,9 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
-import type { AppData, DiagnosisRange } from '../../types';
-import { calculateTimeContext } from '../../src/lib';
+import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
+import { usePosOrders } from '../../hooks/usePosOrders';
+import {
+  getLatestOrderDate,
+  hasOrdersInDateRange,
+  toDateInputValue,
+} from '../reports/reportDateDefaults';
 
 interface Props {
   data: AppData;
@@ -19,6 +25,12 @@ const fmtAvg = (n: number) =>
 
 type GroupMetric = 'qty' | 'revenue' | 'profit';
 type SpeedTab = 'fast' | 'slow';
+
+const getMonthRange = (anchorDate = new Date()) => {
+  const start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  const end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0);
+  return { start: toDateInputValue(start), end: toDateInputValue(end) };
+};
 
 const MiniSparkline: React.FC<{ values: number[]; color: string }> = ({ values, color }) => {
   const data = values.map((v, i) => ({ i, v }));
@@ -38,15 +50,11 @@ const METRIC_TABS: { id: GroupMetric; label: string }[] = [
 ];
 
 const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
-  const today = new Date().toLocaleDateString('sv-SE');
-  const firstOfMonth = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1
-  ).toLocaleDateString('sv-SE');
+  const initialRange = useMemo(() => getMonthRange(), []);
 
-  const [startDate, setStartDate] = useState(firstOfMonth);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState(initialRange.start);
+  const [endDate, setEndDate] = useState(initialRange.end);
+  const [userChangedRange, setUserChangedRange] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [fromCache, setFromCache] = useState(false);
@@ -54,6 +62,18 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
   const [groupMetric, setGroupMetric] = useState<GroupMetric>('qty');
   const [productTab, setProductTab] = useState<SpeedTab>('fast');
   const [productMetric, setProductMetric] = useState<GroupMetric>('qty');
+  const { orders, isLoading: ordersLoading } = usePosOrders(data.posOrders || [], startDate, endDate);
+
+  useEffect(() => {
+    if (userChangedRange) return;
+    const bootstrapOrders = data.posOrders || [];
+    if (bootstrapOrders.length === 0 || hasOrdersInDateRange(bootstrapOrders, startDate, endDate)) return;
+    const latestDate = getLatestOrderDate(bootstrapOrders);
+    if (!latestDate) return;
+    const nextRange = getMonthRange(new Date(`${latestDate}T00:00:00`));
+    setStartDate(nextRange.start);
+    setEndDate(nextRange.end);
+  }, [data.posOrders, endDate, startDate, userChangedRange]);
 
   const groupStats = useMemo(() => {
     const productMap = new Map((data.posProducts || []).map(p => [p.id, p]));
@@ -67,8 +87,9 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
 
     const map = new Map<string, { name: string; qty: number; retQty: number; revenue: number; profit: number }>();
 
-    (data.posOrders || []).forEach(o => {
-      if (o.date < startDate || o.date > endDate) return;
+    (orders || []).forEach(o => {
+      const orderDate = toDateInputValue(new Date(o.date));
+      if (orderDate < startDate || orderDate > endDate) return;
       o.items.forEach(item => {
         const prod = productMap.get(item.productId);
         const groupName = getGroupName(prod?.categoryPath || prod?.categoryId || '');
@@ -90,23 +111,30 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
     });
 
     return Array.from(map.values());
-  }, [data.posOrders, data.posProducts, startDate, endDate]);
+  }, [orders, data.posProducts, startDate, endDate]);
 
   // --- Compute from posOrders ---
   const { productStats, cards, dailyRevenue } = useMemo(() => {
     const productMap = new Map((data.posProducts || []).map(p => [p.id, p]));
 
-    const salesOrders = (data.posOrders || []).filter(
-      o => !o.isReturn && o.date >= startDate && o.date <= endDate
+    const salesOrders = (orders || []).filter(
+      o => {
+        const orderDate = toDateInputValue(new Date(o.date));
+        return !o.isReturn && orderDate >= startDate && orderDate <= endDate;
+      }
     );
-    const returnOrders = (data.posOrders || []).filter(
-      o => o.isReturn && o.date >= startDate && o.date <= endDate
+    const returnOrders = (orders || []).filter(
+      o => {
+        const orderDate = toDateInputValue(new Date(o.date));
+        return o.isReturn && orderDate >= startDate && orderDate <= endDate;
+      }
     );
 
     // Daily revenue for sparkline
     const dailyMap = new Map<string, number>();
     salesOrders.forEach(o => {
-      dailyMap.set(o.date, (dailyMap.get(o.date) ?? 0) + o.finalAmount);
+      const orderDate = toDateInputValue(new Date(o.date));
+      dailyMap.set(orderDate, (dailyMap.get(orderDate) ?? 0) + calcOrderRevenue(o));
     });
     const sortedDays = Array.from(dailyMap.keys()).sort();
     const dailyRevenue = sortedDays.map(d => dailyMap.get(d) ?? 0);
@@ -162,7 +190,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
         avgProfitPerSku: uniqueSkus > 0 ? totalProfit / uniqueSkus : 0,
       },
     };
-  }, [data.posOrders, data.posProducts, startDate, endDate]);
+  }, [orders, data.posProducts, startDate, endDate]);
 
   const sortedGroups = useMemo(() => {
     const sorted = [...groupStats].sort((a, b) => {
@@ -248,14 +276,20 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
           <input
             type="date"
             value={startDate}
-            onChange={e => setStartDate(e.target.value)}
+            onChange={e => {
+              setUserChangedRange(true);
+              setStartDate(e.target.value);
+            }}
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
           <span className="text-slate-400 text-sm">-</span>
           <input
             type="date"
             value={endDate}
-            onChange={e => setEndDate(e.target.value)}
+            onChange={e => {
+              setUserChangedRange(true);
+              setEndDate(e.target.value);
+            }}
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>
@@ -337,7 +371,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
               {sortedGroups.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-8 text-slate-400 text-sm">
-                    Không có dữ liệu
+                    {ordersLoading ? 'Đang tải dữ liệu...' : 'Không có dữ liệu'}
                   </td>
                 </tr>
               ) : (
@@ -427,7 +461,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
               {sortedProducts.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-8 text-slate-400 text-sm">
-                    Không có dữ liệu
+                    {ordersLoading ? 'Đang tải dữ liệu...' : 'Không có dữ liệu'}
                   </td>
                 </tr>
               ) : (

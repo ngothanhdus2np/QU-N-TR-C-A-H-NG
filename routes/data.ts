@@ -57,6 +57,7 @@ const CONFIG_KEYS = new Set([
   'daily_ads_config',
   'daily_break_even_config',
   'pos_payment_settings',
+  'pos_inventory_settings',
 ]);
 
 const getErrorMessage = (error: unknown): string => {
@@ -64,8 +65,11 @@ const getErrorMessage = (error: unknown): string => {
   return 'Unknown error';
 };
 
-const writeErrorResponse = (res: Parameters<RequestHandler>[1], fallback: string) =>
-  res.status(500).json({ error: fallback });
+const writeErrorResponse = (
+  res: Parameters<RequestHandler>[1],
+  fallback: string,
+  error?: unknown
+) => res.status(500).json({ error: error ? getErrorMessage(error) || fallback : fallback });
 
 const getErrorCode = (error: unknown): string | null => {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -132,22 +136,42 @@ async function writeCostHistory(
   await supabase.from('product_cost_history').upsert(entries, { onConflict: 'id' });
 }
 
-async function setProductStock(supabase: SupabaseClient, productId: string, stock: number) {
+async function setProductStock(
+  supabase: SupabaseClient,
+  productId: string,
+  stock: number,
+  allowNegativeStock = false
+) {
   const { error } = await supabase
     .from('pos_products')
-    .update({ stock: Math.max(0, Math.trunc(stock)) })
+    .update({ stock: allowNegativeStock ? Math.trunc(stock) : Math.max(0, Math.trunc(stock)) })
     .eq('id', productId);
   if (error) throw error;
 }
 
-async function adjustProductStock(supabase: SupabaseClient, productId: string, delta: number) {
+async function adjustProductStock(
+  supabase: SupabaseClient,
+  productId: string,
+  delta: number,
+  options: { allowNegativeStock?: boolean } = {}
+) {
+  const quantity = Math.abs(Math.trunc(delta));
+  if (quantity === 0) return;
+
   if (delta < 0) {
-    const { error } = await supabase.rpc('decrement_product_stock', {
+    const { data, error } = await supabase.rpc('decrement_product_stock', {
       p_product_id: productId,
-      p_quantity: Math.abs(Math.trunc(delta)),
+      p_quantity: quantity,
     });
-    if (!error) return;
-    if (!isInventoryRpcUnavailable(error)) throw error;
+    if (!error && Array.isArray(data) && data.length > 0) return;
+    if (!error && !options.allowNegativeStock) {
+      throw new Error(`Không đủ tồn kho cho sản phẩm ${productId}`);
+    }
+    if (!error && options.allowNegativeStock) {
+      // RPC bảo vệ không cho âm kho; khi cửa hàng bật bán âm, cập nhật có kiểm soát ở fallback.
+    } else if (!isInventoryRpcUnavailable(error)) {
+      throw error;
+    }
   }
 
   if (delta > 0) {
@@ -167,36 +191,99 @@ async function adjustProductStock(supabase: SupabaseClient, productId: string, d
   if (error) throw error;
 
   const currentStock = getNumberField(asRecord(data), 'stock');
-  await setProductStock(supabase, productId, currentStock + delta);
+  await setProductStock(
+    supabase,
+    productId,
+    currentStock + delta,
+    !!options.allowNegativeStock
+  );
 }
 
 async function applyInventoryTransactionFallback(
   supabase: SupabaseClient,
   payload: Record<string, unknown>
 ) {
-  const { error } = await supabase.from('inventory_transactions').upsert(payload, { onConflict: 'id' });
+  const { allow_negative_stock: _allowNegativeStockColumn, ...dbPayload } = payload;
+  const transactionId = getTextField(payload, 'id');
+  const { error } = await supabase.from('inventory_transactions').upsert(dbPayload, { onConflict: 'id' });
   if (error) throw error;
 
   const type = getTextField(payload, 'type');
   const txDate = getTextField(payload, 'date') || new Date().toISOString();
+  const allowNegativeStock =
+    payload.allowNegativeStock === true || payload.allow_negative_stock === true;
   const costItems: { sku: string; productId: string; importPrice: number }[] = [];
+  const productIds = Array.from(new Set(
+    getItems(payload)
+      .map(item => getTextField(item, 'productId'))
+      .filter(Boolean)
+  ));
+  const productSnapshots: Record<string, { stock: number; import_price: number | null }> = {};
 
-  for (const item of getItems(payload)) {
-    const productId = getTextField(item, 'productId');
-    if (!productId) continue;
-
-    if (type === 'Import') {
-      await adjustProductStock(supabase, productId, getNumberField(item, 'quantity'));
-      const sku = getTextField(item, 'sku');
-      const price = getNumberField(item, 'price');
-      if (sku && price > 0) costItems.push({ sku, productId, importPrice: price });
-    } else if (type === 'Sale') {
-      await adjustProductStock(supabase, productId, -Math.abs(getNumberField(item, 'quantity')));
-    } else if (type === 'Return') {
-      await adjustProductStock(supabase, productId, Math.abs(getNumberField(item, 'quantity')));
-    } else if (type === 'Check') {
-      await setProductStock(supabase, productId, getNumberField(item, 'newStock'));
+  if (productIds.length > 0) {
+    const { data: products, error: snapshotError } = await supabase
+      .from('pos_products')
+      .select('id,stock,import_price')
+      .in('id', productIds);
+    if (snapshotError) throw snapshotError;
+    for (const product of (products || []) as Array<Record<string, unknown>>) {
+      const productId = getTextField(product, 'id');
+      if (!productId) continue;
+      productSnapshots[productId] = {
+        stock: getNumberField(product, 'stock'),
+        import_price:
+          product.import_price == null ? null : getNumberField(product, 'import_price'),
+      };
     }
+  }
+
+  try {
+    for (const item of getItems(payload)) {
+      const productId = getTextField(item, 'productId');
+      if (!productId) continue;
+
+      if (type === 'Import') {
+        await adjustProductStock(supabase, productId, getNumberField(item, 'quantity'));
+        const nextImportPrice = getNumberField(item, 'nextImportPrice');
+        if (nextImportPrice > 0) {
+          const { error: priceError } = await supabase
+            .from('pos_products')
+            .update({ import_price: nextImportPrice })
+            .eq('id', productId);
+          if (priceError) throw priceError;
+        }
+        const sku = getTextField(item, 'sku');
+        const price = getNumberField(item, 'price');
+        if (sku && price > 0) costItems.push({ sku, productId, importPrice: price });
+      } else if (type === 'PurchaseReturn') {
+        await adjustProductStock(supabase, productId, -Math.abs(getNumberField(item, 'quantity')));
+      } else if (type === 'Sale') {
+        await adjustProductStock(
+          supabase,
+          productId,
+          -Math.abs(getNumberField(item, 'quantity')),
+          { allowNegativeStock }
+        );
+      } else if (type === 'Return') {
+        await adjustProductStock(supabase, productId, Math.abs(getNumberField(item, 'quantity')));
+      } else if (type === 'Check') {
+        await setProductStock(supabase, productId, getNumberField(item, 'newStock'));
+      }
+    }
+  } catch (stockError) {
+    for (const [productId, snapshot] of Object.entries(productSnapshots)) {
+      const { error: restoreError } = await supabase
+        .from('pos_products')
+        .update({ stock: snapshot.stock, import_price: snapshot.import_price })
+        .eq('id', productId);
+      if (restoreError) {
+        console.error(`Không thể rollback tồn kho sản phẩm ${productId}:`, restoreError);
+      }
+    }
+    if (transactionId) {
+      await supabase.from('inventory_transactions').delete().eq('id', transactionId);
+    }
+    throw stockError;
   }
 
   if (costItems.length) {
@@ -221,6 +308,8 @@ async function deleteInventoryTransactionFallback(supabase: SupabaseClient, tran
 
       if (type === 'Import') {
         await adjustProductStock(supabase, productId, -getNumberField(item, 'quantity'));
+      } else if (type === 'PurchaseReturn') {
+        await adjustProductStock(supabase, productId, Math.abs(getNumberField(item, 'quantity')));
       } else if (type === 'Sale') {
         await adjustProductStock(supabase, productId, Math.abs(getNumberField(item, 'quantity')));
       } else if (type === 'Return') {
@@ -374,22 +463,28 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
 
     try {
-      if (['Sale', 'Return'].includes(getTextField(asRecord(payload), 'type'))) {
-        await applyInventoryTransactionFallback(supabase, asRecord(payload));
-      } else {
-        const { error } = await supabase.rpc('apply_inventory_transaction_with_stock', {
-          p_transaction: payload,
-        });
-        if (error) {
-          if (!isInventoryRpcUnavailable(error)) throw error;
+      const { error } = await supabase.rpc('apply_inventory_transaction_with_stock_v2', {
+        p_transaction: payload,
+      });
+      if (error) {
+        if (!isInventoryRpcUnavailable(error)) throw error;
+        if (['Import', 'PurchaseReturn', 'Sale', 'Return'].includes(getTextField(asRecord(payload), 'type'))) {
           await applyInventoryTransactionFallback(supabase, asRecord(payload));
+        } else {
+          const legacy = await supabase.rpc('apply_inventory_transaction_with_stock', {
+            p_transaction: payload,
+          });
+          if (legacy.error) {
+            if (!isInventoryRpcUnavailable(legacy.error)) throw legacy.error;
+            await applyInventoryTransactionFallback(supabase, asRecord(payload));
+          }
         }
       }
       await auditLog(supabase, 'inventory_transactions', transactionId, 'applyWithStock', payload);
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] inventory apply failed [${transactionId}]:`, error);
-      writeErrorResponse(res, 'Không thể áp dụng giao dịch tồn kho');
+      writeErrorResponse(res, 'Không thể áp dụng giao dịch tồn kho', error);
     }
   });
 
@@ -403,22 +498,28 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         .select('*')
         .eq('id', transactionId)
         .single();
-      if (['Sale', 'Return'].includes(getTextField(asRecord(snapshot), 'type'))) {
-        await deleteInventoryTransactionFallback(supabase, transactionId);
-      } else {
-        const { error } = await supabase.rpc('delete_inventory_transaction_with_stock', {
-          p_transaction_id: transactionId,
-        });
-        if (error) {
-          if (!isInventoryRpcUnavailable(error)) throw error;
+      const { error } = await supabase.rpc('delete_inventory_transaction_with_stock_v2', {
+        p_transaction_id: transactionId,
+      });
+      if (error) {
+        if (!isInventoryRpcUnavailable(error)) throw error;
+        if (['Import', 'PurchaseReturn', 'Sale', 'Return'].includes(getTextField(asRecord(snapshot), 'type'))) {
           await deleteInventoryTransactionFallback(supabase, transactionId);
+        } else {
+          const legacy = await supabase.rpc('delete_inventory_transaction_with_stock', {
+            p_transaction_id: transactionId,
+          });
+          if (legacy.error) {
+            if (!isInventoryRpcUnavailable(legacy.error)) throw legacy.error;
+            await deleteInventoryTransactionFallback(supabase, transactionId);
+          }
         }
       }
       await auditLog(supabase, 'inventory_transactions', transactionId, 'deleteWithStock', snapshot);
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] inventory delete failed [${transactionId}]:`, error);
-      writeErrorResponse(res, 'Không thể xóa giao dịch tồn kho');
+      writeErrorResponse(res, 'Không thể xóa giao dịch tồn kho', error);
     }
   });
 
@@ -574,7 +675,8 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
             const qty = Math.abs(Number(item.quantity || 0));
             const sku = String(item.sku || '').trim();
             // Ưu tiên: importPrice lưu trong item → lịch sử giá → giá hiện tại
-            const ip = Number(item.importPrice || 0)
+            // [FIX m3-INV] Check cả camelCase (importPrice) và snake_case (import_price)
+            const ip = Number(item.importPrice || item.import_price || 0)
               || getHistoricalPrice(sku, orderDate)
               || priceById.get(item.productId)
               || priceBySku.get(sku)
@@ -595,6 +697,8 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       // Gộp revenue_records theo tháng
       type RevMonth = { ids: string[]; netRevenue: number; existingCogs: number };
       const revByMonth = new Map<string, RevMonth>();
+      // [FIX] Build lookup map để lấy date khi upsert — tránh NOT NULL violation
+      const revRecordById = new Map((revRecords as any[]).map((r: any) => [r.id as string, r]));
       for (const r of revRecords as any[]) {
         const month = (r.date as string)?.slice(0, 7);
         if (!month) continue;
@@ -617,8 +721,14 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         const finalCogs = rev.existingCogs !== 0 ? rev.existingCogs : posCogs;
 
         if (rev.ids.length === 1) {
-          const payload: any = { id: rev.ids[0], gross_profit: Math.round(rev.netRevenue) - finalCogs };
-          if (rev.existingCogs === 0) payload.total_cogs = posCogs; // chỉ set nếu chưa có
+          const existing = revRecordById.get(rev.ids[0]);
+          // [FIX] Đưa date vào payload — upsert không bị lỗi NOT NULL nếu record bị xóa bên ngoài
+          const payload: any = {
+            id: rev.ids[0],
+            date: existing?.date,
+            gross_profit: Math.round(rev.netRevenue) - finalCogs,
+          };
+          if (rev.existingCogs === 0) payload.total_cogs = posCogs;
           toUpdate.push(payload);
         } else {
           // Nhiều records/tháng (daily) → mỗi record tự tính gross_profit từ total_cogs riêng
@@ -626,7 +736,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
             const rExisting = Number(r.total_cogs || 0);
             const ratio = rev.netRevenue ? Number(r.net_revenue || 0) / rev.netRevenue : 1 / rev.ids.length;
             const rCogs = rExisting !== 0 ? rExisting : Math.round(posCogs * ratio);
-            const payload: any = { id: r.id, gross_profit: Math.round(Number(r.net_revenue || 0)) - rCogs };
+            // [FIX] Đưa date vào payload
+            const payload: any = {
+              id: r.id,
+              date: r.date,
+              gross_profit: Math.round(Number(r.net_revenue || 0)) - rCogs,
+            };
             if (rExisting === 0) payload.total_cogs = rCogs;
             toUpdate.push(payload);
           }
@@ -656,10 +771,32 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       const endMD   = endDate   ? endDate.slice(5, 10)   : '12-31';
       const includeAll = startMD <= '01-01' && endMD >= '12-31';
 
-      // Tra import_price theo productId và sku
+      // Tra import_price theo productId và sku (fallback hiện tại)
       const { data: products } = await supabase.from('pos_products').select('id, sku, import_price');
       const priceById  = new Map((products || []).map((p: any) => [p.id,  Number(p.import_price || 0)]));
       const priceBySku = new Map((products || []).map((p: any) => [p.sku, Number(p.import_price || 0)]));
+
+      // [FIX M10] Load lịch sử giá nhập — dùng giá tại thời điểm bán thay vì giá hiện tại
+      const { data: matrixCostHistory } = await supabase
+        .from('product_cost_history')
+        .select('sku, import_price, effective_date')
+        .order('effective_date', { ascending: true });
+      const matrixHistoryBySku = new Map<string, { date: string; price: number }[]>();
+      for (const h of ((matrixCostHistory as any[]) || [])) {
+        const sku = String(h.sku || '').trim();
+        if (!sku) continue;
+        if (!matrixHistoryBySku.has(sku)) matrixHistoryBySku.set(sku, []);
+        matrixHistoryBySku.get(sku)!.push({ date: h.effective_date, price: Number(h.import_price || 0) });
+      }
+      const getHistoricalCost = (sku: string, orderDate: string): number => {
+        const entries = matrixHistoryBySku.get(sku);
+        if (!entries?.length) return 0;
+        let best = 0;
+        for (const e of entries) {
+          if (e.date <= orderDate && e.price > 0) best = e.price;
+        }
+        return best;
+      };
 
       type YearAgg = { gross: number; discount: number; returns: number; net: number; cogs: number };
       const byYear = new Map<string, YearAgg>();
@@ -689,13 +826,23 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
             agg.gross    += Number(o.total_amount || 0);
             agg.discount += Math.abs(Number(o.discount || 0));
           } else {
-            agg.returns += Math.abs(Number(o.final_amount || 0));
+            agg.returns += Math.abs(Number(o.total_amount || 0));
           }
-          agg.net += Number(o.final_amount || 0);
+          // netRevenue = totalAmount - discount (chuẩn KiotViet), đơn trả trừ totalAmount
+          if (!isReturn) agg.net += Number(o.total_amount || 0) - Math.abs(Number(o.discount || 0));
+          else           agg.net -= Math.abs(Number(o.total_amount || 0));
 
           for (const item of ((o.items as any[]) || [])) {
             const qty = Math.abs(Number(item.quantity || 0));
-            const ip  = priceById.get(item.productId) || priceBySku.get(item.sku) || 0;
+            const orderDate = (o.date as string)?.slice(0, 10) || '';
+            const sku = String(item.sku || '').trim();
+            // [FIX M10] Ưu tiên: importPrice lưu trong item → lịch sử → hiện tại
+            // [FIX m3-INV] Check cả camelCase và snake_case
+            const ip = Number(item.importPrice || item.import_price || 0)
+              || getHistoricalCost(sku, orderDate)
+              || priceById.get(item.productId)
+              || priceBySku.get(sku)
+              || 0;
             if (!isReturn) agg.cogs += qty * ip;
             else           agg.cogs -= qty * ip;
           }
@@ -737,12 +884,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       const lastDayNum = new Date(y, m, 0).getDate();
       const date = `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}`;
 
-      let netRev = 0, discountSum = 0;
+      let grossRev = 0, returnsGross = 0, discountSum = 0;
       let offset = 0;
       while (true) {
         const { data: orders, error } = await supabase
           .from('pos_orders')
-          .select('final_amount, discount, is_return')
+          .select('total_amount, discount, is_return')
           .gte('date', `${targetMonth}-01`)
           .lte('date', `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}T23:59:59`)
           .range(offset, offset + 999);
@@ -750,31 +897,37 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         if (!orders?.length) break;
 
         for (const o of orders) {
-          netRev += Number(o.final_amount || 0);
-          if (!o.is_return) discountSum += Number(o.discount || 0);
+          if (!o.is_return) {
+            grossRev    += Number(o.total_amount || 0);
+            discountSum += Math.abs(Number(o.discount || 0));
+          } else {
+            returnsGross += Math.abs(Number(o.total_amount || 0));
+          }
         }
 
         if (orders.length < 1000) break;
         offset += 1000;
       }
 
-      const net  = Math.round(netRev);
-      const disc = Math.round(discountSum);
+      const netRev = Math.round(grossRev - discountSum - returnsGross);
+      const disc   = Math.round(discountSum);
+      const gross  = Math.round(grossRev);
+      const ret    = Math.round(returnsGross);
 
       const { data: existing } = await supabase.from('revenue_records').select('id').eq('date', date).maybeSingle();
       const id = (existing as { id: string } | null)?.id ?? crypto.randomUUID();
 
       const { error } = await supabase.from('revenue_records').upsert({
         id, date,
-        total_gross_revenue: Math.round(net + Math.abs(disc)),
+        total_gross_revenue: gross,
         discount: disc,
-        net_revenue: net,
-        returns_value: 0,
+        net_revenue: netRev,
+        returns_value: ret,
         revenue_other: 0,
       }, { onConflict: 'id' });
       if (error) throw new Error(error.message);
 
-      res.json({ success: true, date, net_revenue: net, discount: disc, total_gross_revenue: Math.round(net + Math.abs(disc)) });
+      res.json({ success: true, date, net_revenue: netRev, discount: disc, total_gross_revenue: gross, returns_value: ret });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: msg });
@@ -792,7 +945,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       while (true) {
         const { data: orders, error } = await supabase
           .from('pos_orders')
-          .select('customer_id, customer_name, final_amount, date, is_return, points_earned')
+          .select('customer_id, customer_name, total_amount, discount, final_amount, date, is_return, points_earned')
           .not('customer_id', 'is', null)
           .range(offset, offset + 999);
         if (error) throw new Error(error.message);
@@ -804,7 +957,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
           const prev = aggByCustomer.get(cid) ?? { name: '', totalSpent: 0, lastVisit: '', points: 0 };
           aggByCustomer.set(cid, {
             name: prev.name || String(o.customer_name || ''),
-            totalSpent: prev.totalSpent + (isReturn ? 0 : Number(o.final_amount || 0)),
+            // totalSpent = Σ(totalAmount - discount) bán - Σ totalAmount trả (chuẩn KiotViet)
+            totalSpent: prev.totalSpent + (
+              isReturn
+                ? -Math.abs(Number(o.total_amount || 0))
+                : Number(o.total_amount || 0) - Math.abs(Number(o.discount || 0))
+            ),
             lastVisit: String(o.date || '') > prev.lastVisit ? String(o.date) : prev.lastVisit,
             points: prev.points + Number(o.points_earned || 0),
           });

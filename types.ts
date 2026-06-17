@@ -542,7 +542,7 @@ export interface POSOrder {
   totalAmount: number;
   discount: number;
   finalAmount: number;
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other';
+  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
   staffId: string;
   staffName?: string;
   createdBy?: string;
@@ -554,11 +554,14 @@ export interface POSOrder {
   notes?: string;
   pointsEarned: number;
   isReturn?: boolean;
+  cashReceived?: number;
   refundAmount?: number; // Tiền trả lại khách (> 0 = shop hoàn tiền, 0 = đổi hàng)
+  returnFee?: number; // Phí trả hàng shop thu (ghi vào revenueOther)
+  returnOtherRefund?: number; // Hoàn trả thu khác (cộng vào tiền hoàn cho khách)
   splitPayments?: { cash?: number; bank?: number; card?: number; momo?: number }; // Phân bổ từng PTTT khi chia nhiều
 }
 
-export type POSPaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other';
+export type POSPaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
 
 export interface POSPaymentChannelSettings {
   enabled: boolean;
@@ -601,6 +604,7 @@ export interface POSPaymentSettings {
 export interface POSInventorySettings {
   allowSellOutOfStock: boolean;
   maxQtyWarning?: number; // Ngưỡng cảnh báo số lượng lớn khi nhập POS (mặc định 10000)
+  costMethod?: 'fixed' | 'average'; // Phương pháp tính giá vốn, đồng bộ qua Supabase
 }
 
 export type POSKeyboardAction =
@@ -788,6 +792,8 @@ export interface InventoryTransaction {
     price?: number; // Import price for Import transactions
     discount?: number; // Discount for Import transactions
     costMethod?: 'fixed' | 'average'; // Cost method used when importing stock
+    previousImportPrice?: number; // Import price before this transaction (for rollback on delete)
+    nextImportPrice?: number; // Import price to persist after Import transaction
     note?: string; // For disposal reasons
   }[];
   note?: string;
@@ -797,6 +803,7 @@ export interface InventoryTransaction {
   supplierName?: string; // For Import transactions
   totalAmount?: number; // Total amount for Import transactions
   status?: 'draft' | 'completed' | 'cancelled' | 'balanced'; // Status for Import/Check transactions
+  allowNegativeStock?: boolean; // Cho phép phiếu bán làm tồn kho âm
   // Invoice tracking fields (for Import transactions)
   invoiceStatus?: 'full' | 'partial' | 'memo_only' | 'none';
   invoicedAmount?: number;
@@ -1146,6 +1153,7 @@ export interface ShopeeInventoryOutRecord {
   id: string;
   date: string;
   orderId: string;
+  orderCode?: string;
   sku: string;
   productName?: string;
   platform?: string;

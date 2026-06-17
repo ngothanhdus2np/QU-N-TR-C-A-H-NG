@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { generateId } from '../../src/lib';
-import { POSProduct, POSOrder } from '../../types';
+import { POSProduct, POSOrder, POSCustomer } from '../../types';
 import type { InvoiceTab } from './types';
 
 interface UsePOSReturnFlowParams {
@@ -14,6 +14,7 @@ interface UsePOSReturnFlowParams {
   setTabs: React.Dispatch<React.SetStateAction<InvoiceTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
   setShowReturnModal: React.Dispatch<React.SetStateAction<boolean>>;
+  customers?: POSCustomer[]; // [FIX M4] để auto-fill khách khi load đơn trả
 }
 
 export const usePOSReturnFlow = ({
@@ -27,6 +28,7 @@ export const usePOSReturnFlow = ({
   setTabs,
   setActiveTabId,
   setShowReturnModal,
+  customers = [],
 }: UsePOSReturnFlowParams) => {
   const addToReturnCart = React.useCallback(
     (product: POSProduct) => {
@@ -39,7 +41,8 @@ export const usePOSReturnFlow = ({
           if (existing) {
             newCart = prevCart.map(item =>
               item.productId === product.id
-                ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
+                // [FIX M1] Trừ discount của từng item — tránh hoàn tiền nhiều hơn thực tế đã thu
+                ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * (item.price - (item.discount || 0)) }
                 : item
             );
           } else {
@@ -53,6 +56,9 @@ export const usePOSReturnFlow = ({
                 price: product.salePrice,
                 discount: 0,
                 total: product.salePrice,
+                // Fast return không có đơn gốc → không giới hạn theo tồn kho
+                // (khách có thể đang trả hàng đã bán hết stock rồi)
+                maxQuantity: undefined,
               },
             ];
           }
@@ -72,7 +78,8 @@ export const usePOSReturnFlow = ({
             if (item.productId === productId) {
               const max = item.maxQuantity ?? Infinity;
               const newQty = Math.max(0, Math.min(max, item.quantity + delta));
-              return { ...item, quantity: newQty, total: newQty * item.price };
+              // [FIX M1] Trừ discount — tránh hoàn tiền nhiều hơn thực tế đã thu
+              return { ...item, quantity: newQty, total: newQty * (item.price - (item.discount || 0)) };
             }
             return item;
           });
@@ -120,6 +127,11 @@ export const usePOSReturnFlow = ({
           })
         ) + 1;
       const newId = generateId();
+      // [FIX M4] Tự động tìm và điền khách hàng từ đơn gốc — tránh điểm không bị thu hồi khi trả
+      const orderCustomer = order.customerId
+        ? (customers.find(c => c.id === order.customerId) ?? null)
+        : null;
+
       setTabs(prev => [
         ...prev,
         {
@@ -127,17 +139,21 @@ export const usePOSReturnFlow = ({
           name: `Trả hàng ${nextNum}`,
           mode: 'return',
           cart: [],
-          returnCart: order.items.map(item => ({
-            productId: item.productId,
-            sku: item.sku,
-            name: item.name,
-            quantity: 0,
-            price: item.price,
-            discount: item.discount,
-            total: 0,
-            maxQuantity: item.quantity,
-          })),
-          selectedCustomer: null,
+          // [FIX C1-POS] Chỉ load items gốc (sale), loại trừ exchange items
+          // Tránh cho phép "trả ngược" hàng đã xuất đổi → trừ kép tồn kho
+          returnCart: order.items
+            .filter(item => !item.lineType || item.lineType === 'sale')
+            .map(item => ({
+              productId: item.productId,
+              sku: item.sku,
+              name: item.name,
+              quantity: 0,
+              price: item.price,
+              discount: item.discount,
+              total: 0,
+              maxQuantity: item.quantity,
+            })),
+          selectedCustomer: orderCustomer,
           discountValue: 0,
           discountType: 'fixed',
           paymentMethod: 'Cash',
@@ -154,7 +170,8 @@ export const usePOSReturnFlow = ({
       setActiveTabId(newId);
       setShowReturnModal(false);
     },
-    [setActiveTabId, setShowReturnModal, setTabs, tabs]
+    // [FIX F2] Thêm customers vào deps — tránh stale closure bỏ sót khách mới thêm trong phiên
+    [customers, setActiveTabId, setShowReturnModal, setTabs, tabs]
   );
 
   const handleReturnFast = React.useCallback(() => {

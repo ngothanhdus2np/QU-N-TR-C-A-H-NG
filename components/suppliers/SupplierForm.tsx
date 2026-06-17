@@ -82,7 +82,7 @@ const SupplierForm: React.FC<SupplierFormProps> = ({
         .split(',')
         .map(part => part.trim())
         .filter(Boolean);
-      setStreetAddress(addressParts.length > 2 ? addressParts.slice(0, -2).join(', ') : supplier.address || '');
+      setStreetAddress(addressParts.length > 2 ? addressParts.slice(0, -2).join(', ') : '');
       setWard(addressParts.length > 1 ? addressParts[addressParts.length - 2] : '');
       setCity(addressParts.length > 0 ? addressParts[addressParts.length - 1] : '');
       setGroup(supplier.group || '');

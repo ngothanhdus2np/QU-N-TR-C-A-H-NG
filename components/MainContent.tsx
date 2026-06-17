@@ -1,4 +1,4 @@
-import React, { useTransition, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
@@ -53,6 +53,10 @@ import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
 
 const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
+const OnlineCatalogPage = React.lazy(() => import('./website/OnlineCatalogPage'));
+const WebsiteProductsPage = React.lazy(() => import('./website/WebsiteProductsPage'));
+const WebsiteOrdersPage = React.lazy(() => import('./website/WebsiteOrdersPage'));
+const ShopeeProductsPage = React.lazy(() => import('./website/ShopeeProductsPage'));
 
 interface MainContentProps {
   activeTab: string;
@@ -107,7 +111,6 @@ const MainContent: React.FC<MainContentProps> = ({
   isDraining,
   onDrainOfflineQueue,
 }) => {
-  const [isPending, startTransition] = useTransition();
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
   const [eodDismissed, setEodDismissed] = useState(false);
   const [onlineShopeeSubTab, setOnlineShopeeSubTab] = useState<RevenueSubTab>('source');
@@ -154,9 +157,7 @@ const MainContent: React.FC<MainContentProps> = ({
   }, []);
 
   const handleSetActiveTab = (tab: string) => {
-    startTransition(() => {
-      setActiveTab(tab);
-    });
+    setActiveTab(tab);
   };
 
   const renderContent = () => {
@@ -439,11 +440,17 @@ const MainContent: React.FC<MainContentProps> = ({
               </div>
             </aside>
             <section className="relative h-full min-h-0 min-w-0 overflow-hidden">
-              {renderShopeeRevenueManager({
-                initialSubTab: 'source',
-                hiddenSubTabs: ['diagnosis'],
-                withFilters: true,
-              })}
+              {onlineShopeeSubTab === 'source' ? (
+                <React.Suspense fallback={<CardSkeleton />}>
+                  <ShopeeProductsPage />
+                </React.Suspense>
+              ) : (
+                renderShopeeRevenueManager({
+                  initialSubTab: 'source',
+                  hiddenSubTabs: ['diagnosis'],
+                  withFilters: true,
+                })
+              )}
             </section>
           </div>
         );
@@ -531,6 +538,8 @@ const MainContent: React.FC<MainContentProps> = ({
           <OrderInvoices
             orders={data.posOrders || []}
             customers={data.posCustomers || []}
+            products={data.posProducts || []}
+            revenue={data.revenue || []}
             storeName={brandProfile.name}
             onUpdateSurgical={updateSurgical}
           />
@@ -541,6 +550,7 @@ const MainContent: React.FC<MainContentProps> = ({
             orders={data.posOrders || []}
             products={data.posProducts || []}
             customers={data.posCustomers || []}
+            revenue={data.revenue || []}
             transactions={data.inventoryTransactions || []}
             onUpdateSurgical={updateSurgical}
           />
@@ -623,6 +633,8 @@ const MainContent: React.FC<MainContentProps> = ({
             orders={data.posOrders || []}
             products={data.posProducts || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
+            employees={data.employees || []}
+            inventoryTransactions={data.inventoryTransactions || []}
           />
         );
       case 'report-orders':
@@ -684,6 +696,24 @@ const MainContent: React.FC<MainContentProps> = ({
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
         );
+      case 'online-catalog':
+        return (
+          <React.Suspense fallback={<CardSkeleton />}>
+            <OnlineCatalogPage navigationSlot={renderOnlineNav()} onNavigate={handleSetActiveTab} />
+          </React.Suspense>
+        );
+      case 'website-products':
+        return (
+          <React.Suspense fallback={<CardSkeleton />}>
+            <WebsiteProductsPage navigationSlot={renderOnlineNav()} />
+          </React.Suspense>
+        );
+      case 'website-orders':
+        return (
+          <React.Suspense fallback={<TableSkeleton />}>
+            <WebsiteOrdersPage navigationSlot={renderOnlineNav()} />
+          </React.Suspense>
+        );
       default:
         return null;
     }
@@ -697,7 +727,10 @@ const MainContent: React.FC<MainContentProps> = ({
   const isOnlineActive =
     activeTab === 'shopee-revenue' ||
     activeTab === 'delivery-partners' ||
-    activeTab === 'shipping-orders';
+    activeTab === 'shipping-orders' ||
+    activeTab === 'online-catalog' ||
+    activeTab === 'website-products' ||
+    activeTab === 'website-orders';
 
   return (
     <div
@@ -750,7 +783,7 @@ const MainContent: React.FC<MainContentProps> = ({
                   updateSurgical,
                 })
               }
-              onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems) =>
+              onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems, updatedCustomer) =>
                 processReturnOrder({
                   data,
                   returnOrder,
@@ -758,10 +791,13 @@ const MainContent: React.FC<MainContentProps> = ({
                   returnedItems,
                   exchangeItems,
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
+                  updatedCustomer,
                   pushBatch,
                   updateSurgical,
                 })
               }
+              onUpdateSurgical={updateSurgical}
+              revenue={data.revenue || []}
             />
           </ErrorBoundary>
         </div>
@@ -775,6 +811,7 @@ const MainContent: React.FC<MainContentProps> = ({
               orders={data.posOrders || []}
               productGroups={data.productGroups || []}
               suppliers={data.suppliers || []}
+              inventoryCostMethod={data.posInventorySettings?.costMethod}
               onUpdateProducts={newList => updateData('posProducts', newList)}
               onUpdateSurgical={updateSurgical}
               onPushBatch={pushBatch}
@@ -842,48 +879,28 @@ const MainContent: React.FC<MainContentProps> = ({
         </div>
       )}
 
-      {/* All other tabs — render via switch with skeleton during transitions */}
+      {/* All other tabs */}
       {!isPosActive &&
         !isGoodsActive &&
         !isStaffActive &&
-        !isPayrollActive &&
-        (isPending ? (
-          <div className="space-y-8 pt-4">
-            <CardSkeleton />
-            <TableSkeleton />
-          </div>
-        ) : (
+        !isPayrollActive && (
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0 } }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
               className="h-full"
             >
               <ErrorBoundary key={activeTab} moduleName={activeTab}>
-                <div
-                  className={
-                    isOnlineActive
-                      ? 'h-full min-h-0'
-                      : activeTab.startsWith('analysis-')
-                        ? 'h-full pt-10 pb-5'
-                        : activeTab.startsWith('report-')
-                          ? 'h-full pt-10 pb-5'
-                          : activeTab === 'cash-ledger'
-                            ? 'h-full pt-10 pb-5'
-                            : activeTab === 'overview'
-                              ? 'h-full pt-10 pb-5'
-                              : 'h-full pt-10 pb-5'
-                  }
-                >
+                <div className="h-full pt-10 pb-5">
                   {renderContent()}
                 </div>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
-        ))}
+        )}
     </div>
   );
 };

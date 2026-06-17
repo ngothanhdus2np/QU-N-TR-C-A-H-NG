@@ -36,7 +36,7 @@ export const useExpenseRecurring = ({
     );
   }, [recurringExpenses]);
 
-  const handlePostRecurring = (recurring: RecurringExpense) => {
+  const handlePostRecurring = async (recurring: RecurringExpense) => {
     const now = new Date();
     const currentMonth = now.toISOString().slice(0, 7);
     const dateStr = `${currentMonth}-${String(recurring.dayOfMonth).padStart(2, '0')}`;
@@ -50,7 +50,12 @@ export const useExpenseRecurring = ({
     };
 
     if (onUpdateSurgical) {
-      onUpdateSurgical([{ key: 'expenses', item: newExpense }]);
+      try {
+        await onUpdateSurgical([{ key: 'expenses', item: newExpense }]);
+      } catch (err) {
+        console.error('[useExpenseRecurring] handlePostRecurring failed', err);
+        return; // không cập nhật lastPostedMonth nếu lưu thất bại
+      }
     } else {
       onUpdate([newExpense, ...list]);
     }

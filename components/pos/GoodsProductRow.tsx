@@ -37,8 +37,8 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     </td>
     {visibleColumns.includes('category') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('productType') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.productType || 'Hàng hóa'}</td>}
-    {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-700 text-sm tabular-nums whitespace-nowrap">{variant.salePrice.toLocaleString()}đ</td>}
-    {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right font-normal text-slate-400 text-xs tabular-nums whitespace-nowrap">{variant.importPrice.toLocaleString()}đ</td>}
+    {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-700 text-sm tabular-nums whitespace-nowrap">{(Number(variant.salePrice) || 0).toLocaleString()}đ</td>}
+    {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right font-normal text-slate-400 text-xs tabular-nums whitespace-nowrap">{(Number(variant.importPrice) || 0).toLocaleString()}đ</td>}
     {visibleColumns.includes('brand') && <td className="px-4 py-3 text-xs text-slate-500 font-normal whitespace-nowrap">{variant.brand || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('location') && (
       <td className="px-4 py-3 whitespace-nowrap">
@@ -47,8 +47,8 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     )}
     {visibleColumns.includes('stock') && (
       <td className="px-4 py-3 text-right whitespace-nowrap">
-        <span className={`text-sm tabular-nums ${variant.stock === 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
-        {variant.stock === 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
+        <span className={`text-sm tabular-nums ${variant.stock <= 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
+        {variant.stock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
         {variant.stock > 0 && variant.stock <= (variant.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
       </td>
     )}
@@ -87,6 +87,10 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   variants?: POSProduct[];
 }) => {
   const isParent = product.isParent && product.variantCount && product.variantCount > 0;
+  // BUG-36: tổng tồn kho từ variants (parent product.stock luôn = 0)
+  const totalVariantStock = isParent && variants?.length
+    ? variants.reduce((s, v) => s + (v.stock || 0), 0)
+    : product.stock;
 
   const skuRange = (() => {
     if (!isParent || !variants || variants.length === 0) return null;
@@ -135,8 +139,8 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       </td>
       {visibleColumns.includes('category') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.categoryId || <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('productType') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.productType || 'Hàng hóa'}</td>}
-      {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-900 text-sm tabular-nums whitespace-nowrap">{product.salePrice.toLocaleString()}đ</td>}
-      {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right text-slate-400 text-sm tabular-nums whitespace-nowrap">{product.importPrice.toLocaleString()}đ</td>}
+      {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-900 text-sm tabular-nums whitespace-nowrap">{(Number(product.salePrice) || 0).toLocaleString()}đ</td>}
+      {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right text-slate-400 text-sm tabular-nums whitespace-nowrap">{(Number(product.importPrice) || 0).toLocaleString()}đ</td>}
       {visibleColumns.includes('brand') && <td className="px-4 py-3 text-sm text-slate-500 w-[100px] max-w-[100px]"><span className="truncate block">{product.brand || <span className="text-slate-300">—</span>}</span></td>}
       {visibleColumns.includes('location') && (
         <td className="px-4 py-3 w-[80px] max-w-[80px]">
@@ -145,9 +149,9 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       )}
       {visibleColumns.includes('stock') && (
         <td className="px-4 py-3 text-right whitespace-nowrap">
-          <span className={`text-sm tabular-nums ${product.stock === 0 ? 'text-rose-600' : product.stock <= (product.minStock ?? 5) ? 'text-amber-600' : 'text-slate-800'}`}>{product.stock}</span>
-          {product.stock === 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
-          {product.stock > 0 && product.stock <= (product.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
+          <span className={`text-sm tabular-nums ${totalVariantStock <= 0 ? 'text-rose-600' : !isParent && totalVariantStock <= (product.minStock ?? 5) ? 'text-amber-600' : 'text-slate-800'}`}>{totalVariantStock}</span>
+          {totalVariantStock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
+          {!isParent && totalVariantStock > 0 && totalVariantStock <= (product.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
         </td>
       )}
       {visibleColumns.includes('customerOrders') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{product.customerOrders ?? 0}</td>}

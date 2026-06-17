@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Search, Check, ChevronDown } from 'lucide-react';
 import { POSCustomer, POSOrderItem } from '../../types';
 
-type PaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other';
+type PaymentMethod = 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
 
 interface POSMobileCheckoutSheetProps {
   isOpen: boolean;

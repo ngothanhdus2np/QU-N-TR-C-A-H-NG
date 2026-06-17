@@ -9,6 +9,7 @@ import {
   MoreVertical,
   ExternalLink,
 } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 import {
   POSCustomer,
   POSOrderItem,
@@ -179,6 +180,7 @@ const NonCashPaymentPanel: React.FC<{
     }
   }, [accounts, selectedAccountId]);
 
+  const { showToast } = useToast();
   const copyPaymentInfo = async () => {
     const text = [
       config.accountLabel,
@@ -189,9 +191,9 @@ const NonCashPaymentPanel: React.FC<{
       .join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      window.alert('Đã sao chép thông tin thanh toán.');
+      showToast('Đã sao chép thông tin thanh toán.', 'success');
     } catch {
-      window.alert(text);
+      showToast(text, 'info');
     }
   };
 
@@ -340,6 +342,9 @@ interface POSCheckoutProps {
   finalReturnAmount: number;
   amountToPayCustomer: number;
   customerPaysDifference: number;
+  returnDiscount: number;
+  returnFee: number;
+  returnOtherRefund: number;
   currentCashReceived: number;
   isDebtMode: boolean;
   pointsEarned: number;
@@ -382,6 +387,9 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   finalReturnAmount,
   amountToPayCustomer,
   customerPaysDifference,
+  returnDiscount,
+  returnFee,
+  returnOtherRefund,
   currentCashReceived,
   isDebtMode,
   pointsEarned,
@@ -409,7 +417,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   const nonCashFallback =
     paymentMethod === 'Momo'
       ? resolvedPaymentSettings.wallet
-      : paymentMethod === 'Other'
+      : paymentMethod === 'Other' || paymentMethod === 'Card'
         ? resolvedPaymentSettings.card
         : resolvedPaymentSettings.bank;
   const paymentMethods = React.useMemo(() => {
@@ -423,9 +431,9 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
           enabled.includes('Bank') && resolvedPaymentSettings.bankAccounts.some(a => a.enabled),
       },
       {
-        method: 'Other' as const,
+        method: 'Card' as const,
         label: resolvedPaymentSettings.card.displayName || 'Thẻ',
-        enabled: enabled.includes('Other') && resolvedPaymentSettings.card.enabled,
+        enabled: (enabled.includes('Card') || enabled.includes('Other')) && resolvedPaymentSettings.card.enabled,
       },
       {
         method: 'Momo' as const,
@@ -458,11 +466,13 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
     [resolvedPaymentSettings]
   );
   const hasCheckoutItems =
-    mode === 'return' ? returnCart.length > 0 || cart.length > 0 : cart.length > 0;
+    mode === 'return'
+      ? returnCart.some(item => item.quantity > 0) || cart.length > 0
+      : cart.length > 0;
   // Kiểm tra xem có sản phẩm nào trong giỏ được thiết lập tích điểm không
   const pointsEligibleProductIds = React.useMemo(
     () =>
-      new Set(products.filter(product => product.allowPoints === true).map(product => product.id)),
+      new Set(products.filter(product => product.allowPoints !== false).map(product => product.id)),
     [products]
   );
   const hasPointsEligibleProducts = cart.some(item => pointsEligibleProductIds.has(item.productId));
@@ -623,17 +633,6 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-600 font-normal">Tổng giá gốc hàng mua</span>
-                  <div className="flex items-center gap-4">
-                    <span className="font-normal text-slate-400">
-                      {returnCart.reduce((a, b) => a + b.quantity, 0)}
-                    </span>
-                    <span className="font-normal text-slate-900">
-                      {totalReturnBeforeDiscount.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-600 font-normal">Tổng tiền hàng trả</span>
                   <div className="flex items-center gap-4">
                     <span className="font-normal text-slate-400">
@@ -644,20 +643,47 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div
+                  className="flex justify-between items-center text-sm cursor-pointer hover:bg-slate-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors"
+                  onClick={() => {
+                    const raw = window.prompt('Nhập giảm giá trả hàng', returnDiscount > 0 ? String(returnDiscount) : '');
+                    if (raw === null) return;
+                    onUpdateTab({ returnDiscount: parseCurrencyInput(raw) });
+                  }}
+                >
                   <span className="text-slate-600 font-normal">Giảm giá</span>
                   <div className="flex-1 border-b border-dashed border-slate-200 mx-4" />
-                  <span className="font-normal text-slate-900">0</span>
+                  <span className="font-normal text-slate-900 border-b border-dashed border-slate-300 min-w-[48px] text-right">
+                    {returnDiscount > 0 ? returnDiscount.toLocaleString() : '0'}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div
+                  className="flex justify-between items-center text-sm cursor-pointer hover:bg-slate-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors"
+                  onClick={() => {
+                    const raw = window.prompt('Nhập phí trả hàng', returnFee > 0 ? String(returnFee) : '');
+                    if (raw === null) return;
+                    onUpdateTab({ returnFee: parseCurrencyInput(raw) });
+                  }}
+                >
                   <span className="text-slate-600 font-normal">Phí trả hàng</span>
                   <div className="flex-1 border-b border-dashed border-slate-200 mx-4" />
-                  <span className="font-normal text-slate-900">0</span>
+                  <span className="font-normal text-slate-900 border-b border-dashed border-slate-300 min-w-[48px] text-right">
+                    {returnFee > 0 ? returnFee.toLocaleString() : '0'}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div
+                  className="flex justify-between items-center text-sm cursor-pointer hover:bg-slate-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors"
+                  onClick={() => {
+                    const raw = window.prompt('Nhập hoàn trả thu khác', returnOtherRefund > 0 ? String(returnOtherRefund) : '');
+                    if (raw === null) return;
+                    onUpdateTab({ returnOtherRefund: parseCurrencyInput(raw) });
+                  }}
+                >
                   <span className="text-slate-600 font-normal">Hoàn trả thu khác</span>
                   <div className="flex-1 border-b border-dashed border-slate-200 mx-4" />
-                  <span className="font-normal text-slate-900">0</span>
+                  <span className="font-normal text-slate-900 border-b border-dashed border-slate-300 min-w-[48px] text-right">
+                    {returnOtherRefund > 0 ? returnOtherRefund.toLocaleString() : '0'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                   <span className="text-xs font-normal uppercase text-slate-400">
@@ -678,15 +704,6 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                 <h3 className="text-emerald-500 font-semibold text-lg uppercase tracking-tight">
                   Mua hàng
                 </h3>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-xs font-normal text-slate-600 uppercase tracking-wide">
-                    Giao hàng
-                  </span>
-                </label>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
@@ -723,7 +740,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               </div>
             </div>
 
-            {finalReturnAmount > 0 && netPayable > 0 && (
+            {finalReturnAmount > 0 && (
               <div className="pt-4">
                 {customerPaysDifference > 0 ? (
                   <div className="flex justify-between items-center border-t border-slate-100 pt-3">

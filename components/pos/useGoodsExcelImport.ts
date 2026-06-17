@@ -1,7 +1,8 @@
 import React from 'react';
 import * as XLSX from 'xlsx';
-import { AppData, POSProduct } from '../../types';
+import { AppData, InventoryTransaction, POSProduct } from '../../types';
 import { formatAutoSku, generateId, getNextSKUNumber, isAutoSkuValue } from '../../src/lib';
+import { EXCEL_MAX_ROWS, assertSafeExcelBuffer, assertSafeExcelFile } from '../../src/lib/excelSafety';
 import { ImportStatus } from './GoodsImportExport';
 
 interface UseGoodsExcelImportArgs {
@@ -26,8 +27,15 @@ export const useGoodsExcelImport = ({
     const reader = new FileReader();
     reader.onload = async evt => {
       try {
+        assertSafeExcelFile(file);
         const buf = evt.target?.result as ArrayBuffer;
-        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        assertSafeExcelBuffer(buf, file.name);
+        const wb = XLSX.read(buf, {
+          type: 'array',
+          cellDates: true,
+          dense: true,
+          sheetRows: EXCEL_MAX_ROWS,
+        });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
@@ -93,16 +101,46 @@ export const useGoodsExcelImport = ({
                 categoryId: findKey(['Nhóm hàng', 'Category']) || 'default',
                 importPrice: Number(findKey(['Giá vốn', 'Cost']) || 0),
                 salePrice: Number(findKey(['Giá bán', 'Price']) || 0),
-                stock: Number(findKey(['Tồn kho', 'Stock']) || 0),
+                stock: Math.max(0, Number(findKey(['Tồn kho', 'Stock']) || 0)), // [FIX M6] không cho import tồn kho âm
                 minStock: 0,
                 unit: findKey(['Đơn vị tính', 'Unit']) || 'Cái',
                 status: 'Active' as const,
               };
             })
-            .filter(p => p.name !== '');
+            // [FIX m6] Lọc tên rỗng, khoảng trắng, hoặc 'null'/'undefined' do cột không tìm thấy
+            .filter(p => {
+              const n = String(p.name || '').trim();
+              return n !== '' && n !== 'null' && n !== 'undefined';
+            });
 
           if (onPushBatch) {
             await onPushBatch('posProducts', importedProducts);
+            // Tạo transaction tồn kho ban đầu để buildCostHistory có thể đọc nextImportPrice
+            const openingStockItems = importedProducts.filter(
+              p => p.stock > 0 && p.importPrice > 0
+            );
+            if (openingStockItems.length > 0) {
+              const openingTransaction: InventoryTransaction = {
+                id: generateId(),
+                date: new Date().toISOString(),
+                type: 'Import',
+                status: 'completed',
+                note: 'Tồn kho ban đầu từ import Excel',
+                items: openingStockItems.map(p => ({
+                  productId: p.id,
+                  sku: p.sku,
+                  name: p.name,
+                  quantity: p.stock,
+                  previousStock: 0,
+                  newStock: p.stock,
+                  price: p.importPrice,
+                  costMethod: 'fixed' as const,
+                  previousImportPrice: 0,
+                  nextImportPrice: p.importPrice,
+                })),
+              };
+              await onPushBatch('inventoryTransactions', [openingTransaction]);
+            }
           } else {
             onUpdateProducts([...products, ...importedProducts]);
           }

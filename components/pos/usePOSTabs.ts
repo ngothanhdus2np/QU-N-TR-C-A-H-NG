@@ -86,10 +86,13 @@ export const usePOSTabs = ({
         return;
       }
 
+      const closedIndex = tabs.findIndex(t => t.id === id);
       const newTabs = tabs.filter(t => t.id !== id);
       setTabs(newTabs);
       if (activeTabId === id) {
-        setActiveTabId(newTabs[0].id);
+        // Chọn tab liền kề: ưu tiên tab bên phải, nếu không có thì tab bên trái
+        const nextTab = newTabs[closedIndex] ?? newTabs[closedIndex - 1] ?? newTabs[0];
+        setActiveTabId(nextTab.id);
       }
     },
     [activeTabId, defaultPaymentMethod, setActiveTabId, setTabs, tabs]

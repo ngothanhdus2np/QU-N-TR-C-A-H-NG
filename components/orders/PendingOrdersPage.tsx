@@ -32,11 +32,12 @@ const STATUS_META: Record<POSOrderStatus, { label: string; className: string }> 
 const PAYMENT_LABELS: Record<POSOrder['paymentMethod'], string> = {
   Cash: 'Tiền mặt',
   Bank: 'Chuyển khoản',
+  Card: 'Thẻ',
   Momo: 'Momo',
   Other: 'Khác',
 };
 
-const PAYMENT_METHODS: POSOrder['paymentMethod'][] = ['Cash', 'Bank', 'Momo', 'Other'];
+const PAYMENT_METHODS: POSOrder['paymentMethod'][] = ['Cash', 'Bank', 'Card', 'Momo', 'Other'];
 
 type OrderExtraFilters = {
   shippingUnit?: string;

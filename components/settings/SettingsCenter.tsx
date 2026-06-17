@@ -85,6 +85,7 @@ const AppearanceTab = lazy(() => import('./tabs/AppearanceTab'));
 const GoodsTab = lazy(() => import('./tabs/GoodsTab'));
 const PrintTemplatesTab = lazy(() => import('./tabs/PrintTemplatesTab'));
 const MigrationTab = lazy(() => import('./tabs/MigrationTab'));
+const AccountsTab = lazy(() => import('./tabs/AccountsTab'));
 
 type SettingsTab =
   | 'store'
@@ -98,7 +99,8 @@ type SettingsTab =
   | 'integrations'
   | 'sync'
   | 'migration'
-  | 'security';
+  | 'security'
+  | 'accounts';
 
 interface SettingsCenterProps {
   isOpen: boolean;
@@ -176,6 +178,11 @@ const SETTINGS_PAGES: Record<
     description: 'Import từ KiotViet và xóa dữ liệu test',
     icon: Upload,
   },
+  accounts: {
+    label: 'Quản lý tài khoản',
+    description: 'Tạo, sửa mật khẩu và xóa tài khoản đăng nhập',
+    icon: User,
+  },
 };
 
 const SETTINGS_GROUPS: { title: string; items: SettingsTab[] }[] = [
@@ -184,6 +191,7 @@ const SETTINGS_GROUPS: { title: string; items: SettingsTab[] }[] = [
   { title: 'Quản lý', items: ['goods', 'customers'] },
   { title: 'Tiện ích', items: ['notifications', 'integrations'] },
   { title: 'Dữ liệu', items: ['sync', 'security', 'migration'] },
+  { title: 'Tài khoản', items: ['accounts'] },
 ];
 
 const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
@@ -226,6 +234,9 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
     { id: 'migration-guide', label: 'Quy trình' },
     { id: 'migration-import', label: 'Import dữ liệu' },
     { id: 'migration-delete', label: 'Xóa dữ liệu test' },
+  ],
+  accounts: [
+    { id: 'accounts-create', label: 'Tạo tài khoản' },
   ],
 };
 
@@ -1398,7 +1409,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
           </div>
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
             <WifiOff className="h-5 w-5 text-amber-600 mb-3" />
-            <p className="text-sm text-slate-900">{offlinePendingCount} offline</p>
+            <p className="text-sm text-slate-900">{offlinePendingCount} chờ đồng bộ</p>
             <p className="text-xs text-slate-500 mt-1">{pendingCount} thay đổi chờ sync.</p>
           </div>
         </div>
@@ -1421,7 +1432,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-normal text-amber-700 hover:bg-amber-50 disabled:opacity-50"
             >
               <Upload className="h-4 w-4" />
-              Đẩy thao tác offline
+              Đẩy thao tác chờ đồng bộ
             </button>
           )}
         </div>
@@ -1606,7 +1617,8 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     tab === 'payments' ||
     tab === 'printTemplates' ||
     tab === 'appearance' ||
-    tab === 'migration';
+    tab === 'migration' ||
+    tab === 'accounts';
 
   const ActiveIcon = activeTabMeta.icon;
 
@@ -1676,6 +1688,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                   {activeTab === 'migration' && (
                     <MigrationTab onRefresh={onImportRefresh ?? onRefresh} />
                   )}
+                  {activeTab === 'accounts' && <AccountsTab />}
                 </Suspense>
               </div>
               {activeTab !== 'printTemplates' && <RightAnchor activeTab={activeTab} />}

@@ -338,7 +338,7 @@ export function useShopeeInventoryOut({
     onUpdateShopeeInventoryOut(newList);
   };
 
-  const handleAddInventoryOut = () => {
+  const handleAddInventoryOut = async () => {
     if (!onUpdateShopeeInventoryOut || !inventoryOutForm.sku || !inventoryOutForm.orderId) {
       alert('Vui lòng nhập đầy đủ Mã đơn hàng và Mã SKU');
       return;
@@ -432,9 +432,19 @@ export function useShopeeInventoryOut({
               item: { ...r, adsCost: adsPerOrder, adsTax: newAdsTax, netProfit: newNetProfit },
             };
           });
-        onUpdateSurgical(updates);
+        try {
+          await onUpdateSurgical(updates);
+        } catch (err) {
+          console.error('[useShopeeInventoryOut] handleAddInventoryOut (ads batch) failed', err);
+          return;
+        }
       } else {
-        onUpdateSurgical([{ key: 'shopeeInventoryOut', item: newRecord }]);
+        try {
+          await onUpdateSurgical([{ key: 'shopeeInventoryOut', item: newRecord }]);
+        } catch (err) {
+          console.error('[useShopeeInventoryOut] handleAddInventoryOut failed', err);
+          return;
+        }
       }
     } else {
       let finalList = [...shopeeInventoryOut];
@@ -489,11 +499,16 @@ export function useShopeeInventoryOut({
 
   const handleRemoveInventoryOut = async (id: string) => {
     if (!onUpdateShopeeInventoryOut) return;
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'shopeeInventoryOut', item: { id }, isDelete: true }]);
-    } else {
-      const newList = shopeeInventoryOut.filter(i => i.id !== id);
-      await onUpdateShopeeInventoryOut(newList);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'shopeeInventoryOut', item: { id }, isDelete: true }]);
+      } else {
+        const newList = shopeeInventoryOut.filter(i => i.id !== id);
+        await onUpdateShopeeInventoryOut(newList);
+      }
+    } catch (err) {
+      console.error('[useShopeeInventoryOut] handleRemoveInventoryOut failed', err);
+      return;
     }
     setDeleteConfirmId(null);
   };

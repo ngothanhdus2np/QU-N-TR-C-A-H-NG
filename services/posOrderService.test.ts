@@ -65,8 +65,8 @@ describe('posOrderService', () => {
         grossProfit: 50000,
       }),
     ]);
+    // [FIX I1] inventory transaction và stock update gọi riêng biệt
     expect(updateSurgical).toHaveBeenCalledWith([
-      expect.objectContaining({ key: 'posProducts' }),
       expect.objectContaining({
         key: 'inventoryTransactions',
         item: expect.objectContaining({
@@ -75,6 +75,9 @@ describe('posOrderService', () => {
           items: [expect.objectContaining({ previousStock: 10, newStock: 8 })],
         }),
       }),
+    ]);
+    expect(updateSurgical).toHaveBeenCalledWith([
+      expect.objectContaining({ key: 'posProducts' }),
     ]);
   });
 
@@ -113,12 +116,18 @@ describe('posOrderService', () => {
       updateSurgical,
     });
 
+    // [FIX I1] inventory transaction và stock update gọi riêng biệt
+    expect(updateSurgical).toHaveBeenCalledWith([
+      expect.objectContaining({
+        key: 'inventoryTransactions',
+        item: expect.objectContaining({ allowNegativeStock: true }),
+      }),
+    ]);
     expect(updateSurgical).toHaveBeenCalledWith([
       expect.objectContaining({
         key: 'posProducts',
         item: expect.objectContaining({ stock: -1 }),
       }),
-      expect.objectContaining({ key: 'inventoryTransactions' }),
     ]);
   });
 

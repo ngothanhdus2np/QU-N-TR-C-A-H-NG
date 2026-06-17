@@ -205,18 +205,15 @@ export default function ShippingOrders({ navigationSlot }: Props) {
   const connect = useCallback(
     (shopIdx: number) => {
       const currentWs = wsRefs.current[shopIdx];
-      console.log(`[WS] connect(${shopIdx}) called — ref readyState:`, currentWs?.readyState ?? 'null');
       if (
         currentWs &&
         (currentWs.readyState === WebSocket.OPEN ||
           currentWs.readyState === WebSocket.CONNECTING)
       ) {
-        console.log(`[WS] connect(${shopIdx}) EARLY RETURN — already open/connecting`);
         return;
       }
 
       const shop = SHOPS[shopIdx];
-      console.log(`[WS] connect(${shopIdx}) creating new WebSocket →`, shop.ws);
 
       setConnStates(prev => {
         const next = [...prev];
@@ -228,7 +225,6 @@ export default function ShippingOrders({ navigationSlot }: Props) {
       wsRefs.current[shopIdx] = ws;
 
       ws.onopen = () => {
-        console.log(`[WS] shop${shopIdx} OPENED`);
         setConnStates(prev => {
           const next = [...prev];
           next[shopIdx] = 'connected';
@@ -305,8 +301,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
         }
       };
 
-      ws.onclose = (e) => {
-        console.log(`[WS] shop${shopIdx} CLOSED code=${e.code} reason=${e.reason} clean=${e.wasClean}`);
+      ws.onclose = () => {
         setConnStates(prev => {
           const next = [...prev];
           next[shopIdx] = 'disconnected';
@@ -315,8 +310,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
         reconnectRefs.current[shopIdx] = setTimeout(() => connect(shopIdx), RECONNECT_MS);
       };
 
-      ws.onerror = (e) => {
-        console.log(`[WS] shop${shopIdx} ERROR`, e);
+      ws.onerror = () => {
         ws.close();
       };
     },

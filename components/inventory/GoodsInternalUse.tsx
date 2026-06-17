@@ -191,6 +191,20 @@ export default function GoodsInternalUse({ products, data, onUpdateSurgical }: G
       return;
     }
 
+    // Validate lại tồn kho thực tế trước khi ghi (snapshot trong form có thể lỗi thời)
+    const insufficientItem = items.find(item => {
+      const product = products.find(p => p.id === item.productId);
+      return product && item.quantity > (product.stock || 0);
+    });
+    if (insufficientItem) {
+      const product = products.find(p => p.id === insufficientItem.productId);
+      showToast(
+        `Không đủ tồn kho: "${insufficientItem.productName}" (tồn hiện tại: ${product?.stock ?? 0}, cần xuất: ${insufficientItem.quantity})`,
+        'error'
+      );
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -204,7 +218,7 @@ export default function GoodsInternalUse({ products, data, onUpdateSurgical }: G
             key: 'posProducts',
             item: {
               ...product,
-              stock: (product.stock || 0) - item.quantity
+              stock: Math.max(0, (product.stock || 0) - item.quantity)
             },
             isDelete: false
           });

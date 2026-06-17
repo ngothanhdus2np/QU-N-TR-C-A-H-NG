@@ -487,7 +487,7 @@ export const dataMapper = {
           const isParent = p.is_parent ?? p.isParent ?? false;
           return {
             id: p.id,
-            sku: isParent ? '' : p.sku || '',
+            sku: p.sku || '',
             name:
               !isParent && (p.parent_id || p.parentId)
                 ? buildVariantProductName((p.name || '') as string, variantAttributes as Record<string, string>)
@@ -560,6 +560,8 @@ export const dataMapper = {
             o.is_return ?? o.isReturn
           ),
           refundAmount: Number(o.refund_amount || 0),
+          cashReceived: (o.cash_received != null) ? Number(o.cash_received) : (o.cashReceived != null ? Number(o.cashReceived) : undefined),
+          splitPayments: o.split_payments || o.splitPayments || undefined,
         })),
         localData?.posOrders || []
       ),
@@ -573,6 +575,7 @@ export const dataMapper = {
           notes: c.notes || '',
           points: Number(c.points || 0),
           totalSpent: Number(c.total_spent || 0),
+          debtAmount: Number(c.debt_amount || c.debtAmount || 0),
           lastVisit: c.last_visit || c.lastVisit,
           tier: c.tier || 'Standard',
         })),
@@ -608,6 +611,7 @@ export const dataMapper = {
             t.decrease_count == null && t.decreaseCount == null
               ? undefined
               : Number(t.decrease_count ?? t.decreaseCount),
+          allowNegativeStock: t.allow_negative_stock || t.allowNegativeStock || false,
         })),
         localData?.inventoryTransactions || []
       ),

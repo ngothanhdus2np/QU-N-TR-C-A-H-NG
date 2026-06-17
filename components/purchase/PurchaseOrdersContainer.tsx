@@ -19,11 +19,13 @@ import {
 } from '../../types';
 import {
   AUTO_SKU_PLACEHOLDER,
+  calcEffectiveUnitPrice,
   calculateNextImportPrice,
   generateId,
   getInventoryCostMethod,
   resolveProductSku,
 } from '../../src/lib';
+import { EXCEL_MAX_ROWS, assertSafeExcelBuffer, assertSafeExcelFile } from '../../src/lib/excelSafety';
 import { useToast } from '../ui/Toast';
 import { getCurrentStaffId } from '../shared/staff';
 import { exportToExcel, printToPDF } from '../../services/exportService';
@@ -78,6 +80,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     resetPurchaseForm,
     getPurchaseItemsNetTotal,
     getPurchaseBillDiscountAmount,
+    purchaseReferenceId,
+    setPurchaseReferenceId,
     invoiceStatus,
     setInvoiceStatus,
     invoiceFile,
@@ -94,6 +98,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     setReturnDiscountValue,
     returnDiscountType,
     setReturnDiscountType,
+    returnReferenceId,
+    setReturnReferenceId,
     returnSupplierPaidAmount,
     setReturnSupplierPaidAmount,
     returnApplySupplierDebt,
@@ -230,22 +236,56 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       if (!transaction) return;
 
       const products = data.posProducts || [];
+
+      // Cảnh báo nếu tồn kho hiện tại không đủ để hoàn nguyên (đã bán bớt sau khi nhập)
+      if (transaction.type === 'Import' && transaction.status === 'completed') {
+        const shortfallItems = transaction.items.filter(item => {
+          const product = products.find(p => p.id === item.productId);
+          return product && product.stock < item.quantity;
+        });
+        if (shortfallItems.length > 0) {
+          const lines = shortfallItems
+            .map(item => {
+              const currentStock = products.find(p => p.id === item.productId)?.stock ?? 0;
+              return `• ${item.name}: tồn ${currentStock}, cần hoàn nguyên ${item.quantity}`;
+            })
+            .join('\n');
+          const confirmed = window.confirm(
+            `Cảnh báo: Một số hàng đã được bán sau khi nhập, tồn kho không đủ để hoàn nguyên đầy đủ:\n\n${lines}\n\nXóa phiếu nhập sẽ khiến tồn kho bị sai lệch. Tiếp tục?`
+          );
+          if (!confirmed) return;
+        }
+      }
+
+      // Bug I fix: only rollback stock for completed purchases, not drafts or cancelled
       const rollbackProducts =
-        transaction.type === 'Import' && transaction.status !== 'cancelled'
+        transaction.type === 'Import' && transaction.status === 'completed'
           ? products
               .map(product => {
                 const item = transaction.items.find(i => i.productId === product.id);
-                return item
-                  ? { ...product, stock: Math.max(0, product.stock - item.quantity) }
-                  : null;
+                if (!item) return null;
+                return {
+                  ...product,
+                  stock: Math.max(0, product.stock - item.quantity),
+                  // Khôi phục giá vốn trước khi nhập nếu transaction có lưu giá trị này
+                  ...(item.previousImportPrice != null
+                    ? { importPrice: item.previousImportPrice }
+                    : {}),
+                };
               })
               .filter((product): product is POSProduct => product !== null)
           : [];
+
+      // Bug F fix: find and delete the supplier debt record created for this purchase
+      const relatedDebt = (data.supplierDebts || []).find(d => d.description.includes(id));
 
       if (onUpdateSurgical) {
         await onUpdateSurgical([
           { key: 'inventoryTransactions', item: { id }, isDelete: true },
           ...rollbackProducts.map(product => ({ key: 'posProducts' as const, item: product })),
+          ...(relatedDebt
+            ? [{ key: 'supplierDebts' as const, item: { id: relatedDebt.id }, isDelete: true }]
+            : []),
         ]);
       } else {
         if (rollbackProducts.length > 0) {
@@ -253,6 +293,12 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           await onUpdateData(
             'posProducts',
             products.map(product => rollbackById.get(product.id) || product)
+          );
+        }
+        if (relatedDebt) {
+          await onUpdateData(
+            'supplierDebts',
+            (data.supplierDebts || []).filter(d => d.id !== relatedDebt.id)
           );
         }
         await onUpdateData(
@@ -274,8 +320,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       if (!transaction) return;
 
       const products = data.posProducts || [];
+      // Bug I fix: only rollback stock for completed returns, not drafts or cancelled
       const rollbackProducts =
-        transaction.type === 'PurchaseReturn' && transaction.status !== 'cancelled'
+        transaction.type === 'PurchaseReturn' && transaction.status === 'completed'
           ? products
               .map(product => {
                 const item = transaction.items.find(i => i.productId === product.id);
@@ -284,10 +331,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
               .filter((product): product is POSProduct => product !== null)
           : [];
 
+      // Bug F fix: find and delete ALL supplier debt/payment records created for this return
+      // (a return can create up to 2 records: cashPaymentRecord + debtOffsetRecord)
+      const relatedDebts = (data.supplierDebts || []).filter(d => d.description.includes(id));
+
       if (onUpdateSurgical) {
         await onUpdateSurgical([
           { key: 'inventoryTransactions', item: { id }, isDelete: true },
           ...rollbackProducts.map(product => ({ key: 'posProducts' as const, item: product })),
+          ...relatedDebts.map(debt => ({ key: 'supplierDebts' as const, item: { id: debt.id }, isDelete: true })),
         ]);
       } else {
         if (rollbackProducts.length > 0) {
@@ -295,6 +347,13 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           await onUpdateData(
             'posProducts',
             products.map(product => rollbackById.get(product.id) || product)
+          );
+        }
+        if (relatedDebts.length > 0) {
+          const debtIdsToRemove = new Set(relatedDebts.map(d => d.id));
+          await onUpdateData(
+            'supplierDebts',
+            (data.supplierDebts || []).filter(d => !debtIdsToRemove.has(d.id))
           );
         }
         await onUpdateData(
@@ -336,7 +395,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const existing = prev.find(item => item.productId === product.id);
       if (existing) {
         return prev.map(item =>
-          item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.productId === product.id
+            ? { ...item, quantity: Math.min(product.stock, item.quantity + 1) }
+            : item
         );
       }
       return [
@@ -393,8 +454,10 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       staffId: getCurrentStaffId(),
       supplierId: supplier?.id,
       supplierName,
+      referenceId: purchaseReferenceId.trim() || undefined,
       note: purchaseNote || `Phiếu tạm nhập hàng từ ${supplierName}`,
       status: 'draft',
+      invoiceStatus,
       totalAmount: Math.max(0, getPurchaseItemsNetTotal() - getPurchaseBillDiscountAmount()),
       items: purchaseItems.map(item => {
         const product = data.posProducts?.find(p => p.id === item.productId);
@@ -411,17 +474,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       }),
     };
 
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction }]);
-    } else {
-      await onUpdateData('inventoryTransactions', [
-        ...(data.inventoryTransactions || []),
-        transaction,
-      ]);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction }]);
+      } else {
+        await onUpdateData('inventoryTransactions', [
+          ...(data.inventoryTransactions || []),
+          transaction,
+        ]);
+      }
+      resetPurchaseForm();
+      setShowPurchaseForm(false);
+      showToast('Đã lưu phiếu nhập tạm', 'success');
+    } catch (err) {
+      console.error('[PurchaseOrdersContainer] Save draft failed', err);
+      showToast('Lưu phiếu tạm thất bại. Vui lòng thử lại.', 'error');
     }
-    resetPurchaseForm();
-    setShowPurchaseForm(false);
-    showToast('Đã lưu phiếu nhập tạm', 'success');
   };
 
   const handleSaveReturnDraft = async () => {
@@ -439,6 +507,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       staffId: getCurrentStaffId(),
       supplierId: supplier?.id,
       supplierName,
+      referenceId: returnReferenceId.trim() || undefined,
       note: returnNote || `Phiếu tạm trả hàng nhập cho ${supplierName}`,
       status: 'draft',
       totalAmount: getReturnSupplierMustPay(),
@@ -457,17 +526,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       }),
     };
 
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction }]);
-    } else {
-      await onUpdateData('inventoryTransactions', [
-        ...(data.inventoryTransactions || []),
-        transaction,
-      ]);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'inventoryTransactions', item: transaction }]);
+      } else {
+        await onUpdateData('inventoryTransactions', [
+          ...(data.inventoryTransactions || []),
+          transaction,
+        ]);
+      }
+      resetReturnForm();
+      setShowPurchaseReturnForm(false);
+      showToast('Đã lưu phiếu trả hàng nhập tạm', 'success');
+    } catch (err) {
+      console.error('[PurchaseOrdersContainer] Save return draft failed', err);
+      showToast('Lưu phiếu tạm thất bại. Vui lòng thử lại.', 'error');
     }
-    resetReturnForm();
-    setShowPurchaseReturnForm(false);
-    showToast('Đã lưu phiếu trả hàng nhập tạm', 'success');
   };
 
   const handlePurchaseFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -475,8 +549,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     if (!file) return;
 
     try {
+      assertSafeExcelFile(file);
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      assertSafeExcelBuffer(buffer, file.name);
+      const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+        dense: true,
+        sheetRows: EXCEL_MAX_ROWS,
+      });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
       const products = data.posProducts || [];
@@ -493,8 +574,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       rows.forEach(row => {
         const sku = String(getCell(row, ['Mã hàng', 'SKU', 'Product Code']) || '').trim();
         const name = String(getCell(row, ['Tên hàng', 'Tên sản phẩm', 'Name']) || '').trim();
+        // Bug H fix: exclude parent products (isParent: true) — they have no SKU/stock
         const product = products.find(
-          p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase()
+          p => !p.isParent && (p.sku === sku || p.name.toLowerCase() === name.toLowerCase())
         );
         if (!product) {
           if (sku || name) missing.push(sku || name);
@@ -528,10 +610,14 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         });
         return Array.from(byProduct.values());
       });
+      const missingNote =
+        missing.length > 0
+          ? `. Bỏ qua ${missing.length} dòng: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? `... (+${missing.length - 5} dòng)` : ''}`
+          : '';
       showToast(
-        `Đã nhập ${nextItems.length} dòng từ file${missing.length > 0 ? `, bỏ qua ${missing.length} dòng không khớp SKU` : ''}`,
+        `Đã nhập ${nextItems.length} dòng từ file${missingNote}`,
         missing.length > 0 ? 'warning' : 'success',
-        6000
+        8000
       );
     } catch (err) {
       console.error('[PurchaseOrdersContainer] Import purchase file failed', err);
@@ -546,8 +632,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     if (!file) return;
 
     try {
+      assertSafeExcelFile(file);
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      assertSafeExcelBuffer(buffer, file.name);
+      const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+        dense: true,
+        sheetRows: EXCEL_MAX_ROWS,
+      });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
       const products = data.posProducts || [];
@@ -564,8 +657,9 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       rows.forEach(row => {
         const sku = String(getCell(row, ['Mã hàng', 'SKU', 'Product Code']) || '').trim();
         const name = String(getCell(row, ['Tên hàng', 'Tên sản phẩm', 'Name']) || '').trim();
+        // Bug H fix: exclude parent products (isParent: true) — they have no SKU/stock
         const product = products.find(
-          p => p.sku === sku || p.name.toLowerCase() === name.toLowerCase()
+          p => !p.isParent && (p.sku === sku || p.name.toLowerCase() === name.toLowerCase())
         );
         if (!product) {
           if (sku || name) missing.push(sku || name);
@@ -601,10 +695,14 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         });
         return Array.from(byProduct.values());
       });
+      const missingNote =
+        missing.length > 0
+          ? `. Bỏ qua ${missing.length} dòng: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? `... (+${missing.length - 5} dòng)` : ''}`
+          : '';
       showToast(
-        `Đã nhập ${nextItems.length} dòng từ file${missing.length > 0 ? `, bỏ qua ${missing.length} dòng không khớp SKU` : ''}`,
+        `Đã nhập ${nextItems.length} dòng từ file${missingNote}`,
         missing.length > 0 ? 'warning' : 'success',
-        6000
+        8000
       );
     } catch (err) {
       console.error('[PurchaseOrdersContainer] Import purchase return file failed', err);
@@ -683,25 +781,31 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       status: quickProductForm.status || 'Active',
     };
 
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'posProducts', item: product }]);
-    } else {
-      await onUpdateData('posProducts', [...(data.posProducts || []), product]);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'posProducts', item: product }]);
+      } else {
+        await onUpdateData('posProducts', [...(data.posProducts || []), product]);
+      }
+      if (quickProductTarget === 'return') {
+        handleAddProductToReturn(product);
+      } else {
+        handleAddProductToPurchase(product);
+      }
+      setShowQuickProductForm(false);
+      resetQuickProductForm();
+      showToast(
+        quickProductTarget === 'return'
+          ? 'Đã thêm nhanh sản phẩm vào phiếu trả hàng nhập'
+          : 'Đã thêm nhanh sản phẩm vào phiếu nhập',
+        'success'
+      );
+      return true;
+    } catch (err) {
+      console.error('[PurchaseOrdersContainer] Save quick product failed', err);
+      showToast('Thêm sản phẩm thất bại. Vui lòng thử lại.', 'error');
+      return false;
     }
-    if (quickProductTarget === 'return') {
-      handleAddProductToReturn(product);
-    } else {
-      handleAddProductToPurchase(product);
-    }
-    setShowQuickProductForm(false);
-    resetQuickProductForm();
-    showToast(
-      quickProductTarget === 'return'
-        ? 'Đã thêm nhanh sản phẩm vào phiếu trả hàng nhập'
-        : 'Đã thêm nhanh sản phẩm vào phiếu nhập',
-      'success'
-    );
-    return true;
   };
 
   const handleSaveAndCreateMoreQuickProduct = async () => {
@@ -726,18 +830,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       status: supplierData.status || 'active',
     };
 
-    if (quickSupplierTarget === 'return') {
-      setReturnSupplier(supplier.name);
-    } else {
-      setPurchaseSupplier(supplier.name);
-    }
-    setShowQuickSupplierForm(false);
-    showToast('Đã thêm nhanh nhà cung cấp', 'success');
-
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
-    } else {
-      await onUpdateData('suppliers', [...(data.suppliers || []), supplier]);
+    try {
+      if (onUpdateSurgical) {
+        await onUpdateSurgical([{ key: 'suppliers', item: supplier }]);
+      } else {
+        await onUpdateData('suppliers', [...(data.suppliers || []), supplier]);
+      }
+      if (quickSupplierTarget === 'return') {
+        setReturnSupplier(supplier.name);
+      } else {
+        setPurchaseSupplier(supplier.name);
+      }
+      setShowQuickSupplierForm(false);
+      showToast('Đã thêm nhanh nhà cung cấp', 'success');
+    } catch (err) {
+      console.error('[PurchaseOrdersContainer] Save quick supplier failed', err);
+      showToast('Thêm nhà cung cấp thất bại. Vui lòng thử lại.', 'error');
     }
   };
 
@@ -751,7 +859,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const products = data.posProducts || [];
       const supplier = findSupplier(purchaseSupplier);
       const supplierName = supplier?.name || purchaseSupplier.trim() || 'NCC vãng lai';
-      const costMethod = getInventoryCostMethod();
+      // Ưu tiên costMethod từ Supabase (posInventorySettings), fallback về localStorage
+      const costMethod = data.posInventorySettings?.costMethod ?? getInventoryCostMethod();
+
+      // Tính discount toàn đơn để phân bổ vào giá vốn từng dòng
+      const itemsNetTotal = Math.max(
+        0,
+        purchaseItems.reduce((sum, item) => sum + item.quantity * item.price - item.discount, 0)
+      );
+      const billDiscountAmount = getPurchaseBillDiscountAmount();
 
       // Create inventory transaction
       const transaction: InventoryTransaction = {
@@ -761,12 +877,17 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         staffId: getCurrentStaffId(),
         supplierId: supplier?.id,
         supplierName,
+        referenceId: purchaseReferenceId.trim() || undefined,
         note: purchaseNote || `Nhập hàng từ ${supplierName}`,
         status: 'completed',
         invoiceStatus,
-        totalAmount: Math.max(0, getPurchaseItemsNetTotal() - getPurchaseBillDiscountAmount()),
+        totalAmount: Math.max(0, itemsNetTotal - billDiscountAmount),
         items: purchaseItems.map(item => {
           const product = products.find(p => p.id === item.productId);
+          const effectiveUnitPrice = calcEffectiveUnitPrice(item, billDiscountAmount, itemsNetTotal);
+          const nextImportPrice = product
+            ? calculateNextImportPrice(product, item.quantity, effectiveUnitPrice, costMethod)
+            : effectiveUnitPrice;
           return {
             productId: item.productId,
             sku: product?.sku || '',
@@ -777,6 +898,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             price: item.price,
             discount: item.discount,
             costMethod,
+            previousImportPrice: product?.importPrice ?? 0,
+            nextImportPrice,
           };
         }),
       };
@@ -798,13 +921,18 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const updatedProducts = products.map(product => {
         const purchaseItem = purchaseItems.find(item => item.productId === product.id);
         if (purchaseItem) {
+          const effectiveUnitPrice = calcEffectiveUnitPrice(
+            purchaseItem,
+            billDiscountAmount,
+            itemsNetTotal
+          );
           return {
             ...product,
             stock: product.stock + purchaseItem.quantity,
             importPrice: calculateNextImportPrice(
               product,
               purchaseItem.quantity,
-              purchaseItem.price,
+              effectiveUnitPrice,
               costMethod
             ),
           };
@@ -878,9 +1006,23 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       }
 
       const products = data.posProducts || [];
+      const missingItem = returnItems.find(item => !products.some(p => p.id === item.productId));
+      if (missingItem) {
+        showToast(`Không tìm thấy sản phẩm "${missingItem.name}" trong kho`, 'error');
+        return;
+      }
+
+      const returnQtyByProduct = new Map<string, number>();
+      for (const item of returnItems) {
+        returnQtyByProduct.set(
+          item.productId,
+          (returnQtyByProduct.get(item.productId) || 0) + item.quantity
+        );
+      }
+
       const insufficientItem = returnItems.find(item => {
         const product = products.find(p => p.id === item.productId);
-        return product && item.quantity > product.stock;
+        return product && (returnQtyByProduct.get(item.productId) || 0) > product.stock;
       });
       if (insufficientItem) {
         showToast(`Số lượng trả của "${insufficientItem.name}" lớn hơn tồn hiện tại`, 'warning');
@@ -891,6 +1033,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const supplierName = supplier?.name || returnSupplier.trim() || 'NCC vãng lai';
       const supplierMustPay = getReturnSupplierMustPay();
       const remainingDebt = Math.max(0, supplierMustPay - returnSupplierPaidAmount);
+      const runningReturnStock = new Map(products.map(product => [product.id, product.stock || 0]));
       const transaction: InventoryTransaction = {
         id: generateId(),
         date: new Date().toISOString(),
@@ -898,18 +1041,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         staffId: getCurrentStaffId(),
         supplierId: supplier?.id,
         supplierName,
+        referenceId: returnReferenceId.trim() || undefined,
         note: returnNote || `Trả hàng nhập cho ${supplierName}`,
         status: 'completed',
         totalAmount: supplierMustPay,
         items: returnItems.map(item => {
           const product = products.find(p => p.id === item.productId);
+          const previousStock = runningReturnStock.get(item.productId) || 0;
+          const newStock = Math.max(0, previousStock - item.quantity);
+          runningReturnStock.set(item.productId, newStock);
           return {
             productId: item.productId,
             sku: product?.sku || '',
             name: item.name,
             quantity: item.quantity,
-            previousStock: product?.stock || 0,
-            newStock: Math.max(0, (product?.stock || 0) - item.quantity),
+            previousStock,
+            newStock,
             price: item.price,
             discount: item.discount,
           };
@@ -917,17 +1064,31 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       };
 
       const updatedProducts = products.map(product => {
-        const returnItem = returnItems.find(item => item.productId === product.id);
-        if (!returnItem) return product;
+        const returnQuantity = returnQtyByProduct.get(product.id) || 0;
+        if (returnQuantity <= 0) return product;
         return {
           ...product,
-          stock: Math.max(0, product.stock - returnItem.quantity),
+          stock: Math.max(0, product.stock - returnQuantity),
         };
       });
       const changedProducts = updatedProducts.filter(product =>
         returnItems.some(item => item.productId === product.id)
       );
-      const debtRecord: SupplierDebtRecord | null =
+      // Ghi nhận phần NCC trả tiền mặt trực tiếp (nếu có)
+      const cashPaymentRecord: SupplierDebtRecord | null =
+        supplier && returnSupplierPaidAmount > 0
+          ? {
+              id: generateId(),
+              supplierId: supplier.id,
+              supplierName,
+              date: new Date().toISOString(),
+              type: 'payment',
+              amount: returnSupplierPaidAmount,
+              description: `NCC thanh toán tiền mặt từ phiếu trả hàng nhập ${transaction.id}`,
+            }
+          : null;
+      // Ghi nhận phần bù trừ vào công nợ cũ (nếu có)
+      const debtOffsetRecord: SupplierDebtRecord | null =
         supplier && returnApplySupplierDebt && remainingDebt > 0
           ? {
               id: generateId(),
@@ -939,19 +1100,46 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
               description: `Bù trừ công nợ từ phiếu trả hàng nhập ${transaction.id}`,
             }
           : null;
+      const debtUpdates = [
+        ...(cashPaymentRecord ? [{ key: 'supplierDebts' as const, item: cashPaymentRecord }] : []),
+        ...(debtOffsetRecord ? [{ key: 'supplierDebts' as const, item: debtOffsetRecord }] : []),
+      ];
 
-      if (onUpdateSurgical) {
-        await onUpdateSurgical([
-          { key: 'inventoryTransactions', item: transaction },
-          ...changedProducts.map(product => ({ key: 'posProducts' as const, item: product })),
-          ...(debtRecord ? [{ key: 'supplierDebts' as const, item: debtRecord }] : []),
-        ]);
-      } else {
-        await onPushBatch?.('inventoryTransactions', [transaction]);
-        await onUpdateData('posProducts', updatedProducts);
-        if (debtRecord) {
-          await onUpdateData('supplierDebts', [...(data.supplierDebts || []), debtRecord]);
+      try {
+        if (onUpdateSurgical) {
+          await onUpdateSurgical([
+            { key: 'inventoryTransactions', item: transaction },
+            ...changedProducts.map(product => ({ key: 'posProducts' as const, item: product })),
+            ...debtUpdates,
+          ]);
+        } else {
+          await onPushBatch?.('inventoryTransactions', [transaction]);
+          await onUpdateData('posProducts', updatedProducts);
+          const newDebtItems = [
+            ...(cashPaymentRecord ? [cashPaymentRecord] : []),
+            ...(debtOffsetRecord ? [debtOffsetRecord] : []),
+          ];
+          if (newDebtItems.length > 0) {
+            await onUpdateData('supplierDebts', [...(data.supplierDebts || []), ...newDebtItems]);
+          }
         }
+      } catch (err) {
+        if (onUpdateSurgical) {
+          await onUpdateSurgical([
+            { key: 'inventoryTransactions', item: { id: transaction.id }, isDelete: true },
+            ...(cashPaymentRecord
+              ? [{ key: 'supplierDebts' as const, item: { id: cashPaymentRecord.id }, isDelete: true }]
+              : []),
+            ...(debtOffsetRecord
+              ? [{ key: 'supplierDebts' as const, item: { id: debtOffsetRecord.id }, isDelete: true }]
+              : []),
+            ...changedProducts.map(product => {
+              const original = products.find(p => p.id === product.id);
+              return original ? { key: 'posProducts' as const, item: original } : null;
+            }).filter((u): u is NonNullable<typeof u> => u !== null),
+          ]);
+        }
+        throw err;
       }
 
       resetReturnForm();
@@ -1058,6 +1246,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             onAddProductToPurchase={handleAddProductToPurchase}
             onUpdatePurchaseItem={handleUpdatePurchaseItem}
             onRemovePurchaseItem={handleRemovePurchaseItem}
+            purchaseReferenceId={purchaseReferenceId}
+            setPurchaseReferenceId={setPurchaseReferenceId}
             onCompletePurchase={handleCompletePurchase}
             onSaveDraft={handleSaveDraft}
             onDownloadTemplate={handleDownloadTemplate}
@@ -1091,6 +1281,8 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             onClickFileInput={() => returnFileInputRef.current?.click()}
             onOpenQuickAddProduct={() => handleQuickAddProduct('return')}
             onOpenQuickAddSupplier={() => handleQuickAddSupplier('return')}
+            returnReferenceId={returnReferenceId}
+            setReturnReferenceId={setReturnReferenceId}
             onAddProductToReturn={handleAddProductToReturn}
             onUpdateReturnItem={handleUpdateReturnItem}
             onRemoveReturnItem={handleRemoveReturnItem}

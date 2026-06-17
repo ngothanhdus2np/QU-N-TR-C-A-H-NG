@@ -352,10 +352,11 @@ const PayrollManager: React.FC<Props> = ({
         p => p.month === selectedMonth && p.employeeId === employeeId
       );
       if (payrollToUndo) {
-        const expenseDesc = `Chi lương tháng ${selectedMonth.split('-').reverse().join('/')} - ${payrollToUndo.employeeName}`;
+        const regularExpenseDesc = `Chi lương tháng ${selectedMonth.split('-').reverse().join('/')} - ${payrollToUndo.employeeName}`;
+        const settlementExpenseDesc = `Quyết toán lương nghỉ việc - ${payrollToUndo.employeeName}`;
         onUpdateData(
           'expenses',
-          data.expenses.filter(e => e.description !== expenseDesc)
+          data.expenses.filter(e => e.description !== regularExpenseDesc && e.description !== settlementExpenseDesc)
         );
         onUpdateData(
           'staffPerformance',
@@ -377,9 +378,14 @@ const PayrollManager: React.FC<Props> = ({
         return;
 
       const monthPrefix = `Chi lương tháng ${selectedMonth.split('-').reverse().join('/')}`;
+      const settlementNamesThisMonth = data.payroll
+        .filter(p => p.month === selectedMonth)
+        .map(p => `Quyết toán lương nghỉ việc - ${p.employeeName}`);
       onUpdateData(
         'expenses',
-        data.expenses.filter(e => !e.description.startsWith(monthPrefix))
+        data.expenses.filter(
+          e => !e.description.startsWith(monthPrefix) && !settlementNamesThisMonth.includes(e.description)
+        )
       );
       onUpdateData(
         'staffPerformance',

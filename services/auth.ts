@@ -128,7 +128,7 @@ export const getUserMetadata = (user: User | null): {
   return {
     tenant_id: metadata.tenant_id || 'phuc-sang',
     branch_id: metadata.branch_id || 'main',
-    role: metadata.role || 'user',
+    role: metadata.role || 'owner',
   };
 };
 

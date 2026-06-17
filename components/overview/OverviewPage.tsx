@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   ComposedChart,
@@ -19,6 +19,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { AppData, POSOrder } from '../../types';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
+import { usePosOrders } from '../../hooks/usePosOrders';
 
 interface Props {
   data: AppData;
@@ -51,8 +53,16 @@ const money = (value?: number) => (Number.isFinite(value) ? Number(value) : 0);
 
 const orderDateKey = (order: POSOrder) => order.date?.slice(0, 10) || '';
 
-const netOrderAmount = (order: POSOrder) =>
-  order.isReturn ? -Math.abs(money(order.finalAmount)) : Math.max(0, money(order.finalAmount));
+const netOrderAmount = (order: POSOrder) => calcOrderRevenue(order);
+
+const orderItemAmount = (item: POSOrder['items'][number], isReturn = false) => {
+  const quantity = money(item.quantity);
+  const discount = money(item.discount);
+  const directAmount = money(item.total);
+  const unitPrice = money(item.price) || directAmount;
+  if (isReturn) return Math.max(0, unitPrice * quantity - discount);
+  return Math.max(0, (directAmount || unitPrice * quantity) - discount);
+};
 
 const sameDatePreviousYear = (dateKey: string) => {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -72,6 +82,7 @@ const fmtTime = (iso: string) => {
 
 type ChartTab = 'day' | 'hour' | 'weekday';
 type RevenuePeriod = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'thisYear';
+type ProductTopMetric = 'quantity' | 'netRevenue';
 
 const REVENUE_PERIODS: { id: RevenuePeriod; label: string; title: string }[] = [
   { id: 'today', label: 'Hôm nay', title: 'hôm nay' },
@@ -88,7 +99,9 @@ const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}h`);
 const OverviewPage: React.FC<Props> = ({ data }) => {
   const [chartTab, setChartTab] = useState<ChartTab>('day');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('thisMonth');
+  const [productTopMetric, setProductTopMetric] = useState<ProductTopMetric>('quantity');
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
+  const [isMetricOpen, setIsMetricOpen] = useState(false);
   const orders: POSOrder[] = data.posOrders || [];
 
   const productLookup = useMemo(() => {
@@ -103,7 +116,6 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
 
   const today = new Date();
   const todayStr = localDateKey(today);
-  const thisMonth = todayStr.slice(0, 7);
 
   const completedOrders = useMemo(
     () => orders.filter(o => o.status === 'completed' || !o.status),
@@ -128,6 +140,12 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
     return ranges[revenuePeriod];
   }, [revenuePeriod, today, todayStr]);
 
+  const { orders: periodOrders, isLoading: top10Loading } = usePosOrders(
+    orders,
+    revenueRange.start,
+    revenueRange.end
+  );
+
   const previousRevenueRange = useMemo(() => {
     if (['thisMonth', 'lastMonth', 'thisYear'].includes(revenuePeriod)) {
       return {
@@ -149,6 +167,14 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
 
   const selectedPeriod = REVENUE_PERIODS.find(period => period.id === revenuePeriod);
 
+  // Nếu đang ở "tháng này" nhưng không có đơn nào → tự chuyển sang "tháng trước"
+  useEffect(() => {
+    if (revenuePeriod !== 'thisMonth' || orders.length === 0) return;
+    const currentYearMonth = revenueRange.start.slice(0, 7);
+    const hasOrdersThisMonth = orders.some(o => o.date?.slice(0, 7) === currentYearMonth);
+    if (!hasOrdersThisMonth) setRevenuePeriod('lastMonth');
+  }, [orders, revenuePeriod, revenueRange.start]);
+
   // ── Today stats ──────────────────────────────────────────────
   const todayOrders = useMemo(
     () => completedOrders.filter(o => o.date?.startsWith(todayStr) && !o.isReturn),
@@ -169,34 +195,31 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
   const netOrderProfit = React.useCallback(
     (order: POSOrder) => {
       const cogs = orderCogs(order);
-      if (order.isReturn) return -(Math.abs(money(order.finalAmount)) - cogs);
-      return Math.max(0, money(order.finalAmount)) - cogs;
+      if (order.isReturn) return -(Math.abs(money(order.totalAmount)) - cogs);
+      return calcOrderRevenue(order) - cogs;
     },
     [orderCogs]
   );
   const todayRevenue = todayOrders.reduce((s, o) => s + netOrderAmount(o), 0);
-  const todayReturnAmt = todayReturns.reduce((s, o) => s + Math.abs(money(o.finalAmount)), 0);
+  const todayReturnAmt = todayReturns.reduce((s, o) => s + Math.abs(money(o.totalAmount)), 0);
   const todayNet = todayRevenue - todayReturnAmt;
   const todaySalesCogs = todayOrders.reduce((s, o) => s + orderCogs(o), 0);
   const todayReturnCogs = todayReturns.reduce((s, o) => s + orderCogs(o), 0);
   const todayProfit = todayRevenue - todaySalesCogs - (todayReturnAmt - todayReturnCogs);
   const todayMargin = todayNet > 0 ? (todayProfit / todayNet) * 100 : null;
 
-  // Compare with same day last month
+  // Compare with same day last month — dùng cùng công thức với todayNet (đã trừ trả hàng)
   const sameDayLastMonth = localDateKey(
     new Date(today.getFullYear(), today.getMonth() - 1, today.getDate())
   );
-  const lastMonthSameDay = completedOrders
-    .filter(o => o.date?.startsWith(sameDayLastMonth) && !o.isReturn)
-    .reduce((s, o) => s + (o.finalAmount ?? 0), 0);
+  const lastMonthSameDay = (() => {
+    const sameDayOrders = completedOrders.filter(o => o.date?.startsWith(sameDayLastMonth));
+    const sales = sameDayOrders.filter(o => !o.isReturn).reduce((s, o) => s + calcOrderRevenue(o), 0);
+    const returns = sameDayOrders.filter(o => o.isReturn).reduce((s, o) => s + Math.abs(money(o.totalAmount)), 0);
+    return sales - returns;
+  })();
   const netChangePct =
     lastMonthSameDay > 0 ? ((todayNet - lastMonthSameDay) / lastMonthSameDay) * 100 : null;
-
-  // ── This month orders ────────────────────────────────────────
-  const thisMonthOrders = useMemo(
-    () => completedOrders.filter(o => o.date?.startsWith(thisMonth) && !o.isReturn),
-    [completedOrders, thisMonth]
-  );
 
   const revenueOrders = useMemo(
     () =>
@@ -287,40 +310,76 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
 
   // ── Top 10 products ──────────────────────────────────────────
   const top10Products = useMemo(() => {
-    const map = new Map<string, { name: string; revenue: number }>();
-    thisMonthOrders.forEach(o =>
+    const map = new Map<string, { id: string; name: string; revenue: number; quantity: number }>();
+    periodOrders.filter(o => {
+      const key = orderDateKey(o);
+      return (
+        (o.status === 'completed' || !o.status) &&
+        key >= revenueRange.start &&
+        key <= revenueRange.end
+      );
+    }).forEach(o =>
       o.items?.forEach(item => {
-        const prev = map.get(item.name) ?? { name: item.name, revenue: 0 };
-        map.set(item.name, { name: item.name, revenue: prev.revenue + item.total });
+        const key = item.sku || item.productId || item.name;
+        if (!key) return;
+        const name = item.name || item.sku || 'Không xác định';
+        const prev = map.get(key) ?? { id: key, name, revenue: 0, quantity: 0 };
+        const sign = o.isReturn ? -1 : 1;
+        map.set(key, {
+          id: key,
+          name,
+          revenue: prev.revenue + sign * orderItemAmount(item, o.isReturn),
+          quantity: prev.quantity + sign * money(item.quantity),
+        });
       })
     );
-    return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-  }, [thisMonthOrders]);
+    return [...map.values()]
+      .filter(row => row.quantity > 0 && row.revenue > 0)
+      .sort((a, b) =>
+        productTopMetric === 'quantity'
+          ? b.quantity - a.quantity || b.revenue - a.revenue
+          : b.revenue - a.revenue || b.quantity - a.quantity
+      )
+      .slice(0, 10);
+  }, [periodOrders, productTopMetric, revenueRange]);
 
-  const maxProductRevenue = top10Products[0]?.revenue ?? 1;
+  const maxProductValue =
+    top10Products[0]?.[productTopMetric === 'quantity' ? 'quantity' : 'revenue'] ?? 1;
 
   // ── Top 10 customers ─────────────────────────────────────────
   const top10Customers = useMemo(() => {
     const map = new Map<string, { name: string; revenue: number }>();
-    thisMonthOrders.forEach(o => {
-      if (!o.customerId) return;
+    periodOrders.filter(o => {
+      const key = orderDateKey(o);
+      return (
+        !!o.customerId &&
+        (o.status === 'completed' || !o.status) &&
+        key >= revenueRange.start &&
+        key <= revenueRange.end
+      );
+    }).forEach(o => {
+      const key = o.customerId;
       const name = o.customerName || o.customerId;
-      const prev = map.get(o.customerId) ?? { name, revenue: 0 };
-      map.set(o.customerId, { name, revenue: prev.revenue + (o.finalAmount ?? 0) });
+      const prev = map.get(key) ?? { name, revenue: 0 };
+      const sign = o.isReturn ? -1 : 1;
+      map.set(key, { name, revenue: prev.revenue + sign * Math.abs(netOrderAmount(o)) });
     });
-    return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-  }, [thisMonthOrders]);
+    return [...map.values()]
+      .filter(c => c.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+  }, [periodOrders, revenueRange]);
 
   const maxCustomerRevenue = top10Customers[0]?.revenue ?? 1;
 
   // ── Recent activity ──────────────────────────────────────────
   const recentOrders = useMemo(
     () =>
-      [...orders]
+      [...completedOrders]
         .filter(o => o.date)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 25),
-    [orders]
+    [completedOrders]
   );
 
   // ── Revenue total ────────────────────────────────────────────
@@ -542,16 +601,44 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
           <div className="bg-white rounded-xl border border-slate-100 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-slate-700">Top 10 hàng bán chạy</h3>
-              <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
-                Tháng này
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsMetricOpen(o => !o)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    {productTopMetric === 'quantity' ? 'Theo số lượng' : 'Theo doanh thu thuần'}
+                    <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${isMetricOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isMetricOpen && (
+                    <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                      {(['quantity', 'netRevenue'] as ProductTopMetric[]).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { setProductTopMetric(m); setIsMetricOpen(false); }}
+                          className={`block w-full px-3 py-2 text-left text-xs ${productTopMetric === m ? 'bg-blue-50 text-blue-600 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          {m === 'quantity' ? 'Theo số lượng' : 'Theo doanh thu thuần'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
+                  {selectedPeriod?.label || 'Tháng này'}
+                </span>
+              </div>
             </div>
             {top10Products.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-6">Chưa có dữ liệu</p>
+              <p className="text-sm text-slate-400 text-center py-6">
+                {top10Loading ? 'Đang tải dữ liệu...' : 'Chưa có dữ liệu'}
+              </p>
             ) : (
               <div className="space-y-2.5">
                 {top10Products.map(p => (
-                  <div key={p.name}>
+                  <div key={p.id}>
                     <div className="flex items-center justify-between mb-1">
                       <span
                         className="text-xs text-slate-600 truncate max-w-[65%]"
@@ -560,13 +647,21 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
                         {p.name}
                       </span>
                       <span className="text-xs font-medium text-slate-700 shrink-0">
-                        {fmt(p.revenue)}
+                        {productTopMetric === 'quantity'
+                          ? `${fmtFull(p.quantity)} SP`
+                          : fmt(p.revenue)}
                       </span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-blue-400 rounded-full"
-                        style={{ width: `${(p.revenue / maxProductRevenue) * 100}%` }}
+                        style={{
+                          width: `${
+                            ((productTopMetric === 'quantity' ? p.quantity : p.revenue) /
+                              maxProductValue) *
+                            100
+                          }%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -582,11 +677,13 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
                 Top 10 khách mua nhiều nhất
               </h3>
               <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
-                Tháng này
+                {selectedPeriod?.label || 'Tháng này'}
               </span>
             </div>
             {top10Customers.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-6">Chưa có dữ liệu</p>
+              <p className="text-sm text-slate-400 text-center py-6">
+                {top10Loading ? 'Đang tải dữ liệu...' : 'Chưa có dữ liệu'}
+              </p>
             ) : (
               <div className="space-y-2.5">
                 {top10Customers.map(c => (
@@ -649,7 +746,7 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
                       <span className="font-medium">{o.customerName || 'Khách lẻ'}</span>{' '}
                       {o.isReturn ? 'trả hàng' : 'mua hàng'} với giá trị{' '}
                       <span className="font-semibold text-slate-800">
-                        {fmtFull(o.isReturn ? Math.abs(money(o.finalAmount)) : money(o.finalAmount))}
+                        {fmtFull(o.isReturn ? Math.abs(money(o.totalAmount)) : calcOrderRevenue(o))}
                       </span>
                     </p>
                     <div className="flex items-center gap-1 mt-0.5">

@@ -1,9 +1,9 @@
 // CFO Brain 4.0 - Service Worker
-// Version: 1.0.2
+// Version: 1.0.3
 
-const CACHE_NAME = 'cfo-brain-v1.0.2';
-const RUNTIME_CACHE = 'cfo-brain-runtime';
-const IMAGE_CACHE = 'cfo-brain-images';
+const CACHE_NAME = 'cfo-brain-v1.0.3';
+const RUNTIME_CACHE = 'cfo-brain-runtime-v2';
+const IMAGE_CACHE = 'cfo-brain-images-v2';
 const MAX_IMAGE_CACHE_BYTES = 1_500_000;
 
 // Files to cache immediately on install

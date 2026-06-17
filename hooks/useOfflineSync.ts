@@ -50,7 +50,6 @@ export function useOfflineSync(): UseOfflineSyncReturn {
 
       for (const op of ops) {
         if (op.retries >= 5) {
-          await posOfflineQueue.remove(op.id);
           failed++;
           continue;
         }
@@ -80,7 +79,7 @@ export function useOfflineSync(): UseOfflineSyncReturn {
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(`[OfflineSync] Lỗi sync op ${op.id}:`, message);
-          await posOfflineQueue.incrementRetry(op.id);
+          await posOfflineQueue.incrementRetry(op.id, message);
           failed++;
         }
       }

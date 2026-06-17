@@ -63,7 +63,16 @@ export const calculateOrderStaffSales = (
 
   if (order.isReturn) {
     const exchangeItems = order.items.filter(item => item.lineType === 'exchange');
-    const extraPaid = Math.max(0, Number(order.finalAmount) || 0);
+    // Tính extraPaid từ item totals: tiền khách bù thêm khi đổi hàng đắt hơn
+    // Dùng item.total thay vì finalAmount vì finalAmount của đơn trả native POS = 0
+    // khi tổng đổi > tổng trả (POSComputer lưu finalAmount = -Math.max(0, totalReturn-totalExchange))
+    const exchangeTotal = exchangeItems.reduce((s, i) => s + (Number(i.total) || 0), 0);
+    const returnTotal = order.items
+      .filter(i => i.lineType !== 'exchange')
+      .reduce((s, i) => s + (Number(i.total) || 0), 0);
+    const extraPaid = exchangeTotal > 0
+      ? Math.max(0, exchangeTotal - returnTotal)
+      : Math.max(0, Number(order.finalAmount) || 0); // fallback KiotViet imports
     if (extraPaid <= 0) return [];
 
     if (exchangeItems.length === 0) {
@@ -100,14 +109,21 @@ export const calculateOrderStaffSales = (
 
   const saleItems = order.items.filter(item => item.lineType !== 'return');
   const hasBillDiscount = (Number(order.discount) || 0) > 0;
-  const saleQty = positiveQuantity(saleItems) || 1;
+  // Doanh thu đơn = totalAmount - discount (chuẩn KiotViet, không trừ điểm tích lũy)
+  const orderNetRevenue = (Number(order.totalAmount) || 0) - Math.abs(Number(order.discount) || 0);
+
+  // Tổng giá trị item trước discount — dùng để phân bổ theo tỷ lệ giá trị, không phải số lượng
+  const orderGrossTotal = hasBillDiscount
+    ? saleItems.reduce((s, i) => s + (Number(i.total) || 0), 0) || 1
+    : 1;
 
   saleItems.forEach(item => {
     const staff = getLineStaff(order, item);
     const itemQty = Math.max(0, Number(item.quantity) || 0);
+    const itemValue = Number(item.total) || 0;
     const amount = hasBillDiscount
-      ? ((Number(order.finalAmount) || 0) / saleQty) * itemQty
-      : Number(item.total) || 0;
+      ? orderNetRevenue * (itemValue / orderGrossTotal)
+      : itemValue;
 
     addLine(summary, employeesById, staff.id, staff.name, amount, itemQty, order.id, countedOrders);
   });

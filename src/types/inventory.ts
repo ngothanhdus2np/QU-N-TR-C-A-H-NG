@@ -16,6 +16,7 @@ export interface InventoryTransaction {
     newStock: number;
     price?: number; // Import price for Import transactions
     discount?: number; // Discount for Import transactions
+    nextImportPrice?: number; // Import price to persist after Import transaction
   }[];
   note?: string;
   referenceId?: string; // OrderId or ImportId
@@ -24,6 +25,7 @@ export interface InventoryTransaction {
   supplierName?: string; // For Import transactions
   totalAmount?: number; // Total amount for Import transactions
   status?: 'draft' | 'completed' | 'cancelled' | 'balanced'; // Status for Import/Check transactions
+  allowNegativeStock?: boolean; // Allow Sale transaction to drive stock below zero
   // Audit/Check specific fields
   balancedDate?: string; // Date when audit was balanced
   totalActualQty?: number; // Total actual quantity counted

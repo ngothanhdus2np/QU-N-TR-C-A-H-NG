@@ -40,7 +40,15 @@ export const calculateExecutiveInsights = (data: Partial<AppData>) => {
     (sum, r) => sum + (Number(r.grossProfit) || 0),
     0
   );
-  const projectedNetProfit = currentMonthGross - currentMonthExp;
+  // Tránh double-count lương: nếu payroll module có dữ liệu, lọc salary ra khỏi ledger
+  const normExecVN = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const execSalaryKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
+  const isExecSalaryEntry = (cat: string) => { const n = normExecVN(cat); return execSalaryKws.some(kw => n.includes(kw)); };
+  const nonSalaryMonthExp = projectedPayroll > 0
+    ? monthExpList.filter(e => !isExecSalaryEntry(e.category)).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+    : currentMonthExp;
+  const projectedNetProfit = currentMonthGross - nonSalaryMonthExp - projectedPayroll;
   const activeStaff = employees.filter(e => isStaffActive(e));
   const profitPerStaff = activeStaff.length > 0 ? projectedNetProfit / activeStaff.length : 0;
   const monthSalesList = sales.filter(s => s.date.startsWith(currentMonthStr));
@@ -429,14 +437,23 @@ export const calculateMISMetrics = (
   const currentRev = currentData.revenue;
   const categories = currentData.categories;
 
+  // Lọc salary/COGS khỏi expenses để tránh double-count khi cộng payroll module
+  const normMIS = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+  const misSalaryKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
+  const isMISSalary = (cat: string) => { const n = normMIS(cat); return misSalaryKws.some(kw => n.includes(kw)); };
+  const isMISCogs = (cat: string) => { const n = normMIS(cat); return n.includes('gia von') || n.includes('cogs'); };
+  const filteredMISExpenses = currentExpenses.filter(e => !isMISSalary(e.category) && !isMISCogs(e.category));
+
   const getMetricActual = (key: string) => {
     if (currentRev <= 0) return 0;
     let amount = 0;
     if (key === 'cogs') amount = currentData.cogs;
     else if (key === 'labor') amount = currentData.payroll;
     else if (key === 'opex') {
+      // Dùng filteredMISExpenses (đã loại salary + cogs) rồi cộng payroll một lần — tránh double-count
       amount =
-        currentExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + currentData.payroll;
+        filteredMISExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) + currentData.payroll;
     } else {
       // Find categories matching the name
       const matchingCats = categories.filter(c => {
@@ -582,11 +599,11 @@ export const calculateStrategicSuggestions = (
   nextMonthNum: number,
   viewMode: 'revenue' | 'quantity' = 'revenue'
 ) => {
-  const yearsSet = new Set<string>();
-  groupRevenue.forEach(r => yearsSet.add(r.date.split('-')[0]));
-  const yearsCount = Math.max(yearsSet.size, 1);
-
   const data = groupRevenue.filter(r => parseInt(r.date.split('-')[1]) === nextMonthNum);
+  // Chỉ đếm số năm có dữ liệu cho tháng cụ thể này — tránh chia nhầm cho số năm toàn dataset
+  const yearsSet = new Set<string>();
+  data.forEach(r => yearsSet.add(r.date.split('-')[0]));
+  const yearsCount = Math.max(yearsSet.size, 1);
 
   const groupsMap: Record<string, { name: string; rev: number; qty: number }> = {};
   data.forEach(r => {

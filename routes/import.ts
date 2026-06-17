@@ -10,6 +10,7 @@ import {
   stripVariantProductNameSuffix,
   formatAutoSku,
 } from '../src/lib';
+import { EXCEL_MAX_ROWS, assertSafeExcelBuffer } from '../src/lib/excelSafety';
 
 type KiotVietRevenueInput = {
   date?: string;
@@ -38,6 +39,16 @@ type ImportedProductRecord = Record<
 
 type SpreadsheetCell = string | number | boolean | Date | null;
 type SpreadsheetRow = SpreadsheetCell[];
+
+const readSafeWorkbook = (buf: Buffer, fileName = 'Excel') => {
+  assertSafeExcelBuffer(buf, fileName);
+  return XLSX.read(buf, {
+    type: 'buffer',
+    cellDates: true,
+    dense: true,
+    sheetRows: EXCEL_MAX_ROWS,
+  });
+};
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -349,7 +360,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const wb = readSafeWorkbook(buf, 'Excel import');
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -705,7 +716,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const wb = readSafeWorkbook(buf, 'Excel import');
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -933,10 +944,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         const base = {
           id: existingDateMap.get(date) ?? generateId(),
           date,
-          total_gross_revenue: Math.round(d.netRev + Math.abs(d.discount)),
-          discount: Math.round(d.discount),
+          total_gross_revenue: Math.round(d.totalGross),
+          discount: Math.round(Math.abs(d.discount)),
           net_revenue: Math.round(d.netRev),
-          returns_value: 0,
+          returns_value: Math.round(d.returnsGross),
           revenue_other: 0,
         };
         // "Theo lợi nhuận" cung cấp COGS và lợi nhuận thực → ghi đè 2 cột này
@@ -1123,7 +1134,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const wb = readSafeWorkbook(buf, 'Excel import');
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -1334,7 +1345,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const wb = readSafeWorkbook(buf, 'Excel import');
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -1379,10 +1390,12 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           });
         }
 
-        const totalAmount = Number(row[38] || 0);
-        const discountAmt = Number(row[39] || 0);
-        const finalAmount = Number(row[41] || 0);
-        const isReturn    = !!String(row[11] || '').trim() || /^TH/i.test(invoiceCode);
+        const totalAmount = Math.abs(Number(row[38] || 0));
+        const discountAmt = Math.abs(Number(row[39] || 0)); // KiotViet đôi khi export âm
+        const finalAmount = Math.abs(Number(row[41] || 0));
+        // "Mã trả hàng" (row[11]) trong file hoá đơn bán = mã tham chiếu phiếu trả liên kết,
+        // KHÔNG có nghĩa là hoá đơn này là đơn trả. Chỉ nhận đơn trả khi mã HĐ bắt đầu bằng "TH".
+        const isReturn    = /^TH/i.test(invoiceCode);
 
         let paymentMethod: 'Cash'|'Bank'|'Momo'|'Other' = 'Cash';
         if (Number(row[46] || 0) > 0)      paymentMethod = 'Bank';
@@ -1495,7 +1508,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
 
       const buf = Buffer.from(fileBase64, 'base64');
-      const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+      const wb = readSafeWorkbook(buf, 'Excel import');
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
 
@@ -1522,7 +1535,8 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         quantity: number;
         price: number;
         discount: number;
-        costMethod: 'fixed';
+        costMethod: 'fixed' | 'average';
+        nextImportPrice: number;
         note?: string;
       };
 
@@ -1636,6 +1650,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             price: importPrice,
             discount: lineDiscount,
             costMethod: 'fixed',
+            nextImportPrice: importPrice,
             note: noteParts.join(' | ') || undefined,
           });
         }
@@ -1704,6 +1719,30 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         OPTIONAL_INVENTORY_TRANSACTION_COLUMNS
       );
 
+      // Cập nhật import_price trên pos_products theo giá nhập mới nhất từ KiotViet
+      const latestPriceByProductId = new Map<string, number>();
+      for (const p of Array.from(purchases.values()).sort((a, b) => a.date.localeCompare(b.date))) {
+        for (const item of p.items.values()) {
+          if (item.price > 0) {
+            latestPriceByProductId.set(item.productId, item.price);
+          }
+        }
+      }
+      if (latestPriceByProductId.size > 0) {
+        const priceUpdates = Array.from(latestPriceByProductId.entries());
+        for (let i = 0; i < priceUpdates.length; i += BATCH) {
+          const batch = priceUpdates.slice(i, i + BATCH);
+          await Promise.all(
+            batch.map(([productId, importPrice]) =>
+              supabase
+                .from('pos_products')
+                .update({ import_price: importPrice })
+                .eq('id', productId)
+            )
+          );
+        }
+      }
+
       const debtRecords = Array.from(purchases.values()).flatMap(p => {
         const records = [
           {
@@ -1749,7 +1788,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         skippedSupplierColumns,
         skippedInventoryTransactionColumns,
         skippedSupplierDebtColumns,
-        stockUpdated: false,
+        importPriceUpdated: latestPriceByProductId.size,
       });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-purchase-details]', getErrorMessage(error));
@@ -1784,6 +1823,266 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ── Import phiếu trả hàng từ KiotViet ──
+  // File: "Danh sách chi tiết phiếu trả hàng" xuất từ KiotViet → Đơn hàng → Trả hàng → Xuất file
+  // Cột cần có: Mã phiếu trả (col 1), Thời gian (col 6), Tổng tiền hàng (col 38), Khách cần trả (col 41),
+  //             Mã hàng (col 52), Số lượng (col 57), Thành tiền (col 62)
+  router.post('/api/import/kiotviet-returns', requireAuth, async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = readSafeWorkbook(buf, 'Excel import');
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2) return res.status(400).json({ error: 'File trống.' });
+
+      const h = rows[0];
+      // Validate: cột 2 phải là "Mã phiếu trả" hoặc "Mã trả hàng"
+      const col1 = String(h[1] || '').trim();
+      if (!col1.includes('Mã phiếu trả') && !col1.includes('Mã trả hàng')) {
+        return res.status(400).json({
+          error: `File không đúng định dạng. Cần file "Danh sách chi tiết phiếu trả hàng". Cột 2 hiện là "${col1}".`,
+        });
+      }
+
+      // Detect column positions từ header (tránh bị sai khi KiotViet thêm/bớt cột)
+      const colMap = new Map<string, number>();
+      (h as unknown[]).forEach((cell, i) => { if (cell) colMap.set(String(cell).trim(), i); });
+      const col = (name: string, fallback: number) => colMap.get(name) ?? fallback;
+
+      const iCode      = col('Mã phiếu trả', 1) !== 1 ? col('Mã phiếu trả', 1) : col('Mã trả hàng', 1);
+      const iTime      = col('Thời gian', 6);
+      // File TH dùng "Tổng tiền hàng trả" / "Cần trả khách", file HĐ dùng "Tổng tiền hàng" / "Khách cần trả"
+      const iTotal     = colMap.get('Tổng tiền hàng trả') ?? col('Tổng tiền hàng', 13);
+      const iFinal     = colMap.get('Cần trả khách') ?? col('Khách cần trả', 18);
+      const iSku       = col('Mã hàng', 26);
+      const iQty       = col('Số lượng', 31);
+      const iLineTotal = colMap.get('Giá bán') ?? col('Thành tiền', 32);
+      const iInvoiceRef = col('Mã hóa đơn', 11);
+
+      type ReturnOrd = { date: string; invoiceRef: string; totalAmount: number; finalAmount: number; items: Map<string, { sku: string; name: string; quantity: number; total: number }> };
+      const returnMap   = new Map<string, ReturnOrd>();
+      const seenReturns = new Set<string>();
+
+      for (const row of rows.slice(1)) {
+        const returnCode = String(row[iCode] || '').trim();
+        if (!returnCode) continue;
+
+        const dateTime = excelDateToLocalIsoDateTime(row[iTime]);
+        if (!dateTime) continue;
+
+        const totalAmount = Math.abs(Number(row[iTotal] || 0));
+        const finalAmount = Math.abs(Number(row[iFinal] || 0));
+        const invoiceRef  = String(row[iInvoiceRef] || '').trim();
+
+        if (!returnMap.has(returnCode)) {
+          returnMap.set(returnCode, { date: dateTime, invoiceRef, totalAmount, finalAmount, items: new Map() });
+        }
+
+        const sku = String(row[iSku] || '').trim();
+        const qty = Math.abs(Number(row[iQty] || 0));
+        if (sku && qty > 0) {
+          const ord = returnMap.get(returnCode)!;
+          const existing = ord.items.get(sku);
+          const lineTotal = Math.abs(Number(row[iLineTotal] || 0));
+          if (existing) { existing.quantity += qty; existing.total += lineTotal; }
+          else ord.items.set(sku, { sku, name: String(row[(iSku + 1)] || '').trim(), quantity: qty, total: lineTotal });
+        }
+      }
+
+      const IBATCH = 500;
+
+      // Upsert return orders vào pos_orders với is_return = true
+      const allCodes = Array.from(returnMap.keys());
+      const existingMap = new Map<string, string>();
+      for (let i = 0; i < allCodes.length; i += IBATCH) {
+        const { data: chunk } = await supabase.from('pos_orders').select('id, order_code').in('order_code', allCodes.slice(i, i + IBATCH));
+        for (const o of (chunk as { id: string; order_code: string }[] | null) ?? []) existingMap.set(o.order_code, o.id);
+      }
+
+      const ordersToUpsert = allCodes.map(code => {
+        const d = returnMap.get(code)!;
+        return {
+          id:            existingMap.get(code) ?? stableUuidFromKey(`kiotviet-return:${code}`),
+          order_code:    code,
+          date:          d.date,
+          total_amount:  d.totalAmount,
+          discount:      0,
+          final_amount:  d.finalAmount,
+          refund_amount: d.finalAmount,
+          is_return:     true,
+          payment_method: 'Cash' as const,
+          points_earned: 0,
+          notes:         d.invoiceRef ? `Trả hàng HĐ ${d.invoiceRef}` : null,
+          items:         Array.from(d.items.values()),
+        };
+      });
+
+      const skipped = await upsertPosOrdersWithSchemaFallback(supabase, ordersToUpsert, IBATCH);
+
+      res.json({ success: true, returns: ordersToUpsert.length, skipped });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-returns]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ── Import danh sách chi tiết hóa đơn từ KiotViet (v2 — colMap tự động) ──
+  // Route này dùng colMap nhận dạng header tự động, hỗ trợ nhiều format KiotViet hơn route v1
+  // Để kích hoạt: gọi /api/import/kiotviet-invoices-v2 thay vì /api/import/kiotviet-invoices
+  router.post('/api/import/kiotviet-invoices-v2', requireAuth, async (req, res) => {
+    // Inline helper để không phụ thuộc import từ dataMapper (server-side route)
+    const inferIsReturnOrder = (code: string, finalAmount: number) =>
+      /^TH/i.test(code) || finalAmount < 0;
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: 'fileBase64 là bắt buộc' });
+
+      const buf = Buffer.from(fileBase64, 'base64');
+      const wb = readSafeWorkbook(buf, 'Excel import');
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(ws, { header: 1, defval: null });
+
+      if (rows.length < 2) return res.status(400).json({ error: 'File trống.' });
+
+      const h = rows[0];
+      const col1 = String(h[1] || '').trim();
+      if (!col1.includes('Mã hóa đơn')) {
+        return res.status(400).json({
+          error: `File không đúng định dạng. Cần file "Danh sách chi tiết hóa đơn". Cột 2 hiện là "${col1}".`,
+        });
+      }
+
+      const colMap = new Map<string, number>();
+      (h as unknown[]).forEach((cell, i) => { if (cell) colMap.set(String(cell).trim(), i); });
+      const col = (name: string, fallback: number) => colMap.get(name) ?? fallback;
+
+      const iCode        = col('Mã hóa đơn', 1);
+      const iTime        = col('Thời gian', 6);
+      const iCustomerId  = col('Mã khách hàng', 12);
+      const iCustomerName = col('Tên khách hàng', 13);
+      const iStaff       = col('Người bán', 21);
+      const iChannel     = col('Kênh bán', 22);
+      const iCreatedBy   = col('Người tạo', 23);
+      const iPriceBook   = col('Bảng giá', 20);
+      const iTotal       = col('Tổng tiền hàng', 38);
+      const iDiscount    = col('Giảm giá hóa đơn', 39);
+      const iFinal       = col('Khách cần trả', 41);
+      const iStatus      = col('Trạng thái', 50);
+      const iSku         = col('Mã hàng', 52);
+      const iSkuName     = col('Tên hàng', 53);
+      const iQty         = col('Số lượng', 56);
+      const iPrice       = col('Giá bán', 60);
+      const iLineTotal   = col('Thành tiền', 62);
+
+      type InvData = {
+        date: string;
+        customerId: string;
+        customerName: string;
+        staffId: string;
+        channel: string;
+        createdBy: string;
+        priceBookName: string;
+        totalAmount: number;
+        discount: number;
+        finalAmount: number;
+        status: string;
+        items: Map<string, { sku: string; name: string; quantity: number; price: number; total: number }>;
+      };
+
+      const orderMap = new Map<string, InvData>();
+
+      for (const row of rows.slice(1)) {
+        const orderCode = String(row[iCode] || '').trim();
+        if (!orderCode) continue;
+
+        const dateTime = excelDateToLocalIsoDateTime(row[iTime]);
+        if (!dateTime) continue;
+
+        if (!orderMap.has(orderCode)) {
+          orderMap.set(orderCode, {
+            date: dateTime,
+            customerId: String(row[iCustomerId] || '').trim(),
+            customerName: String(row[iCustomerName] || '').trim(),
+            staffId: String(row[iStaff] || '').trim(),
+            channel: String(row[iChannel] || 'direct').trim(),
+            createdBy: String(row[iCreatedBy] || '').trim(),
+            priceBookName: String(row[iPriceBook] || '').trim(),
+            totalAmount: Math.abs(Number(row[iTotal] || 0)),
+            discount: Math.abs(Number(row[iDiscount] || 0)),
+            finalAmount: Math.abs(Number(row[iFinal] || 0)),
+            status: String(row[iStatus] || '').trim(),
+            items: new Map(),
+          });
+        }
+
+        const sku = String(row[iSku] || '').trim();
+        const qty = Math.abs(Number(row[iQty] || 0));
+        if (sku && qty > 0) {
+          const ord = orderMap.get(orderCode)!;
+          const existing = ord.items.get(sku);
+          const price = Math.abs(Number(row[iPrice] || 0));
+          const lineTotal = Math.abs(Number(row[iLineTotal] || 0));
+          if (existing) {
+            existing.quantity += qty;
+            existing.total += lineTotal;
+          } else {
+            ord.items.set(sku, { sku, name: String(row[iSkuName] || '').trim(), quantity: qty, price, total: lineTotal });
+          }
+        }
+      }
+
+      const IBATCH = 500;
+      const allCodes = Array.from(orderMap.keys());
+
+      const existingMap = new Map<string, string>();
+      for (let i = 0; i < allCodes.length; i += IBATCH) {
+        const { data: chunk } = await supabase
+          .from('pos_orders')
+          .select('id, order_code')
+          .in('order_code', allCodes.slice(i, i + IBATCH));
+        for (const o of (chunk as { id: string; order_code: string }[] | null) ?? [])
+          existingMap.set(o.order_code, o.id);
+      }
+
+      const ordersToUpsert = allCodes.map(code => {
+        const d = orderMap.get(code)!;
+        const isReturn = inferIsReturnOrder(code, d.finalAmount);
+        const status = d.status.includes('Hoàn thành') ? 'completed'
+          : d.status.includes('Hủy') ? 'cancelled' : 'completed';
+        return {
+          id:              existingMap.get(code) ?? stableUuidFromKey(`kiotviet-order:${code}`),
+          order_code:      code,
+          date:            d.date,
+          customer_id:     d.customerId || null,
+          customer_name:   d.customerName || null,
+          staff_id:        d.staffId || null,
+          staff_name:      d.staffId || null,
+          channel:         d.channel || 'direct',
+          created_by:      d.createdBy || null,
+          price_book_name: d.priceBookName || null,
+          total_amount:    d.totalAmount,
+          discount:        d.discount,
+          final_amount:    d.finalAmount,
+          refund_amount:   isReturn ? d.finalAmount : 0,
+          is_return:       isReturn,
+          status,
+          items:           Array.from(d.items.values()),
+        };
+      });
+
+      const skipped = await upsertPosOrdersWithSchemaFallback(supabase, ordersToUpsert, IBATCH);
+
+      res.json({ success: true, invoices: ordersToUpsert.length, skipped });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-invoices]', getErrorMessage(error));
       res.status(500).json({ error: getErrorMessage(error) });
     }
   });

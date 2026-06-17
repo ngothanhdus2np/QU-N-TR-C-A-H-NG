@@ -13,6 +13,7 @@ import {
 import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 
 interface Props {
   data: AppData;
@@ -142,10 +143,10 @@ const AnalysisCustomersClassifyPage: React.FC<Props> = ({ data }) => {
         const month = o.date.slice(0, 7);
 
         if (o.isReturn) {
-          c.returnValue += Math.abs(o.finalAmount);
+          c.returnValue += Math.abs(Number(o.totalAmount) || 0);
         } else {
           c.frequency++;
-          c.monetary += o.finalAmount;
+          c.monetary += calcOrderRevenue(o);
           if (o.date > c.lastDate) c.lastDate = o.date;
           c.monthOrders.set(month, (c.monthOrders.get(month) || 0) + 1);
         }

@@ -16,6 +16,9 @@ import {
   RotateCcw,
   Printer,
   Trash2,
+  Star,
+  Plus,
+  Upload,
 } from 'lucide-react';
 import { AppData, AppDataSurgicalUpdate } from '../../types';
 import { apiService } from '../../services/apiService';
@@ -24,6 +27,8 @@ import { FilterSection, FilterDateRange, FilterCheckboxGroup } from '../shared';
 interface OrderInvoicesProps {
   orders: AppData['posOrders'];
   customers: AppData['posCustomers'];
+  products: AppData['posProducts'];
+  revenue: AppData['revenue'];
   storeName: string;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
@@ -33,11 +38,12 @@ const PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
 const PAYMENT_LABELS: Record<string, string> = {
   Cash: 'Tiền mặt',
   Bank: 'Chuyển khoản',
+  Card: 'Thẻ',
   Momo: 'Momo',
   Other: 'Khác',
 };
 
-const PAYMENT_METHODS = ['Cash', 'Bank', 'Momo', 'Other'] as const;
+const PAYMENT_METHODS = ['Cash', 'Bank', 'Card', 'Momo', 'Other'] as const;
 
 function fmt(n: number) {
   return n.toLocaleString('vi-VN');
@@ -55,16 +61,29 @@ function formatOrderDateTime(value: string) {
   });
 }
 
-export default function OrderInvoices({ orders, customers, storeName, onUpdateSurgical }: OrderInvoicesProps) {
+export default function OrderInvoices({ orders, customers, products, revenue, storeName, onUpdateSurgical }: OrderInvoicesProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [dateRange, setDateRange] = useState(() => {
+    const d = new Date();
+    return {
+      start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`,
+      end: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    };
+  });
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
+  const importFileRef = React.useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<15 | 30 | 50>(15);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isCreatingReturn, setIsCreatingReturn] = useState(false);
   const [pageOrders, setPageOrders] = useState<AppData['posOrders']>([]);
   const [totalOrders, setTotalOrders] = useState(orders.length);
+  const [filterSummary, setFilterSummary] = useState({ totalAmount: 0, discount: 0, finalAmount: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -80,7 +99,10 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showPaymentColumn, setShowPaymentColumn] = useState(true);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,10 +117,13 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
           endDate: dateRange.end,
           typeFilter,
           paymentFilter,
+          deliveryTypeFilter,
+          statusFilter,
         });
         if (cancelled) return;
         setPageOrders(result.data);
         setTotalOrders(result.total);
+        setFilterSummary(result.summary ?? { totalAmount: 0, discount: 0, finalAmount: 0 });
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : 'Không tải được hóa đơn');
@@ -113,16 +138,9 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [dateRange.end, dateRange.start, page, pageSize, paymentFilter, searchTerm, typeFilter]);
+  }, [dateRange.end, dateRange.start, page, pageSize, paymentFilter, searchTerm, typeFilter, deliveryTypeFilter, statusFilter]);
 
-  const summary = useMemo(
-    () => ({
-      totalAmount: pageOrders.reduce((s, o) => s + o.totalAmount, 0),
-      discount: pageOrders.reduce((s, o) => s + o.discount, 0),
-      finalAmount: pageOrders.reduce((s, o) => s + o.finalAmount, 0),
-    }),
-    [pageOrders]
-  );
+  const summary = filterSummary;
 
   const totalPages = Math.max(1, Math.ceil(totalOrders / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -187,18 +205,20 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
     return '—';
   };
 
-  const tableColumnCount = showPaymentColumn ? 10 : 9;
+  // checkbox + star + mã HĐ + thời gian + mã trả hàng + mã KH + khách hàng + tổng + giảm + sau giảm + khách trả + [thanh toán]
+  const tableColumnCount = showPaymentColumn ? 12 : 11;
+
+  const toggleStar = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setStarredIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const persistOrder = async (order: AppData['posOrders'][number]) => {
     setPageOrders(prev => prev.map(item => (item.id === order.id ? order : item)));
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'posOrders', item: order, isDelete: false }]);
-    }
-  };
-
-  const addOrder = async (order: AppData['posOrders'][number]) => {
-    setPageOrders(prev => [order, ...prev]);
-    setTotalOrders(prev => prev + 1);
     if (onUpdateSurgical) {
       await onUpdateSurgical([{ key: 'posOrders', item: order, isDelete: false }]);
     }
@@ -245,6 +265,100 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
     exportOrders(rows, `hoa-don-trang-${safePage}-${todayStr}.csv`);
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input để có thể chọn lại cùng file
+    e.target.value = '';
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) throw new Error('File không có dữ liệu (cần ít nhất 1 dòng dữ liệu sau header).');
+
+      // Tách cột CSV đúng chuẩn: hỗ trợ quoted fields có dấu phẩy bên trong
+      const parseCsvRow = (line: string): string[] => {
+        const cols: string[] = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci];
+          if (ch === '"') {
+            if (inQuotes && line[ci + 1] === '"') { cur += '"'; ci++; }
+            else inQuotes = !inQuotes;
+          } else if (ch === ',' && !inQuotes) {
+            cols.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        cols.push(cur.trim());
+        return cols;
+      };
+
+      // Bỏ qua BOM (﻿) nếu có
+      const header = parseCsvRow(lines[0].replace(/^﻿/, '')).map(h => h.toLowerCase());
+
+      // Map header → index (hỗ trợ cả tiếng Việt lẫn tiếng Anh)
+      const idx = (candidates: string[]) => {
+        for (const c of candidates) {
+          const i = header.findIndex(h => h.includes(c));
+          if (i !== -1) return i;
+        }
+        return -1;
+      };
+      const iCode    = idx(['mã hóa đơn', 'order_code', 'ordercode', 'mã hd']);
+      const iDate    = idx(['ngày', 'thời gian', 'date', 'time']);
+      const iCust    = idx(['khách hàng', 'customer_name', 'customer']);
+      const iTotal   = idx(['tổng tiền hàng', 'tổng tiền', 'total_amount', 'total']);
+      const iDisc    = idx(['giảm giá', 'discount']);
+      const iFinal   = idx(['tổng sau giảm', 'tổng thanh toán', 'final_amount', 'final']);
+      const iPayment = idx(['phương thức', 'payment_method', 'payment']);
+      const iStatus  = idx(['trạng thái', 'status']);
+
+      if (iCode === -1) throw new Error('Không tìm thấy cột "Mã hóa đơn" trong file.');
+
+      const { supabaseAdmin } = await import('../../services/supabase');
+      let inserted = 0, skipped = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvRow(lines[i]);
+        const orderCode = cols[iCode];
+        if (!orderCode) { skipped++; continue; }
+
+        const row: Record<string, any> = {
+          order_code: orderCode,
+          date: iDate !== -1 ? cols[iDate] : new Date().toISOString(),
+          customer_name: iCust !== -1 ? cols[iCust] : 'Khách lẻ',
+          total_amount: iTotal !== -1 ? Number(cols[iTotal]?.replace(/[^0-9.-]/g, '')) || 0 : 0,
+          discount: iDisc !== -1 ? Number(cols[iDisc]?.replace(/[^0-9.-]/g, '')) || 0 : 0,
+          final_amount: iFinal !== -1 ? Number(cols[iFinal]?.replace(/[^0-9.-]/g, '')) || 0 : 0,
+          payment_method: iPayment !== -1 ? cols[iPayment] || 'Cash' : 'Cash',
+          status: iStatus !== -1 ? cols[iStatus] || 'completed' : 'completed',
+          items: [],
+          channel: 'direct',
+        };
+
+        const { error } = await supabaseAdmin
+          .from('pos_orders')
+          .upsert(row, { onConflict: 'order_code' });
+
+        if (error) skipped++;
+        else inserted++;
+      }
+
+      alert(`✅ Import xong: ${inserted} đơn thành công, ${skipped} bỏ qua.`);
+      // Reload trang hiện tại
+      setPage(1);
+    } catch (err: any) {
+      alert(`❌ Lỗi import: ${err.message}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleExportOne = (order: AppData['posOrders'][number]) => {
     exportOrders([order], `hoa-don-${order.orderCode}-${todayStr}.csv`);
   };
@@ -272,8 +386,13 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
       priceBookName: draftOrder.priceBookName,
       notes: draftOrder.notes,
     };
-    await persistOrder(updatedOrder);
-    setEditingOrderId(null);
+    try {
+      await persistOrder(updatedOrder);
+      setEditingOrderId(null);
+    } catch (err) {
+      console.error('[OrderInvoices] handleSaveOrder failed', err);
+      alert('Lưu thất bại. Vui lòng thử lại.');
+    }
   };
 
   const handleCancelInvoice = async (order: AppData['posOrders'][number]) => {
@@ -282,7 +401,12 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
       return;
     }
     if (!window.confirm(`Hủy hóa đơn ${order.orderCode}?`)) return;
-    await persistOrder({ ...order, status: 'cancelled' });
+    try {
+      await persistOrder({ ...order, status: 'cancelled' });
+    } catch (err) {
+      console.error('[OrderInvoices] handleCancelInvoice failed', err);
+      alert('Hủy hóa đơn thất bại. Vui lòng thử lại.');
+    }
   };
 
   const handleCopyInvoice = async (order: AppData['posOrders'][number]) => {
@@ -302,11 +426,22 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
   };
 
   const handleCreateReturn = async (order: AppData['posOrders'][number]) => {
+    if (isCreatingReturn) return;
     if (order.isReturn) {
       alert('Đây đã là phiếu trả hàng.');
       return;
     }
+    const hasExistingReturn = [...orders, ...pageOrders].some(candidate =>
+      candidate.isReturn &&
+      candidate.id !== order.id &&
+      candidate.notes?.includes(order.orderCode)
+    );
+    if (hasExistingReturn) {
+      alert(`Hóa đơn ${order.orderCode} đã có phiếu trả hàng. Vui lòng kiểm tra tab trả hàng trước khi tạo thêm.`);
+      return;
+    }
     if (!window.confirm(`Tạo phiếu trả hàng từ hóa đơn ${order.orderCode}?`)) return;
+    setIsCreatingReturn(true);
     const suffix = order.orderCode.replace(/\D/g, '').slice(-6) || Date.now().toString().slice(-6);
     const returnOrder: AppData['posOrders'][number] = {
       ...order,
@@ -317,9 +452,108 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
       isReturn: true,
       notes: `Trả hàng từ hóa đơn ${order.orderCode}${order.notes ? `. ${order.notes}` : ''}`,
     };
-    await addOrder(returnOrder);
-    setExpandedOrderId(returnOrder.id);
-    setDetailTab('info');
+
+    // Cập nhật tồn kho: cộng lại số lượng từng sản phẩm
+    const stockUpdates: AppDataSurgicalUpdate[] = order.items
+      .map(item => {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) return null;
+        return {
+          key: 'posProducts' as const,
+          item: { ...product, stock: (product.stock || 0) + item.quantity },
+          isDelete: false,
+        };
+      })
+      .filter((u): u is Exclude<typeof u, null> => u !== null);
+
+    // Ghi inventory transaction kiểu Return
+    const inventoryTransaction: AppDataSurgicalUpdate = {
+      key: 'inventoryTransactions',
+      item: {
+        id: crypto.randomUUID(),
+        date: returnOrder.date,
+        type: 'Return' as const,
+        staffId: order.staffId,
+        items: order.items.map(item => {
+          const product = products.find(p => p.id === item.productId);
+          return {
+            productId: item.productId,
+            sku: item.sku,
+            name: item.name,
+            quantity: item.quantity,
+            previousStock: product?.stock || 0,
+            newStock: (product?.stock || 0) + item.quantity,
+          };
+        }),
+        note: `Trả hàng ${returnOrder.orderCode} (từ ${order.orderCode})`,
+        referenceId: returnOrder.id,
+      },
+      isDelete: false,
+    };
+
+    // Cập nhật revenue: trừ doanh thu, trừ COGS (hàng trả về kho)
+    const returnDateKey = new Date(returnOrder.date).toLocaleDateString('en-CA');
+    const existingRevenue = (revenue || []).find(r => r.date === returnDateKey);
+    const returnCogs = order.items.reduce((sum, item) => {
+      const product = products.find(p => p.id === item.productId);
+      return sum + (product?.importPrice || 0) * item.quantity;
+    }, 0);
+    const revenueUpdates: AppDataSurgicalUpdate[] = [];
+    // returnsValue = giá trị hàng thực tế trả (totalAmount)
+    // netRevenue giảm = totalAmount - discount (chuẩn KiotViet, không trừ điểm)
+    const returnTotalValue = order.totalAmount;
+    const orderRevenue = Number(order.totalAmount) - Math.abs(Number(order.discount) || 0);
+    if (existingRevenue) {
+      const updatedNetRevenue = existingRevenue.netRevenue - orderRevenue;
+      const updatedTotalCogs = (existingRevenue.totalCogs || 0) - returnCogs;
+      const updatedRev = {
+        ...existingRevenue,
+        returnsValue: (existingRevenue.returnsValue || 0) + returnTotalValue,
+        netRevenue: updatedNetRevenue,
+        totalCogs: updatedTotalCogs,
+        grossProfit: updatedNetRevenue - updatedTotalCogs,
+      };
+      revenueUpdates.push({ key: 'revenue', item: updatedRev });
+    } else {
+      const netRevenue = -orderRevenue;
+      const totalCogs = -returnCogs;
+      revenueUpdates.push({
+        key: 'revenue',
+        item: {
+          id: crypto.randomUUID(),
+          date: returnDateKey,
+          totalGrossRevenue: 0,
+          discount: 0,
+          revenueOther: 0,
+          returnsValue: returnTotalValue,
+          netRevenue,
+          totalCogs,
+          grossProfit: netRevenue - totalCogs,
+        },
+      });
+    }
+
+    if (!onUpdateSurgical) {
+      alert('Không thể lưu phiếu trả hàng: thiếu kết nối dữ liệu.');
+      return;
+    }
+    try {
+      await onUpdateSurgical([
+        { key: 'posOrders', item: returnOrder, isDelete: false },
+        ...stockUpdates,
+        inventoryTransaction,
+        ...revenueUpdates,
+      ]);
+      setPageOrders(prev => [returnOrder, ...prev]);
+      setTotalOrders(prev => prev + 1);
+      setExpandedOrderId(returnOrder.id);
+      setDetailTab('info');
+    } catch (err) {
+      console.error('[OrderInvoices] handleCreateReturn failed', err);
+      alert('Tạo phiếu trả hàng thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsCreatingReturn(false);
+    }
   };
 
   const renderOrderDetail = (order: AppData['posOrders'][number]) => {
@@ -578,10 +812,11 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                 </button>
                 <button
                   onClick={() => handleCreateReturn(order)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  disabled={isCreatingReturn}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Trả hàng
+                  {isCreatingReturn ? 'Đang xử lý...' : 'Trả hàng'}
                 </button>
                 <button
                   onClick={() => handlePrintInvoice(order.id)}
@@ -624,14 +859,8 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
           <FilterDateRange
             startDate={dateRange.start}
             endDate={dateRange.end}
-            onStartDateChange={date => {
-              setDateRange(prev => ({ ...prev, start: date }));
-              setPage(1);
-            }}
-            onEndDateChange={date => {
-              setDateRange(prev => ({ ...prev, end: date }));
-              setPage(1);
-            }}
+            onStartDateChange={date => { setDateRange(prev => ({ ...prev, start: date })); setPage(1); }}
+            onEndDateChange={date => { setDateRange(prev => ({ ...prev, end: date })); setPage(1); }}
           />
         </FilterSection>
 
@@ -640,14 +869,27 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
           <FilterCheckboxGroup
             label="Loại hóa đơn"
             options={[
-              { value: 'sale', label: 'Bán hàng' },
-              { value: 'return', label: 'Trả hàng' },
+              { value: 'no-delivery', label: 'Không giao hàng' },
+              { value: 'delivery', label: 'Giao hàng' },
             ]}
-            selected={typeFilter}
-            onChange={v => {
-              setTypeFilter(v);
-              setPage(1);
-            }}
+            selected={deliveryTypeFilter}
+            onChange={v => { setDeliveryTypeFilter(v); setPage(1); }}
+            searchable={false}
+          />
+        </FilterSection>
+
+        {/* Trạng thái hóa đơn */}
+        <FilterSection title="Trạng thái hóa đơn">
+          <FilterCheckboxGroup
+            label="Trạng thái"
+            options={[
+              { value: 'processing', label: 'Đang xử lý' },
+              { value: 'completed', label: 'Hoàn thành' },
+              { value: 'failed', label: 'Không giao được' },
+              { value: 'cancelled', label: 'Đã hủy' },
+            ]}
+            selected={statusFilter}
+            onChange={v => { setStatusFilter(v); setPage(1); }}
             searchable={false}
           />
         </FilterSection>
@@ -658,23 +900,26 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
             label="Phương thức"
             options={PAYMENT_METHODS.map(m => ({ value: m, label: PAYMENT_LABELS[m] }))}
             selected={paymentFilter}
-            onChange={v => {
-              setPaymentFilter(v);
-              setPage(1);
-            }}
+            onChange={v => { setPaymentFilter(v); setPage(1); }}
             searchable={false}
           />
         </FilterSection>
 
         {/* Clear filters */}
-        {(dateRange.start ||
-          dateRange.end ||
+        {(deliveryTypeFilter.length > 0 ||
+          statusFilter.length > 0 ||
           typeFilter.length > 0 ||
           paymentFilter.length > 0) && (
           <div className="px-4 py-3">
             <button
               onClick={() => {
-                setDateRange({ start: '', end: '' });
+                const d = new Date();
+                setDateRange({
+                  start: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`,
+                  end: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
+                });
+                setDeliveryTypeFilter([]);
+                setStatusFilter([]);
                 setTypeFilter([]);
                 setPaymentFilter([]);
                 setPage(1);
@@ -708,11 +953,34 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
 
           <div className="relative flex items-center gap-2 ml-auto">
             <button
+              onClick={() => window.location.assign('/pos')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Tạo mới
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+            <button
+              onClick={() => importFileRef.current?.click()}
+              disabled={isImporting}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              title="Import file CSV"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {isImporting ? 'Đang import...' : 'Import file'}
+            </button>
+            <button
               onClick={handleExport}
               className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              {selectedIds.size > 0 ? `Xuất ${selectedIds.size} dòng` : 'Xuất trang'}
+              {selectedIds.size > 0 ? `Xuất ${selectedIds.size} dòng` : 'Xuất file'}
             </button>
             <button
               onClick={() => {
@@ -772,11 +1040,26 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
 
         {/* Table */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full text-sm border-collapse table-fixed">
+            {/* Column widths */}
+            <colgroup>
+              <col style={{ width: 36 }} />   {/* checkbox */}
+              <col style={{ width: 32 }} />   {/* star */}
+              <col style={{ width: 110 }} />  {/* mã HĐ */}
+              <col style={{ width: 140 }} />  {/* thời gian */}
+              <col style={{ width: 100 }} />  {/* mã trả hàng */}
+              <col style={{ width: 88 }} />   {/* mã KH */}
+              <col style={{ width: 150 }} />  {/* khách hàng */}
+              <col style={{ width: 112 }} />  {/* tổng tiền hàng */}
+              <col style={{ width: 80 }} />   {/* giảm giá */}
+              <col style={{ width: 120 }} />  {/* tổng sau giảm */}
+              <col style={{ width: 112 }} />  {/* khách đã trả */}
+              {showPaymentColumn && <col style={{ width: 96 }} />} {/* thanh toán */}
+            </colgroup>
             {/* Header */}
             <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
               <tr>
-                <th className="w-10 px-3 py-2.5">
+                <th className="px-3 py-2.5">
                   <input
                     type="checkbox"
                     checked={allChecked}
@@ -784,33 +1067,39 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-2 py-2.5 text-center" />
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Mã hóa đơn
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Thời gian
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Mã trả hàng
+                </th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Mã KH
                 </th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Khách hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Tổng tiền hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Giảm giá
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                  Tổng sau giá
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Tổng sau giảm giá
+                </th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Khách đã trả
                 </th>
                 {showPaymentColumn && (
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Thanh toán
                   </th>
                 )}
-                <th className="w-16 px-3 py-2.5" />
               </tr>
             </thead>
 
@@ -819,9 +1108,11 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
               <tbody>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <td className="px-3 py-2" />
+                  <td className="px-2 py-2" />
                   <td className="px-3 py-2 text-xs font-medium text-slate-500">
                     Tổng trang này
                   </td>
+                  <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
@@ -834,8 +1125,10 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                   <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
                     {fmt(summary.finalAmount)}
                   </td>
+                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
+                    {fmt(summary.finalAmount)}
+                  </td>
                   {showPaymentColumn && <td className="px-3 py-2" />}
-                  <td className="px-3 py-2" />
                 </tr>
               </tbody>
             )}
@@ -862,6 +1155,7 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                           : 'hover:bg-slate-50/60'
                       }`}
                     >
+                      {/* Checkbox */}
                       <td className="px-3 py-2.5" onClick={event => event.stopPropagation()}>
                         <input
                           type="checkbox"
@@ -870,7 +1164,18 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      {/* Star */}
+                      <td className="px-2 py-2.5 text-center" onClick={e => toggleStar(order.id, e)}>
+                        <Star
+                          className={`w-3.5 h-3.5 mx-auto transition-colors ${
+                            starredIds.has(order.id)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'text-slate-200 hover:text-yellow-300'
+                          }`}
+                        />
+                      </td>
+                      {/* Mã hóa đơn */}
+                      <td className="px-3 py-2.5 text-center">
                         <span className="font-medium text-indigo-600 text-xs">{order.orderCode}</span>
                         {order.isReturn && (
                           <span className="ml-1.5 px-1.5 py-0.5 bg-red-50 text-red-500 text-[9px] font-semibold rounded">
@@ -878,40 +1183,45 @@ export default function OrderInvoices({ orders, customers, storeName, onUpdateSu
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-slate-600 font-medium">
+                      {/* Thời gian */}
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-600 font-medium">
                         {formatOrderDateTime(order.date)}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-slate-500 font-medium">
+                      {/* Mã trả hàng */}
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-400 font-medium">
+                        {order.isReturn ? order.orderCode : '—'}
+                      </td>
+                      {/* Mã KH */}
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-500 font-medium">
                         {getCustomerCode(order)}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-slate-800 font-medium">
+                      {/* Khách hàng */}
+                      <td className="px-3 py-2.5 text-xs text-slate-800 font-medium truncate">
                         {order.customerName || 'Khách lẻ'}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-xs font-normal text-slate-800 whitespace-nowrap">
+                      {/* Tổng tiền hàng */}
+                      <td className="px-3 py-2.5 text-right text-xs font-normal text-slate-800">
                         {fmt(order.totalAmount)}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-500 whitespace-nowrap">
+                      {/* Giảm giá */}
+                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-500">
                         {order.discount > 0 ? fmt(order.discount) : '0'}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-900 whitespace-nowrap">
+                      {/* Tổng sau giảm giá */}
+                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-900">
                         {fmt(order.finalAmount)}
                       </td>
+                      {/* Khách đã trả */}
+                      <td className="px-3 py-2.5 text-right text-xs font-medium text-emerald-700">
+                        {fmt((order as any).cashReceived > 0 ? (order as any).cashReceived : order.finalAmount)}
+                      </td>
                       {showPaymentColumn && (
-                        <td className="px-3 py-2.5 whitespace-nowrap">
+                        <td className="px-3 py-2.5 text-center">
                           <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
                             {PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}
                           </span>
                         </td>
                       )}
-                      <td className="px-3 py-2.5 text-center" onClick={event => event.stopPropagation()}>
-                        <button
-                          onClick={() => handlePrintInvoice(order.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-2xs font-semibold rounded-lg hover:bg-indigo-100 transition-colors"
-                        >
-                          <Eye className="w-3 h-3" />
-                          Xem
-                        </button>
-                      </td>
                     </tr>
                     {expandedOrderId === order.id && renderOrderDetail(order)}
                   </React.Fragment>

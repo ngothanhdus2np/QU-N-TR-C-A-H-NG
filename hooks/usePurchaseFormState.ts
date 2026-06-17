@@ -10,6 +10,7 @@ export function usePurchaseFormState() {
   const [purchaseNote, setPurchaseNote] = useState('');
   const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(0);
   const [purchaseDiscountType, setPurchaseDiscountType] = useState<PurchaseDiscountType>('fixed');
+  const [purchaseReferenceId, setPurchaseReferenceId] = useState('');
   const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>('none');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
@@ -20,6 +21,7 @@ export function usePurchaseFormState() {
   const [returnNote, setReturnNote] = useState('');
   const [returnDiscountValue, setReturnDiscountValue] = useState(0);
   const [returnDiscountType, setReturnDiscountType] = useState<PurchaseDiscountType>('fixed');
+  const [returnReferenceId, setReturnReferenceId] = useState('');
   const [returnSupplierPaidAmount, setReturnSupplierPaidAmount] = useState(0);
   const [returnApplySupplierDebt, setReturnApplySupplierDebt] = useState(true);
 
@@ -30,6 +32,7 @@ export function usePurchaseFormState() {
     setPurchaseNote('');
     setPurchaseDiscountValue(0);
     setPurchaseDiscountType('fixed');
+    setPurchaseReferenceId('');
     setInvoiceStatus('none');
     setInvoiceFile(null);
   };
@@ -40,6 +43,7 @@ export function usePurchaseFormState() {
     setReturnNote('');
     setReturnDiscountValue(0);
     setReturnDiscountType('fixed');
+    setReturnReferenceId('');
     setReturnSupplierPaidAmount(0);
     setReturnApplySupplierDebt(true);
   };
@@ -84,6 +88,8 @@ export function usePurchaseFormState() {
     resetPurchaseForm,
     getPurchaseItemsNetTotal,
     getPurchaseBillDiscountAmount,
+    purchaseReferenceId,
+    setPurchaseReferenceId,
     invoiceStatus,
     setInvoiceStatus,
     invoiceFile,
@@ -102,6 +108,8 @@ export function usePurchaseFormState() {
     setReturnDiscountValue,
     returnDiscountType,
     setReturnDiscountType,
+    returnReferenceId,
+    setReturnReferenceId,
     returnSupplierPaidAmount,
     setReturnSupplierPaidAmount,
     returnApplySupplierDebt,

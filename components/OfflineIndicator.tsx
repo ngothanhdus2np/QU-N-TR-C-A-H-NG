@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi, CloudOff, Cloud } from 'lucide-react';
 
+async function probeOnline(): Promise<boolean> {
+  if (navigator.onLine) return true;
+  try {
+    const res = await fetch('/health', { method: 'HEAD', cache: 'no-store' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 const OfflineIndicator: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showNotification, setShowNotification] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log('🌐 Back online');
       setIsOnline(true);
       setShowNotification(true);
       
@@ -18,7 +27,6 @@ const OfflineIndicator: React.FC = () => {
     };
 
     const handleOffline = () => {
-      console.log('📴 Offline mode');
       setIsOnline(false);
       setShowNotification(true);
     };
@@ -26,7 +34,17 @@ const OfflineIndicator: React.FC = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    let cancelled = false;
+    const refreshOnlineState = async () => {
+      const reachable = await probeOnline();
+      if (!cancelled) setIsOnline(reachable);
+    };
+    refreshOnlineState();
+    const intervalId = window.setInterval(refreshOnlineState, 10_000);
+
     return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };

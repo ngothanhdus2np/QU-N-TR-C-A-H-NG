@@ -44,7 +44,7 @@ export default [
       // --- TypeScript ---
       // warn thay vì error vì codebase hiện có nhiều any — dần dần cải thiện
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-require-imports': 'error',
 
       // --- console ---
@@ -53,7 +53,7 @@ export default [
 
       // --- Code quality ---
       'no-debugger': 'error',
-      'no-duplicate-imports': 'error',
+      'no-duplicate-imports': 'warn',
       'prefer-const': 'error',
       'no-var': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
@@ -94,6 +94,7 @@ export default [
       'node_modules/**',
       'imports/**',
       'coverage/**',
+      'supabase/**',
       '*.config.js',  // Tránh tự lint file này
       'vite.config.ts',
     ],

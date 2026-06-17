@@ -533,6 +533,13 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
     }
   });
   const [costMethod, setCostMethod] = useState<InventoryCostMethod>(() => {
+    // Ưu tiên giá trị từ Supabase (inventorySettings.costMethod) nếu có
+    if (inventorySettings.costMethod === 'fixed' || inventorySettings.costMethod === 'average') {
+      try {
+        localStorage.setItem(INVENTORY_COST_METHOD_STORAGE_KEY, inventorySettings.costMethod);
+      } catch { /* ignore */ }
+      return inventorySettings.costMethod;
+    }
     try {
       const saved = localStorage.getItem(INVENTORY_COST_METHOD_STORAGE_KEY);
       return saved === 'fixed' || saved === 'average' ? saved : 'fixed';
@@ -979,23 +986,23 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
                 name="costMethod"
                 value="fixed"
                 checked={costMethod === 'fixed'}
-                onChange={e => {
+                onChange={async e => {
                   const newValue = e.target.value as InventoryCostMethod;
                   setCostMethod(newValue);
                   try {
                     localStorage.setItem(INVENTORY_COST_METHOD_STORAGE_KEY, newValue);
-                  } catch {
-                    // Ignore localStorage errors
-                  }
+                  } catch { /* ignore */ }
+                  await onUpdateInventorySettings({ ...inventoryForm, costMethod: newValue }).catch(() => {});
                 }}
                 className="mt-0.5 h-5 w-5 text-blue-600 border-slate-300 focus:ring-blue-500"
               />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-slate-900 mb-1">Giá vốn cố định</div>
                 <div className="text-xs text-slate-500 leading-relaxed">
-                  Giá vốn được xác định theo{' '}
+                  Giá vốn giữ nguyên theo{' '}
                   <span className="font-medium text-slate-700">giá nhập đầu tiên</span> hoặc do
-                  người dùng tự nhập.
+                  người dùng tự nhập. Khi nhập hàng với giá khác, giá vốn sẽ{' '}
+                  <span className="font-medium text-slate-700">không tự động thay đổi</span>.
                 </div>
               </div>
             </label>
@@ -1007,22 +1014,21 @@ const GoodsTab: React.FC<GoodsTabProps> = ({
                 name="costMethod"
                 value="average"
                 checked={costMethod === 'average'}
-                onChange={e => {
+                onChange={async e => {
                   const newValue = e.target.value as InventoryCostMethod;
                   setCostMethod(newValue);
                   try {
                     localStorage.setItem(INVENTORY_COST_METHOD_STORAGE_KEY, newValue);
-                  } catch {
-                    // Ignore localStorage errors
-                  }
+                  } catch { /* ignore */ }
+                  await onUpdateInventorySettings({ ...inventoryForm, costMethod: newValue }).catch(() => {});
                 }}
                 className="mt-0.5 h-5 w-5 text-blue-600 border-slate-300 focus:ring-blue-500"
               />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-900 mb-1">Giá vốn trung bình</div>
+                <div className="text-sm font-medium text-slate-900 mb-1">Giá vốn trung bình (AVCO)</div>
                 <div className="text-xs text-slate-500 leading-relaxed">
-                  Giá vốn được tính theo phương pháp trung bình dựa trên giao dịch nhập hàng và trả
-                  hàng nhập.
+                  Giá vốn tự động tính lại theo bình quân gia quyền sau mỗi lần nhập hàng.
+                  Phù hợp khi giá nhập thay đổi thường xuyên.
                 </div>
               </div>
             </label>

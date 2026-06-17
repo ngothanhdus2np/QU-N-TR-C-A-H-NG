@@ -28,6 +28,10 @@ export const useGoodsAudit = ({
   const [auditItems, setAuditItems] = React.useState<AuditItem[]>([]);
 
   const handleConfirmAudit = async (note?: string) => {
+    if (auditItems.length === 0) {
+      showToast('Chưa có sản phẩm nào trong danh sách kiểm kho.', 'error');
+      return;
+    }
     const updatedProducts = [...products];
     const itemsForTransaction: InventoryTransactionItem[] = [];
     const surgicalUpdates: AppDataSurgicalUpdate[] = [];
@@ -37,6 +41,8 @@ export const useGoodsAudit = ({
       const idx = updatedProducts.findIndex(product => product.id === audit.productId);
       if (idx !== -1) {
         const product = updatedProducts[idx];
+        // BUG-37: bỏ qua sản phẩm cha — stock thực nằm ở các variant con
+        if (product.isParent) return;
         const diff = audit.actualStock - audit.currentStock;
         totalActualQty += audit.actualStock;
         totalDiff += diff;
@@ -53,29 +59,39 @@ export const useGoodsAudit = ({
         surgicalUpdates.push({ key: 'posProducts', item: updatedProduct });
       }
     });
-    if (onUpdateSurgical && surgicalUpdates.length > 0) {
-      await onUpdateSurgical(surgicalUpdates);
-    } else {
-      onUpdateProducts(updatedProducts);
+    try {
+      // BUG-31: onAddTransaction chỉ chạy sau khi stock update thành công
+      if (onUpdateSurgical && surgicalUpdates.length > 0) {
+        await onUpdateSurgical(surgicalUpdates);
+      } else {
+        onUpdateProducts(updatedProducts);
+      }
+      if (onAddTransaction) {
+        const now = new Date().toISOString();
+        onAddTransaction({
+          id: generateId(),
+          date: now,
+          type: 'Check',
+          staffId: getCurrentStaffId(),
+          items: itemsForTransaction,
+          note: note?.trim() || 'Kiểm kho',
+          status: 'balanced',
+          balancedDate: now,
+          totalActualQty,
+          totalDiff,
+        });
+      }
+      // BUG-43: thông báo kèm chênh lệch để người dùng biết
+      const diffNote = totalDiff < 0
+        ? ` (giảm ${Math.abs(totalDiff)} đơn vị)`
+        : totalDiff > 0 ? ` (tăng ${totalDiff} đơn vị)` : '';
+      showToast(`Đã cân bằng kho ${itemsForTransaction.length} mặt hàng theo số lượng thực tế${diffNote}.`);
+      setAuditItems([]);
+      setActiveTab('kho');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      showToast(`Kiểm kho thất bại: ${message}`, 'error');
     }
-    if (onAddTransaction) {
-      const now = new Date().toISOString();
-      onAddTransaction({
-        id: generateId(),
-        date: now,
-        type: 'Check',
-        staffId: getCurrentStaffId(),
-        items: itemsForTransaction,
-        note: note?.trim() || 'Kiểm kho',
-        status: 'balanced',
-        balancedDate: now,
-        totalActualQty,
-        totalDiff,
-      });
-    }
-    showToast(`Đã cân bằng kho ${itemsForTransaction.length} mặt hàng theo số lượng thực tế.`);
-    setAuditItems([]);
-    setActiveTab('kho');
   };
 
   const cancelAudit = () => {

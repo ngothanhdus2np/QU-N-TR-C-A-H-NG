@@ -220,8 +220,13 @@ export const calculateEmployeePayroll = (
   for (let d = 1; d <= (daysInMonthTotal || 30); d++) {
     // Hỗ trợ cả 2 format: MM-DD (chuẩn lưu ngày lễ) và YYYY-MM-DD (legacy)
     const dayStr = `${currentMonthStr}-${d.toString().padStart(2, '0')}`;
-    if (holidays.some(h => h.date === dayStr || h.date === `${year}-${dayStr}`))
-      monthHolidaysCount++;
+    const fullDateStr = `${year}-${dayStr}`;
+    if (holidays.some(h => h.date === dayStr || h.date === fullDateStr)) {
+      // Chỉ tính thưởng ngày lễ nếu nhân viên thực sự đi làm ngày đó
+      if (monthAttendance.some(a => a.date === fullDateStr && a.status === 'Present')) {
+        monthHolidaysCount++;
+      }
+    }
   }
 
   // 3. Disciplinary Deductions
@@ -480,7 +485,7 @@ export const calculateEmployeePayroll = (
     netPay: isNaN(finalNetPay) ? 0 : finalNetPay,
     seniorityDays: Number(seniorityAtMonthEnd) || 0,
     isOfficial,
-    hasTetCommitment: true,
+    hasTetCommitment: tetTotal > 0 || Boolean(tetConfig),
     calculationNote: notes.join(' | '),
     carryForwardDeduction: cfDeduction,
     carryForwardDebtOut: cfDebtOut,

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  calcEffectiveUnitPrice,
+  calculateNextImportPrice,
   cartesianProduct,
   buildVariantProductName,
   stripVariantProductNameSuffix,
@@ -7,6 +9,85 @@ import {
   getNextSKUNumber,
 } from '../../src/lib/businessLogic.inventory';
 import type { POSProduct, POSProductAttribute } from '../../types';
+
+// ─── calculateNextImportPrice ─────────────────────────────────────────────
+
+describe('calculateNextImportPrice', () => {
+  // ── Method: fixed ──────────────────────────────────────────────────────
+
+  it('fixed — giữ nguyên importPrice hiện tại khi đã có giá vốn', () => {
+    const product = { stock: 10, importPrice: 50000 };
+    expect(calculateNextImportPrice(product, 5, 80000, 'fixed')).toBe(50000);
+  });
+
+  it('fixed — dùng giá nhập mới khi importPrice = 0 (lần nhập đầu tiên)', () => {
+    const product = { stock: 0, importPrice: 0 };
+    expect(calculateNextImportPrice(product, 10, 60000, 'fixed')).toBe(60000);
+  });
+
+  it('fixed — dùng giá nhập mới khi importPrice chưa có (sản phẩm mới)', () => {
+    const product = { stock: 5, importPrice: 0 };
+    expect(calculateNextImportPrice(product, 3, 45000, 'fixed')).toBe(45000);
+  });
+
+  // ── Method: average (AVCO/WAC) ─────────────────────────────────────────
+
+  it('average — tính đúng AVCO với tồn kho hiện có', () => {
+    // 10 cái @ 50.000 + 5 cái @ 80.000 = (500.000 + 400.000) / 15 = 60.000
+    const product = { stock: 10, importPrice: 50000 };
+    expect(calculateNextImportPrice(product, 5, 80000, 'average')).toBe(60000);
+  });
+
+  it('average — lần nhập đầu tiên (stock = 0) → dùng giá nhập mới', () => {
+    const product = { stock: 0, importPrice: 0 };
+    expect(calculateNextImportPrice(product, 10, 70000, 'average')).toBe(70000);
+  });
+
+  it('average — tồn kho âm (hàng trả về, stock < 0) → dùng giá nhập mới', () => {
+    const product = { stock: -2, importPrice: 50000 };
+    expect(calculateNextImportPrice(product, 5, 55000, 'average')).toBe(55000);
+  });
+
+  it('average — số lượng nhập = 0 → giữ nguyên importPrice hiện tại', () => {
+    const product = { stock: 10, importPrice: 50000 };
+    expect(calculateNextImportPrice(product, 0, 80000, 'average')).toBe(50000);
+  });
+
+  it('average — số lượng nhập = 0 và importPrice = 0 → dùng purchasePrice', () => {
+    const product = { stock: 0, importPrice: 0 };
+    expect(calculateNextImportPrice(product, 0, 60000, 'average')).toBe(60000);
+  });
+
+  it('average — làm tròn kết quả về số nguyên', () => {
+    // 3 cái @ 10.000 + 2 cái @ 15.000 = (30.000 + 30.000) / 5 = 12.000 (chẵn)
+    const product = { stock: 3, importPrice: 10000 };
+    expect(calculateNextImportPrice(product, 2, 15000, 'average')).toBe(12000);
+  });
+
+  it('average — kết quả lẻ được làm tròn đúng', () => {
+    // 1 cái @ 10.000 + 1 cái @ 11.000 = 21.000 / 2 = 10.500 → 10500 (Math.round)
+    const product = { stock: 1, importPrice: 10000 };
+    expect(calculateNextImportPrice(product, 1, 11000, 'average')).toBe(10500);
+  });
+
+  it('average — giá nhập bằng 0 → kéo giá vốn về 0', () => {
+    // Nhập miễn phí: (10 * 50000 + 5 * 0) / 15 = 33333
+    const product = { stock: 10, importPrice: 50000 };
+    expect(calculateNextImportPrice(product, 5, 0, 'average')).toBe(33333);
+  });
+
+  // ── Edge cases ─────────────────────────────────────────────────────────
+
+  it('xử lý giá trị string dạng số (defensive cast)', () => {
+    const product = { stock: '10' as unknown as number, importPrice: '50000' as unknown as number };
+    expect(calculateNextImportPrice(product, 5, 80000, 'average')).toBe(60000);
+  });
+
+  it('không cho phép giá vốn âm (giá nhập âm → 0)', () => {
+    const product = { stock: 0, importPrice: 0 };
+    expect(calculateNextImportPrice(product, 5, -1000, 'average')).toBe(0);
+  });
+});
 
 // ─── cartesianProduct ─────────────────────────────────────────────────────
 
@@ -380,5 +461,46 @@ describe('getNextSKUNumber', () => {
       { sku: 'SP000003' },
     ] as POSProduct[];
     expect(getNextSKUNumber(products)).toBe(6);
+  });
+});
+
+// ─── calcEffectiveUnitPrice ───────────────────────────────────────────────────
+
+describe('calcEffectiveUnitPrice', () => {
+  it('không có chiết khấu toàn đơn → giá vốn = (qty*price - lineDiscount) / qty', () => {
+    // 10 cái x 50.000 - 0 giảm dòng - 0 giảm đơn = 50.000/cái
+    expect(calcEffectiveUnitPrice({ quantity: 10, price: 50000, discount: 0 }, 0, 500000)).toBe(50000);
+  });
+
+  it('có chiết khấu dòng → trừ discount dòng trước khi chia', () => {
+    // 10 cái x 50.000 - 50.000 giảm dòng = 450.000 / 10 = 45.000
+    expect(calcEffectiveUnitPrice({ quantity: 10, price: 50000, discount: 50000 }, 0, 450000)).toBe(45000);
+  });
+
+  it('chiết khấu toàn đơn phân bổ đúng theo tỷ lệ (1 dòng duy nhất)', () => {
+    // 10 cái x 50.000 = 500.000; billDiscount = 50.000; tỷ lệ = 100% → itemOrderDiscount = 50.000
+    // effectiveUnitPrice = (500.000 - 50.000) / 10 = 45.000
+    expect(calcEffectiveUnitPrice({ quantity: 10, price: 50000, discount: 0 }, 50000, 500000)).toBe(45000);
+  });
+
+  it('chiết khấu toàn đơn phân bổ theo tỷ lệ giá trị (dòng chiếm 60% tổng)', () => {
+    // dòng này: 6 cái x 50.000 = 300.000 = 60% của tổng 500.000
+    // billDiscount = 100.000 → itemOrderDiscount = round(60% * 100.000) = 60.000
+    // effectiveUnitPrice = (300.000 - 60.000) / 6 = 40.000
+    expect(calcEffectiveUnitPrice({ quantity: 6, price: 50000, discount: 0 }, 100000, 500000)).toBe(40000);
+  });
+
+  it('itemsNetTotal = 0 → không phân bổ chiết khấu toàn đơn', () => {
+    // Tránh chia 0; billDiscount bị bỏ qua khi tổng = 0
+    expect(calcEffectiveUnitPrice({ quantity: 5, price: 10000, discount: 0 }, 50000, 0)).toBe(10000);
+  });
+
+  it('quantity = 0 → trả về price gốc (tránh chia 0)', () => {
+    expect(calcEffectiveUnitPrice({ quantity: 0, price: 30000, discount: 0 }, 0, 0)).toBe(30000);
+  });
+
+  it('discount lớn hơn giá trị dòng → kết quả bị giới hạn ở 0 (không âm)', () => {
+    // 2 cái x 10.000 = 20.000; discount = 30.000 → itemNetAmount âm → Math.max(0, ...)
+    expect(calcEffectiveUnitPrice({ quantity: 2, price: 10000, discount: 30000 }, 0, 20000)).toBe(0);
   });
 });

@@ -6,7 +6,10 @@ import {
   ClipboardList,
   Database,
   FileText,
+  Globe,
+  Package,
   Settings,
+  ShoppingBag,
   ShoppingCart,
 } from 'lucide-react';
 import type { RevenueSubTab } from '../../types';
@@ -19,17 +22,24 @@ interface Props {
 }
 
 const shopeeItems: { id: RevenueSubTab; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: 'source', label: 'Dữ liệu nguồn', icon: Database, desc: 'Dữ liệu đơn hàng thô từ Shopee' },
+  { id: 'source', label: 'Sản phẩm Shopee', icon: Database, desc: 'Quản lý ảnh, mô tả, SEO sản phẩm Shopee' },
   { id: 'costs', label: 'Chi phí', icon: Settings, desc: 'Định phí, biến phí theo từng đơn hàng' },
   { id: 'inventory_in', label: 'Nhập kho', icon: ArrowDownToLine, desc: 'Theo dõi hàng nhập về kho Shopee' },
   { id: 'inventory_out', label: 'Xuất kho', icon: ArrowUpFromLine, desc: 'Đơn đã xuất — doanh thu & phí thực tế' },
   { id: 'report', label: 'Báo cáo', icon: ClipboardList, desc: 'Tổng hợp lợi nhuận theo kỳ' },
 ];
 
+const websiteItems = [
+  { id: 'website-products', label: 'Sản phẩm', icon: Package, desc: 'Quản lý sản phẩm trên website' },
+  { id: 'website-orders', label: 'Đơn hàng', icon: ShoppingBag, desc: 'Đơn hàng từ website' },
+];
+
 const mainItems = [
+  { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
   { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
   { id: 'delivery-partners', label: 'Đối tác giao hàng', icon: Bike },
   { id: 'shipping-orders', label: 'Vận đơn', icon: FileText },
+  { id: 'website-phuc-sang', label: 'Website PHÚC SANG', icon: Globe },
 ];
 
 export default function OnlineSidebarNav({
@@ -38,10 +48,19 @@ export default function OnlineSidebarNav({
   onSelectMainTab,
   onSelectShopeeSubTab,
 }: Props) {
-  const activeMainItem = mainItems.find(item => item.id === activeTab) ?? mainItems[0];
+  const isWebsiteTab = activeTab === 'website-products' || activeTab === 'website-orders';
+  const activeMainItem =
+    isWebsiteTab
+      ? mainItems.find(i => i.id === 'website-phuc-sang')!
+      : (mainItems.find(item => item.id === activeTab) ?? mainItems[0]);
   const activeShopeeItem = shopeeItems.find(item => item.id === activeShopeeSubTab);
+  const activeWebsiteItem = websiteItems.find(i => i.id === activeTab);
   const activeHeaderItem =
-    activeTab === 'shopee-revenue' && activeShopeeItem ? activeShopeeItem : activeMainItem;
+    activeTab === 'shopee-revenue' && activeShopeeItem
+      ? activeShopeeItem
+      : isWebsiteTab && activeWebsiteItem
+      ? activeWebsiteItem
+      : activeMainItem;
   const ActiveIcon = activeHeaderItem.icon;
 
   return (
@@ -51,18 +70,28 @@ export default function OnlineSidebarNav({
         <div className="min-w-0">
           <p className="text-sm font-bold uppercase text-slate-900">{activeHeaderItem.label}</p>
           <p className="text-xs text-slate-500">
-            {activeTab === 'shopee-revenue' && activeShopeeItem ? activeShopeeItem.desc : 'Online'}
+            {activeTab === 'shopee-revenue' && activeShopeeItem
+              ? activeShopeeItem.desc
+              : isWebsiteTab && activeWebsiteItem
+              ? activeWebsiteItem.desc
+              : 'Online'}
           </p>
         </div>
       </div>
       <div className="space-y-1 p-3">
         {mainItems.map(item => {
           const Icon = item.icon;
-          const active = activeTab === item.id;
+          const active = isWebsiteTab
+            ? item.id === 'website-phuc-sang'
+            : activeTab === item.id;
           return (
             <div key={item.id}>
               <button
-                onClick={() => onSelectMainTab(item.id)}
+                onClick={() =>
+                  item.id === 'website-phuc-sang'
+                    ? onSelectMainTab('website-products')
+                    : onSelectMainTab(item.id)
+                }
                 className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-normal transition-colors ${
                   active ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
                 }`}
@@ -79,6 +108,28 @@ export default function OnlineSidebarNav({
                       <button
                         key={subItem.id}
                         onClick={() => onSelectShopeeSubTab(subItem.id)}
+                        className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-normal transition-colors ${
+                          subActive
+                            ? 'bg-slate-900 text-white'
+                            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                        }`}
+                      >
+                        <SubIcon className="h-3.5 w-3.5" />
+                        <span className="min-w-0 truncate">{subItem.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {item.id === 'website-phuc-sang' && isWebsiteTab && (
+                <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+                  {websiteItems.map(subItem => {
+                    const SubIcon = subItem.icon;
+                    const subActive = activeTab === subItem.id;
+                    return (
+                      <button
+                        key={subItem.id}
+                        onClick={() => onSelectMainTab(subItem.id)}
                         className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-normal transition-colors ${
                           subActive
                             ? 'bg-slate-900 text-white'

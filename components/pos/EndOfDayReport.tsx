@@ -3,12 +3,14 @@ import React, { useState, useMemo } from 'react';
 import { X, Printer, ChevronRight, ChevronDown } from 'lucide-react';
 import { Employee, POSOrder } from '../../types';
 import { calculateStaffSalesForDate } from '../../src/lib/posSalesAttribution';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 
 interface EndOfDayReportProps {
   orders: POSOrder[];
   employees?: Employee[];
   storeName?: string;
   onClose: () => void;
+  embedded?: boolean; // true = nhúng vào page, không dùng modal overlay
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN');
@@ -26,6 +28,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
   employees = [],
   storeName = 'CFO Brain Store',
   onClose,
+  embedded = false,
 }) => {
   const today = new Date().toLocaleDateString('en-CA');
   const [selectedDate, setSelectedDate] = useState(today);
@@ -51,7 +54,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
   } = useMemo(() => {
     const salesOrders: POSOrder[] = [];
     const returnOrders: POSOrder[] = [];
-    let salesQty = 0, salesRevenue = 0, salesActual = 0, salesDiscount = 0;
+    let salesQty = 0, salesRevenue = 0, salesGross = 0, salesActual = 0;
     let returnQty = 0, returnRevenue = 0, returnActual = 0;
     let returnRefundTotal = 0, returnTraHang = 0;
     let totalAllOrders = 0, allQty = 0;
@@ -59,20 +62,20 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     for (const o of filteredOrders) {
       const qty = o.items.reduce((q, i) => q + i.quantity, 0);
       allQty += qty;
-      totalAllOrders += Math.abs(o.totalAmount);
+      if (!o.isReturn) totalAllOrders += Math.abs(o.totalAmount);
       if (o.isReturn) {
         returnOrders.push(o);
         returnQty += qty;
-        returnRevenue += o.totalAmount;
+        returnRevenue += Math.abs(o.totalAmount);
         returnActual += o.finalAmount;
         returnRefundTotal += o.refundAmount ?? 0;
-        returnTraHang += o.refundAmount || Math.abs(o.totalAmount);
+        returnTraHang += Math.abs(o.totalAmount);
       } else {
         salesOrders.push(o);
         salesQty += qty;
-        salesRevenue += o.totalAmount;
+        salesGross += Number(o.totalAmount) || 0;
+        salesRevenue += calcOrderRevenue(o); // = totalAmount - discount (chuẩn KiotViet)
         salesActual += o.finalAmount;
-        salesDiscount += Math.abs(o.discount || 0);
       }
     }
 
@@ -81,7 +84,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       returnOrders,
       salesSummary: { count: salesOrders.length, qty: salesQty, revenue: salesRevenue, actual: salesActual },
       returnSummary: { count: returnOrders.length, qty: returnQty, revenue: returnRevenue, actual: returnActual },
-      salesDiscount,
+      salesDiscount: salesGross - salesRevenue, // = Σdiscount, dùng để hiển thị
       returnRefundTotal,
       returnTraHang,
       totalAllOrders,
@@ -93,10 +96,6 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     () => calculateStaffSalesForDate(filteredOrders, selectedDate, employees),
     [employees, filteredOrders, selectedDate]
   );
-  // Doanh thu = Tổng tiền hàng - Giảm giá
-  const doanhThuAll = totalAllOrders - salesDiscount;
-  // Thực thu cuối ngày = Doanh thu - Ghi nợ
-  const netActual = doanhThuAll - returnRefundTotal;
 
   // Nhóm tất cả đơn theo PTTT (dùng cho sub-group Chi tiết)
   const ordersByMethod = useMemo(() => {
@@ -106,7 +105,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       if (!map.has(m)) map.set(m, []);
       map.get(m)!.push(o);
     });
-    const order = ['Cash', 'Bank', 'Momo', 'Other'];
+    const order = ['Cash', 'Bank', 'Card', 'Momo', 'Other'];
     const sorted = new Map<string, POSOrder[]>();
     order.forEach(m => { if (map.has(m)) sorted.set(m, map.get(m)!); });
     map.forEach((v, k) => { if (!sorted.has(k)) sorted.set(k, v); });
@@ -120,7 +119,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
   }, [employees]);
 
   const methodDisplayName = (m: string) =>
-    ({ Cash: 'TM', Bank: 'CK', Momo: 'Ví', Other: 'Khác' } as Record<string, string>)[m] || m;
+    ({ Cash: 'TM', Bank: 'CK', Card: 'Thẻ', Momo: 'Ví', Other: 'Khác' } as Record<string, string>)[m] || m;
 
   // Pre-compute group summaries theo PTTT — tránh tính lại mỗi lần expand
   const methodSummaries = useMemo(() => {
@@ -131,12 +130,14 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       const sales      = methodOrders.filter(o => !o.isReturn);
       const returns    = methodOrders.filter(o => !!o.isReturn);
       const qty        = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
-      // Tổng tiền hàng = bán + trả (tất cả dương)
-      const totienHang = methodOrders.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
-      const traHang    = returns.reduce((s, o) => s + (o.refundAmount || Math.abs(o.totalAmount)), 0);
-      const doanhThu   = sales.reduce((s, o) => s + o.totalAmount, 0); // Doanh thu chỉ từ bán
-      const giamGia    = sales.reduce((s, o) => s + Math.abs(o.discount || 0), 0);
-      const thucThu    = doanhThu - giamGia;
+      // Tổng tiền hàng = chỉ đơn bán (trả hàng hiển thị riêng ở group "Trả hàng")
+      const totienHang = sales.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
+      const traHang    = returns.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
+      const grossSales = sales.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+      const doanhThu   = sales.reduce((s, o) => s + calcOrderRevenue(o), 0); // = totalAmount - discount
+      const giamGia    = grossSales - doanhThu; // discount = gross - net
+      // thucThu chỉ tính sales để khớp với dòng header "Hóa đơn"; traHang thể hiện ở group riêng
+      const thucThu    = doanhThu;
       result.set(method, { qty, totienHang, traHang, doanhThu, giamGia, thucThu });
     });
     return result;
@@ -156,10 +157,10 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     return m;
   }, [filteredOrders, staffNameMap]);
 
-  // Doanh thu = chỉ đơn bán (trả hàng nằm trong Tổng tiền hàng, không tách cột)
+  // salesRevenue = Σ calcOrderRevenue = totalAmount - discount (đã trừ giảm giá)
   const newDoanhThu = salesSummary.revenue;
-  // Thực thu = Doanh thu - Giảm giá
-  const newThucthu  = newDoanhThu - salesDiscount;
+  // newDoanhThu đã net của giảm giá → newThucthu = newDoanhThu
+  const newThucthu  = newDoanhThu;
 
   // Thực thu tổng ngày = Thực thu bán - Trả hàng
   const overallThucthu = newThucthu - returnTraHang;
@@ -337,21 +338,21 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       const mSales    = methodOrders.filter(o => !o.isReturn);
       const mReturns  = methodOrders.filter(o => !!o.isReturn);
       const mQty      = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
-      const mTienHang = mSales.reduce((s, o) => s + o.totalAmount, 0)
-                      - mReturns.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
-      const mTraHang  = mReturns.reduce((s, o) => s + (o.refundAmount || Math.abs(o.totalAmount)), 0);
-      const mDoanhThu = mTienHang;
-      const mGiamGia  = mSales.reduce((s, o) => s + Math.abs(o.discount || 0), 0);
-      const mThucThu  = mDoanhThu - mGiamGia;
+      const mTienHang = mSales.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+      const mTraHang  = mReturns.reduce((s, o) => s + Math.abs(Number(o.totalAmount) || 0), 0);
+      const mDoanhThu = mSales.reduce((s, o) => s + calcOrderRevenue(o), 0); // = totalAmount - discount
+      const mGiamGia  = mTienHang - mDoanhThu; // derived, nhất quán với UI live
+      const mThucThu  = mDoanhThu;
       const mName     = methodDisplayName(method);
 
       const orderRows = methodOrders.map(order => {
         const disc      = Math.abs(order.discount || 0);
         const isRet     = !!order.isReturn;
-        const retAmt    = order.refundAmount || Math.abs(order.totalAmount);
+        const retAmt    = Math.abs(order.totalAmount);
         const staffName = order.staffName || staffNameMap.get(order.staffId) || '';
         const time      = fmtTime(order.date);
         const tienHang  = isRet ? 0 : Math.abs(order.totalAmount);
+        const doanhThuOrder = isRet ? 0 : calcOrderRevenue(order); // totalAmount - discount
         return `<tr>
           ${dtd(`<span style="padding-left:36px;font-family:monospace;color:${isRet ? '#e11d48' : '#4f46e5'}">${order.orderCode}</span>`)}
           ${dtd(fmtCustomer(order.customerName))}
@@ -360,7 +361,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
           ${dtdR(String(order.items.reduce((s, i) => s + i.quantity, 0)))}
           ${dtdR(isRet ? fmt(retAmt) : fmt(tienHang), isRet ? '#e11d48' : '')}
           ${dtdR('0')}
-          ${dtdR(isRet ? '0' : fmt(tienHang))}
+          ${dtdR(isRet ? '0' : fmt(doanhThuOrder))}
           ${dtdR(disc > 0 ? `-${fmt(disc)}` : '', '#e11d48')}
           ${dtdR('0')}${dtdR('0')}
           ${dtdR(isRet ? '' : fmt(order.finalAmount))}
@@ -380,7 +381,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     }).join('');
 
     const printReturnRows = returnOrders.map(order => {
-      const retAmt    = order.refundAmount || Math.abs(order.totalAmount);
+      const retAmt    = Math.abs(order.totalAmount);
       const staffName = order.staffName || staffNameMap.get(order.staffId) || '';
       const time      = fmtTime(order.date);
       return `<tr>
@@ -532,11 +533,10 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     </section>
   );
 
-  return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-6">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+  const inner = (
+    <div className={embedded ? 'flex h-full flex-col overflow-hidden' : 'bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden'}>
 
-      {/* Hàng 1: title + controls + nút in + đóng */}
+      {/* Hàng 1: title + controls + nút in + (nút đóng nếu modal) */}
       <div className="bg-white border-b border-slate-200 h-12 flex items-center px-4 gap-3 shrink-0 shadow-sm">
         <span className="font-normal text-slate-800 text-sm mr-1">Báo cáo cuối ngày</span>
 
@@ -568,12 +568,14 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
           In báo cáo
         </button>
 
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {!embedded && (
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Hàng 2: tab Tổng quát / Chi tiết — căn giữa */}
@@ -601,6 +603,13 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       {/* Preview area */}
       <div className="flex-1 overflow-auto px-6 py-4">
           <div className="text-slate-900">
+
+            {filteredOrders.length === 0 && (
+              <div className="text-center py-10 text-slate-400 text-xs">
+                Không có dữ liệu cho ngày {dateStr}.<br />
+                Hệ thống chỉ lưu dữ liệu 90 ngày gần nhất trên thiết bị. Vui lòng xem báo cáo tại mục <strong>Phân tích</strong> để tra cứu dữ liệu cũ hơn.
+              </div>
+            )}
 
             {/* Creation time */}
             <div className="text-2xs text-slate-400 mb-3">Ngày lập: {nowStr}</div>
@@ -811,7 +820,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
                           {expandedGroups.has(key) && methodOrders.map(order => {
                             const d      = orderDisplayMap.get(order.id)!;
                             const isRet  = !!order.isReturn;
-                            const retAmt = order.refundAmount || Math.abs(order.totalAmount);
+                            const retAmt = Math.abs(order.totalAmount);
                             return (
                               <tr key={order.id} className={isRet ? 'hover:bg-rose-50/40' : 'hover:bg-slate-50'}>
                                 <td className={`${tdStyle} pl-12 font-mono ${isRet ? 'text-rose-500' : 'text-indigo-600'}`}>{order.orderCode}</td>
@@ -821,7 +830,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
                                 <td className={tdRStyle}>{d.qty}</td>
                                 <td className={`${tdRStyle} ${isRet ? 'text-rose-500' : ''}`}>{isRet ? fmt(retAmt) : fmt(order.totalAmount)}</td>
                                 <td className={tdRStyle}>0</td>
-                                <td className={`${tdRStyle} ${isRet ? 'text-rose-500' : ''}`}>{isRet ? '0' : fmt(order.totalAmount)}</td>
+                                <td className={`${tdRStyle} ${isRet ? 'text-rose-500' : ''}`}>{isRet ? '0' : fmt(calcOrderRevenue(order))}</td>
                                 <td className={`${tdRStyle} ${d.disc > 0 ? 'text-rose-500' : ''}`}>{d.disc > 0 ? `-${fmt(d.disc)}` : ''}</td>
                                 <td className={tdRStyle}>0</td>
                                 <td className={tdRStyle}>0</td>
@@ -857,7 +866,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
                     </tr>
                     {expandedGroups.has('return') && returnOrders.map(order => {
                       const d      = orderDisplayMap.get(order.id)!;
-                      const retAmt = order.refundAmount || Math.abs(order.totalAmount);
+                      const retAmt = Math.abs(order.totalAmount);
                       return (
                         <tr key={order.id} className="hover:bg-rose-50/40">
                           <td className={`${tdStyle} pl-8 font-mono text-rose-500`}>{order.orderCode}</td>
@@ -893,6 +902,12 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
           </div>
       </div>
     </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-modal flex items-center justify-center p-6">
+      {inner}
     </div>
   );
 };

@@ -13,6 +13,7 @@ import {
 import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
+import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 
 interface Props {
   data: AppData;
@@ -193,20 +194,20 @@ const AnalysisCustomersOverviewPage: React.FC<Props> = ({ data }) => {
 
       if (!o.customerId) {
         leCount++;
-        leRevenue += o.finalAmount;
+        leRevenue += calcOrderRevenue(o);
         dayCustomersSet.get(day)!.add(`le_${o.id}`);
       } else {
         const first = firstOrderDate.get(o.customerId);
         if (first && first >= startDate) {
           moiCount++;
-          moiRevenue += o.finalAmount;
+          moiRevenue += calcOrderRevenue(o);
         } else {
           cuCount++;
-          cuRevenue += o.finalAmount;
+          cuRevenue += calcOrderRevenue(o);
         }
         dayCustomersSet.get(day)!.add(o.customerId);
       }
-      dayRevenue.set(day, (dayRevenue.get(day) || 0) + o.finalAmount);
+      dayRevenue.set(day, (dayRevenue.get(day) || 0) + calcOrderRevenue(o));
     });
 
     // Build daily series

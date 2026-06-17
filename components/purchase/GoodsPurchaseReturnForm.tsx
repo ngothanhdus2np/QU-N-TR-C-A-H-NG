@@ -42,6 +42,8 @@ interface GoodsPurchaseReturnFormProps {
     updates: Partial<{ quantity: number; price: number; discount: number }>
   ) => void;
   onRemoveReturnItem: (id: string) => void;
+  returnReferenceId: string;
+  setReturnReferenceId: (value: string) => void;
   onCompleteReturn: () => void;
   onSaveDraft: () => void;
   onDownloadTemplate: () => void;
@@ -72,6 +74,8 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
   onAddProductToReturn,
   onUpdateReturnItem,
   onRemoveReturnItem,
+  returnReferenceId,
+  setReturnReferenceId,
   onCompleteReturn,
   onSaveDraft,
   onDownloadTemplate,
@@ -288,7 +292,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                             <button
                               onClick={() =>
                                 onUpdateReturnItem(item.productId, {
-                                  quantity: item.quantity + 1,
+                                  quantity: Math.min(product?.stock ?? item.quantity + 1, item.quantity + 1),
                                 })
                               }
                               className="px-2 py-1 hover:bg-slate-100"
@@ -403,12 +407,14 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                 <input
                   className="text-right text-sm border-b border-dashed border-slate-300 outline-none focus:border-indigo-500 font-normal"
                   placeholder="Mã phiếu tự động"
+                  value={returnReferenceId}
+                  onChange={event => setReturnReferenceId(event.target.value)}
                 />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm font-normal text-slate-600">Trạng thái</span>
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-normal">
-                  Phiếu tạm
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-normal">
+                  Đang trả hàng
                 </span>
               </div>
             </div>

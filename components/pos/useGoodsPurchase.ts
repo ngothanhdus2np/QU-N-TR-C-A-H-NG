@@ -1,6 +1,6 @@
 import React from 'react';
-import { AppDataSurgicalUpdate, POSProduct, InventoryTransaction } from '../../types';
-import { calculateNextImportPrice, generateId, getInventoryCostMethod } from '../../src/lib';
+import { AppDataSurgicalUpdate, POSProduct, InventoryTransaction, Supplier, SupplierDebtRecord } from '../../types';
+import { calcEffectiveUnitPrice, calculateNextImportPrice, generateId, getInventoryCostMethod } from '../../src/lib';
 import { getCurrentStaffId } from '../shared/staff';
 import { PurchaseDiscountType } from './GoodsPurchaseForm';
 import { InvoiceStatus, uploadPurchaseInvoice } from '../../services/invoiceService';
@@ -16,6 +16,9 @@ type PurchaseTransactionItem = InventoryTransaction['items'][number] & { price?:
 
 interface UseGoodsPurchaseArgs {
   products: POSProduct[];
+  suppliers?: Supplier[];
+  // Ưu tiên costMethod từ Supabase (posInventorySettings), fallback về localStorage
+  inventoryCostMethod?: 'fixed' | 'average';
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onAddTransaction?: (transaction: InventoryTransaction) => void;
@@ -24,6 +27,8 @@ interface UseGoodsPurchaseArgs {
 
 export const useGoodsPurchase = ({
   products,
+  suppliers = [],
+  inventoryCostMethod,
   onUpdateProducts,
   onUpdateSurgical,
   onAddTransaction,
@@ -108,13 +113,18 @@ export const useGoodsPurchase = ({
 
   const handleCompletePurchase = async () => {
     if (purchaseItems.length === 0) return;
-    const costMethod = getInventoryCostMethod();
+    try {
+    // Ưu tiên costMethod từ Supabase (inventoryCostMethod prop), fallback về localStorage
+    const costMethod = inventoryCostMethod ?? getInventoryCostMethod();
+    const matchedSupplier = suppliers.find(
+      s => s.name === purchaseSupplier.trim() || s.id === purchaseSupplier.trim()
+    );
     const updatedProducts = [...products];
     const itemsForTransaction: PurchaseTransactionItem[] = [];
-    const itemsNetTotal = purchaseItems.reduce(
+    const itemsNetTotal = Math.max(0, purchaseItems.reduce(
       (sum, item) => sum + item.quantity * item.price - item.discount,
       0
-    );
+    ));
     const purchaseDiscountAmount =
       purchaseDiscountType === 'percent'
         ? Math.min(itemsNetTotal, Math.round((itemsNetTotal * purchaseDiscountValue) / 100))
@@ -126,11 +136,8 @@ export const useGoodsPurchase = ({
       const idx = updatedProducts.findIndex(product => product.id === item.productId);
       if (idx !== -1) {
         const product = updatedProducts[idx];
-        // Giá vốn thực mỗi đơn vị = (số lượng × giá - chiết khấu dòng) / số lượng
-        const effectiveUnitPrice =
-          item.quantity > 0
-            ? Math.max(0, (item.quantity * item.price - item.discount) / item.quantity)
-            : item.price;
+        const effectiveUnitPrice = calcEffectiveUnitPrice(item, purchaseDiscountAmount, itemsNetTotal);
+        const nextImportPrice = calculateNextImportPrice(product, item.quantity, effectiveUnitPrice, costMethod);
         itemsForTransaction.push({
           productId: product.id,
           sku: product.sku,
@@ -141,30 +148,51 @@ export const useGoodsPurchase = ({
           price: item.price,
           discount: item.discount,
           costMethod,
+          previousImportPrice: product.importPrice ?? 0,
+          nextImportPrice,
         });
         const updatedProduct: POSProduct = {
           ...product,
           stock: product.stock + item.quantity,
-          importPrice: calculateNextImportPrice(product, item.quantity, effectiveUnitPrice, costMethod),
+          importPrice: nextImportPrice,
         };
         updatedProducts[idx] = updatedProduct;
         surgicalUpdates.push({ key: 'posProducts', item: updatedProduct });
       }
     });
 
+    const transactionId = generateId();
+    const totalPayable = Math.max(0, itemsNetTotal - purchaseDiscountAmount);
+    const debtRecord: SupplierDebtRecord | null =
+      matchedSupplier && totalPayable > 0
+        ? {
+            id: generateId(),
+            supplierId: matchedSupplier.id,
+            supplierName: matchedSupplier.name || purchaseSupplier.trim(),
+            date: new Date().toISOString(),
+            type: 'purchase',
+            amount: totalPayable,
+            description: `Công nợ từ phiếu nhập hàng ${transactionId}`,
+          }
+        : null;
+
     if (onUpdateSurgical && surgicalUpdates.length > 0) {
-      await onUpdateSurgical(surgicalUpdates);
+      await onUpdateSurgical([
+        ...surgicalUpdates,
+        ...(debtRecord ? [{ key: 'supplierDebts' as const, item: debtRecord }] : []),
+      ]);
     } else {
       onUpdateProducts(updatedProducts);
     }
-    const transactionId = generateId();
     if (onAddTransaction) {
-      onAddTransaction({
+      // [FIX M3-INV] Thêm await — tránh lỗi bị nuốt silently, đảm bảo transaction ghi sau stock
+      await onAddTransaction({
         id: transactionId,
         date: new Date().toISOString(),
         type: 'Import',
         staffId: getCurrentStaffId(),
-        supplierName: purchaseSupplier.trim() || undefined,
+        supplierId: matchedSupplier?.id,
+        supplierName: matchedSupplier?.name || purchaseSupplier.trim() || undefined,
         items: itemsForTransaction,
         note: purchaseNote || `Nhập hàng từ ${purchaseSupplier || 'NCC vãng lai'}`,
         totalAmount: Math.max(0, itemsNetTotal - purchaseDiscountAmount),
@@ -187,6 +215,9 @@ export const useGoodsPurchase = ({
     setInvoiceStatus('none');
     setInvoiceFile(null);
     setShowPurchaseForm(false);
+    } catch (err: unknown) {
+      showToast(`Lỗi nhập hàng: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
   };
 
   return {

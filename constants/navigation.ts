@@ -35,6 +35,8 @@ import {
   UserSearch,
   Gauge,
   CalendarCheck,
+  Globe,
+  Store,
 } from 'lucide-react';
 
 export const SIDEBAR_SECTIONS = [
@@ -82,9 +84,12 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Online',
     items: [
+      { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Package },
       { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
       { id: 'delivery-partners', label: 'Đối tác giao hàng', icon: Bike },
       { id: 'shipping-orders', label: 'Vận đơn', icon: FileText },
+      { id: 'website-products', label: 'Website · Sản phẩm', icon: Globe },
+      { id: 'website-orders', label: 'Website · Đơn hàng', icon: Store },
     ],
   },
   {
