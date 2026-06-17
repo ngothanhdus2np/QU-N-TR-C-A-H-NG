@@ -126,7 +126,7 @@ const formatDate = (value: string) => {
   });
 };
 
-type ConnState = 'connecting' | 'connected' | 'disconnected';
+type ConnState = 'connecting' | 'connected' | 'session_expired' | 'disconnected';
 type FilterStatus = 'all' | DisplayStatus;
 
 interface Props {
@@ -225,17 +225,39 @@ export default function ShippingOrders({ navigationSlot }: Props) {
       wsRefs.current[shopIdx] = ws;
 
       ws.onopen = () => {
-        setConnStates(prev => {
-          const next = [...prev];
-          next[shopIdx] = 'connected';
-          return next;
-        });
         if (reconnectRefs.current[shopIdx]) clearTimeout(reconnectRefs.current[shopIdx]!);
+        // Trạng thái sẽ được set khi nhận message CONNECTED (có sessionExpired)
       };
 
       ws.onmessage = evt => {
         try {
           const msg = JSON.parse(evt.data as string);
+
+          if (msg.type === 'CONNECTED') {
+            setConnStates(prev => {
+              const next = [...prev];
+              next[shopIdx] = msg.sessionExpired ? 'session_expired' : 'connected';
+              return next;
+            });
+            // Bot vừa khởi động — fetch lại để có đơn mới nhất
+            fetchOrders(shopIdx);
+          }
+
+          if (msg.type === 'LOGIN_EXPIRED') {
+            setConnStates(prev => {
+              const next = [...prev];
+              next[shopIdx] = 'session_expired';
+              return next;
+            });
+          }
+
+          if (msg.type === 'LOGIN_SUCCESS') {
+            setConnStates(prev => {
+              const next = [...prev];
+              next[shopIdx] = 'connected';
+              return next;
+            });
+          }
 
           if (msg.type === 'NEW_ORDER') {
             setOrdersByShop(prev => {
@@ -459,12 +481,16 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                 const dotColor =
                   state === 'connected'
                     ? shop.connDotClass
+                    : state === 'session_expired'
+                    ? 'bg-amber-400'
                     : state === 'connecting'
                     ? 'bg-amber-400'
                     : 'bg-rose-400';
                 const stateLabel =
                   state === 'connected'
                     ? 'Đã kết nối'
+                    : state === 'session_expired'
+                    ? 'Session hết hạn'
                     : state === 'connecting'
                     ? 'Đang kết nối...'
                     : 'Mất kết nối';

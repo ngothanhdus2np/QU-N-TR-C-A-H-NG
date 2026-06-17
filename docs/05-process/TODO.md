@@ -9,9 +9,18 @@
 
 ---
 
-### [ ] Fix `cfobrain.phucsang.com.vn` bị down + swap subdomain *(phiên tới — cần ở gần iMac)*
+### [x] Restart Shopee Monitor bot sau khi tái cấu trúc *(xong 2026-06-17)*
 
-> **Context phiên 2026-06-17:** `cfobrain.phucsang.com.vn` không truy cập được. Nguyên nhân chưa xác định (server crash hoặc Cloudflare Tunnel tắt). User không ở gần iMac nên để lại.
+> Bots shopee-shop1 và shopee-shop2 đã restart thành công trên MacBook. Endpoint mới `/api/products/fetch/status` và `/api/product/sync-wait/:itemId` hoạt động. Lưu ý: bots chạy trên **MacBook** (user apple), không phải iMac quầy (user mac).
+
+[x] Kết nối nút "Sync từ Shopee" vào ShopeeProductsPage *(xong 2026-06-17)*
+
+---
+
+### [x] Fix `cfobrain.phucsang.com.vn` bị down + swap subdomain *(xong 2026-06-17)*
+
+> **Nguyên nhân:** `cfobrain.phucsang.com.vn` chưa có trong config cloudflared và chưa có DNS CNAME record.
+> **Đã fix:** Thêm `cfobrain.phucsang.com.vn` → `localhost:8000` vào `~/.cloudflared/config.yml` trên iMac, thêm CNAME record trong Cloudflare DNS, restart cloudflared. Verify: trả về 401 (đúng — Supabase cần auth).
 
 **Bước 1 — Fix service đang down (làm trên iMac):**
 ```bash
@@ -40,6 +49,12 @@ Việc cần làm trong Cloudflare Tunnel:
 ```
 Dev (localhost:3000) → npm run deploy → iMac build lại → app.phucsang.com.vn cập nhật
 ```
+
+---
+
+### ✅ Fix channel links — RLS + error display + backend route *(xong 2026-06-17)*
+
+> Lỗi "object Object" khi liên kết kênh → fixed. Lỗi RLS trên `shopee_products` → fixed bằng route backend dùng service role key. `GoodsChannelLinksTab.tsx` giờ gọi `/api/channel-links/toggle` thay vì Supabase trực tiếp.
 
 ---
 
@@ -903,22 +918,181 @@ Thêm dòng:
 
 ## 🟠 P1 — Setup backup tự động lên Mega.nz
 
-> Cần làm trên iMac cá nhân. Tài khoản Mega đã có sẵn.
+> Cần làm trên iMac cá nhân (iMac chạy server). Tài khoản Mega free 20GB đã có sẵn.
+>
+> **Bối cảnh đã thống nhất (2026-06-17):**
+> - App chạy hoàn toàn trên local Supabase (`192.168.1.3:8000`) — không phụ thuộc Supabase cloud
+> - Backup theo chiến lược **full dump mỗi đêm** (không phải incremental) vì:
+>   - File dump nén chỉ ~5-20MB — nhỏ, không cần incremental
+>   - Full dump = restore 1 file duy nhất, không cần ghép nhiều file
+>   - Giữ đủ lịch sử để so sánh doanh thu qua các năm
+> - Tool: **rclone** (hỗ trợ Mega, dùng được trong cron/launchd)
+> - Scheduler: **launchd** (không dùng cron vì launchd bền hơn, tự chạy bù nếu iMac tắt lúc 2AM)
 
-### Các bước thực hiện
+---
 
-1. Cài Rclone trên iMac: `brew install rclone`
-2. Cấu hình Rclone kết nối Mega: `rclone config` → chọn Mega → đăng nhập
-3. Tạo script backup:
-   - Export database: `docker exec supabase-db pg_dump -U postgres postgres > ~/Backups/supabase_$(date +%Y%m%d).sql`
-   - Upload lên Mega: `rclone copy ~/Backups/ mega:cfobrain-backups/`
-   - Xóa backup cũ hơn 7 ngày
-4. Tạo LaunchAgent chạy mỗi đêm 2:00 AM
+### Cấu trúc thư mục trên Mega
 
-### Kết quả mong đợi
-- Mỗi đêm 2:00 AM tự động backup lên Mega
-- Giữ 7 ngày gần nhất
-- Dung lượng mỗi file ~1-5MB
+```
+Mega/
+  cfobrain-backup/
+    daily/          ← giữ 7 bản gần nhất (tự xóa cũ hơn 7 ngày)
+      cfobrain_2026-06-17.sql.gz
+      cfobrain_2026-06-16.sql.gz
+      ...
+    weekly/         ← giữ 4 bản (chỉ tạo vào Chủ nhật, tự xóa cũ hơn 28 ngày)
+      cfobrain_2026-06-15.sql.gz
+      ...
+    monthly/        ← giữ mãi mãi (chỉ tạo vào mồng 1 mỗi tháng, không xóa)
+      cfobrain_2026-06-01.sql.gz
+      cfobrain_2026-05-01.sql.gz
+      ...
+```
+
+**Ước tính dung lượng sau 5 năm:** ~1.5GB — thoải mái trong 20GB Mega free.
+
+---
+
+### File cần tạo (chỉ 2 file, không sửa file nào hiện có)
+
+| File | Mục đích |
+|---|---|
+| `scripts/backup-mega.sh` | Script backup chính |
+| `scripts/com.cfobrain.backup.plist` | Lịch chạy tự động qua launchd |
+
+---
+
+### BƯỚC 1 — Cài rclone và kết nối Mega (làm 1 lần, thủ công trên iMac)
+
+```bash
+# Cài rclone
+brew install rclone
+
+# Cấu hình kết nối Mega
+rclone config
+# → New remote → đặt tên: mega
+# → Storage type: chọn Mega
+# → Nhập email + password Mega
+# → Xác nhận xong
+
+# Test kết nối
+rclone ls mega:
+
+# Tạo thư mục gốc trên Mega
+rclone mkdir mega:cfobrain-backup
+rclone mkdir mega:cfobrain-backup/daily
+rclone mkdir mega:cfobrain-backup/weekly
+rclone mkdir mega:cfobrain-backup/monthly
+```
+
+---
+
+### BƯỚC 2 — Tạo script backup (`scripts/backup-mega.sh`)
+
+Script làm 5 việc theo thứ tự:
+1. Xác định hôm nay là daily / weekly / monthly (dựa vào ngày trong tuần + ngày trong tháng)
+2. `pg_dump` từ PostgreSQL trong Docker → nén thành `.sql.gz`
+3. Upload file lên đúng thư mục Mega tương ứng
+4. Xóa file cũ theo chính sách giữ
+5. Ghi log kết quả vào `/tmp/cfobrain-backup.log`
+
+**Logic phân loại ngày:**
+```bash
+DAY_OF_WEEK=$(date +%u)   # 7 = Chủ nhật
+DAY_OF_MONTH=$(date +%d)  # 01 = mồng 1
+
+if [ "$DAY_OF_MONTH" = "01" ]; then
+  FOLDER="monthly"    # mồng 1 → monthly (không bao giờ xóa)
+elif [ "$DAY_OF_WEEK" = "7" ]; then
+  FOLDER="weekly"     # Chủ nhật → weekly (giữ 4 tuần)
+else
+  FOLDER="daily"      # Còn lại → daily (giữ 7 ngày)
+fi
+```
+
+**Chính sách xóa file cũ:**
+- `daily/`: xóa file cũ hơn 7 ngày
+- `weekly/`: xóa file cũ hơn 28 ngày
+- `monthly/`: không xóa
+
+**Lệnh pg_dump** (chạy qua Docker vì Supabase dùng Docker):
+```bash
+FILENAME="cfobrain_$(date +%Y-%m-%d).sql.gz"
+docker exec supabase-db pg_dump -U postgres postgres | gzip > ~/Backups/$FILENAME
+```
+
+---
+
+### BƯỚC 3 — Đăng ký launchd (`scripts/com.cfobrain.backup.plist`)
+
+File plist cấu hình launchd chạy script mỗi đêm lúc 2:00 AM:
+
+```xml
+<key>StartCalendarInterval</key>
+<dict>
+  <key>Hour</key><integer>2</integer>
+  <key>Minute</key><integer>0</integer>
+</dict>
+```
+
+**Cài đặt launchd sau khi tạo file:**
+```bash
+cp scripts/com.cfobrain.backup.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.cfobrain.backup.plist
+```
+
+---
+
+### BƯỚC 4 — Chạy lần đầu thủ công (full backup toàn bộ data)
+
+```bash
+# Tạo thư mục local chứa backup tạm
+mkdir -p ~/Backups
+
+# Chạy script lần đầu
+bash scripts/backup-mega.sh
+
+# Kiểm tra file đã lên Mega chưa
+rclone ls mega:cfobrain-backup/
+
+# Kiểm tra log
+cat /tmp/cfobrain-backup.log
+```
+
+---
+
+### BƯỚC 5 — Verify hoạt động sau 1 đêm
+
+Hôm sau kiểm tra:
+```bash
+# Xem log đêm qua
+cat /tmp/cfobrain-backup.log
+
+# Xem file trên Mega
+rclone ls mega:cfobrain-backup/daily/
+```
+
+---
+
+### Xử lý rủi ro
+
+| Tình huống | Kết quả |
+|---|---|
+| iMac tắt lúc 2AM | launchd tự chạy bù khi iMac bật lại |
+| Mất mạng khi upload | rclone retry tự động, file local vẫn còn |
+| Docker chưa chạy khi script chạy | Script kiểm tra Docker trước, ghi lỗi vào log |
+| Mega đầy (sau ~100 năm) | rclone báo lỗi trong log |
+
+---
+
+### Chính sách giữ file — tóm tắt
+
+| Loại | Tần suất | Giữ | Dung lượng ước tính |
+|---|---|---|---|
+| Daily | Mỗi đêm | 7 ngày | ~140MB |
+| Weekly | Chủ nhật | 4 tuần | ~80MB |
+| Monthly | Mồng 1 | Mãi mãi | ~20MB/năm |
+| **Tổng sau 5 năm** | | | **~1.5GB** |
 
 ---
 

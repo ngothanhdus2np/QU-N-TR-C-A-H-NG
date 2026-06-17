@@ -37,11 +37,14 @@ import pg from 'pg';
 import { readFile } from 'fs/promises';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
+import { createChannelLinksRouter } from './routes/channelLinks';
 import { createDataRouter } from './routes/data';
 import { createFacebookRouter } from './routes/facebook';
 import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
 import { createStoreRouter } from './routes/store';
+import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
+import { createShopeeSyncRouter } from './routes/shopeeSync';
 
 /**
  * Kiểm tra schema local Supabase qua REST API.
@@ -67,6 +70,7 @@ async function syncLocalSchema(): Promise<void> {
     { table: 'pos_orders', column: 'created_by',     sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS created_by TEXT;" },
     { table: 'pos_orders', column: 'branch_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';" },
     { table: 'pos_orders', column: 'tenant_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';" },
+    { table: 'shopee_product_variants', column: 'shopee_price_override', sql: "ALTER TABLE shopee_product_variants ADD COLUMN IF NOT EXISTS shopee_price_override INTEGER;" },
   ];
 
   try {
@@ -387,10 +391,13 @@ async function startServer() {
     app.use(facebookRoutes.router);
     app.use(createAuthRouter(supabase));
     app.use(createAiRouter(requireAuth));
+    app.use(createChannelLinksRouter(supabase, requireAuth));
     app.use(createDataRouter(supabase, requireAuth));
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
     app.use(createStoreRouter(supabase));
+    app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
+    app.use(createShopeeSyncRouter(requireAuth));
 
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
     if (!IS_PROD) {

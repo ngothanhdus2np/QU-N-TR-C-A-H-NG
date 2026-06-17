@@ -3,6 +3,42 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-17 — Fix iMac: restart bots + fix cfobrain tunnel
+
+- **Restart shopee-shop1/shop2** trên MacBook: load code đa-bot mới, verify endpoint `/api/products/fetch/status` trả `{"ok":true,"running":false}` ✅
+- **Fix `cfobrain.phucsang.com.vn` down**: nguyên nhân là thiếu entry trong cloudflared config + thiếu DNS CNAME; đã thêm `cfobrain.phucsang.com.vn → localhost:8000` vào `~/.cloudflared/config.yml` trên iMac, thêm CNAME record Cloudflare, restart tunnel; verify trả 401 ✅
+- Files: `docs/05-process/TODO.md`, `~/.cloudflared/config.yml` (iMac), Cloudflare DNS
+
+### 2026-06-17 — Nút Sync Shopee + route proxy
+
+- **Tạo `routes/shopeeSync.ts`**: proxy `POST /api/shopee-sync` → gọi `shopee-monitor:port/api/product/sync-wait/:itemId`, map shopIdx 0→3001, 1→3002; lỗi ECONNREFUSED trả thông báo rõ ràng
+- **Thêm `POST /api/shopee-sync/all`**: trigger bot quét toàn bộ danh sách SP
+- **Đăng ký route trong `server.ts`**: `createShopeeSyncRouter(requireAuth)`
+- **Thêm nút "Sync Shopee"** trong `ShopeeProductsPage.tsx`: hiện trên thanh tab, disabled khi chưa có `shopee_item_id`, gọi sync rồi tự điền ảnh bìa / gallery / tên vào form
+- Files: `routes/shopeeSync.ts`, `server.ts`, `components/website/ShopeeProductsPage.tsx`
+
+### 2026-06-17 — Tái cấu trúc shopee-monitor thành kiến trúc đa-bot
+
+- **Tạo `bots/orders.js`**: tách toàn bộ logic đơn hàng ra khỏi `monitor.js` (fetchOrderIncome, backfill, response hook, auto-refresh, check return orders, Telegram commands)
+- **Tạo `bots/products.js`**: bot mới quét toàn bộ danh sách sản phẩm + biến thể từ Shopee Seller Center, upsert vào `shopee_products` Supabase, tự match SKU với `pos_products`
+- **Tạo `bots/productSync.js`**: bot mới sync chi tiết 1 sản phẩm (ảnh bìa, gallery, tên) theo `shopee_item_id`
+- **Tạo `src/supabase.js`**: Supabase client dùng chung cho các bot, dùng service role key
+- **Cập nhật `monitor.js`**: refactor thành orchestrator gọn — mở browser rồi gọi setupXxxBot()
+- **Cập nhật `src/apiServer.js`**: thêm 4 endpoint mới: `POST /api/products/fetch`, `GET /api/products/fetch/status`, `POST /api/product/sync/:itemId`, `POST /api/product/sync-wait/:itemId`
+- **Cập nhật `.env.shop1/.env.shop2`**: thêm `SUPABASE_URL` và `SUPABASE_SERVICE_KEY`
+- **Cài `@supabase/supabase-js`** vào shopee-monitor
+- Files: `bots/orders.js`, `bots/products.js`, `bots/productSync.js`, `src/supabase.js`, `monitor.js`, `src/apiServer.js`, `.env.shop1`, `.env.shop2`
+
+### 2026-06-17 — Fix channel links: RLS + error display + backend route
+
+- **Fix lỗi "object Object"** khi bấm nút liên kết kênh: `PostgrestError` không phải `instanceof Error`, đã extract `.message` đúng cách.
+- **Tạo `routes/channelLinks.ts`**: backend route dùng admin supabase client (service role) để bypass RLS — xử lý link/unlink cho cả website lẫn Shopee, cả sản phẩm đơn lẫn parent+children.
+- **Đăng ký route** trong `server.ts`: `app.use(createChannelLinksRouter(supabase, requireAuth))`.
+- **Rewrite `GoodsChannelLinksTab.tsx`**: bỏ toàn bộ direct Supabase write từ frontend, thay bằng gọi `/api/channel-links/toggle` qua `toggleChannelBackend()` — đọc (loadStatus) vẫn dùng anon key như cũ.
+- **Fix Shopee Monitor**: cập nhật `monitor.js` + `login.js` dùng `playwright-extra` + stealth plugin + `channel: 'chrome'` để giảm session expiry do Shopee phát hiện bot.
+- **Thêm SQL vào `supabase_setup.sql`**: RLS policies cho `shopee_products`, `shopee_product_variants`, `store_products`, `store_product_variants`.
+- Files: `components/pos/GoodsChannelLinksTab.tsx`, `routes/channelLinks.ts`, `server.ts`, `/Users/apple/shopee-monitor/monitor.js`, `/Users/apple/shopee-monitor/login.js`, `supabase_setup.sql`
+
 ### 2026-06-17 — Rewrite ShopeeProductsPage.tsx — nguồn dữ liệu mới shopee_inventory_out
 
 - **Rewrite hoàn toàn `components/website/ShopeeProductsPage.tsx`**: bỏ interfaces cũ (ShopeeShop, ShopeeProduct, ShopeeVariant, RootRow, EditingVariant), thay bằng `InventoryVariant` + `ParentRow`.
