@@ -3,6 +3,20 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-18 — Fix bot shop2 không click được tab "Đang giao"
+
+- **Chẩn đoán**: Bot quét đơn shop2 click được "Chờ xác nhận" và "Chờ lấy hàng" nhưng luôn fail tab "Đang giao" trong auto-refresh — Shopee SPA re-render sau mỗi tab click, tab kế chưa actionable khi bot thử click ngay
+- **Fix**: Thay `waitForTimeout(2000)` bằng `waitForLoadState('networkidle', {timeout: 8000})` sau mỗi click thành công — đợi Shopee settle hẳn trước khi click tab tiếp theo
+- **Verify**: Cả initial scan lẫn auto-refresh đều click đủ 3 tab (✅ Chờ xác nhận, ✅ Chờ lấy hàng, ✅ Đang giao)
+- Files: `/Users/apple/shopee-monitor/bots/orders.js`
+
+### 2026-06-18 — Nút tải lại trigger bot quét đơn ngay
+
+- **Fix hiển thị "Đã kết nối" khi session Shopee hết hạn**: thêm trạng thái `session_expired` vào ConnState, track `sessionExpired` flag trong apiServer, broadcast `LOGIN_EXPIRED`/`LOGIN_SUCCESS` qua WebSocket
+- **Fix trang vận đơn không cập nhật sau bot restart**: gọi `fetchOrders` ngay khi nhận message `CONNECTED`
+- **Nút tải lại → trigger bot quét đơn ngay**: thêm event `orders:refresh` trong `bots/orders.js`, endpoint `POST /api/orders/refresh` trong `apiServer.js`, button onClick trong `ShippingOrders.tsx` gọi refresh rồi fetchOrders sau 3 giây
+- Files: `/Users/apple/shopee-monitor/bots/orders.js`, `/Users/apple/shopee-monitor/src/apiServer.js`, `components/orders/ShippingOrders.tsx`
+
 ### 2026-06-17 — Fix iMac: restart bots + fix cfobrain tunnel
 
 - **Restart shopee-shop1/shop2** trên MacBook: load code đa-bot mới, verify endpoint `/api/products/fetch/status` trả `{"ok":true,"running":false}` ✅
