@@ -119,9 +119,20 @@ const InventoryOutTab: React.FC<Props> = ({
     }
   };
 
+  // Dedup bằng orderId (mã vận đơn) trước khi filter — lớp bảo vệ cuối cùng
+  const dedupedInventoryOut = useMemo(() => {
+    const seen = new Set<string>();
+    return shopeeInventoryOut.filter(item => {
+      const key = item.orderId || item.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [shopeeInventoryOut]);
+
   const filteredData = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return shopeeInventoryOut
+    return dedupedInventoryOut
       .filter(item => {
         if (filterPlatforms.length > 0 && !filterPlatforms.includes(item.platform || 'Shopee 2')) return false;
         if (filterStatuses.length > 0 && !filterStatuses.includes(item.status || 'OK')) return false;
@@ -135,7 +146,7 @@ const InventoryOutTab: React.FC<Props> = ({
         return true;
       })
       .sort((a, b) => (b.shipDate || b.date).localeCompare(a.shipDate || a.date));
-  }, [shopeeInventoryOut, filterPlatforms, filterStatuses, filterShippingUnits, searchQuery]);
+  }, [dedupedInventoryOut, filterPlatforms, filterStatuses, filterShippingUnits, searchQuery]);
 
   // Map SKU → tên sản phẩm từ shopeeSourceData
   const skuNameEntries = useMemo(() => {

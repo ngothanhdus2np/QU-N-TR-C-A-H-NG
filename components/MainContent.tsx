@@ -52,6 +52,7 @@ import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
 import { supabaseAdmin as supabase } from '../services/supabase';
+import { apiService } from '../services/apiService';
 
 const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
 const OnlineCatalogPage = React.lazy(() => import('./website/OnlineCatalogPage'));
@@ -139,12 +140,8 @@ const MainContent: React.FC<MainContentProps> = ({
     const json = await res.json();
     if (!res.ok || json.ok === false) throw new Error(json.error ?? 'Sync thất bại');
     if (json.inserted > 0) {
-      // Reload shopeeInventoryOut từ Supabase sau khi có đơn mới
-      const { data: rows } = await supabase
-        .from('shopee_inventory_out')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(2000);
+      // Reload shopeeInventoryOut từ Supabase sau khi có đơn mới (dùng fetchShopeeInventoryOut để dedup)
+      const { data: rows } = await apiService.fetchShopeeInventoryOut();
       if (rows) await updateData('shopeeInventoryOut', rows as AppData['shopeeInventoryOut']);
     }
     return { inserted: json.inserted, skipped: json.skipped };

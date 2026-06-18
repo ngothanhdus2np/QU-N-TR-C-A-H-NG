@@ -707,8 +707,20 @@ export const apiService = {
   },
 
   // Fetch riêng shopee_inventory_out (lazy, không block main sync timeout)
+  // Order by id (UUID, unique) để tránh page overlap khi nhiều đơn cùng ngày
+  // Dedup bằng order_id (mã vận đơn) — primary key thực tế của bảng này
   async fetchShopeeInventoryOut() {
-    return fetchAllRows('shopee_inventory_out', 'date');
+    const result = await fetchAllRows('shopee_inventory_out', 'id');
+    if (result.data) {
+      const seen = new Set<string>();
+      result.data = result.data.filter((r: any) => {
+        const key = r.order_id || r.id;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+    return result;
   },
 
   // Lấy một trang dữ liệu từ bất kỳ bảng nào (dùng cho lazy load / load thêm)

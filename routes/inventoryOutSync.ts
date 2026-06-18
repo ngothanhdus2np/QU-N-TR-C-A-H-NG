@@ -158,11 +158,16 @@ export function createInventoryOutSyncRouter(supabase: SupabaseClient, requireAu
     );
 
     // 3. Tách thành 2 nhóm: đơn mới và đơn cần cập nhật status
+    // seenInBatch để dedup intra-batch (cùng order_sn từ 2 bot hoặc data trùng)
+    const seenInBatch = new Set<string>();
     const newOrders: BotOrder[] = [];
     const toUpdate: { order_id: string; status: string }[] = [];
 
     for (const o of allOrders) {
       if (!o.order_sn) continue;
+      if (seenInBatch.has(o.order_sn)) continue;
+      seenInBatch.add(o.order_sn);
+
       const newStatus = STATUS_MAP[o.status] ?? 'PENDING';
       if (!existingMap.has(o.order_sn)) {
         newOrders.push(o);
@@ -171,11 +176,13 @@ export function createInventoryOutSyncRouter(supabase: SupabaseClient, requireAu
       }
     }
 
-    // 4. Insert đơn mới
+    // 4. Upsert đơn mới (onConflict order_id để tránh duplicate nếu có race condition)
     let inserted = 0;
     if (newOrders.length > 0) {
       const rows = newOrders.map(mapToRow);
-      const { error } = await supabase.from('shopee_inventory_out').insert(rows);
+      const { error } = await supabase
+        .from('shopee_inventory_out')
+        .upsert(rows, { onConflict: 'order_id', ignoreDuplicates: true });
       if (error) {
         res.status(500).json({ ok: false, error: error.message });
         return;

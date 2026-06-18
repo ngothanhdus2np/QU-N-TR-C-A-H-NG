@@ -1325,3 +1325,25 @@ END $$;
 
 -- Thêm giá Shopee riêng cho từng SKU liên kết
 ALTER TABLE shopee_product_variants ADD COLUMN IF NOT EXISTS shopee_price_override INTEGER;
+
+-- ============================================================
+-- Migration: chống trùng order_id trong shopee_inventory_out
+-- Chạy theo thứ tự: bước 1 trước (xóa duplicate), bước 2 sau (thêm constraint)
+-- ============================================================
+
+-- Bước 1: Xóa các dòng duplicate, giữ lại dòng có id nhỏ nhất (cũ nhất) cho mỗi order_id
+-- Chỉ áp dụng cho order_id NOT NULL (dòng nhập tay có order_id NULL không bị ảnh hưởng)
+DELETE FROM shopee_inventory_out
+WHERE id IN (
+  SELECT id FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY created_at ASC) AS rn
+    FROM shopee_inventory_out
+    WHERE order_id IS NOT NULL
+  ) ranked
+  WHERE rn > 1
+);
+
+-- Bước 2: Thêm UNIQUE constraint để DB ngăn duplicate từ đây về sau
+ALTER TABLE shopee_inventory_out
+  ADD CONSTRAINT uq_shopee_inventory_out_order_id UNIQUE (order_id);

@@ -452,31 +452,41 @@ export const dataMapper = {
         })),
         localData?.shopeeInventoryIn || []
       ),
-      shopeeInventoryOut: this.mergeBy(
-        (results.shopeeInventoryOut || []).map(r => ({
-          id: r.id,
-          date: r.date,
-          status: r.status,
-          orderId: r.order_id || r.orderId,
-          sku: r.sku,
-          quantity: r.quantity || r.Quantity || 0,
-          salePrice: r.sale_price || r.salePrice || 0,
-          platformFee: r.platform_fee || r.platformFee || 0,
-          paymentFee: r.payment_fee || r.paymentFee || 0,
-          freeshipExtra: r.freeship_extra || r.freeshipExtra || 0,
-          affiliateFee: r.affiliate_fee || r.affiliateFee || 0,
-          handlingFee: r.handling_fee || r.handlingFee || 0,
-          adsCost: r.ads_cost || r.adsCost || 0,
-          adsTax: r.ads_tax || r.adsTax || 0,
-          personalIncomeTax: r.personal_income_tax || r.personalIncomeTax || 0,
-          netProfit: r.net_profit || r.netProfit || 0,
-          address: r.address,
-          shippingUnit: r.shipping_unit || r.shippingUnit,
-          platform: r.platform || 'Shopee 2',
-          productName: r.product_name || r.productName || '',
-        })),
-        localData?.shopeeInventoryOut || []
-      ),
+      shopeeInventoryOut: (() => {
+        const merged = this.mergeBy(
+          (results.shopeeInventoryOut || []).map(r => ({
+            id: r.id,
+            date: r.date,
+            status: r.status,
+            orderId: r.order_id || r.orderId,
+            sku: r.sku,
+            quantity: r.quantity || r.Quantity || 0,
+            salePrice: r.sale_price || r.salePrice || 0,
+            platformFee: r.platform_fee || r.platformFee || 0,
+            paymentFee: r.payment_fee || r.paymentFee || 0,
+            freeshipExtra: r.freeship_extra || r.freeshipExtra || 0,
+            affiliateFee: r.affiliate_fee || r.affiliateFee || 0,
+            handlingFee: r.handling_fee || r.handlingFee || 0,
+            adsCost: r.ads_cost || r.adsCost || 0,
+            adsTax: r.ads_tax || r.adsTax || 0,
+            personalIncomeTax: r.personal_income_tax || r.personalIncomeTax || 0,
+            netProfit: r.net_profit || r.netProfit || 0,
+            address: r.address,
+            shippingUnit: r.shipping_unit || r.shippingUnit,
+            platform: r.platform || 'Shopee 2',
+            productName: r.product_name || r.productName || '',
+          })),
+          localData?.shopeeInventoryOut || []
+        );
+        // Dedup bằng orderId (mã vận đơn) — primary key thực tế
+        const seen = new Set<string>();
+        return merged.filter(r => {
+          const key = r.orderId || r.id;
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      })(),
       posProducts: this.mergeBy(
         (results.posProducts || []).map(p => {
           const attrText = (p.attributes_text || p.attributesText || '') as string;
