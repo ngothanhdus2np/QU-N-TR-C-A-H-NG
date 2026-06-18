@@ -3,6 +3,18 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-18 — Bot database cleanup: xóa 81 đơn trùng giữa 2 shop
+
+- Xác định 81 đơn tồn tại cả shop1.db (giaydepphucsang) và shop2.db (phuc_sang_store) do lỗi display reversal trước đây
+- Backup cả 2 DB trước khi xử lý
+- Xóa 81 đơn trùng khỏi cả 2 DB, trigger scan song song trên cả 2 bot
+- Kết quả scan: 40 đơn xác nhận thuộc giaydepphucsang, 27 thuộc phuc_sang_store, 14 không xác định được
+- Fix đơn `2606047X0F2VY8` (xóa nhầm kỳ trước): chuyển từ shop2.db → shop1.db (giaydepphucsang)
+- 14 đơn ambiguous restore về shop1.db từ backup (tháng 5, "Đã giao", không ảnh hưởng ShippingOrders 25-ngày)
+- Kết quả cuối: shop1=236 orders, shop2=85 orders, 0 đơn trùng
+- Mapping đúng: shop1.db (port 3001) = giaydepphucsang; shop2.db (port 3002) = phuc_sang_store
+- Files: `/Users/apple/shopee-monitor/storage/shop1.db`, `shop2.db`
+
 ### 2026-06-18 — Xuất kho: sync toàn bộ đơn + cập nhật status tự động
 
 - `routes/inventoryOutSync.ts`: fetch tất cả pages từ bot (loop qua offset, thay vì limit=500 cứng)

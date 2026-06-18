@@ -17,7 +17,7 @@ import {
 const SHOPS = [
   {
     id: 1,
-    label: 'Phúc Sang Store',
+    label: 'Giày Dép Phúc Sang',
     api: 'http://localhost:3001/api/orders',
     refreshApi: 'http://localhost:3001/api/orders/refresh',
     ws: 'ws://localhost:3001/ws',
@@ -27,7 +27,7 @@ const SHOPS = [
   },
   {
     id: 2,
-    label: 'Giày Dép Phúc Sang',
+    label: 'Phúc Sang Store',
     api: 'http://localhost:3002/api/orders',
     refreshApi: 'http://localhost:3002/api/orders/refresh',
     ws: 'ws://localhost:3002/ws',

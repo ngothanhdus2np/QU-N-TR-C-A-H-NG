@@ -9,6 +9,12 @@
 
 ---
 
+### [x] Xóa 81 đơn trùng giữa shop1.db và shop2.db *(xong 2026-06-18)*
+
+> Dùng scan song song cả 2 bot để xác định đúng shop cho từng đơn. Kết quả: shop1=236, shop2=85, 0 trùng.
+
+---
+
 ### [x] Trang vận đơn filter 15 ngày cửa sổ hoàn hàng *(xong 2026-06-18)*
 
 > Bot lưu `first_delivered_at` khi đơn đạt "Đã giao"/"Đã nhận được hàng". App ẩn các đơn "Đã nhận được hàng" đã qua 15 ngày.
