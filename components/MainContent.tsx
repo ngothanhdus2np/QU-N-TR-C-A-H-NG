@@ -140,9 +140,37 @@ const MainContent: React.FC<MainContentProps> = ({
     const json = await res.json();
     if (!res.ok || json.ok === false) throw new Error(json.error ?? 'Sync thất bại');
     if (json.inserted > 0) {
-      // Reload shopeeInventoryOut từ Supabase sau khi có đơn mới (dùng fetchShopeeInventoryOut để dedup)
-      const { data: rows } = await apiService.fetchShopeeInventoryOut();
-      if (rows) await updateData('shopeeInventoryOut', rows as AppData['shopeeInventoryOut']);
+      // Reload shopeeInventoryOut từ Supabase sau khi có đơn mới
+      const { data: rawRows } = await apiService.fetchShopeeInventoryOut();
+      if (rawRows?.length) {
+        // Map sang camelCase trước khi updateData (tránh orderId=undefined → dedup fallback về id)
+        const mapped: AppData['shopeeInventoryOut'] = rawRows.map((r: any) => ({
+          id: r.id,
+          date: r.date ?? '',
+          status: r.status ?? 'OK',
+          orderId: r.order_id ?? r.orderId ?? '',
+          sku: r.sku ?? '',
+          quantity: Number(r.quantity ?? 0),
+          salePrice: Number(r.sale_price ?? r.salePrice ?? 0),
+          platformFee: Number(r.platform_fee ?? r.platformFee ?? 0),
+          paymentFee: Number(r.payment_fee ?? r.paymentFee ?? 0),
+          freeshipExtra: Number(r.freeship_extra ?? r.freeshipExtra ?? 0),
+          affiliateFee: Number(r.affiliate_fee ?? r.affiliateFee ?? 0),
+          handlingFee: Number(r.handling_fee ?? r.handlingFee ?? 0),
+          pishipFee: Number(r.piship_fee ?? r.pishipFee ?? 0),
+          vatTax: Number(r.vat_tax ?? r.vatTax ?? 0),
+          adsCost: Number(r.ads_cost ?? r.adsCost ?? 0),
+          adsTax: Number(r.ads_tax ?? r.adsTax ?? 0),
+          personalIncomeTax: Number(r.personal_income_tax ?? r.personalIncomeTax ?? 0),
+          netProfit: Number(r.net_profit ?? r.netProfit ?? 0),
+          customerPaid: Number(r.customer_paid ?? r.customerPaid ?? r.sale_price ?? r.salePrice ?? 0),
+          address: r.address ?? '',
+          shippingUnit: r.shipping_unit ?? r.shippingUnit ?? '',
+          platform: r.platform ?? 'Shopee 2',
+          productName: r.product_name ?? r.productName ?? '',
+        }));
+        await updateData('shopeeInventoryOut', mapped);
+      }
     }
     return { inserted: json.inserted, skipped: json.skipped };
   };
