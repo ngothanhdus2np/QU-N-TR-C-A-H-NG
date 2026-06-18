@@ -63,6 +63,20 @@ interface ShopeeOrder {
 
 type DisplayStatus = 'waiting_confirm' | 'pending' | 'shipping' | 'delivered' | 'cancelled' | 'return' | 'other';
 
+// Thứ tự ưu tiên khi dedup: số càng cao càng "tiên tiến" hơn
+const STATUS_RANK: Record<string, number> = {
+  'Đã nhận được hàng': 6,
+  'Đã giao': 5,
+  'Đang giao': 4,
+  'Đã giao cho ĐVVC': 4,
+  'Đang hoàn': 3,
+  'Hoàn hàng': 3,
+  'Đã hủy': 2,
+  'Đã hủy đơn': 2,
+  'Chờ lấy hàng': 1,
+  'Chờ xác nhận': 0,
+};
+
 const STATUS_MAP: Record<string, DisplayStatus> = {
   UNPAID: 'other',
   PROCESSED: 'other',
@@ -384,7 +398,18 @@ export default function ShippingOrders({ navigationSlot }: Props) {
   }, [fetchOrders, connect]);
 
   // Tất cả đơn raw (dùng để tính stats)
-  const rawOrders = useMemo(() => ordersByShop.flat(), [ordersByShop]);
+  // Dedup theo order_sn — giữ bản có status tiên tiến nhất (tránh đơn trùng do bot nhầm shop)
+  const rawOrders = useMemo(() => {
+    const all = ordersByShop.flat();
+    const map = new Map<string, ShopeeOrder>();
+    for (const o of all) {
+      const existing = map.get(o.order_sn);
+      if (!existing || (STATUS_RANK[o.status] ?? -1) > (STATUS_RANK[existing.status] ?? -1)) {
+        map.set(o.order_sn, o);
+      }
+    }
+    return Array.from(map.values());
+  }, [ordersByShop]);
 
   // Parse ngày thực từ 6 ký tự đầu order_sn: YYMMDD → timestamp
   // Fallback về created_at nếu không parse được
