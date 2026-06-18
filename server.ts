@@ -45,6 +45,7 @@ import { createNotificationsRouter, runNotificationScheduler } from './routes/no
 import { createStoreRouter } from './routes/store';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
+import { createInventoryOutSyncRouter } from './routes/inventoryOutSync';
 
 /**
  * Kiểm tra schema local Supabase qua REST API.
@@ -71,6 +72,13 @@ async function syncLocalSchema(): Promise<void> {
     { table: 'pos_orders', column: 'branch_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';" },
     { table: 'pos_orders', column: 'tenant_id',      sql: "ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'phuc-sang';" },
     { table: 'shopee_product_variants', column: 'shopee_price_override', sql: "ALTER TABLE shopee_product_variants ADD COLUMN IF NOT EXISTS shopee_price_override INTEGER;" },
+    { table: 'shopee_inventory_out', column: 'customer_paid',    sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS customer_paid NUMERIC DEFAULT 0;" },
+    { table: 'shopee_inventory_out', column: 'tracking_number',  sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS tracking_number TEXT;" },
+    { table: 'shopee_inventory_out', column: 'ship_date',        sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS ship_date TEXT;" },
+    { table: 'shopee_inventory_out', column: 'product_name',     sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS product_name TEXT;" },
+    { table: 'shopee_inventory_out', column: 'piship_fee',       sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS piship_fee NUMERIC DEFAULT 0;" },
+    { table: 'shopee_inventory_out', column: 'vat_tax',          sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS vat_tax NUMERIC DEFAULT 0;" },
+    { table: 'shopee_inventory_out', column: 'profit_status',    sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS profit_status TEXT;" },
   ];
 
   try {
@@ -398,6 +406,7 @@ async function startServer() {
     app.use(createStoreRouter(supabase));
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
     app.use(createShopeeSyncRouter(requireAuth));
+    app.use(createInventoryOutSyncRouter(supabase, requireAuth));
 
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
     if (!IS_PROD) {

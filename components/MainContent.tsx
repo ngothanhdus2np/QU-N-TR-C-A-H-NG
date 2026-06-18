@@ -51,6 +51,7 @@ import {
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
+import { supabaseAdmin as supabase } from '../services/supabase';
 
 const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
 const OnlineCatalogPage = React.lazy(() => import('./website/OnlineCatalogPage'));
@@ -124,6 +125,30 @@ const MainContent: React.FC<MainContentProps> = ({
   const platformBtnRef = useRef<HTMLButtonElement>(null);
   const statusBtnRef = useRef<HTMLButtonElement>(null);
   const shippingBtnRef = useRef<HTMLButtonElement>(null);
+
+  const syncInventoryOutFromBot = async (): Promise<{ inserted: number; skipped: number }> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const jwt = session?.access_token;
+    const res = await fetch('/api/inventory-out/sync-from-bot', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      },
+    });
+    const json = await res.json();
+    if (!res.ok || json.ok === false) throw new Error(json.error ?? 'Sync thất bại');
+    if (json.inserted > 0) {
+      // Reload shopeeInventoryOut từ Supabase sau khi có đơn mới
+      const { data: rows } = await supabase
+        .from('shopee_inventory_out')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(2000);
+      if (rows) await updateData('shopeeInventoryOut', rows as AppData['shopeeInventoryOut']);
+    }
+    return { inserted: json.inserted, skipped: json.skipped };
+  };
 
   const openPopup = (key: 'platform' | 'status' | 'shipping', ref: React.RefObject<HTMLButtonElement>) => {
     if (openFilterPopup === key) { setOpenFilterPopup(null); return; }
@@ -235,6 +260,7 @@ const MainContent: React.FC<MainContentProps> = ({
         setDiagStartDate={setDiagStartDate}
         diagEndDate={diagEndDate}
         setDiagEndDate={setDiagEndDate}
+        onSyncInventoryOutFromBot={syncInventoryOutFromBot}
       />
     );
 

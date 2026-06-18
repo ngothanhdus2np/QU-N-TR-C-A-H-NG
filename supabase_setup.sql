@@ -1293,3 +1293,35 @@ DO $$ BEGIN
     CREATE POLICY "audit_logs_authenticated" ON audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
   END IF;
 END $$;
+
+-- RLS cho các bảng channel links (shopee + website)
+ALTER TABLE shopee_products ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_products' AND policyname='shopee_products_authenticated') THEN
+    CREATE POLICY "shopee_products_authenticated" ON shopee_products FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE shopee_product_variants ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_product_variants' AND policyname='shopee_product_variants_authenticated') THEN
+    CREATE POLICY "shopee_product_variants_authenticated" ON shopee_product_variants FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE store_products ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_products' AND policyname='store_products_authenticated') THEN
+    CREATE POLICY "store_products_authenticated" ON store_products FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE store_product_variants ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='store_product_variants' AND policyname='store_product_variants_authenticated') THEN
+    CREATE POLICY "store_product_variants_authenticated" ON store_product_variants FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- Thêm giá Shopee riêng cho từng SKU liên kết
+ALTER TABLE shopee_product_variants ADD COLUMN IF NOT EXISTS shopee_price_override INTEGER;

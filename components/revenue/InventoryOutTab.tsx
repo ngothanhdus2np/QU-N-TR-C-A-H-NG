@@ -4,7 +4,7 @@ import {
 } from '../../types';
 import {
   Upload, TrendingUp, DollarSign, Plus, Pencil, Save, Trash2,
-  Check, X, ArrowUpFromLine, ArrowDownToLine, ChevronLeft, ChevronRight, FileDown,
+  Check, X, ArrowUpFromLine, ArrowDownToLine, ChevronLeft, ChevronRight, FileDown, RefreshCw,
 } from 'lucide-react';
 
 const PAGE_SIZE = 100;
@@ -57,6 +57,7 @@ interface Props {
   filterPlatforms?: string[];
   filterStatuses?: string[];
   filterShippingUnits?: string[];
+  onSyncFromBot?: () => Promise<{ inserted: number; skipped: number }>;
 }
 
 const InventoryOutTab: React.FC<Props> = ({
@@ -72,9 +73,12 @@ const InventoryOutTab: React.FC<Props> = ({
   filterPlatforms = [],
   filterStatuses = [],
   filterShippingUnits = [],
+  onSyncFromBot,
 }) => {
   const localTodayStr = new Date().toLocaleDateString('sv-SE');
   const [showModal, setShowModal] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -86,6 +90,22 @@ const InventoryOutTab: React.FC<Props> = ({
   useEffect(() => {
     setPage(1);
   }, [shopeeInventoryOut.length, filterPlatforms, filterStatuses, filterShippingUnits]);
+
+  const handleSyncFromBot = async () => {
+    if (!onSyncFromBot || syncing) return;
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await onSyncFromBot();
+      setSyncMsg(`Đã thêm ${result.inserted} đơn mới, bỏ qua ${result.skipped} đơn đã có`);
+      setTimeout(() => setSyncMsg(null), 5000);
+    } catch (err) {
+      setSyncMsg(`Lỗi: ${err instanceof Error ? err.message : 'Không kết nối được bot'}`);
+      setTimeout(() => setSyncMsg(null), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const closeModal = () => {
     setShowModal(false);
@@ -200,6 +220,23 @@ const InventoryOutTab: React.FC<Props> = ({
           <p className="text-xs text-slate-500">{filteredData.length} đơn hàng</p>
         </div>
         <div className="flex items-center gap-2">
+          {onSyncFromBot && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSyncFromBot}
+                disabled={syncing}
+                className="flex h-9 items-center gap-2 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Đang quét...' : 'Đồng bộ Bot'}
+              </button>
+              {syncMsg && (
+                <span className={`text-xs font-medium px-2 py-1 rounded-md ${syncMsg.startsWith('Lỗi') ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {syncMsg}
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setShowModal(true)}
             className="flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"

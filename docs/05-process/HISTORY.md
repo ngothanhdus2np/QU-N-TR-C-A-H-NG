@@ -3,6 +3,30 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-18 — Xuất kho: sync toàn bộ đơn + cập nhật status tự động
+
+- `routes/inventoryOutSync.ts`: fetch tất cả pages từ bot (loop qua offset, thay vì limit=500 cứng)
+- Đổi từ INSERT-only sang 2 bước tách biệt: INSERT đơn mới + UPDATE status đơn đã có (chỉ update status, giữ nguyên giá vốn và dữ liệu nhập tay)
+- Response mới trả thêm `updated` (số đơn đổi status) và `botErrors`
+- Files: `routes/inventoryOutSync.ts`
+
+### 2026-06-18 — Trang vận đơn: filter 15 ngày cửa sổ hoàn hàng
+
+- Bot `src/db.js`: Thêm cột `first_delivered_at` vào bảng `orders` (migration), thêm function `setFirstDeliveredAt()`
+- Bot `bots/orders.js`: Gọi `setFirstDeliveredAt()` khi đơn đạt status "Đã giao" hoặc "Đã nhận được hàng"
+- Backfill `first_delivered_at = created_at` cho 75 đơn shop1 + 64 đơn shop2 đã có trong DB
+- App `ShippingOrders.tsx`: Thêm filter logic — ẩn "Đã nhận được hàng" đã qua 15 ngày kể từ `first_delivered_at`
+- Files: `shopee-monitor/src/db.js`, `shopee-monitor/bots/orders.js`, `components/orders/ShippingOrders.tsx`
+
+### 2026-06-18 — Bot đồng bộ đơn Shopee vào trang Xuất Kho
+
+- Tạo backend route `POST /api/inventory-out/sync-from-bot`: gọi cả 2 bot (port 3001, 3002), dedup theo `order_id`, insert đơn mới vào bảng `shopee_inventory_out`
+- Migration tự động 7 cột còn thiếu: `customer_paid`, `tracking_number`, `ship_date`, `product_name`, `piship_fee`, `vat_tax`, `profit_status` — đăng ký trong `requiredColumns` tại `server.ts`
+- Thêm nút "Đồng bộ Bot" (icon RefreshCw, màu indigo) vào toolbar `InventoryOutTab` — chỉ hiện khi có prop `onSyncFromBot`
+- Toast kết quả: "Đã thêm X đơn mới, bỏ qua Y đơn đã có"
+- Sau sync thành công, tự reload `shopeeInventoryOut` từ Supabase và cập nhật UI qua `updateData`
+- Files: `routes/inventoryOutSync.ts` (mới), `server.ts`, `components/revenue/InventoryOutTab.tsx`, `components/RevenueManager.tsx`, `components/MainContent.tsx`
+
 ### 2026-06-18 — Fix bot shop2 không click được tab "Đang giao"
 
 - **Chẩn đoán**: Bot quét đơn shop2 click được "Chờ xác nhận" và "Chờ lấy hàng" nhưng luôn fail tab "Đang giao" trong auto-refresh — Shopee SPA re-render sau mỗi tab click, tab kế chưa actionable khi bot thử click ngay

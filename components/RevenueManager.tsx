@@ -66,6 +66,7 @@ interface Props {
   setDiagStartDate: (date: string) => void;
   diagEndDate: string;
   setDiagEndDate: (date: string) => void;
+  onSyncInventoryOutFromBot?: () => Promise<{ inserted: number; skipped: number }>;
 }
 
 const RevenueManager: React.FC<Props> = ({
@@ -105,6 +106,7 @@ const RevenueManager: React.FC<Props> = ({
   setDiagStartDate,
   diagEndDate,
   setDiagEndDate,
+  onSyncInventoryOutFromBot,
 }) => {
   const [internalSubTab, setInternalSubTab] = useState<RevenueSubTab>(initialSubTab);
   const activeSubTab = controlledSubTab ?? internalSubTab;
@@ -420,6 +422,7 @@ const RevenueManager: React.FC<Props> = ({
           filterPlatforms={inventoryOutFilterPlatforms}
           filterStatuses={inventoryOutFilterStatuses}
           filterShippingUnits={inventoryOutFilterShippingUnits}
+          onSyncFromBot={onSyncInventoryOutFromBot}
         />
       )}
 

@@ -17,8 +17,9 @@ import {
 const SHOPS = [
   {
     id: 1,
-    label: 'Giày Dép Phúc Sang',
-    api: 'http://localhost:3001/api/orders?limit=200',
+    label: 'Phúc Sang Store',
+    api: 'http://localhost:3001/api/orders',
+    refreshApi: 'http://localhost:3001/api/orders/refresh',
     ws: 'ws://localhost:3001/ws',
     badgeClass: 'bg-indigo-50 text-indigo-700',
     dotClass: 'bg-indigo-400',
@@ -26,8 +27,9 @@ const SHOPS = [
   },
   {
     id: 2,
-    label: 'Phúc Sang Store',
-    api: 'http://localhost:3002/api/orders?limit=200',
+    label: 'Giày Dép Phúc Sang',
+    api: 'http://localhost:3002/api/orders',
+    refreshApi: 'http://localhost:3002/api/orders/refresh',
     ws: 'ws://localhost:3002/ws',
     badgeClass: 'bg-violet-50 text-violet-700',
     dotClass: 'bg-violet-400',
@@ -42,6 +44,7 @@ interface ShopeeOrder {
   order_sn: string;
   status: string;
   created_at: string;
+  first_delivered_at: string | null;
   buyer_name: string;
   buyer_phone: string;
   product_name: string;
@@ -104,6 +107,8 @@ interface Toast {
   shopLabel: string;
   shopIdx: number;
 }
+
+const RETURN_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 const formatMoney = (value: number) => (value ? `${value.toLocaleString('vi-VN')}đ` : '-');
 
@@ -174,14 +179,26 @@ export default function ShippingOrders({ navigationSlot }: Props) {
 
   const fetchOrders = useCallback(async (shopIdx: number) => {
     const shop = SHOPS[shopIdx];
+    const PAGE_SIZE = 200;
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(shop.api, { signal: controller.signal });
-      clearTimeout(timeout);
-      const json = await res.json();
-      if (json.ok && Array.isArray(json.data)) {
-        const withShop: ShopeeOrder[] = json.data.map((o: Omit<ShopeeOrder, 'shopIdx'>) => ({
+      const allData: Omit<ShopeeOrder, 'shopIdx'>[] = [];
+      let offset = 0;
+
+      while (true) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`, { signal: controller.signal });
+        clearTimeout(timeout);
+        const json = await res.json();
+        if (!json.ok || !Array.isArray(json.data) || json.data.length === 0) break;
+        allData.push(...json.data);
+        // Nếu trang trả về ít hơn PAGE_SIZE hoặc đã lấy đủ total → dừng
+        if (json.data.length < PAGE_SIZE || allData.length >= (json.total ?? allData.length)) break;
+        offset += json.data.length;
+      }
+
+      if (allData.length > 0) {
+        const withShop: ShopeeOrder[] = allData.map((o: Omit<ShopeeOrder, 'shopIdx'>) => ({
           ...o,
           shopIdx,
         }));
@@ -278,6 +295,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                 province: msg.province ?? '',
                 shipping_carrier: msg.shippingCarrier ?? '',
                 order_date: '',
+                first_delivered_at: null,
                 paid_to_seller_at: null,
                 return_completed_at: null,
                 shopIdx,
@@ -367,18 +385,34 @@ export default function ShippingOrders({ navigationSlot }: Props) {
   // Tất cả đơn raw (dùng để tính stats)
   const rawOrders = useMemo(() => ordersByShop.flat(), [ordersByShop]);
 
-  // Gộp tất cả đơn, sort mới nhất lên đầu
-  // Ẩn: đã huỷ | đã giao + Shopee đã thanh toán | trả hàng đã về tay người bán
+  // Parse ngày thực từ 6 ký tự đầu order_sn: YYMMDD → timestamp
+  // Fallback về created_at nếu không parse được
+  const snToTimestamp = (sn: string, createdAt: string): number => {
+    const m = sn.match(/^(\d{2})(\d{2})(\d{2})/);
+    if (m) {
+      const ts = Date.parse(`20${m[1]}-${m[2]}-${m[3]}`);
+      if (!isNaN(ts)) return ts;
+    }
+    return new Date(createdAt).getTime();
+  };
+
+  // Trang vận đơn = chỉ đơn "tiền chưa về ví người bán"
+  // Ẩn: đã hủy | "Đã nhận được hàng" qua 15 ngày cửa sổ hoàn | hoàn hàng đã hoàn tất
   const allOrders = useMemo(() => {
+    const now = Date.now();
     return rawOrders
       .filter(o => {
         const display = toDisplay(o.status);
         if (display === 'cancelled') return false;
-        if (display === 'delivered' && o.paid_to_seller_at) return false;
+        // "Đã nhận được hàng": ẩn nếu đã qua 15 ngày kể từ khi giao
+        if (o.status === 'Đã nhận được hàng') {
+          if (!o.first_delivered_at) return true; // chưa có data → giữ lại cho an toàn
+          return now - new Date(o.first_delivered_at).getTime() <= RETURN_WINDOW_MS;
+        }
         if (display === 'return' && o.return_completed_at) return false;
         return true;
       })
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .sort((a, b) => snToTimestamp(b.order_sn, b.created_at) - snToTimestamp(a.order_sn, a.created_at));
   }, [rawOrders]);
 
   const filteredOrders = useMemo(() => {
@@ -506,12 +540,18 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        fetchOrders(idx);
+                      onClick={async () => {
+                        // Trigger bot quét đơn ngay, sau 3 giây fetch lại
+                        try {
+                          await fetch(shop.refreshApi, { method: 'POST' });
+                        } catch {
+                          // bot chưa chạy → chỉ fetchOrders thông thường
+                        }
+                        setTimeout(() => fetchOrders(idx), 3000);
                         if (wsRefs.current[idx]) wsRefs.current[idx]!.close();
                       }}
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100"
-                      title={`Tải lại ${shop.label}`}
+                      title={`Quét đơn ngay — ${shop.label}`}
                     >
                       <RefreshCw
                         className={`h-3.5 w-3.5 ${state === 'connecting' ? 'animate-spin' : ''}`}
@@ -805,7 +845,10 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right text-xs text-slate-500">
-                          {formatDate(order.order_date || order.created_at)}
+                          {formatDate(order.order_date) || (() => {
+                            const m = order.order_sn.match(/^(\d{2})(\d{2})(\d{2})/);
+                            return m ? `${m[3]}/${m[2]}/20${m[1]}` : formatDate(order.created_at);
+                          })()}
                         </td>
                       </tr>
                     );

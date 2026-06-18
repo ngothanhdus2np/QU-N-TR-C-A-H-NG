@@ -9,6 +9,22 @@
 
 ---
 
+### [x] Trang vận đơn filter 15 ngày cửa sổ hoàn hàng *(xong 2026-06-18)*
+
+> Bot lưu `first_delivered_at` khi đơn đạt "Đã giao"/"Đã nhận được hàng". App ẩn các đơn "Đã nhận được hàng" đã qua 15 ngày.
+
+### [x] Xuất kho: sync toàn bộ đơn + cập nhật status *(xong 2026-06-18)*
+
+> Nút "Đồng bộ Bot" giờ fetch tất cả pages + UPDATE status cho đơn đã có (chỉ status, giữ giá vốn). Response trả `inserted`/`updated`/`skipped`.
+
+---
+
+### [x] Bot đồng bộ đơn Shopee vào trang Xuất Kho *(xong 2026-06-18)*
+
+> Route `POST /api/inventory-out/sync-from-bot` + nút "Đồng bộ Bot" trong `InventoryOutTab`. Phí tài chính (platformFee, paymentFee...) để 0 — người dùng cập nhật sau qua upload Excel Shopee.
+
+---
+
 ### [x] Restart Shopee Monitor bot sau khi tái cấu trúc *(xong 2026-06-17)*
 
 > Bots shopee-shop1 và shopee-shop2 đã restart thành công trên MacBook. Endpoint mới `/api/products/fetch/status` và `/api/product/sync-wait/:itemId` hoạt động. Lưu ý: bots chạy trên **MacBook** (user apple), không phải iMac quầy (user mac).
@@ -170,6 +186,7 @@ interface ParentRow {
 
 > **Note**: Đã hoàn thành tất cả P0 tasks! 🎉
 
+- [x] ~~**Fix trang vận đơn + nút tải lại trigger bot**~~ — session_expired state, fetchOrders khi CONNECTED, POST /api/orders/refresh ✅ *(2026-06-18)*
 - [x] ~~**Chạy SQL pending trên Supabase dashboard**~~ — ALTER TABLE carry-forward debt + RLS 5 bảng Shopee ✅ *(2026-06-13)*
 - [x] ~~**Chạy SQL pending (Round 2)**~~ — `product_cost_history` index+RLS, 4 cột mới `pos_orders`, RLS 6 bảng nhạy cảm ✅ *(2026-06-15)*
 - [x] ~~**Chạy SQL pending (Round 3)**~~ — `shopee_products` + `shopee_product_variants` tables ✅ *(2026-06-16)*
