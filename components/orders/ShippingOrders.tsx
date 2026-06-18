@@ -17,7 +17,7 @@ import {
 const SHOPS = [
   {
     id: 1,
-    label: 'Giày Dép Phúc Sang',
+    label: 'Giày Dép Da Phúc Sang',
     api: 'http://localhost:3001/api/orders',
     refreshApi: 'http://localhost:3001/api/orders/refresh',
     ws: 'ws://localhost:3001/ws',
@@ -27,7 +27,7 @@ const SHOPS = [
   },
   {
     id: 2,
-    label: 'Phúc Sang Store',
+    label: 'Phúc Sang_Đồ Da Cao Cấp 93',
     api: 'http://localhost:3002/api/orders',
     refreshApi: 'http://localhost:3002/api/orders/refresh',
     ws: 'ws://localhost:3002/ws',
@@ -796,6 +796,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
             <table className="w-full min-w-[1080px] border-collapse text-sm">
               <thead className="sticky top-0 bg-slate-50">
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                  <th className="px-4 py-3 text-left">Ngày đặt</th>
                   <th className="px-4 py-3 text-left">Shop</th>
                   <th className="px-4 py-3 text-left">Mã đơn</th>
                   <th className="px-4 py-3 text-left">Người mua</th>
@@ -803,7 +804,6 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                   <th className="px-4 py-3 text-left">Tỉnh / ĐVVC</th>
                   <th className="px-4 py-3 text-right">Thanh toán</th>
                   <th className="px-4 py-3 text-center">Trạng thái</th>
-                  <th className="px-4 py-3 text-right">Ngày đặt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -821,6 +821,12 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                     const shop = SHOPS[order.shopIdx];
                     return (
                       <tr key={`${order.shopIdx}-${order.order_sn}`} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {formatDate(order.order_date) || (() => {
+                            const m = order.order_sn.match(/^(\d{2})(\d{2})(\d{2})/);
+                            return m ? `${m[3]}/${m[2]}/20${m[1]}` : formatDate(order.created_at);
+                          })()}
+                        </td>
                         <td className="px-4 py-3">
                           <span
                             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${shop.badgeClass}`}
@@ -873,12 +879,6 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-xs text-slate-500">
-                          {formatDate(order.order_date) || (() => {
-                            const m = order.order_sn.match(/^(\d{2})(\d{2})(\d{2})/);
-                            return m ? `${m[3]}/${m[2]}/20${m[1]}` : formatDate(order.created_at);
-                          })()}
                         </td>
                       </tr>
                     );

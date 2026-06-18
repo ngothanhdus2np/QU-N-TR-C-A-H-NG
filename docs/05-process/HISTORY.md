@@ -3,16 +3,23 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-18 — Fix nhãn shop và mapping bot/DB
+
+- **Phát hiện**: browser profile của 2 bot bị đảo ngược so với ecosystem.config.js:
+  - port 3001 (shopee-profile-shop1) thực tế login phuc_sang_store, không phải giaydepphucsang
+  - port 3002 (shopee-profile-shop2) thực tế login giaydepphucsang
+- Revert `ShippingOrders.tsx` về label đúng: port 3001 = "Phúc Sang Store", port 3002 = "Giày Dép Phúc Sang"
+- Fix `ecosystem.config.js`: swap SHOP_NAME — port 3001 = 'phuc_sang_store', port 3002 = 'giaydepphucsang'
+- Xóa đơn `2606047X0F2VY8` khỏi shop1.db (đã được bot background scan tự bổ sung vào shop2.db đúng chỗ)
+- Files: `components/orders/ShippingOrders.tsx`, `/Users/apple/shopee-monitor/ecosystem.config.js`
+
 ### 2026-06-18 — Bot database cleanup: xóa 81 đơn trùng giữa 2 shop
 
-- Xác định 81 đơn tồn tại cả shop1.db (giaydepphucsang) và shop2.db (phuc_sang_store) do lỗi display reversal trước đây
+- Xác định 81 đơn tồn tại cả shop1.db và shop2.db do lỗi display reversal trước đây
 - Backup cả 2 DB trước khi xử lý
 - Xóa 81 đơn trùng khỏi cả 2 DB, trigger scan song song trên cả 2 bot
-- Kết quả scan: 40 đơn xác nhận thuộc giaydepphucsang, 27 thuộc phuc_sang_store, 14 không xác định được
-- Fix đơn `2606047X0F2VY8` (xóa nhầm kỳ trước): chuyển từ shop2.db → shop1.db (giaydepphucsang)
-- 14 đơn ambiguous restore về shop1.db từ backup (tháng 5, "Đã giao", không ảnh hưởng ShippingOrders 25-ngày)
-- Kết quả cuối: shop1=236 orders, shop2=85 orders, 0 đơn trùng
-- Mapping đúng: shop1.db (port 3001) = giaydepphucsang; shop2.db (port 3002) = phuc_sang_store
+- Kết quả scan: 40 đơn xác nhận phuc_sang_store → shop1.db, 27 đơn giaydepphucsang → shop2.db, 14 ambiguous restore về shop1.db
+- Kết quả cuối: shop1=235 orders, shop2=85 orders, 0 đơn trùng
 - Files: `/Users/apple/shopee-monitor/storage/shop1.db`, `shop2.db`
 
 ### 2026-06-18 — Xuất kho: sync toàn bộ đơn + cập nhật status tự động
