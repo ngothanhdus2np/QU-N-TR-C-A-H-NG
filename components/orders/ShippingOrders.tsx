@@ -109,6 +109,7 @@ interface Toast {
 }
 
 const RETURN_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
+const ORDER_DISPLAY_WINDOW_MS = 25 * 24 * 60 * 60 * 1000;
 
 const formatMoney = (value: number) => (value ? `${value.toLocaleString('vi-VN')}đ` : '-');
 
@@ -402,11 +403,15 @@ export default function ShippingOrders({ navigationSlot }: Props) {
     const now = Date.now();
     return rawOrders
       .filter(o => {
+        // Chỉ hiện đơn trong 25 ngày gần nhất (3-4 ngày ship + 15 ngày hoàn hàng + buffer)
+        const orderTs = snToTimestamp(o.order_sn, o.created_at);
+        if (now - orderTs > ORDER_DISPLAY_WINDOW_MS) return false;
+
         const display = toDisplay(o.status);
         if (display === 'cancelled') return false;
         // "Đã nhận được hàng": ẩn nếu đã qua 15 ngày kể từ khi giao
         if (o.status === 'Đã nhận được hàng') {
-          if (!o.first_delivered_at) return true; // chưa có data → giữ lại cho an toàn
+          if (!o.first_delivered_at) return true;
           return now - new Date(o.first_delivered_at).getTime() <= RETURN_WINDOW_MS;
         }
         if (display === 'return' && o.return_completed_at) return false;
