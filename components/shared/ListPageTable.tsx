@@ -152,7 +152,7 @@ export function ListPageTable<T>({
                   {columns.map((col, colIndex) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 border-r border-slate-50 last:border-r-0 ${
+                      className={`px-4 py-[13px] border-r border-slate-50 last:border-r-0 ${
                         col.align === 'center'
                           ? 'text-center'
                           : col.align === 'right'

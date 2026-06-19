@@ -213,6 +213,10 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                               onEdit={onOpenEditor}
                               onView={onToggleView}
                               isExpanded={expandedParents === product.id}
+                              isViewing={
+                                viewingProduct?.id === product.id &&
+                                (!product.isParent || !product.variantCount || product.variantCount === 0)
+                              }
                               onToggleExpand={onToggleExpanded}
                               visibleColumns={visibleColumns}
                             />
@@ -261,7 +265,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                         transform: `translateY(${virtualItem.start}px)`,
                       }}
                     >
-                      <td colSpan={colCount} className="p-0">
+                      <td colSpan={colCount} className={`p-0 border-l-2 border-r-2 border-indigo-400${!parentId ? ' border-b-2' : ''}`}>
                         <GoodsProductDetailPanel
                           product={product}
                           transactions={transactions}
@@ -273,6 +277,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                               ? 'Bạn có chắc muốn xóa biến thể này?'
                               : 'Bạn có chắc muốn xóa sản phẩm này?'
                           }
+                          noBorder={!parentId}
                           showSupplierActions={!parentId}
                           showCopyPrintActions={!parentId}
                           onAddUnit={!parentId ? onAddUnitInView : undefined}
@@ -302,7 +307,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                     >
                       <td
                         colSpan={colCount}
-                        className="px-4 py-3 text-right border-b border-slate-100"
+                        className="px-4 py-3 text-right border-b-2 border-l-2 border-r-2 border-indigo-400"
                       >
                         <button
                           onClick={e => {

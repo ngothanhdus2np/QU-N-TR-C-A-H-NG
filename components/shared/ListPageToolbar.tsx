@@ -33,7 +33,7 @@ export const ListPageToolbar: React.FC<ListPageToolbarProps> = ({
   return (
     <div className="shrink-0 border-b border-slate-100">
       {/* Main Toolbar Row */}
-      <div className="px-4 min-h-[52px] flex items-center gap-3">
+      <div className="px-4 min-h-[60px] flex items-center gap-3">
         {/* Left Actions */}
         {leftActions && <div className="flex items-center gap-2">{leftActions}</div>}
 

@@ -82,6 +82,8 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
           const isParentProduct =
             product.isParent && product.variantCount && product.variantCount > 0;
 
+          const isViewing = viewingProduct?.id === product.id && !isParentProduct;
+
           return (
             <React.Fragment key={product.id}>
               <ProductRow
@@ -93,6 +95,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                 onEdit={onOpenEditor}
                 onView={onToggleView}
                 isExpanded={isExpanded}
+                isViewing={isViewing}
                 onToggleExpand={onToggleExpanded}
                 visibleColumns={visibleColumns}
                 variants={childVariants}
@@ -115,7 +118,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
 
                     {viewingProduct?.id === variant.id && (
                       <tr>
-                        <td colSpan={colCount} className="p-0">
+                        <td colSpan={colCount} className="p-0 border-l-2 border-r-2 border-indigo-400">
                           <GoodsProductDetailPanel
                             product={viewingProduct}
                             transactions={transactions}
@@ -139,7 +142,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
 
               {isExpanded && isParentProduct && (
                 <tr className="bg-indigo-50/40">
-                  <td colSpan={colCount} className="px-4 py-3 text-right border-b-2 border-l-2 border-r-2 border-indigo-200">
+                  <td colSpan={colCount} className="px-4 py-3 text-right border-b-2 border-l-2 border-r-2 border-indigo-400">
                     <button
                       onClick={e => {
                         e.stopPropagation();
@@ -156,7 +159,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
 
               {viewingProduct?.id === product.id && !isParentProduct && (
                 <tr>
-                  <td colSpan={colCount} className="p-0">
+                  <td colSpan={colCount} className="p-0 border-l-2 border-r-2 border-b-2 border-indigo-400">
                     <GoodsProductDetailPanel
                       product={viewingProduct}
                       transactions={transactions}
@@ -164,6 +167,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                       activeTab={detailActiveTab}
                       onTabChange={tab => onChangeDetailTab(tab)}
                       deleteConfirmText="Bạn có chắc muốn xóa sản phẩm này?"
+                      noBorder
                       showSupplierActions
                       showCopyPrintActions
                       onAddUnit={onAddUnitInView}

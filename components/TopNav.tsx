@@ -155,7 +155,7 @@ const TopNav: React.FC<TopNavProps> = ({
   return (
     <>
       {/* Row 1 — Logo + Utility */}
-      <header className="h-14 bg-white border-b border-slate-100 flex items-center px-4 md:px-6 gap-2 z-40 shrink-0 shadow-sm">
+      <header className="h-12 bg-white border-b border-slate-100 flex items-center px-4 md:px-6 gap-2 z-40 shrink-0 shadow-sm">
         {/* Logo */}
         <div className="shrink-0 mr-2">
           <img src="/logo.png" className="h-10 w-auto object-contain" alt="logo" />
@@ -429,7 +429,7 @@ const TopNav: React.FC<TopNavProps> = ({
       </header>
 
       {/* Row 2 — Hover dropdown nav + Bán hàng CTA */}
-      <div className="h-11 bg-indigo-600 flex items-center px-4 md:px-6 relative z-50 shrink-0 shadow-sm overflow-visible">
+      <div className="h-12 bg-indigo-600 flex items-center px-4 md:px-6 relative z-50 shrink-0 shadow-sm overflow-visible">
         <nav className="flex items-center gap-0.5 flex-1">
           {activeId !== 'pos' &&
             sections.map(section => {

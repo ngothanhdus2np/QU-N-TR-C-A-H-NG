@@ -207,12 +207,12 @@ export const useGoodsVariantWorkflow = ({
     const nextSKU = getNextSKUNumber(products);
     const variants: POSProduct[] = previewVariants.map((preview, index) => ({
       id: generateId(),
-      sku: formatAutoSku(nextSKU + index),
+      sku: index === 0 ? (viewingProduct.sku || formatAutoSku(nextSKU)) : formatAutoSku(nextSKU + index - 1),
       name: preview.name,
       categoryId: viewingProduct.categoryId || '',
       importPrice: preview.importPrice,
       salePrice: preview.salePrice,
-      stock: preview.stock,
+      stock: index === 0 ? (viewingProduct.stock || 0) : 0,
       minStock: viewingProduct.minStock || 0,
       maxStock: viewingProduct.maxStock,
       unit: viewingProduct.unit || 'Cái',
