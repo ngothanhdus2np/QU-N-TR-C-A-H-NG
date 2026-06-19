@@ -69,6 +69,8 @@ interface GoodsInventoryModalsProps {
   lockedAddMoreAttributeNames?: string[];
   onCloseAddMoreVariants: () => void;
   onSaveMoreVariants: () => void;
+  applyToVariants?: boolean;
+  onApplyToVariantsChange?: (checked: boolean) => void;
 }
 
 export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
@@ -121,6 +123,8 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
   lockedAddMoreAttributeNames,
   onCloseAddMoreVariants,
   onSaveMoreVariants,
+  applyToVariants,
+  onApplyToVariantsChange,
 }) => (
   <>
     <GoodsProductForm
@@ -167,6 +171,8 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
           showUnitsSection={showUnitsSection}
           setShowUnitsSection={setShowUnitsSection}
           addBaseUnit={addBaseUnit}
+          applyToVariants={applyToVariants}
+          onApplyToVariantsChange={onApplyToVariantsChange}
         />
       )}
 

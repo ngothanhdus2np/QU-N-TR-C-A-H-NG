@@ -92,6 +92,11 @@ export const useGoodsProductEditor = ({
   const [newUnitName, setNewUnitName] = React.useState('');
   const [newUnitPrice, setNewUnitPrice] = React.useState(0);
   const [newUnitDirectSale, setNewUnitDirectSale] = React.useState(true);
+  const [applyToVariants, setApplyToVariants] = React.useState(false);
+  const [showApplyVariantsModal, setShowApplyVariantsModal] = React.useState(false);
+  const [variantSiblings, setVariantSiblings] = React.useState<import('../../types').POSProduct[]>([]);
+  const [selectedSiblingIds, setSelectedSiblingIds] = React.useState<string[]>([]);
+  const [pendingSiblingChanges, setPendingSiblingChanges] = React.useState<Partial<import('../../types').POSProduct>>({});
 
   const openCreateProduct = () => {
     setShowCreateModal(true);
@@ -166,13 +171,30 @@ export const useGoodsProductEditor = ({
     }
 
     if (editingProduct) {
-      if (onUpdateSurgical) {
-        onUpdateSurgical([{ key: 'posProducts', item: { ...editingProduct, ...formData } as POSProduct }]).catch(err =>
-          showToast(`Lỗi lưu sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      // Khi tick "Áp dụng cho hàng cùng loại" và sản phẩm là variant → mở modal chọn trước
+      if (applyToVariants && editingProduct.parentId) {
+        const EXCLUDED_FROM_APPLY = new Set([
+          'name', 'sku', 'barcode', 'id', 'parentId', 'isParent',
+          'variantCount', 'attributes', 'createdAt', 'stock',
+        ]);
+        const changedFields: Partial<POSProduct> = {};
+        (Object.keys(formData) as (keyof POSProduct)[]).forEach((key) => {
+          if (!EXCLUDED_FROM_APPLY.has(key) && formData[key] !== (editingProduct as POSProduct)[key]) {
+            (changedFields as Record<string, unknown>)[key] = formData[key];
+          }
+        });
+        const siblings = products.filter(
+          (p) => p.parentId === editingProduct.parentId && p.id !== editingProduct.id
         );
-      } else {
-        onUpdateProducts(products.map(product => product.id === editingProduct.id ? { ...product, ...formData } as POSProduct : product));
+        if (siblings.length > 0 && Object.keys(changedFields).length > 0) {
+          setPendingSiblingChanges(changedFields);
+          setVariantSiblings(siblings);
+          setSelectedSiblingIds(siblings.map((s) => s.id));
+          setShowApplyVariantsModal(true);
+          return; // save sẽ xảy ra khi user xác nhận trong modal
+        }
       }
+      performSaveCurrentProduct(editingProduct);
     } else if (hasAttributes) {
       const parentProduct: POSProduct = {
         ...formData,
@@ -241,6 +263,71 @@ export const useGoodsProductEditor = ({
     if (stayOnPage) {
       showToast('Đã lưu sản phẩm thành công. Nhập sản phẩm tiếp theo.');
     }
+  };
+
+  const performSaveCurrentProduct = (editing: POSProduct) => {
+    if (onUpdateSurgical) {
+      onUpdateSurgical([{ key: 'posProducts', item: { ...editing, ...formData } as POSProduct }]).catch(err =>
+        showToast(`Lỗi lưu sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      );
+    } else {
+      onUpdateProducts(products.map(p => p.id === editing.id ? { ...p, ...formData } as POSProduct : p));
+    }
+  };
+
+  const handleConfirmApplyVariants = () => {
+    if (!editingProduct) return;
+    const updatedSiblings = variantSiblings
+      .filter((s) => selectedSiblingIds.includes(s.id))
+      .map((s) => ({ ...s, ...pendingSiblingChanges } as POSProduct));
+
+    if (onUpdateSurgical) {
+      const updates = [
+        { key: 'posProducts' as const, item: { ...editingProduct, ...formData } as POSProduct },
+        ...updatedSiblings.map((s) => ({ key: 'posProducts' as const, item: s })),
+      ];
+      onUpdateSurgical(updates).catch(err =>
+        showToast(`Lỗi lưu sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      );
+    } else {
+      const updatedIds = new Set([editingProduct.id, ...updatedSiblings.map((s) => s.id)]);
+      const siblingMap = new Map(updatedSiblings.map((s) => [s.id, s]));
+      onUpdateProducts(products.map((p) => {
+        if (p.id === editingProduct.id) return { ...p, ...formData } as POSProduct;
+        if (siblingMap.has(p.id)) return siblingMap.get(p.id)!;
+        return p;
+      }));
+      void updatedIds; // suppress unused warning
+    }
+
+    setShowApplyVariantsModal(false);
+    setApplyToVariants(false);
+    setEditingProduct(null);
+    setFormData(emptyProductForm());
+    setActiveTab('goods');
+    setShowCreateModal(false);
+    showToast(`Đã cập nhật sản phẩm và ${updatedSiblings.length} hàng cùng loại.`);
+  };
+
+  const handleCancelApplyVariants = () => {
+    if (!editingProduct) return;
+    performSaveCurrentProduct(editingProduct);
+    setShowApplyVariantsModal(false);
+    setApplyToVariants(false);
+    setEditingProduct(null);
+    setFormData(emptyProductForm());
+    setActiveTab('goods');
+    setShowCreateModal(false);
+  };
+
+  const handleToggleSibling = (id: string) => {
+    setSelectedSiblingIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAllSiblings = (checked: boolean) => {
+    setSelectedSiblingIds(checked ? variantSiblings.map((s) => s.id) : []);
   };
 
   const handleOpenQuickAddProduct = () => {
@@ -358,6 +445,15 @@ export const useGoodsProductEditor = ({
     handleOpenQuickAddProduct,
     addBaseUnit,
     handleSaveBaseUnit,
-    addConversionUnit
+    addConversionUnit,
+    applyToVariants,
+    setApplyToVariants,
+    showApplyVariantsModal,
+    variantSiblings,
+    selectedSiblingIds,
+    handleToggleSibling,
+    handleToggleAllSiblings,
+    handleConfirmApplyVariants,
+    handleCancelApplyVariants,
   };
 };

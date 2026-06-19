@@ -29,6 +29,8 @@ interface GoodsCreateProductInfoTabProps {
   showUnitsSection: boolean;
   setShowUnitsSection: React.Dispatch<React.SetStateAction<boolean>>;
   addBaseUnit: () => void;
+  applyToVariants?: boolean;
+  onApplyToVariantsChange?: (checked: boolean) => void;
 }
 
 export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps> = ({
@@ -44,6 +46,8 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   showUnitsSection,
   setShowUnitsSection,
   addBaseUnit,
+  applyToVariants,
+  onApplyToVariantsChange,
 }) => {
   const [showPriceSetup, setShowPriceSetup] = React.useState(false);
   const [barcodeManualMode, setBarcodeManualMode] = React.useState(getGoodsBarcodeManualMode);
@@ -677,6 +681,18 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
         </div>
       )}
     </div>
+
+    {editingProduct?.parentId && onApplyToVariantsChange && (
+      <label className="flex items-center gap-2 cursor-pointer py-1">
+        <input
+          type="checkbox"
+          className="rounded border-slate-300 text-indigo-600"
+          checked={applyToVariants ?? false}
+          onChange={(e) => onApplyToVariantsChange(e.target.checked)}
+        />
+        <span className="text-sm text-slate-600">Áp dụng thay đổi cho các hàng hoá cùng loại</span>
+      </label>
+    )}
     </div>
   );
 };

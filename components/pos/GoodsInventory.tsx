@@ -28,6 +28,7 @@ import { useGoodsAudit } from './useGoodsAudit';
 import { useGoodsVariantWorkflow } from './useGoodsVariantWorkflow';
 import { useGoodsSelection } from './useGoodsSelection';
 import { useGoodsProductEditor } from './useGoodsProductEditor';
+import { ApplyToVariantsModal } from './ApplyToVariantsModal';
 import { GoodsPriceSetupModal } from './GoodsPriceSetupModal';
 import { GoodsWarrantyMaintenancePage } from './GoodsWarrantyMaintenancePage';
 import { GroupTreePicker } from './GroupTreePicker';
@@ -388,6 +389,15 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     addBaseUnit,
     handleSaveBaseUnit,
     addConversionUnit,
+    applyToVariants,
+    setApplyToVariants,
+    showApplyVariantsModal,
+    variantSiblings,
+    selectedSiblingIds,
+    handleToggleSibling,
+    handleToggleAllSiblings,
+    handleConfirmApplyVariants,
+    handleCancelApplyVariants,
   } = useGoodsProductEditor({
     products,
     onUpdateProducts,
@@ -1111,6 +1121,17 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         addingToParentId={addingToParentId}
         onCloseAddMoreVariants={closeAddMoreVariantsModal}
         onSaveMoreVariants={handleSaveMoreVariants}
+        applyToVariants={applyToVariants}
+        onApplyToVariantsChange={setApplyToVariants}
+      />
+      <ApplyToVariantsModal
+        isOpen={showApplyVariantsModal}
+        siblings={variantSiblings}
+        selectedIds={selectedSiblingIds}
+        onToggle={handleToggleSibling}
+        onToggleAll={handleToggleAllSiblings}
+        onConfirm={handleConfirmApplyVariants}
+        onCancel={handleCancelApplyVariants}
       />
     {changeGroupModal.isOpen && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
