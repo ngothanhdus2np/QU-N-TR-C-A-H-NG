@@ -231,7 +231,7 @@ export default function PurchaseLegacyReport({
                               </td>
                               <td className="px-4 py-3">
                                 <span className="block max-w-[220px] truncate text-xs text-slate-700">{t.supplierName || 'N/A'}</span>
-                                <span className="mt-0.5 block max-w-[220px] truncate font-mono text-2xs text-slate-400">{supplierCode}</span>
+                                <span className="mt-0.5 block max-w-[220px] truncate text-2xs text-slate-400">{supplierCode}</span>
                               </td>
                               <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">1</td>
                               <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-800">{total.toLocaleString('vi-VN')}đ</td>

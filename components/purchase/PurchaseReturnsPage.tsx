@@ -394,7 +394,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
       width: 'w-40',
       sortable: true,
       render: transaction => (
-        <span className="font-mono text-xs font-normal text-indigo-600">{transaction.referenceId || transaction.id.slice(0, 12)}</span>
+        <span className="text-xs font-normal text-indigo-600">{transaction.referenceId || transaction.id.slice(0, 12)}</span>
       ),
     },
     {

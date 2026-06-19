@@ -1073,7 +1073,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                 type="button"
                 title="Nhấn để gán lại phím"
                 onClick={() => setKbRecordingId(sc.id)}
-                className={`px-3 py-1 rounded-lg text-xs font-mono border transition-all min-w-[90px] text-center ${
+                className={`px-3 py-1 rounded-lg text-xs border transition-all min-w-[90px] text-center ${
                   kbRecordingId === sc.id
                     ? 'bg-amber-50 border-amber-300 text-amber-700 animate-pulse'
                     : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700'
@@ -1116,7 +1116,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               <button
                 type="button"
                 onClick={() => setKbNewRecording(true)}
-                className={`px-4 py-2 rounded-lg text-xs font-mono border transition-all min-w-[130px] text-center ${
+                className={`px-4 py-2 rounded-lg text-xs border transition-all min-w-[130px] text-center ${
                   kbNewRecording
                     ? 'bg-amber-50 border-amber-300 text-amber-700 animate-pulse'
                     : kbNewKey

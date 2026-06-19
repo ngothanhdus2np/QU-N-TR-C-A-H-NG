@@ -195,7 +195,7 @@ const InventoryInTab: React.FC<Props> = ({
                           : <ChevronRight className="h-4 w-4" />
                         }
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-semibold">{orderCode}</td>
+                      <td className="px-4 py-3 text-xs text-indigo-600 font-semibold">{orderCode}</td>
                       <td className="px-4 py-3 text-slate-600 text-xs">{order.date.split('-').reverse().join('/')}</td>
                       <td className="px-4 py-3 text-slate-700 text-xs">{order.supplierName || <span className="italic text-slate-400">—</span>}</td>
                       <td className="px-4 py-3 text-center text-xs font-semibold text-slate-700">{order.items.length}</td>
@@ -207,7 +207,7 @@ const InventoryInTab: React.FC<Props> = ({
                     {isExpanded && order.items.map(item => (
                       <tr key={item.id} className="bg-slate-50/60 border-b border-slate-100">
                         <td colSpan={2} />
-                        <td className="px-4 py-2 font-mono text-xs text-slate-500 uppercase">{item.sku}</td>
+                        <td className="px-4 py-2 text-xs text-slate-500 uppercase">{item.sku}</td>
                         <td className="px-4 py-2 text-xs text-slate-400">{item.date.split('-').reverse().join('/')}</td>
                         <td className="px-4 py-2 text-xs text-slate-400">{item.note || '—'}</td>
                         <td className="px-4 py-2 text-center text-xs text-slate-500">—</td>

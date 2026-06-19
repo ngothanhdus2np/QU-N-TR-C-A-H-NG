@@ -97,7 +97,7 @@ const SupplierDetailView: React.FC<SupplierDetailViewProps> = ({
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-[18px] font-bold text-slate-900">{supplier.name}</h2>
-            <span className="text-sm text-slate-400 font-mono block mt-0.5">
+            <span className="text-sm text-slate-400 block mt-0.5">
               {supplier.code || supplier.id.slice(0, 8)}
             </span>
             <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-500 mt-1">
@@ -210,7 +210,7 @@ const SupplierDetailView: React.FC<SupplierDetailViewProps> = ({
                 {supplierTransactions.map(purchase => (
                   <tr key={purchase.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-indigo-600 text-xs">
+                      <span className="text-indigo-600 text-xs">
                         {purchase.referenceId || purchase.id.slice(0, 12)}
                       </span>
                     </td>

@@ -104,7 +104,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
         <div className="flex-1 overflow-y-auto p-8 bg-slate-100/50 flex justify-center">
           <div
             style={{ width: '80mm' }}
-            className="bg-white shadow-xl p-5 font-mono text-xs text-black leading-tight border border-slate-200"
+            className="bg-white shadow-xl p-5 text-xs text-black leading-tight border border-slate-200"
           >
             <div className="text-center border-b border-dashed border-black pb-3 mb-3">
               <h1 className="text-[14px] font-semibold m-0">PHÚC SANG</h1>

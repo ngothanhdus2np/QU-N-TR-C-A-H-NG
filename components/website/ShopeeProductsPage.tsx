@@ -140,7 +140,7 @@ function VariantsEditor({ drafts, onChange }: { drafts: VariantDraft[]; onChange
                   className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left">
                   <div className="flex items-center gap-2">
                     {already && <Check size={13} className="text-green-500" />}
-                    <span className="font-mono font-medium text-slate-700">{pos.sku}</span>
+                    <span className="font-medium text-slate-700">{pos.sku}</span>
                     <span className="text-slate-500 truncate max-w-[140px]">{pos.name}</span>
                   </div>
                   <span className="text-xs text-slate-400 shrink-0 ml-2">{pos.stock} tồn</span>
@@ -169,7 +169,7 @@ function VariantsEditor({ drafts, onChange }: { drafts: VariantDraft[]; onChange
             <tbody>
               {drafts.map(v => (
                 <tr key={v.pos_product_id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 font-mono text-slate-700 font-medium">{v.sku}</td>
+                  <td className="px-3 py-2 text-slate-700 font-medium">{v.sku}</td>
                   <td className="px-3 py-2">
                     <input value={v.size} onChange={e => updateVariant(v.pos_product_id, 'size', e.target.value)}
                       placeholder="40" className="w-14 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-orange-400" />
@@ -667,7 +667,7 @@ export default function ShopeeProductsPage() {
                               <ShoppingBag size={14} className="text-orange-300" />
                             </div>
                           )}
-                          <span className={`font-mono font-semibold ${isExpanded ? 'text-orange-700' : 'text-slate-800'}`}>
+                          <span className={`font-semibold ${isExpanded ? 'text-orange-700' : 'text-slate-800'}`}>
                             {product.name}
                           </span>
                         </div>

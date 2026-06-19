@@ -37,7 +37,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
             <p className="text-2xs font-normal text-indigo-500 uppercase tracking-widest">
               {isPurchaseReturn ? 'Phiếu trả hàng nhập' : 'Phiếu nhập hàng'}
             </p>
-            <h3 className="text-lg font-semibold text-slate-900 font-mono">{documentCode}</h3>
+            <h3 className="text-lg font-semibold text-slate-900">{documentCode}</h3>
             <p className="text-xs text-slate-500 mt-1">
               Ngày tạo: {formatDateTime(transaction.date)} | NCC: {transaction.supplierName || 'NCC vãng lai'}
             </p>
@@ -115,7 +115,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
                   const discount = withPrice.discount || 0;
                   return (
                     <tr key={`${item.productId}-${item.sku}`} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-indigo-600 font-normal">{item.sku || '—'}</td>
+                      <td className="px-4 py-3 text-indigo-600 font-normal">{item.sku || '—'}</td>
                       <td className="px-4 py-3 font-normal text-slate-800">{item.name || item.productId}</td>
                       <td className="px-4 py-3 text-right">{item.quantity}</td>
                       <td className="px-4 py-3 text-right">{price.toLocaleString('vi-VN')}đ</td>

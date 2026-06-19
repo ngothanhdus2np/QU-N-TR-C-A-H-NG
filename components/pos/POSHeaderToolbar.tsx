@@ -272,12 +272,12 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="text-indigo-600 font-mono text-sm font-normal shrink-0">
+                      <span className="text-indigo-600 text-sm font-normal shrink-0">
                         {p.salePrice.toLocaleString()}đ
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-slate-500">
-                      <span className="font-mono uppercase">{p.sku}</span>
+                      <span className="uppercase">{p.sku}</span>
                       <span className="text-slate-300">|</span>
                       <span className={p.stock > 0 ? 'text-emerald-600' : 'text-rose-600'}>
                         Tồn: {p.stock}
@@ -428,7 +428,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                       alt="QR Code"
                       className="w-[180px] h-[180px] mx-auto mb-3 rounded-xl"
                     />
-                    <p className="text-xs font-mono text-center text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-3 break-all">
+                    <p className="text-xs text-center text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-3 break-all">
                       {mobileUrl}
                     </p>
                   </>

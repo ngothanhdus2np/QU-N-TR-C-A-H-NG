@@ -606,7 +606,7 @@ export default function GoodsInternalUse({ products, data, onUpdateSurgical }: G
                         onClick={() => setSelectedDetail(transaction)}
                         className={`cursor-pointer hover:bg-slate-50 ${selectedDetail?.id === transaction.id ? 'bg-indigo-50/50' : ''}`}
                       >
-                        <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">
+                        <td className="px-4 py-3 text-xs font-bold text-indigo-600">
                           {transaction.id.slice(0, 12)}
                         </td>
                         <td className="px-4 py-3 text-slate-600">

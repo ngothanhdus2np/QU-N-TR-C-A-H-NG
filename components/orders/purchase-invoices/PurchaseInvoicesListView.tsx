@@ -102,7 +102,7 @@ export default function PurchaseInvoicesListView({
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="font-mono text-xs font-normal text-indigo-600">
+                      <span className="text-xs font-normal text-indigo-600">
                         {getPurchaseCode(t)}
                       </span>
                     </td>

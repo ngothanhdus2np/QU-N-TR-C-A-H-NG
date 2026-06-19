@@ -246,7 +246,7 @@ export default function SelectInvoiceModal({
                 <tbody className="divide-y divide-slate-50 italic">
                   {paginated.map(inv => (
                     <tr key={inv.id} className="hover:bg-indigo-50/50 group transition-all">
-                      <td className="px-6 py-4 font-mono font-normal text-indigo-600">
+                      <td className="px-6 py-4 font-normal text-indigo-600">
                         {inv.orderCode}
                       </td>
                       <td className="px-6 py-4 font-normal text-slate-600">

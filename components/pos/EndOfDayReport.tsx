@@ -823,7 +823,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
                             const retAmt = Math.abs(order.totalAmount);
                             return (
                               <tr key={order.id} className={isRet ? 'hover:bg-rose-50/40' : 'hover:bg-slate-50'}>
-                                <td className={`${tdStyle} pl-12 font-mono ${isRet ? 'text-rose-500' : 'text-indigo-600'}`}>{order.orderCode}</td>
+                                <td className={`${tdStyle} pl-12 ${isRet ? 'text-rose-500' : 'text-indigo-600'}`}>{order.orderCode}</td>
                                 <td className={`${tdStyle} text-slate-500 truncate`}>{fmtCustomer(order.customerName)}</td>
                                 <td className={`${tdStyle} text-slate-500 truncate`}>{d.staffName}</td>
                                 <td className={`${tdStyle} text-slate-400`}>{d.time}</td>
@@ -869,7 +869,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
                       const retAmt = Math.abs(order.totalAmount);
                       return (
                         <tr key={order.id} className="hover:bg-rose-50/40">
-                          <td className={`${tdStyle} pl-8 font-mono text-rose-500`}>{order.orderCode}</td>
+                          <td className={`${tdStyle} pl-8 text-rose-500`}>{order.orderCode}</td>
                           <td className={`${tdStyle} text-slate-500 truncate`}>{fmtCustomer(order.customerName)}</td>
                           <td className={`${tdStyle} text-slate-500 truncate`}>{d.staffName}</td>
                           <td className={`${tdStyle} text-slate-400`}>{d.time}</td>

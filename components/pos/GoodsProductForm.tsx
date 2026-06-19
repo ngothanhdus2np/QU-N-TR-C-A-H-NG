@@ -74,7 +74,7 @@ export const GoodsProductForm: React.FC<GoodsProductFormProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-2xs font-normal uppercase text-slate-500 mb-1 block">Mã SKU *</label>
-                      <input className="w-full p-2 bg-slate-50 border rounded-lg font-mono text-indigo-600 font-normal outline-none focus:border-indigo-500" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} />
+                      <input className="w-full p-2 bg-slate-50 border rounded-lg text-indigo-600 font-normal outline-none focus:border-indigo-500" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} />
                     </div>
                     <div>
                       <label className="text-2xs font-normal uppercase text-slate-500 mb-1 block">Giá nhập</label>
@@ -84,7 +84,7 @@ export const GoodsProductForm: React.FC<GoodsProductFormProps> = ({
                   <div>
                     <label className="text-2xs font-normal uppercase text-slate-500 mb-1 block">Mã vạch</label>
                     <input
-                      className={`w-full p-2 border rounded-lg font-mono text-sm font-normal outline-none ${
+                      className={`w-full p-2 border rounded-lg text-sm font-normal outline-none ${
                         barcodeManualMode
                           ? 'bg-slate-50 text-slate-700 focus:border-indigo-500'
                           : 'bg-slate-50 text-slate-400 border-slate-200'

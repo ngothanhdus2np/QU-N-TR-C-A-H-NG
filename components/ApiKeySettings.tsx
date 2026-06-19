@@ -145,7 +145,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             </div>
             <div className="flex items-start space-x-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100 mb-3">
               <p className="text-xs text-indigo-800 leading-relaxed">
-                API key cấu hình trong <code className="bg-indigo-100 px-1 rounded font-mono">.env.local</code> — không lưu trên trình duyệt.
+                API key cấu hình trong <code className="bg-indigo-100 px-1 rounded">.env.local</code> — không lưu trên trình duyệt.
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
@@ -191,7 +191,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
               {emailConfigured === true && emailTo && (
                 <p className="text-xs text-slate-500">
-                  Gửi đến: <span className="font-mono font-normal text-slate-700">{emailTo}</span>
+                  Gửi đến: <span className="font-normal text-slate-700">{emailTo}</span>
                 </p>
               )}
 
@@ -199,8 +199,8 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                 <div className="text-xs text-slate-600 bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
                   <p className="font-normal text-amber-800">Cách bật email thông báo:</p>
                   <p>1. Bật 2FA trên Google Account</p>
-                  <p>2. Tạo App Password tại <span className="font-mono">myaccount.google.com/apppasswords</span></p>
-                  <p>3. Thêm vào <span className="font-mono">.env.local</span>:</p>
+                  <p>2. Tạo App Password tại <span className="">myaccount.google.com/apppasswords</span></p>
+                  <p>3. Thêm vào <span className="">.env.local</span>:</p>
                   <pre className="bg-amber-100 rounded p-2 mt-1 text-2xs leading-relaxed">{`EMAIL_USER=your@gmail.com\nEMAIL_PASS=xxxx-xxxx-xxxx-xxxx\nEMAIL_TO=owner@gmail.com`}</pre>
                 </div>
               )}
@@ -245,17 +245,17 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
               {zaloConfigured === true && zaloFollowerId && (
                 <p className="text-xs text-slate-500">
-                  Gửi đến follower: <span className="font-mono font-normal text-slate-700">{zaloFollowerId}</span>
+                  Gửi đến follower: <span className="font-normal text-slate-700">{zaloFollowerId}</span>
                 </p>
               )}
 
               {zaloConfigured === false && (
                 <div className="text-xs text-slate-600 bg-sky-50 border border-sky-100 rounded-lg p-3 space-y-1">
                   <p className="font-normal text-sky-800">Cách bật Zalo OA:</p>
-                  <p>1. Đăng ký Zalo Official Account tại <span className="font-mono">oa.zalo.me</span></p>
-                  <p>2. Lấy Access Token từ <span className="font-mono">developers.zalo.me</span></p>
+                  <p>1. Đăng ký Zalo Official Account tại <span className="">oa.zalo.me</span></p>
+                  <p>2. Lấy Access Token từ <span className="">developers.zalo.me</span></p>
                   <p>3. Lấy Follower ID (Zalo user ID của chủ nhà)</p>
-                  <p>4. Thêm vào <span className="font-mono">.env.local</span>:</p>
+                  <p>4. Thêm vào <span className="">.env.local</span>:</p>
                   <pre className="bg-sky-100 rounded p-2 mt-1 text-2xs leading-relaxed">{`ZALO_OA_ACCESS_TOKEN=your-oa-access-token\nZALO_FOLLOWER_ID=your-zalo-user-id`}</pre>
                 </div>
               )}

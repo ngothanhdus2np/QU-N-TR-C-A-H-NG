@@ -176,7 +176,7 @@ const InfoTab: React.FC<{
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
             <h2 className="text-[18px] font-bold text-slate-900">{customer.name}</h2>
-            <span className="text-sm text-slate-400 font-mono">{customerCode}</span>
+            <span className="text-sm text-slate-400">{customerCode}</span>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500 mb-3 flex-wrap">
             <span>

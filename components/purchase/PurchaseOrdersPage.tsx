@@ -469,7 +469,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: order => (
-        <span className="font-mono font-normal text-indigo-600 text-xs">
+        <span className="font-normal text-indigo-600 text-xs">
           {order.referenceId || order.id.slice(0, 12)}
         </span>
       ),

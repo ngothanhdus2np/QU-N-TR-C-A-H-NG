@@ -164,7 +164,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
               ) : (
                 paginatedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50/80 group cursor-pointer transition-all" onClick={() => setSelectedOrder(order)}>
-                    <td className="px-8 py-6 font-mono font-normal text-indigo-600 text-sm">
+                    <td className="px-8 py-6 font-normal text-indigo-600 text-sm">
                       <span className="bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">{order.orderCode}</span>
                     </td>
                     <td className="px-8 py-6 text-slate-500 font-normal whitespace-nowrap">{formatDateTime(order.date)}</td>

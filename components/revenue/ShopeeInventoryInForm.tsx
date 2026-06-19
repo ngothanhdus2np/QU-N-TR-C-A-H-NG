@@ -209,7 +209,7 @@ const ShopeeInventoryInForm: React.FC<Props> = ({ shopeeSourceData, shopeeInvent
                     </button>
                   </td>
                   <td className="px-3 py-2 border-r border-slate-100 text-center text-xs text-slate-400">{idx + 1}</td>
-                  <td className="px-3 py-2 border-r border-slate-100 font-mono text-xs text-indigo-600">{item.sku}</td>
+                  <td className="px-3 py-2 border-r border-slate-100 text-xs text-indigo-600">{item.sku}</td>
                   <td className="px-3 py-2 border-r border-slate-100 text-sm text-slate-700">{item.name}</td>
                   <td className="px-3 py-2 border-r border-slate-100">
                     <div className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 overflow-hidden">

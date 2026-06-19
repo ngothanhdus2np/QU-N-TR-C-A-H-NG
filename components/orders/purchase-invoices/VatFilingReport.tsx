@@ -482,7 +482,7 @@ export default function VatFilingReport({
                 ) : (
                   currentOpeningStockItems.map(item => (
                     <tr key={item.id} className="hover:bg-slate-50/60">
-                      <td className="px-4 py-3 text-xs font-mono font-normal text-indigo-600">{item.sku}</td>
+                      <td className="px-4 py-3 text-xs font-normal text-indigo-600">{item.sku}</td>
                       <td className="px-4 py-3 text-xs font-normal text-slate-800">{item.productName}</td>
                       <td className="px-4 py-3">
                         <select

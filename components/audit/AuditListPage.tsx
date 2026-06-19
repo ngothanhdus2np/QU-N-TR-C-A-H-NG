@@ -421,7 +421,7 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: audit => (
-        <span className="font-mono font-normal text-indigo-600 text-xs">{audit.id.slice(0, 12)}</span>
+        <span className="font-normal text-indigo-600 text-xs">{audit.id.slice(0, 12)}</span>
       ),
     },
     {

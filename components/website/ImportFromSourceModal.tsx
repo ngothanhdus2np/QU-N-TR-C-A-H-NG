@@ -387,7 +387,7 @@ export default function ImportFromSourceModal({ onClose, onDone }: Props) {
                             }
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs font-semibold text-slate-700">{group.parentCode}</span>
+                                <span className="text-xs font-semibold text-slate-700">{group.parentCode}</span>
                                 {hasParentInPos && (
                                   <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">Đã có cha</span>
                                 )}
@@ -411,7 +411,7 @@ export default function ImportFromSourceModal({ onClose, onDone }: Props) {
                                 const inPos = !!allPosMap[item.sku];
                                 return (
                                   <div key={item.sku} className={`flex items-center gap-3 px-5 py-2 text-xs ${isLinked ? 'opacity-40' : ''}`}>
-                                    <span className="font-mono text-slate-600 w-36 shrink-0">{item.sku}</span>
+                                    <span className="text-slate-600 w-36 shrink-0">{item.sku}</span>
                                     <span className="text-slate-400 w-16 shrink-0">{item.color ?? '—'}</span>
                                     <span className="text-slate-400 w-10 shrink-0">size {item.size ?? '—'}</span>
                                     <span className="text-slate-400">{item.import_price > 0 ? `${item.import_price.toLocaleString('vi')}đ` : '—'}</span>

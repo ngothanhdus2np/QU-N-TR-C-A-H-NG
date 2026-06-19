@@ -485,7 +485,7 @@ const InventoryOutTab: React.FC<Props> = ({
                     <ArrowDownToLine className="w-3 h-3 rotate-180" />
                   </div>
                 </td>
-                <td className={`p-2 border-b border-r border-slate-200 font-mono text-xs text-indigo-600${dt}`}>
+                <td className={`p-2 border-b border-r border-slate-200 text-xs text-indigo-600${dt}`}>
                   {item.trackingNumber || item.orderId || '-'}
                 </td>
                 <td className={`p-2 border-b border-r border-slate-200${dt}`}>

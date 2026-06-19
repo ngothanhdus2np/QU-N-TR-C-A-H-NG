@@ -279,7 +279,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                           </button>
                         </td>
                         <td className="px-3 py-2 text-slate-500 border-r text-center">{idx + 1}</td>
-                        <td className="px-3 py-2 font-mono text-indigo-600 border-r">
+                        <td className="px-3 py-2 text-indigo-600 border-r">
                           {productById.get(item.productId)?.sku}
                         </td>
                         <td className="px-3 py-2 font-normal border-r">{item.name}</td>
@@ -658,7 +658,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     const badge = badges[status as keyof typeof badges] ?? badges.none;
                     return (
                       <tr key={t.id} className="border-b transition-colors hover:bg-slate-50">
-                        <td className="p-4 font-mono font-normal text-indigo-600">
+                        <td className="p-4 font-normal text-indigo-600">
                           {t.id.slice(0, 8)}
                         </td>
                         <td className="p-4 text-slate-500">

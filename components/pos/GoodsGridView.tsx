@@ -69,7 +69,7 @@ const GoodsGridCard = React.memo(
           </p>
           <div className="flex items-center justify-between mt-auto pt-1">
             {product.sku && (
-              <span className="font-mono text-[9px] text-slate-400 truncate">{product.sku}</span>
+              <span className="text-[9px] text-slate-400 truncate">{product.sku}</span>
             )}
             <span className={`text-[9px] font-normal px-1.5 py-0.5 rounded-full ml-auto ${stockColor}`}>
               Tồn: {stockQty}

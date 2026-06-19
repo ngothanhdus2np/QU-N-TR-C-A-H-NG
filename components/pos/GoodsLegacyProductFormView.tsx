@@ -166,7 +166,7 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
                 <div>
                   <label className="text-sm font-normal text-slate-700 mb-2 block">Mã hàng</label>
                   <input
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                     value={formData.sku}
                     onChange={e => setFormData({ ...formData, sku: e.target.value })}
                     placeholder="Tự động"

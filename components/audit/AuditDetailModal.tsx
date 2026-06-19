@@ -28,7 +28,7 @@ const AuditDetailModal: React.FC<AuditDetailModalProps> = ({
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-2xs font-normal text-indigo-500 uppercase tracking-widest">Phiếu kiểm kho</p>
-            <h3 className="text-lg font-semibold text-slate-900 font-mono">{transaction.id}</h3>
+            <h3 className="text-lg font-semibold text-slate-900">{transaction.id}</h3>
             <p className="text-xs text-slate-500 mt-1">
               Tạo: {formatDateTime(transaction.date)} | Cân bằng: {formatDateTime(transaction.balancedDate)}
             </p>
@@ -102,7 +102,7 @@ const AuditDetailModal: React.FC<AuditDetailModalProps> = ({
                   const diff = item.quantity || (item.newStock || 0) - (item.previousStock || 0);
                   return (
                     <tr key={`${item.productId}-${item.sku}`} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-indigo-600 font-normal">{item.sku || '—'}</td>
+                      <td className="px-4 py-3 text-indigo-600 font-normal">{item.sku || '—'}</td>
                       <td className="px-4 py-3 font-normal text-slate-800">{item.name || item.productId}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{item.previousStock || 0}</td>
                       <td className="px-4 py-3 text-right text-slate-900 font-normal">{item.newStock || 0}</td>

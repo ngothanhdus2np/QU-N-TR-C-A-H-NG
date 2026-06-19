@@ -51,7 +51,7 @@ export const GoodsKhoHistory: React.FC<GoodsKhoHistoryProps> = ({ transactions }
           .filter(t => t.type === 'Check')
           .map(t => (
             <tr key={t.id} className="border-b">
-              <td className="p-4 font-mono text-indigo-600 font-normal">#{t.id.slice(0, 8)}</td>
+              <td className="p-4 text-indigo-600 font-normal">#{t.id.slice(0, 8)}</td>
               <td className="p-4 text-slate-500">{new Date(t.date).toLocaleDateString()}</td>
               <td className="p-4 text-right font-normal">
                 {t.items.reduce((s, i) => s + i.quantity, 0)}
@@ -392,7 +392,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                       <td className="border-b border-slate-100 px-4 py-3 text-center font-normal text-slate-500">
                         {idx + 1}
                       </td>
-                      <td className="border-b border-slate-100 px-4 py-3 font-mono text-xs font-normal text-indigo-600">
+                      <td className="border-b border-slate-100 px-4 py-3 text-xs font-normal text-indigo-600">
                         {product?.sku || item.productId}
                       </td>
                       <td className="border-b border-slate-100 px-4 py-3">
@@ -621,7 +621,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                   return (
                     <div key={transaction.id} className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-mono text-xs font-normal text-indigo-600">
+                        <span className="text-xs font-normal text-indigo-600">
                           #{transaction.id.slice(0, 8)}
                         </span>
                         <span className="text-xs font-normal text-slate-400">

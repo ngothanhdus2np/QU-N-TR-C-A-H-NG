@@ -200,7 +200,7 @@ function VariantsEditor({
                   >
                     <div className="flex items-center gap-2">
                       {already && <Check size={13} className="text-green-500" />}
-                      <span className="font-mono font-medium text-slate-700">{pos.sku}</span>
+                      <span className="font-medium text-slate-700">{pos.sku}</span>
                       <span className="text-slate-500 truncate max-w-[140px]">{pos.name}</span>
                     </div>
                     <span className="text-xs text-slate-400 shrink-0 ml-2">{pos.stock} tồn</span>
@@ -231,7 +231,7 @@ function VariantsEditor({
             <tbody>
               {drafts.map(v => (
                 <tr key={v.pos_product_id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 font-mono text-slate-700 font-medium">{v.sku}</td>
+                  <td className="px-3 py-2 text-slate-700 font-medium">{v.sku}</td>
                   <td className="px-3 py-2">
                     <input
                       value={v.size}
@@ -427,7 +427,7 @@ function DetailPanel({
                 <input
                   value={form.slug}
                   onChange={e => setF({ slug: e.target.value })}
-                  className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-xs text-slate-400 shrink-0">.html</span>
               </div>
@@ -642,7 +642,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
                   <input
                     value={form.slug}
                     onChange={e => setF({ slug: e.target.value })}
-                    className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="text-xs text-slate-400 shrink-0">.html</span>
                 </div>
@@ -907,7 +907,7 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs text-slate-500">{product.slug}</span>
+                          <span className="text-xs text-slate-500">{product.slug}</span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className="text-slate-600 font-medium">{product.store_product_variants.length}</span>

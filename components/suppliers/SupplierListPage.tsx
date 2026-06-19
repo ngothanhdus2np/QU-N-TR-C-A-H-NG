@@ -438,7 +438,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       width: 'w-32',
       sortable: true,
       render: supplier => (
-        <span className="font-mono font-normal text-indigo-600 text-xs">
+        <span className="font-normal text-indigo-600 text-xs">
           {supplier.code || supplier.id.slice(0, 8)}
         </span>
       ),

@@ -231,7 +231,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                      <span className="font-mono font-semibold text-slate-800">{order.order_code}</span>
+                      <span className="font-semibold text-slate-800">{order.order_code}</span>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusInfo.color}`}>
                         {statusInfo.label}
                       </span>
@@ -293,7 +293,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                             <tbody>
                               {order.items.map((item, i) => (
                                 <tr key={i} className="border-b border-slate-50 last:border-0">
-                                  <td className="px-3 py-2 font-mono text-xs text-slate-600">{item.sku}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-600">{item.sku}</td>
                                   <td className="px-3 py-2 text-slate-700">{item.productName}</td>
                                   <td className="px-3 py-2 text-center text-slate-600">{item.quantity}</td>
                                   <td className="px-3 py-2 text-right text-slate-600">{formatVND(item.price)}</td>

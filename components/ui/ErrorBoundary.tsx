@@ -41,7 +41,7 @@ class ErrorBoundary extends Component<Props, State> {
               Phần này không thể hiển thị. Các module khác vẫn hoạt động bình thường.
             </p>
             {this.state.error && (
-              <p className="text-2xs text-rose-400 font-mono bg-rose-50 rounded-xl px-3 py-2 mt-3 mb-5 text-left break-all">
+              <p className="text-2xs text-rose-400 bg-rose-50 rounded-xl px-3 py-2 mt-3 mb-5 text-left break-all">
                 {this.state.error.message}
               </p>
             )}

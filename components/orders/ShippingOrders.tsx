@@ -847,7 +847,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                             {shop.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-600">
+                        <td className="px-4 py-3 text-xs font-semibold text-indigo-600">
                           {order.order_sn}
                         </td>
                         <td className="px-4 py-3">

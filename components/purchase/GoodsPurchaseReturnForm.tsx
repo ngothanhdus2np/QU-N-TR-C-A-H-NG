@@ -255,7 +255,7 @@ export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = (
                         <td className="px-3 py-2 text-slate-500 border-r border-slate-50 text-center">
                           {index + 1}
                         </td>
-                        <td className="px-3 py-2 font-mono text-indigo-600 border-r border-slate-50">
+                        <td className="px-3 py-2 text-indigo-600 border-r border-slate-50">
                           {product?.sku}
                         </td>
                         <td className="px-3 py-2 font-normal text-slate-800 border-r border-slate-50">

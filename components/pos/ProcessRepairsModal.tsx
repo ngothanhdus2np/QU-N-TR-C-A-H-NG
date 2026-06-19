@@ -161,7 +161,7 @@ export default function ProcessRepairsModal({ tickets = [], onClose }: ProcessRe
                       style={{ gridTemplateColumns: '1.6fr 1.6fr 1.2fr 1.4fr' }}
                     >
                       <div className="px-4 py-3">
-                        <div className="font-mono text-indigo-600 text-xs font-semibold">
+                        <div className="text-indigo-600 text-xs font-semibold">
                           {ticket.code}
                         </div>
                         <div className="text-slate-400 text-xs mt-0.5">{createdDate}</div>
