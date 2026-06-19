@@ -260,6 +260,15 @@ ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS components TEXT;
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS periodic_maintenance TEXT;
 ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS story TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS voice TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS target_audience TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS competitive_advantage TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS logo TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS inventory JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE brand_profile ADD COLUMN IF NOT EXISTS hashtags TEXT;
 
 -- KiotViet extended fields (2026-05-10)
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS customer_orders INTEGER DEFAULT 0;

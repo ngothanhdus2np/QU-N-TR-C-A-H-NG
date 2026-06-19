@@ -890,6 +890,15 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     void saveInventorySettings(nextSettings);
   };
 
+  const toggleShowSalesAdvisor = () => {
+    const nextSettings = {
+      ...inventoryForm,
+      showSalesAdvisor: !(inventoryForm.showSalesAdvisor ?? true),
+    };
+    setInventoryForm(nextSettings);
+    void saveInventorySettings(nextSettings);
+  };
+
   const renderStoreTab = () => (
     <div className="space-y-4">
       <Section
@@ -1027,8 +1036,10 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
         <SettingLine
           title="Tư vấn bán hàng"
           description="Box tư vấn sản phẩm trong POS đang dùng cấu hình hàng hóa hiện tại."
-          value="Đang bật"
-        />
+          onClick={toggleShowSalesAdvisor}
+        >
+          <TogglePill enabled={inventoryForm.showSalesAdvisor ?? true} />
+        </SettingLine>
       </Section>
 
       <Section

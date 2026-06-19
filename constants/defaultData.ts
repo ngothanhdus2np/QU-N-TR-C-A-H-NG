@@ -229,6 +229,7 @@ export const DEFAULT_POS_PAYMENT_SETTINGS: POSPaymentSettings = {
 
 export const DEFAULT_POS_INVENTORY_SETTINGS: POSInventorySettings = {
   allowSellOutOfStock: false,
+  showSalesAdvisor: true,
 };
 
 const legacyChannelToAccount = (

@@ -606,6 +606,7 @@ export interface POSInventorySettings {
   allowSellOutOfStock: boolean;
   maxQtyWarning?: number; // Ngưỡng cảnh báo số lượng lớn khi nhập POS (mặc định 10000)
   costMethod?: 'fixed' | 'average'; // Phương pháp tính giá vốn, đồng bộ qua Supabase
+  showSalesAdvisor?: boolean; // Hiển thị box tư vấn bán hàng trong POS (mặc định true)
 }
 
 export type POSKeyboardAction =

@@ -232,6 +232,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const returnOtherRefund = activeTab.returnOtherRefund || 0;
   const splitPayment = activeTab.splitPayment || EMPTY_SPLIT_PAYMENT;
   const allowSellOutOfStock = inventorySettings?.allowSellOutOfStock ?? false;
+  const salesAdvisorEnabled = inventorySettings?.showSalesAdvisor !== false;
   const [currentStaffId, setCurrentStaffId] = useState(() => {
     const stored = getCurrentStaffId();
     return stored === 'unknown' ? DEFAULT_POS_STAFF[0].id : stored;
@@ -1377,8 +1378,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
           cart={cart}
           returnCart={returnCart}
           orderNote={orderNote}
-          showConsultant={showConsultant}
-          setShowConsultant={setShowConsultant}
+          showConsultant={showConsultant && salesAdvisorEnabled}
+          setShowConsultant={salesAdvisorEnabled ? setShowConsultant : () => {}}
           products={products}
           productGroups={productGroups}
           employees={salespersonOptions}

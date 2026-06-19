@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useReducer, useState } from 'react';
+import { useEffect, useMemo, useCallback, useReducer, useState, useRef } from 'react';
 import {
   AppData,
   AppDataItem,
@@ -750,13 +750,23 @@ export function useAppData() {
     };
   }, [fetchData]);
 
+  // Bỏ qua lần render đầu tiên (brandProfile = DEFAULT_BRAND) để tránh race condition:
+  // fetchData chậm hơn 2s → timer nổ → DEFAULT_BRAND đè lên Supabase → dữ liệu mất.
+  const brandSaveReadyRef = useRef(false);
   useEffect(() => {
+    if (!brandSaveReadyRef.current) {
+      brandSaveReadyRef.current = true;
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
         await apiService.upsertItem('brandProfile', brandProfile);
         await appDataCache.saveBrandProfile(brandProfile);
+        dispatch({ type: 'SET_SYNC_ERRORS', payload: null });
       } catch (e) {
         console.error('Brand sync error:', e);
+        const msg = e instanceof Error ? e.message : 'Không thể lưu hồ sơ cửa hàng';
+        dispatch({ type: 'SET_SYNC_ERRORS', payload: [`LỖI LƯU HỒ SƠ CỬA HÀNG: ${msg}`] });
       }
     }, 2000);
     return () => clearTimeout(timer);
