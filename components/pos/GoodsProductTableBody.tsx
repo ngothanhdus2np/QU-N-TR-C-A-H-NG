@@ -12,7 +12,7 @@ interface GoodsProductTableBodyProps {
   colCount: number;
   selectedIdSet: Set<string>;
   favoriteIdSet: Set<string>;
-  expandedParents: Set<string>;
+  expandedParents: string | null;
   viewingProduct: POSProduct | null;
   activeFormTab: string;
   visibleColumns: string[];
@@ -77,7 +77,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
         </tr>
       ) : (
         currentProducts.map(product => {
-          const isExpanded = expandedParents.has(product.id);
+          const isExpanded = expandedParents === product.id;
           const childVariants = product.isParent ? (variantsByParentId.get(product.id) ?? []) : [];
           const isParentProduct =
             product.isParent && product.variantCount && product.variantCount > 0;

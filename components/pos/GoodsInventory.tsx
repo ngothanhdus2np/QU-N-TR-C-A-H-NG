@@ -704,6 +704,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     [viewingProduct?.id]
   );
 
+  const handleToggleExpanded = useCallback(
+    (id: string) => {
+      toggleExpandedParent(id);
+      setViewingProduct(null);
+    },
+    [toggleExpandedParent]
+  );
+
   const handleGridCardClick = useCallback(
     (prod: POSProduct) => {
       if (prod.isParent && prod.variantCount && prod.variantCount > 0) {
@@ -820,7 +828,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   onToggleFavorite={toggleFavorite}
                   onOpenEditor={openProductEditor}
                   onToggleView={handleToggleView}
-                  onToggleExpanded={toggleExpandedParent}
+                  onToggleExpanded={handleToggleExpanded}
                   onChangeDetailTab={handleChangeDetailTab}
                   onDeleteViewed={handleDeleteViewed}
                   onEditViewed={handleEditViewed}

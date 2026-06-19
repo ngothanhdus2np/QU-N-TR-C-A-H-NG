@@ -30,7 +30,7 @@ export const useGoodsSelection = ({
 }: UseGoodsSelectionArgs) => {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = React.useState<string[]>([]);
-  const [expandedParents, setExpandedParents] = React.useState<Set<string>>(new Set());
+  const [expandedParents, setExpandedParents] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     try {
@@ -74,15 +74,7 @@ export const useGoodsSelection = ({
   };
 
   const toggleExpandedParent = (id: string) => {
-    setExpandedParents(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+    setExpandedParents(prev => prev === id ? null : id);
   };
 
   const handleBulkDelete = () => {

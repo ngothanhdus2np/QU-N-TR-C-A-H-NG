@@ -15,7 +15,7 @@ interface GoodsVirtualizedTableProps {
   colCount: number;
   selectedIdSet: Set<string>;
   favoriteIdSet: Set<string>;
-  expandedParents: Set<string>;
+  expandedParents: string | null;
   viewingProduct: POSProduct | null;
   activeFormTab: string;
   visibleColumns: string[];
@@ -94,7 +94,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
       rows.push({ type: 'product', product });
 
       // If expanded, add variants
-      if (expandedParents.has(product.id) && product.isParent) {
+      if (expandedParents === product.id && product.isParent) {
         const childVariants = variantsByParentId.get(product.id) ?? [];
         childVariants.forEach(variant => {
           rows.push({ type: 'variant', product: variant, parentId: product.id });
@@ -212,7 +212,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                               onToggleFavorite={onToggleFavorite}
                               onEdit={onOpenEditor}
                               onView={onToggleView}
-                              isExpanded={expandedParents.has(product.id)}
+                              isExpanded={expandedParents === product.id}
                               onToggleExpand={onToggleExpanded}
                               visibleColumns={visibleColumns}
                             />
