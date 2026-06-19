@@ -1366,7 +1366,6 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const customerMap  = new Map<string, CustInfo>();
       const orderMap     = new Map<string, OrdData>();
       const monthMap     = new Map<string, MonthAgg>();
-      const dailyMap     = new Map<string, MonthAgg>();
       const seenInvoices = new Set<string>();
 
       for (const row of rows.slice(1)) {
@@ -1435,12 +1434,6 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             monthMap.set(yearMonth, { ...prev, totalGross: prev.totalGross + totalAmount, discount: prev.discount + discountAmt, netRev: prev.netRev + finalAmount });
           } else {
             monthMap.set(yearMonth, { ...prev, returnsGross: prev.returnsGross + Math.abs(finalAmount), netRev: prev.netRev - Math.abs(finalAmount) });
-          }
-          const prevDay = dailyMap.get(date) ?? { totalGross: 0, discount: 0, returnsGross: 0, netRev: 0 };
-          if (!isReturn) {
-            dailyMap.set(date, { ...prevDay, totalGross: prevDay.totalGross + totalAmount, discount: prevDay.discount + discountAmt, netRev: prevDay.netRev + finalAmount });
-          } else {
-            dailyMap.set(date, { ...prevDay, returnsGross: prevDay.returnsGross + Math.abs(finalAmount), netRev: prevDay.netRev - Math.abs(finalAmount) });
           }
         }
       }
@@ -1516,18 +1509,60 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       });
       const skipped = await upsertPosOrdersWithSchemaFallback(supabase, ordersToUpsert, IBATCH);
 
-      // ── 3. Revenue records (daily) ──
-      const revDates = Array.from(dailyMap.keys());
-      if (revDates.length > 0) {
+      // ── 3. Revenue records — tính lại từ pos_orders trong DB ──
+      // Dùng DB thay vì dữ liệu file để tránh lỗi khi 2 file giao nhau ngày:
+      // sau khi upsert orders, query lại toàn bộ orders trong khoảng ngày bị ảnh hưởng
+      // → aggregate → ghi revenue_records luôn đúng bất kể thứ tự import.
+      const affectedDates = Array.from(new Set(ordersToUpsert.map(o => o.date.slice(0, 10))));
+      if (affectedDates.length > 0) {
+        const minDate = affectedDates.reduce((a, b) => (a < b ? a : b));
+        const dayAfterMax = (() => {
+          const d = new Date(affectedDates.reduce((a, b) => (a > b ? a : b)));
+          d.setDate(d.getDate() + 1);
+          return d.toISOString().slice(0, 10);
+        })();
+
+        type DBOrder = { date: string; total_amount: number; discount: number; final_amount: number; is_return: boolean; refund_amount: number };
+        const { data: dbOrders } = await supabase
+          .from('pos_orders')
+          .select('date, total_amount, discount, final_amount, is_return, refund_amount')
+          .gte('date', minDate)
+          .lt('date', dayAfterMax);
+
+        type DayRev = { totalGross: number; discount: number; netRev: number; returnsGross: number };
+        const revenueByDate = new Map<string, DayRev>(
+          affectedDates.map(d => [d, { totalGross: 0, discount: 0, netRev: 0, returnsGross: 0 }])
+        );
+        for (const ord of (dbOrders ?? []) as DBOrder[]) {
+          const day = ord.date.slice(0, 10);
+          const prev = revenueByDate.get(day);
+          if (!prev) continue;
+          if (!ord.is_return) {
+            revenueByDate.set(day, {
+              totalGross:   prev.totalGross + (ord.total_amount ?? 0),
+              discount:     prev.discount   + (ord.discount ?? 0),
+              netRev:       prev.netRev     + (ord.final_amount ?? 0),
+              returnsGross: prev.returnsGross,
+            });
+          } else {
+            const returnAmt = Math.abs(ord.refund_amount || ord.final_amount || 0);
+            revenueByDate.set(day, {
+              ...prev,
+              returnsGross: prev.returnsGross + returnAmt,
+              netRev:       prev.netRev       - returnAmt,
+            });
+          }
+        }
+
         const { data: existingRevRecords } = await supabase
           .from('revenue_records')
           .select('id, date')
-          .in('date', revDates);
+          .in('date', affectedDates);
         const existingDateMap = new Map(
           (existingRevRecords as ExistingRevenueRecord[] | null)?.map(r => [r.date, r.id]) ?? []
         );
-        const revenueToUpsert = revDates.map(date => {
-          const d = dailyMap.get(date)!;
+        const revenueToUpsert = affectedDates.map(date => {
+          const d = revenueByDate.get(date)!;
           return {
             id:                  existingDateMap.get(date) ?? generateId(),
             date,
@@ -1547,7 +1582,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         if (firstError) throw new Error(firstError);
       }
 
-      res.json({ success: true, customers: customersToUpsert.length, orders: ordersToUpsert.length, revenuedays: revDates.length, skipped });
+      res.json({ success: true, customers: customersToUpsert.length, orders: ordersToUpsert.length, revenuedays: affectedDates.length, skipped });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-invoices]', getErrorMessage(error));
       res.status(500).json({ error: getErrorMessage(error) });
