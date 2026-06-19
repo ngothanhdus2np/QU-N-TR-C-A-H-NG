@@ -126,6 +126,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                             activeTab={detailActiveTab}
                             onTabChange={tab => onChangeDetailTab(tab)}
                             deleteConfirmText="Bạn có chắc muốn xóa biến thể này?"
+                            onAddUnit={onAddUnitInView}
                             onDelete={() => onDeleteViewed(viewingProduct.id)}
                             onEdit={() => onEditViewed(viewingProduct)}
                             onClose={() => onToggleView(viewingProduct)}

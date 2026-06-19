@@ -280,7 +280,7 @@ const GoodsVirtualizedTableBase: React.FC<GoodsVirtualizedTableProps> = ({
                           noBorder={!parentId}
                           showSupplierActions={!parentId}
                           showCopyPrintActions={!parentId}
-                          onAddUnit={!parentId ? onAddUnitInView : undefined}
+                          onAddUnit={onAddUnitInView}
                           onAddAttribute={!parentId ? onAddAttributeInView : undefined}
                           onDelete={() => onDeleteViewed(product.id)}
                           onEdit={() => onEditViewed(product)}

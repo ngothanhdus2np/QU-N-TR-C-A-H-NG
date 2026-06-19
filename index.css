@@ -197,9 +197,7 @@ tbody td a {
 }
 
 tbody td span[class*="rounded"],
-tbody td span[class*="bg-"],
-tbody td div[class*="rounded"],
-tbody td div[class*="bg-"] {
+tbody td span[class*="bg-"] {
   background-color: transparent !important;
   padding-left: 0 !important;
   padding-right: 0 !important;

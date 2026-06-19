@@ -658,7 +658,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   };
 
   return (
-    <div className={`bg-white rounded-lg shadow-2xl mx-4 my-2 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`}>
+    <div className={`bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`}>
       <div className="border-b border-slate-200 bg-white">
         <div className="flex items-center gap-1 px-6">
           {DETAIL_TABS.map(tab => (
@@ -779,19 +779,31 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
               );
             })()}
 
-            {showSupplierActions && (
+            {showSupplierActions ? (() => {
+              const hasUnits = (product.units?.length ?? 0) > 0;
+              const hasAttributes = (product.attributes?.length ?? 0) > 0;
+              if (hasUnits && hasAttributes) return null;
+              return (
+                <div className="space-y-2">
+                  {!hasUnits && (
+                    <button onClick={onAddUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
+                      🔗 Thêm đơn vị tính
+                    </button>
+                  )}
+                  {!hasAttributes && (
+                    <button onClick={onAddAttribute} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
+                      🔗 Thêm thuộc tính
+                    </button>
+                  )}
+                </div>
+              );
+            })() : (onAddUnit && (product.units?.length ?? 0) === 0) ? (
               <div className="space-y-2">
                 <button onClick={onAddUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
                   🔗 Thêm đơn vị tính
                 </button>
-                <button onClick={onAddAttribute} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
-                  🔗 Thêm thuộc tính
-                </button>
-                <button onClick={() => onAddSameType?.(product)} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
-                  🔗 Thêm hàng hóa cùng loại
-                </button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -818,7 +830,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
       </div>
 
       {activeTab !== 'units' && (
-        <div className="border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between rounded-b-lg">
+        <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between rounded-b-lg">
           <div className="flex items-center gap-2">
             <button
               onClick={handleDelete}
@@ -841,6 +853,18 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
             )}
           </div>
         <div className="flex items-center gap-2">
+            {showSupplierActions && (
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  onAddSameType?.(product);
+                }}
+                className="px-4 py-2 border border-indigo-200 rounded-lg text-sm font-normal text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-2"
+              >
+                <PackagePlus className="h-4 w-4" />
+                Thêm hàng hóa cùng loại
+              </button>
+            )}
             <button
               onClick={handleEdit}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-normal hover:bg-indigo-700 transition-colors flex items-center gap-2"
