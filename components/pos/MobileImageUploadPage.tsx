@@ -1,0 +1,137 @@
+import React, { useState, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { supabase } from '../../services/supabase';
+
+type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+
+export const MobileImageUploadPage: React.FC = () => {
+  const { productId } = useParams<{ productId: string }>();
+  const [state, setState] = useState<UploadState>('idle');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !productId) return;
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+    setState('uploading');
+    setErrorMsg('');
+
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const filePath = `${productId}/${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file, { upsert: false, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      const { data: product, error: fetchError } = await supabase
+        .from('pos_products')
+        .select('images')
+        .eq('id', productId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const currentImages: string[] = product?.images ?? [];
+      const { error: updateError } = await supabase
+        .from('pos_products')
+        .update({ images: [...currentImages, publicUrl] })
+        .eq('id', productId);
+
+      if (updateError) throw updateError;
+
+      setState('success');
+    } catch (err: unknown) {
+      setState('error');
+      setErrorMsg(err instanceof Error ? err.message : 'Lỗi không xác định');
+    }
+  };
+
+  const handleRetry = () => {
+    setState('idle');
+    setPreview(null);
+    setErrorMsg('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center gap-5">
+        <div className="text-center">
+          <div className="text-4xl mb-2">📷</div>
+          <h1 className="text-lg font-semibold text-slate-800">Thêm ảnh hàng hóa</h1>
+          <p className="text-sm text-slate-500 mt-1">Chụp hoặc chọn ảnh để tải lên</p>
+        </div>
+
+        {preview && (
+          <div className="w-full aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+            <img src={preview} alt="preview" className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        {state === 'idle' && (
+          <label className="w-full cursor-pointer">
+            <div className="w-full py-3 px-4 bg-indigo-600 text-white rounded-xl text-center text-sm font-medium hover:bg-indigo-700 transition-colors">
+              Chụp / Chọn ảnh
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </label>
+        )}
+
+        {state === 'uploading' && (
+          <div className="flex flex-col items-center gap-2 text-slate-500">
+            <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            <span className="text-sm">Đang tải lên...</span>
+          </div>
+        )}
+
+        {state === 'success' && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-2xl">✓</div>
+            <p className="text-emerald-700 font-medium text-sm">Tải ảnh thành công!</p>
+            <p className="text-slate-400 text-xs">Ảnh đã cập nhật trên máy tính</p>
+            <button
+              onClick={handleRetry}
+              className="mt-1 text-indigo-600 text-sm underline"
+            >
+              Thêm ảnh khác
+            </button>
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-2xl">✕</div>
+            <p className="text-red-600 font-medium text-sm">Tải ảnh thất bại</p>
+            {errorMsg && <p className="text-slate-400 text-xs">{errorMsg}</p>}
+            <button
+              onClick={handleRetry}
+              className="mt-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

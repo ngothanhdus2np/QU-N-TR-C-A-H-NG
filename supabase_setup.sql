@@ -1403,3 +1403,25 @@ WHERE ctid NOT IN (
 -- Bước 3: Thêm UNIQUE constraint
 ALTER TABLE payroll_records
   ADD CONSTRAINT uq_payroll_records_employee_month UNIQUE (employee_id, month);
+
+-- ============================================================
+-- Product Images Storage Bucket
+-- Chạy trên Supabase Dashboard > SQL Editor
+-- ============================================================
+
+-- Tạo bucket product-images (public)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Cho phép upload không cần auth (anon có thể upload)
+CREATE POLICY "Allow anon upload product images"
+ON storage.objects FOR INSERT
+TO anon
+WITH CHECK (bucket_id = 'product-images');
+
+-- Cho phép đọc public
+CREATE POLICY "Allow public read product images"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'product-images');

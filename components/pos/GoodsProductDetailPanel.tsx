@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Camera,
   Edit2,
   FileText,
   Image as ImageIcon,
@@ -11,8 +12,10 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { InventoryTransaction, POSOrder, POSProduct } from '../../types';
 import { GoodsChannelLinksTab } from './GoodsChannelLinksTab';
+import { supabase } from '../../services/supabase';
 
 export type DetailTab = 'info' | 'desc' | 'warranty' | 'units' | 'channels';
 
@@ -635,6 +638,29 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   onStopBusiness
 }) => {
   const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
+  const [isQROpen, setIsQROpen] = React.useState(false);
+  const [liveImages, setLiveImages] = React.useState<string[]>(product.images ?? []);
+
+  React.useEffect(() => {
+    setLiveImages(product.images ?? []);
+  }, [product.images]);
+
+  React.useEffect(() => {
+    const channel = supabase
+      .channel(`product-images-${product.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pos_products', filter: `id=eq.${product.id}` },
+        (payload) => {
+          const updated = payload.new as POSProduct;
+          if (updated.images) setLiveImages(updated.images);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [product.id]);
+
+  const uploadUrl = `${window.location.origin}/upload-image/${product.id}`;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -658,6 +684,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   };
 
   return (
+    <>
     <div className={`bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`}>
       <div className="border-b border-slate-200 bg-white">
         <div className="flex items-center gap-1 px-6">
@@ -682,8 +709,20 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
           <div className="space-y-6">
             <div className="bg-white rounded-lg border border-slate-200 p-6">
               <div className="flex gap-6">
-                <div className="w-24 h-24 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
-                  <ImageIcon className="h-10 w-10 text-slate-300" />
+                <div className="w-40 self-stretch shrink-0 flex flex-col gap-2">
+                  <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200 overflow-hidden min-h-[120px]">
+                    {liveImages[0]
+                      ? <img src={liveImages[0]} alt={product.name} className="w-full h-full object-cover" />
+                      : <ImageIcon className="h-16 w-16 text-slate-300" />
+                    }
+                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); setIsQROpen(true); }}
+                    className="w-full py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Thêm ảnh
+                  </button>
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-normal text-slate-900 mb-2">{product.name}</h2>
@@ -942,5 +981,30 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         </div>
       )}
     </div>
+
+    {isQROpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        onClick={() => setIsQROpen(false)}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-4 w-72"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between w-full">
+            <h3 className="text-sm font-semibold text-slate-800">Quét để chụp ảnh</h3>
+            <button onClick={() => setIsQROpen(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <QRCodeSVG value={uploadUrl} size={180} />
+          <p className="text-xs text-slate-500 text-center">
+            Dùng điện thoại quét mã QR → chụp ảnh → ảnh tự cập nhật tại đây
+          </p>
+          <p className="text-[10px] text-slate-300 break-all text-center select-all">{uploadUrl}</p>
+        </div>
+      </div>
+    )}
+    </>
   );
 };

@@ -8,6 +8,7 @@ import LauncherPage from './components/LauncherPage';
 import AuthGate from './components/AuthGate';
 import { ToastProvider } from './components/ui/Toast';
 import ErrorBoundary from './components/ui/ErrorBoundary';
+import { MobileImageUploadPage } from './components/pos/MobileImageUploadPage';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -23,6 +24,7 @@ root.render(
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/launcher" element={<AuthGate><LauncherPage /></AuthGate>} />
+            <Route path="/upload-image/:productId" element={<MobileImageUploadPage />} />
             <Route path="/*" element={<App />} />
           </Routes>
         </ToastProvider>
