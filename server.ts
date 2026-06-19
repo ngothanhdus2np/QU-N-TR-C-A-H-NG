@@ -173,6 +173,22 @@ const healthHandler: RequestHandler = (_req, res) => res.send('OK');
 
 app.get('/health', healthHandler);
 app.head('/health', healthHandler);
+
+app.get('/api/local-ip', (_req, res) => {
+  const { networkInterfaces } = require('os');
+  const nets = networkInterfaces();
+  let localIp = '127.0.0.1';
+  for (const iface of Object.values(nets) as any[]) {
+    for (const alias of iface) {
+      if (alias.family === 'IPv4' && !alias.internal) {
+        localIp = alias.address;
+        break;
+      }
+    }
+    if (localIp !== '127.0.0.1') break;
+  }
+  res.json({ ip: localIp });
+});
 app.get('/', (req, res, next) => {
   if (!viteReady && process.env.NODE_ENV !== 'production') {
     return res.send(`

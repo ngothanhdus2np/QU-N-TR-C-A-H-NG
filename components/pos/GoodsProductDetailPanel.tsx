@@ -640,6 +640,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
   const [isQROpen, setIsQROpen] = React.useState(false);
   const [liveImages, setLiveImages] = React.useState<string[]>(product.images ?? []);
+  const [localIp, setLocalIp] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setLiveImages(product.images ?? []);
@@ -660,7 +661,18 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     return () => { supabase.removeChannel(channel); };
   }, [product.id]);
 
-  const uploadUrl = `${window.location.origin}/upload-image/${product.id}`;
+  const uploadUrl = `${localIp ? `http://${localIp}:${window.location.port || 3000}` : window.location.origin}/upload-image/${product.id}`;
+
+  const handleOpenQR = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsQROpen(true);
+    if (!localIp) {
+      fetch('/api/local-ip')
+        .then(r => r.json())
+        .then(d => setLocalIp(d.ip))
+        .catch(() => {});
+    }
+  };
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -717,7 +729,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                     }
                   </div>
                   <button
-                    onClick={e => { e.stopPropagation(); setIsQROpen(true); }}
+                    onClick={handleOpenQR}
                     className="w-full py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors"
                   >
                     <Camera className="h-3.5 w-3.5" />
