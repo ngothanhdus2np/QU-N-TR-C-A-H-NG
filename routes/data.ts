@@ -362,6 +362,23 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
       if (error) throw error;
       await auditLog(supabase, tableName, recordId, 'upsert', payload);
+
+      // Ghi lịch sử giá nhập khi upsert phiếu nhập hàng (bao gồm nhập hàng nhanh OP-011
+      // vốn không đi qua apply_inventory_transaction_with_stock nên thiếu writeCostHistory)
+      if (tableName === 'inventory_transactions' && payload.type === 'Import') {
+        const costItems = ((payload.items as any[]) || [])
+          .map((item: any) => ({
+            sku: String(item.sku || ''),
+            productId: String(item.productId || ''),
+            importPrice: Number(item.nextImportPrice || item.price || 0),
+          }))
+          .filter(i => i.sku && i.importPrice > 0);
+        if (costItems.length) {
+          const txDate = String(payload.date || '').slice(0, 10);
+          await writeCostHistory(supabase, costItems, txDate, 'purchase').catch(() => {});
+        }
+      }
+
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] upsert failed [${tableName} - ${recordId}]:`, error);
