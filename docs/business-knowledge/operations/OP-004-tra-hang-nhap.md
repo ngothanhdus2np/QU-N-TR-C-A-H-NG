@@ -1,27 +1,27 @@
 # OP-004 — Trả hàng nhập (Purchase Return)
 
 ## Mục tiêu
-Ghi nhận việc trả hàng lại cho nhà cung cấp, giảm tồn kho, giảm công nợ NCC (hoặc nhận tiền mặt).
+Ghi nhận việc trả hàng lại cho nhà cung cấp, giảm tồn kho, giảm công nợ nhà cung cấp (hoặc nhận tiền mặt).
 
-## Trigger
+## Kích hoạt
 Tạo phiếu trả tại tab "Trả hàng nhập" trong `PurchaseOrdersContainer.tsx`.
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   returnSupplier: string
   returnItems: [{ productId, sku, quantity }]
-  returnSupplierPaidAmount: number  // NCC trả tiền mặt ngay
+  returnSupplierPaidAmount: number  // nhà cung cấp trả tiền mặt ngay
   returnApplySupplierDebt: boolean  // trừ vào công nợ hay không
   returnReferenceId: string
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - Số lượng trả không vượt quá tồn kho hiện tại: `Math.min(product.stock, qty + 1)`
 - Phải chọn ít nhất 1 sản phẩm
 
-## Processing
+## Xử lý
 
 ### Bước 1 — Tạo InventoryTransaction
 ```
@@ -40,7 +40,7 @@ FOR each returnItem:
   UPDATE pos_products SET stock -= qty
 ```
 
-### Bước 3 — Ghi công nợ NCC
+### Bước 3 — Ghi công nợ nhà cung cấp
 
 **Trường hợp A — Trừ vào công nợ (returnApplySupplierDebt=true):**
 ```
@@ -51,7 +51,7 @@ INSERT supplier_debts {
 }
 ```
 
-**Trường hợp B — NCC trả tiền mặt:**
+**Trường hợp B — Nhà cung cấp trả tiền mặt:**
 ```
 IF returnSupplierPaidAmount > 0:
   INSERT supplier_debts {
@@ -61,40 +61,40 @@ IF returnSupplierPaidAmount > 0:
   }
 ```
 
-### Rollback nếu lỗi
+### Khôi phục khi lỗi
 ```
-try { insert transaction, insert debt record }
+try { thêm transaction, thêm bản ghi công nợ }
 catch {
-  // Khôi phục stock về giá trị ban đầu
+  // Khôi phục tồn kho về giá trị ban đầu
   UPDATE pos_products SET stock = previousStock per item
-  // Xóa debtRecord, transactionRecord đã insert
+  // Xóa debtRecord, transactionRecord đã thêm
 }
 ```
 
-## Output
-- `inventory_transactions` (1 record, type='PurchaseReturn')
+## Dữ liệu đầu ra
+- `inventory_transactions` (1 bản ghi, type='PurchaseReturn')
 - `pos_products.stock` giảm
-- `supplier_debts` (1–2 records type='payment')
+- `supplier_debts` (1–2 bản ghi type='payment')
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `inventory_transactions`, `pos_products`, `supplier_debts`
 
-## State changes
-- `pos_products.stock` giảm = qty trả
-- `supplier_debts` tăng record type='payment' → giảm công nợ
+## Thay đổi trạng thái
+- `pos_products.stock` giảm = số lượng trả
+- `supplier_debts` thêm bản ghi type='payment' → giảm công nợ
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
 | Trả nhiều hơn tồn kho | Math.min giới hạn — không cho phép âm |
-| NCC trả tiền mặt VÀ trừ nợ | 2 records supplier_debts cùng lúc |
-| Lỗi giữa chừng | Try/catch: rollback stock + xóa records đã insert |
-| Giá vốn không thay đổi | Trả hàng nhập KHÔNG rollback import_price |
+| Nhà cung cấp trả tiền mặt VÀ trừ nợ | 2 bản ghi supplier_debts cùng lúc |
+| Lỗi giữa chừng | Try/catch: khôi phục tồn kho + xóa bản ghi đã thêm |
+| Giá vốn không thay đổi | Trả hàng nhập KHÔNG khôi phục import_price |
 
-## Related rules
-- EC-INV-004 (Trả hàng nhập không rollback giá vốn)
+## Quy tắc liên quan
+- EC-INV-004 (Trả hàng nhập không khôi phục giá vốn)
 
-## Related code
+## Code liên quan
 - `components/purchase/PurchaseOrdersContainer.tsx:handleCompleteReturn()`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

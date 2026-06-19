@@ -3,10 +3,10 @@
 ## Mục tiêu
 Ghi nhận giao dịch trả hàng hoặc đổi hàng tại quầy, cập nhật tồn kho, tính hoàn tiền/thu thêm.
 
-## Trigger
+## Kích hoạt
 Nhân viên mở màn hình trả hàng, chọn sản phẩm cần trả/đổi, bấm "Xác nhận".
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   returnCart: [{
@@ -14,18 +14,18 @@ Nhân viên mở màn hình trả hàng, chọn sản phẩm cần trả/đổi,
     quantity: number,
     lineType: 'return' | 'exchange'  // trả hoặc đổi mới
   }]
-  originalOrder?: POSOrder  // đơn gốc (không bắt buộc — fast return)
+  originalOrder?: POSOrder  // đơn gốc (không bắt buộc — trả hàng nhanh)
   returnFee: number         // phí trả hàng (thu từ khách)
   returnOtherRefund: number // hoàn thêm cho khách
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - `quantity > 0`
 - Sản phẩm phải tồn tại trong `pos_products`
-- Không bắt buộc có đơn gốc (hỗ trợ fast return)
+- Không bắt buộc có đơn gốc (hỗ trợ trả hàng nhanh)
 
-## Processing
+## Xử lý
 
 ### Tính toán hoàn tiền
 ```
@@ -76,25 +76,25 @@ UPSERT revenue_records (date=today):
   revenue_other += returnFee  ← phí trả hàng vào revenue_other
 ```
 
-## Output
-- `pos_orders` (1 record mới, isReturn=true)
+## Dữ liệu đầu ra
+- `pos_orders` (1 bản ghi mới, isReturn=true)
 - `pos_products.stock` thay đổi
 - `revenue_records` cập nhật
 - `pos_customers.total_spent` giảm
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `pos_orders`, `pos_products`, `revenue_records`, `pos_customers`
 
-## State changes
+## Thay đổi trạng thái
 - `pos_orders.isReturn` = true
-- Stock sản phẩm trả: +qty
-- Stock sản phẩm đổi: -qty
+- Tồn kho sản phẩm trả: +qty
+- Tồn kho sản phẩm đổi: -qty
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Fast return (không có đơn gốc) | Cho phép — không cần orderCode gốc |
-| Đơn trả + đổi kết hợp | items chứa cả 'return' và 'exchange' |
+| Trả hàng nhanh (không có đơn gốc) | Cho phép — không cần mã đơn gốc |
+| Đơn vừa trả vừa đổi | items chứa cả 'return' và 'exchange' |
 | refundAmount < 0 | Khách phải thanh toán thêm |
 | Ghi nợ trong đơn gốc | KHÔNG tự giảm debt_amount — phải thủ công |
 | returnFee > 0 | Vào revenue_other, không phải netRevenue |
@@ -102,7 +102,7 @@ UPSERT revenue_records (date=today):
 ## In hóa đơn trả hàng
 ```
 // POSComputer.tsx:handlePrint() / POSReceiptModal.tsx
-Item prefix:
+Tiền tố từng dòng:
   [TRẢ] → lineType='return'
   [ĐỔI] → lineType='exchange'
 
@@ -111,15 +111,15 @@ Dòng cuối:
   "KHÁCH THANH TOÁN: X đ" nếu customerPaysDifference > 0
 ```
 
-## Related rules
+## Quy tắc liên quan
 - RULE-POS-002 (Trả hàng)
 - EC-ORDER-001 (Trả hàng không giảm công nợ)
 
-## Related code
+## Code liên quan
 - `services/posOrderService.ts:processReturnOrder()`
 - `components/pos/usePOSReturnFlow.ts`
 - `components/pos/POSComputer.tsx:handleCheckout()` (nhánh return)
 - `components/pos/POSReceiptModal.tsx`
 - RPC `increment_product_stock`, `decrement_product_stock`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

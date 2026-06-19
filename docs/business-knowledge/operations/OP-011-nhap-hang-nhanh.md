@@ -3,10 +3,10 @@
 ## Mục tiêu
 Nhập nhanh 1 sản phẩm mà không cần tạo phiếu nhập đầy đủ, dùng trực tiếp từ trang quản lý hàng hóa.
 
-## Trigger
+## Kích hoạt
 Bấm nút "Nhập hàng" trực tiếp trong `GoodsInventory.tsx` (trang Hàng hóa).
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   productId: UUID,
@@ -19,11 +19,11 @@ Bấm nút "Nhập hàng" trực tiếp trong `GoodsInventory.tsx` (trang Hàng 
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - `quantity > 0`
 - `importPrice >= 0`
 
-## Processing
+## Xử lý
 Logic tương tự OP-003 nhưng đơn giản hơn:
 ```
 1. Tính nextImportPrice (theo costMethod: fixed/average)
@@ -37,22 +37,22 @@ IF supplierId:
   INSERT supplier_debts { type: 'purchase', amount: importPrice × qty }
 ```
 
-**Lưu ý quan trọng:** Phải truyền đúng `suppliers` prop để resolve supplierId từ tên NCC.
+**Lưu ý quan trọng:** Phải truyền đúng prop `suppliers` để xác định supplierId từ tên nhà cung cấp.
 Nếu không có supplierId → supplierName = '' → KHÔNG ghi `supplier_debts`.
 
-## Output
-- `inventory_transactions` (1 record)
+## Dữ liệu đầu ra
+- `inventory_transactions` (1 bản ghi)
 - `pos_products.stock` tăng
 - `pos_products.import_price` cập nhật
-- `product_cost_history` (1 record)
+- `product_cost_history` (1 bản ghi)
 - `supplier_debts` (tuỳ chọn)
 
-## Tables affected
-`inventory_transactions`, `pos_products`, `product_cost_history`, `supplier_debts` (nếu có NCC)
+## Bảng bị ảnh hưởng
+`inventory_transactions`, `pos_products`, `product_cost_history`, `supplier_debts` (nếu có nhà cung cấp)
 
-## Related code
+## Code liên quan
 - `components/pos/useGoodsPurchase.ts`
 - `components/pos/GoodsInventory.tsx`
 
-## Confidence level: MEDIUM
+## Mức độ tin cậy: TRUNG BÌNH
 (Chưa đọc source useGoodsPurchase.ts đầy đủ — suy luận từ INVENTORY_LOGIC.md)

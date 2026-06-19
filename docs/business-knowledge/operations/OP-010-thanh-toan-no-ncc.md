@@ -1,12 +1,12 @@
 # OP-010 — Thanh toán công nợ nhà cung cấp
 
 ## Mục tiêu
-Ghi nhận khoản thanh toán cho NCC, giảm số dư công nợ NCC theo mô hình transaction.
+Ghi nhận khoản thanh toán cho nhà cung cấp, giảm số dư công nợ theo mô hình giao dịch.
 
-## Trigger
+## Kích hoạt
 Nhân viên vào trang Chi tiết Nhà cung cấp → nhập khoản thanh toán.
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   supplierId: UUID,
@@ -17,11 +17,11 @@ Nhân viên vào trang Chi tiết Nhà cung cấp → nhập khoản thanh toán
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - `paymentAmount > 0`
 - `supplierId` tồn tại trong `suppliers`
 
-## Processing
+## Xử lý
 ```
 INSERT supplier_debts {
   supplier_id: supplierId,
@@ -33,32 +33,32 @@ INSERT supplier_debts {
 }
 ```
 
-**Lưu ý:** Số dư công nợ KHÔNG được lưu trực tiếp — tính runtime:
+**Lưu ý:** Số dư công nợ KHÔNG được lưu trực tiếp — tính tại thời điểm hiển thị:
 ```
 currentDebt = Σ(amount WHERE type='purchase') - Σ(amount WHERE type='payment')
 ```
 
-## Output
-- `supplier_debts` (1 record mới, type='payment')
+## Dữ liệu đầu ra
+- `supplier_debts` (1 bản ghi mới, type='payment')
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `supplier_debts`
 
-## State changes
-- Không thay đổi snapshot — chỉ thêm record 'payment'
-- Số dư hiển thị tự giảm khi UI tính lại
+## Thay đổi trạng thái
+- Không thay đổi ảnh chụp — chỉ thêm bản ghi 'payment'
+- Số dư hiển thị tự giảm khi giao diện tính lại
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Thanh toán vượt quá công nợ | Cho phép — currentDebt có thể âm (NCC nợ lại) |
-| Thanh toán từ trả hàng nhập | Không dùng route này — dùng OP-004 handleCompleteReturn |
+| Thanh toán vượt quá công nợ | Cho phép — currentDebt có thể âm (nhà cung cấp nợ lại) |
+| Thanh toán từ trả hàng nhập | Không dùng luồng này — dùng OP-004 handleCompleteReturn |
 
-## Related rules
-- Mô hình transaction model (không snapshot)
+## Quy tắc liên quan
+- Mô hình giao dịch (không lưu ảnh chụp)
 
-## Related code
+## Code liên quan
 - `components/suppliers/SupplierContainer.tsx`
 - `components/suppliers/SupplierDetailView.tsx`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

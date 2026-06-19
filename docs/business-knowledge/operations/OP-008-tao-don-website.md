@@ -1,13 +1,13 @@
 # OP-008 — Tạo đơn hàng Website Store
 
 ## Mục tiêu
-Khách hàng đặt hàng qua website `phucsang.com.vn` → tạo đơn trong hệ thống, trừ tồn kho atomic.
+Khách hàng đặt hàng qua website `phucsang.com.vn` → tạo đơn trong hệ thống, trừ tồn kho theo kiểu nguyên tử.
 
-## Trigger
+## Kích hoạt
 - Khách bấm "Đặt hàng" trên website → gọi `POST /api/store/orders`
-- Frontend website: `checkout.js:createOrder()`
+- Giao diện website: `checkout.js:createOrder()`
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 // Từ website checkout.js
 {
@@ -25,18 +25,18 @@ Khách hàng đặt hàng qua website `phucsang.com.vn` → tạo đơn trong h�
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - `items.length > 0`
-- `quantity > 0` per item
-- Đủ tồn kho: kiểm tra trong PostgreSQL (atomic với RPC)
-- Phone không rỗng
+- `quantity > 0` mỗi sản phẩm
+- Đủ tồn kho: kiểm tra trong PostgreSQL (nguyên tử với RPC)
+- Số điện thoại không rỗng
 
-## Processing
+## Xử lý
 
-### Bước 1 — Gọi RPC create_store_order (atomic)
+### Bước 1 — Gọi RPC create_store_order (nguyên tử)
 ```sql
 -- supabase_setup.sql: RPC create_store_order()
--- SECURITY DEFINER + FOR UPDATE (row-level lock)
+-- SECURITY DEFINER + FOR UPDATE (khóa dòng)
 
 BEGIN TRANSACTION;
   FOR each item:
@@ -62,7 +62,7 @@ BEGIN TRANSACTION;
 COMMIT;
 ```
 
-### Bước 2 — Response về website
+### Bước 2 — Phản hồi về website
 ```
 {
   success: true,
@@ -71,34 +71,34 @@ COMMIT;
 }
 ```
 
-### Bước 3 — Webhook hoặc realtime (NEEDS_VERIFICATION)
+### Bước 3 — Webhook hoặc thời gian thực (CẦN XÁC MINH THÊM)
 Nhân viên xem đơn trong `WebsiteOrdersPage.tsx`.
 
-## Output
-- `pos_orders` (1 record, channel='website', status='pending')
-- `pos_products.stock` giảm (atomic)
-- `store_order_addresses` (1 record)
+## Dữ liệu đầu ra
+- `pos_orders` (1 bản ghi, channel='website', status='pending')
+- `pos_products.stock` giảm (nguyên tử)
+- `store_order_addresses` (1 bản ghi)
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `pos_orders`, `pos_products`, `store_order_addresses`
 
-## State changes
+## Thay đổi trạng thái
 ```
-pos_orders.status workflow:
+Luồng trạng thái pos_orders:
   pending → processing → shipping → completed
-  pending → cancelled          (trước khi giao ĐVVC → cộng tồn ngay)
+  pending → cancelled          (trước khi giao đơn vị vận chuyển → cộng tồn ngay)
   shipping/completed → return_requested → returned  (sau khi đã giao)
 ```
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Hết hàng khi đặt | RPC raise exception → transaction rollback toàn bộ |
-| Race condition 2 khách cùng mua | FOR UPDATE lock per row → serialized |
-| Huỷ trước khi giao | update_website_order_status RPC: cộng tồn ngay |
+| Hết hàng khi đặt | RPC báo lỗi → toàn bộ giao dịch bị hủy |
+| Tranh chấp 2 khách cùng mua | FOR UPDATE khóa từng dòng → xử lý tuần tự |
+| Hủy trước khi giao | RPC update_website_order_status: cộng tồn ngay |
 | Yêu cầu hoàn hàng sau giao | status = 'return_requested': KHÔNG cộng tồn |
 | Xác nhận đã nhận hàng trả | status = 'returned': cộng tồn (RPC) |
-| Khách dùng fallback offline | checkout.js lưu local khi API lỗi |
+| Khách dùng dự phòng ngoại tuyến | checkout.js lưu cục bộ khi API lỗi |
 
 ## Luồng xử lý sau khi đặt hàng (phía nhân viên)
 
@@ -106,11 +106,11 @@ pos_orders.status workflow:
 WebsiteOrdersPage.tsx:
   Xem đơn pending
   → Xác nhận → processing
-  → Giao ĐVVC → shipping
+  → Giao đơn vị vận chuyển → shipping
   → Hoàn thành → completed
   
   HOẶC:
-  → Huỷ (nếu còn pending/processing) → cancelled + cộng tồn
+  → Hủy (nếu còn pending/processing) → cancelled + cộng tồn
   → Yêu cầu hoàn hàng (nếu đã giao) → return_requested (chờ)
   → Đã nhận lại hàng → returned + cộng tồn
 ```
@@ -121,17 +121,17 @@ store_product_variants.pos_product_id → pos_products.id
 store_products.pos_product_id        → pos_products.id (cha)
 ```
 
-## Related rules
-- RULE-WEB-001 (Website store orders)
+## Quy tắc liên quan
+- RULE-WEB-001 (Đơn hàng website store)
 - EC-WEB-001 (Lỗi bảng pos_order_items không tồn tại)
-- EC-WEB-002 (RPC case-mismatch status)
+- EC-WEB-002 (RPC sai kiểu chữ trạng thái)
 - EC-WEB-003 (2 luồng hoàn hàng)
 
-## Related code
+## Code liên quan
 - `routes/store.ts` (POST /api/store/orders)
 - RPC `create_store_order` (supabase_setup.sql)
 - RPC `update_website_order_status` (supabase_setup.sql)
 - `components/website/WebsiteOrdersPage.tsx`
 - Website: `checkout.js`, `store-api.js`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

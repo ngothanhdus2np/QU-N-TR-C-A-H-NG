@@ -1,20 +1,20 @@
 # OP-003 — Nhập hàng từ nhà cung cấp
 
 ## Mục tiêu
-Ghi nhận phiếu nhập hàng, cập nhật tồn kho, cập nhật giá vốn (Fixed hoặc AVCO), ghi công nợ NCC.
+Ghi nhận phiếu nhập hàng, cập nhật tồn kho, cập nhật giá vốn (Fixed hoặc AVCO), ghi công nợ nhà cung cấp.
 
-## Trigger
+## Kích hoạt
 - Nhân viên hoàn thành phiếu nhập trong trang "Nhập hàng" (`PurchaseOrdersContainer.tsx`)
 - Bấm nút "Hoàn thành" (không phải "Lưu nháp")
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
-  purchaseSupplier: string         // tên NCC
+  purchaseSupplier: string         // tên nhà cung cấp
   purchaseItems: [{
     productId, sku, name,
     quantity: number,
-    originalPrice: number,         // giá nhập per unit
+    originalPrice: number,         // giá nhập mỗi đơn vị
     discount: number,
     discountType: '%' | 'fixed'
   }]
@@ -26,14 +26,14 @@ Ghi nhận phiếu nhập hàng, cập nhật tồn kho, cập nhật giá vốn
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - Số lượng > 0
-- Giảm giá dòng không âm (`Math.max(0, discount)`)
-- Giá nhập > 0 (khuyến nghị, không block)
+- Giảm giá từng dòng không âm (`Math.max(0, discount)`)
+- Giá nhập > 0 (khuyến nghị, không chặn)
 
-## Processing
+## Xử lý
 
-### Bước 1 — Tính giá vốn hiệu dụng per dòng
+### Bước 1 — Tính giá vốn hiệu dụng mỗi dòng
 ```typescript
 // businessLogic.inventory.ts:calcEffectiveUnitPrice()
 lineSubtotal = originalPrice × qty
@@ -41,7 +41,7 @@ lineSubtotal = originalPrice × qty
 effectiveUnitPrice = lineSubtotal / qty
 ```
 
-### Bước 2 — Tính giá vốn mới per SKU
+### Bước 2 — Tính giá vốn mới mỗi SKU
 ```typescript
 // businessLogic.inventory.ts:calculateNextImportPrice()
 
@@ -52,7 +52,7 @@ if costMethod === 'fixed':
 
 if costMethod === 'average':
   if currentStock <= 0:
-    nextImportPrice = effectiveUnitPrice  // tránh chia 0
+    nextImportPrice = effectiveUnitPrice  // tránh chia cho 0
   else:
     nextImportPrice = (currentStock × currentImportPrice + qty × effectiveUnitPrice)
                     / (currentStock + qty)
@@ -70,7 +70,7 @@ if costMethod === 'average':
     productId, sku, qty,
     previousStock, newStock,
     nextImportPrice,
-    previousImportPrice  // để rollback sau
+    previousImportPrice  // để khôi phục sau nếu cần
   }]
 }
 ```
@@ -91,7 +91,7 @@ INSERT product_cost_history {
 }
 ```
 
-### Bước 6 — Ghi công nợ NCC
+### Bước 6 — Ghi công nợ nhà cung cấp
 ```
 IF supplierId OR supplierName:
   INSERT supplier_debts {
@@ -102,26 +102,26 @@ IF supplierId OR supplierName:
   }
 ```
 
-## Output
-- `inventory_transactions` (1 record)
-- `pos_products.stock` tăng per SKU
-- `pos_products.import_price` = nextImportPrice per SKU
-- `product_cost_history` (1 record per SKU)
-- `supplier_debts` (1 record nếu có NCC)
+## Dữ liệu đầu ra
+- `inventory_transactions` (1 bản ghi)
+- `pos_products.stock` tăng mỗi SKU
+- `pos_products.import_price` = nextImportPrice mỗi SKU
+- `product_cost_history` (1 bản ghi mỗi SKU)
+- `supplier_debts` (1 bản ghi nếu có nhà cung cấp)
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `inventory_transactions`, `pos_products`, `product_cost_history`, `supplier_debts`
 
-## State changes
-- `inventory_transactions.status` = 'completed' (không qua draft nếu chọn "Hoàn thành" trực tiếp)
-- `pos_products.import_price` thay đổi (cẩn thận khi rollback)
+## Thay đổi trạng thái
+- `inventory_transactions.status` = 'completed' (không qua nháp nếu chọn "Hoàn thành" trực tiếp)
+- `pos_products.import_price` thay đổi (cẩn thận khi khôi phục)
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Lưu nháp | status='draft', KHÔNG cập nhật stock/giá vốn |
-| NCC không có trong hệ thống | supplier_name = text tự nhập, không có supplier_id |
-| Mã phiếu trùng | Cho phép (không có UNIQUE constraint) |
+| Lưu nháp | status='draft', KHÔNG cập nhật tồn kho/giá vốn |
+| Nhà cung cấp không có trong hệ thống | supplier_name = văn bản tự nhập, không có supplier_id |
+| Mã phiếu trùng | Cho phép (không có ràng buộc UNIQUE) |
 | currentStock <= 0 khi AVCO | nextImportPrice = effectiveUnitPrice |
 | Upload hóa đơn VAT | invoiceService.ts → Supabase Storage bucket 'purchase-invoices' |
 
@@ -135,16 +135,16 @@ AVCO: nextImportPrice = (30×90k + 50×100k) / (30+50) = 96.25k
 Fixed: nextImportPrice = 90k (giữ nguyên giá cũ — currentImportPrice > 0 nên không thay đổi)
 ```
 
-## Related rules
+## Quy tắc liên quan
 - RULE-INV-001 (AVCO)
-- RULE-INV-002 (COGS lịch sử)
-- EC-INV-002 (AVCO khi stock <= 0)
+- RULE-INV-002 (Giá vốn lịch sử)
+- EC-INV-002 (AVCO khi tồn kho <= 0)
 - EC-INV-003 (Xóa phiếu sau khi bán)
 
-## Related code
+## Code liên quan
 - `components/purchase/PurchaseOrdersContainer.tsx:handleCompletePurchase()`
 - `hooks/usePurchaseFormState.ts:getPurchaseItemsNetTotal()`
 - `src/lib/businessLogic.inventory.ts:calcEffectiveUnitPrice()`
 - `src/lib/businessLogic.inventory.ts:calculateNextImportPrice()`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

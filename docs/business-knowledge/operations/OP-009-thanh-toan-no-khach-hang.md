@@ -3,10 +3,10 @@
 ## Mục tiêu
 Ghi nhận khoản khách trả nợ, giảm số dư công nợ trên hệ thống.
 
-## Trigger
+## Kích hoạt
 Nhân viên vào trang Chi tiết Khách hàng → nhập khoản thanh toán nợ.
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   customerId: UUID,
@@ -16,11 +16,11 @@ Nhân viên vào trang Chi tiết Khách hàng → nhập khoản thanh toán n�
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - `repayAmount > 0`
 - `customerId` tồn tại trong `pos_customers`
 
-## Processing
+## Xử lý
 ```
 INSERT customer_debt_history {
   customer_id: customerId,
@@ -35,23 +35,23 @@ UPDATE pos_customers SET
   // Không giới hạn — có thể về 0 hoặc âm (trả dư)
 ```
 
-## Output
-- `customer_debt_history` (1 record mới, type='repay')
+## Dữ liệu đầu ra
+- `customer_debt_history` (1 bản ghi mới, type='repay')
 - `pos_customers.debt_amount` giảm
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `customer_debt_history`, `pos_customers`
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
 | repayAmount > debt_amount | Cho phép — debt_amount có thể âm |
 | Trả hàng từ đơn ghi nợ | Phải thêm thủ công — HỆ THỐNG KHÔNG TỰ ĐỘNG |
 
-## Related rules
+## Quy tắc liên quan
 - EC-ORDER-001 (Trả hàng không giảm công nợ tự động)
 
-## Related code
+## Code liên quan
 - `components/customers/CustomerDetailPage.tsx`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

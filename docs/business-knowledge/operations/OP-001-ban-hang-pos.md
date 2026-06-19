@@ -3,11 +3,11 @@
 ## Mục tiêu
 Ghi nhận giao dịch bán lẻ tại quầy, trừ tồn kho, cập nhật doanh thu, tích điểm khách hàng, ghi doanh số nhân viên.
 
-## Trigger
+## Kích hoạt
 - Nhân viên bấm nút "THANH TOÁN" trên máy tính tiền (`POSComputer.tsx`)
 - Hoặc: khách hàng thanh toán trên website (channel='website')
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   items: [{
@@ -26,12 +26,12 @@ Ghi nhận giao dịch bán lẻ tại quầy, trừ tồn kho, cập nhật doa
 }
 ```
 
-## Validation
+## Kiểm tra hợp lệ
 - Ít nhất 1 sản phẩm có `quantity > 0`
 - `stock >= qty` (trừ khi `allowSellOutOfStock = true`)
 - `finalAmount >= 0`
 
-## Processing
+## Xử lý
 
 ### Bước 1 — Tính toán
 ```
@@ -53,7 +53,7 @@ INSERT pos_orders {
 }
 ```
 
-### Bước 3 — Cập nhật tồn kho (atomic RPC)
+### Bước 3 — Cập nhật tồn kho (RPC nguyên tử)
 ```
 FOR each item:
   RPC decrement_product_stock(productId, qty)
@@ -87,52 +87,52 @@ IF paymentMethod includes 'debt':
   UPDATE pos_customers SET debt_amount += debtAmount
 ```
 
-### Bước 7 — Gán doanh số nhân viên (tách try/catch)
+### Bước 7 — Gán doanh số nhân viên (tách try/catch riêng)
 ```
 autoUpsertStaffSalesForDate()
 → UPSERT sales_records { employee_id, date, sales_amount += finalAmount }
 ```
 
-### Bước 8 — Offline queue (nếu mất mạng)
+### Bước 8 — Hàng đợi ngoại tuyến (khi mất mạng)
 ```
 posOfflineQueue.ts → localStorage['pos_offline_queue']
-→ Flush khi có mạng trở lại
+→ Đẩy lên khi có mạng trở lại
 ```
 
-## Output
-- `pos_orders` (1 record mới)
+## Dữ liệu đầu ra
+- `pos_orders` (1 bản ghi mới)
 - `pos_products.stock` giảm
-- `revenue_records` (upsert per ngày)
+- `revenue_records` (upsert theo ngày)
 - `pos_customers` cập nhật (nếu có khách)
 - `customer_debt_history` (nếu ghi nợ)
 - `sales_records` (cập nhật doanh số nhân viên)
 - `inventory_transactions` (type='Sale', từ RPC)
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `pos_orders`, `pos_products`, `revenue_records`, `pos_customers`, `customer_debt_history`, `sales_records`, `inventory_transactions`
 
-## State changes
+## Thay đổi trạng thái
 - `pos_orders.status` = 'completed' ngay khi tạo (không qua pending)
 - `pos_products.stock` giảm đi `qty`
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Bán hàng offline | localStorage queue → sync sau |
-| Split payment | `pos_orders.split_payments` array JSON |
+| Bán hàng ngoại tuyến | Hàng đợi localStorage → đồng bộ sau |
+| Thanh toán chia nhỏ | `pos_orders.split_payments` mảng JSON |
 | Không có khách | Không ghi customer_debt_history |
-| allowSellOutOfStock | Bỏ qua validation stock |
-| autoUpsertStaffSales lỗi | Không rollback đơn hàng |
+| allowSellOutOfStock | Bỏ qua kiểm tra tồn kho |
+| autoUpsertStaffSales lỗi | Không hủy đơn hàng |
 
-## Related rules
+## Quy tắc liên quan
 - RULE-POS-001 (Bán hàng POS)
 - RULE-FIN-001 (Cập nhật revenue_records)
-- RULE-INV-001 (AVCO COGS)
+- RULE-INV-001 (AVCO giá vốn)
 
-## Related code
+## Code liên quan
 - `services/posOrderService.ts:processPlaceOrder()`
 - `components/pos/POSComputer.tsx:handleCheckout()`
 - `hooks/usePOSState.ts`
 - RPC `decrement_product_stock`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO

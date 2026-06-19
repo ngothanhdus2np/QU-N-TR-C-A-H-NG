@@ -3,10 +3,10 @@
 ## Mục tiêu
 Chuyển trạng thái `payroll_records` từ 'unofficial' → 'official', xác nhận lương chính thức cho kỳ lương.
 
-## Trigger
+## Kích hoạt
 Kế toán bấm nút "Chốt lương" trong `PayrollManager.tsx`.
 
-## Processing
+## Xử lý
 ```
 UPDATE payroll_records SET
   status = 'official',
@@ -15,27 +15,27 @@ UPDATE payroll_records SET
 WHERE month = targetMonth AND employee_id IN (selectedIds)
 ```
 
-## Output
+## Dữ liệu đầu ra
 - `payroll_records.status` = 'official'
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `payroll_records`
 
-## State changes
+## Thay đổi trạng thái
 ```
 'unofficial' → 'official'
 ```
 
-Sau khi chốt, không nên sửa lại (cần ghi audit nếu có thay đổi).
+Sau khi chốt, không nên sửa lại (cần ghi nhật ký kiểm toán nếu có thay đổi).
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
-| Undo chốt lương | Bulk undo bao gồm cả expense "Quyết toán lương nghỉ việc" (BUG-PY2-1 đã fix) |
-| Chốt 1 phần | Cho phép chốt từng nhân viên riêng lẻ |
+| Hoàn tác chốt lương | Hoàn tác hàng loạt bao gồm cả khoản chi "Quyết toán lương nghỉ việc" (BUG-PY2-1 đã sửa) |
+| Chốt từng phần | Cho phép chốt từng nhân viên riêng lẻ |
 
-## Related code
+## Code liên quan
 - `components/PayrollManager.tsx`
 - `hooks/usePayrollState.ts`
 
-## Confidence level: MEDIUM
+## Mức độ tin cậy: TRUNG BÌNH

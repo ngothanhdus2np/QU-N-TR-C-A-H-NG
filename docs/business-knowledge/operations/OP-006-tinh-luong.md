@@ -3,15 +3,15 @@
 ## Mục tiêu
 Tính toán lương tháng cho nhân viên dựa trên thâm niên, chính sách lương, chấm công, doanh số, hoa hồng, khấu trừ.
 
-## Trigger
+## Kích hoạt
 - Nhân viên kế toán bấm "Tính lương" trong `PayrollManager.tsx`
 - Hoặc: "Tính lại toàn bộ lịch sử lương"
 
-## Input
+## Dữ liệu đầu vào
 ```typescript
 {
   employees: Employee[]
-  salaryPolicies: SalaryPolicy[]  // nhiều policy, áp dụng theo thâm niên
+  salaryPolicies: SalaryPolicy[]  // nhiều chính sách, áp dụng theo thâm niên
   attendanceRecords: AttendanceRecord[]
   overtimeRecords: OvertimeRecord[]
   salesRecords: SalesRecord[]
@@ -21,9 +21,9 @@ Tính toán lương tháng cho nhân viên dựa trên thâm niên, chính sách
 }
 ```
 
-## Processing
+## Xử lý
 
-### Bước 1 — Xác định policy áp dụng
+### Bước 1 — Xác định chính sách áp dụng
 
 ```typescript
 // businessLogic.payroll.ts:determineCurrentPolicy()
@@ -33,9 +33,9 @@ calculateSeniority(employee, payrollMonthDate):
   // Đơn vị: số ngày
   seniorityDays = daysBetween(employee.startDate, day15OfPayrollMonth)
 
-// Top-Down Range Matching: duyệt từ policy cao nhất xuống thấp nhất
-// Chọn policy đầu tiên có seniorityRange.from <= seniorityDays
-selectedPolicy = policies.sort(desc by seniorityRange.from)
+// Duyệt từ trên xuống: sắp xếp từ chính sách thâm niên cao nhất xuống thấp nhất
+// Chọn chính sách đầu tiên có seniorityRange.from <= seniorityDays
+selectedPolicy = policies.sort(giảm dần theo seniorityRange.from)
   .find(p => p.seniorityRange.from <= seniorityDays)
 ```
 
@@ -44,7 +44,7 @@ selectedPolicy = policies.sort(desc by seniorityRange.from)
 **Lương theo giờ:**
 ```
 dailySalary = baseSalary / 11
-workedDays = attendance days in month
+workedDays = số ngày công trong tháng
 grossPay = dailySalary × workedHours
 ```
 
@@ -59,27 +59,27 @@ grossPay = dailySalary × workingDays
 grossPay = baseSalary × (workingDays / standardDays)
 ```
 
-### Bước 3 — Tính thêm
+### Bước 3 — Tính các khoản cộng thêm
 
 ```
 overtimePay = Σ(ot.hours × overtimeRate)
 commissionPay = Σ(salesRecord.salesAmount) × (commissionRate / 100)
-bonus = bonusAmount (từ policy)
+bonus = bonusAmount (từ chính sách lương)
 ```
 
-### Bước 4 — Khấu trừ
+### Bước 4 — Các khoản khấu trừ
 
 ```
 advanceDeduction = Σ(advance.amount WHERE month=targetMonth)
 shortageDeduction = Σ(shortage.amount WHERE month=targetMonth)
-fineDeduction = fineAmount (từ attendance records)
+fineDeduction = fineAmount (từ bản ghi chấm công)
 
 carryForwardDebt = employee.carry_forward_debt
 carryForwardDeduction = min(carryForwardDebt, available)
 carryForwardDebtOut = carryForwardDebt - carryForwardDeduction
 ```
 
-### Bước 5 — Tổng
+### Bước 5 — Tổng hợp
 
 ```
 netPay = grossPay + overtimePay + commissionPay + bonus
@@ -114,46 +114,46 @@ INSERT expense_records {
 UPDATE employees SET carry_forward_debt = carryForwardDebtOut
 ```
 
-## Output
-- `payroll_records` (1 record per nhân viên per tháng)
-- `expense_records` (1 record per nhân viên — danh mục lương)
+## Dữ liệu đầu ra
+- `payroll_records` (1 bản ghi mỗi nhân viên mỗi tháng)
+- `expense_records` (1 bản ghi mỗi nhân viên — danh mục lương)
 - `employees.carry_forward_debt` cập nhật
 
-## Tables affected
+## Bảng bị ảnh hưởng
 `payroll_records`, `expense_records`, `employees`
 
-## State changes
+## Thay đổi trạng thái
 - `payroll_records.status`: 'unofficial' → 'official' (khi chốt lương)
 - `employees.carry_forward_debt` = carryForwardDebtOut
 
-## Special cases
+## Trường hợp đặc biệt
 | Tình huống | Xử lý |
 |-----------|-------|
 | Lương âm | netPay = 0, phần âm → carryForwardDebtOut |
-| Không có policy phù hợp | Dùng policy mặc định (thâm niên thấp nhất) |
+| Không có chính sách phù hợp | Dùng chính sách mặc định (thâm niên thấp nhất) |
 | Nhân viên mới (chưa đủ kỳ) | Tính theo số ngày thực tế làm việc |
-| Nghỉ thai sản | NEEDS_VERIFICATION |
+| Nghỉ thai sản | CẦN XÁC MINH THÊM |
 | Nhân viên nghỉ việc giữa tháng | Tính đến ngày nghỉ |
-| Lương double-count | Tránh: nếu payroll module có data, lọc salary khỏi expense_records |
+| Lương tính hai lần | Tránh: nếu module lương có dữ liệu, lọc lương khỏi expense_records |
 
 ## Lưu ý đặc biệt
 - Chỉ tính thâm niên đến **ngày 15** của tháng lương, không phải cuối tháng (RULE-PAY-002)
-- Payroll record mặc định là 'unofficial' — phải chốt thủ công để thành 'official'
+- Bản ghi lương mặc định là 'unofficial' — phải chốt thủ công để thành 'official'
 - Module lương không tự động kích hoạt mà chạy khi người dùng bấm nút
 
-## Related rules
-- RULE-PAY-001 (Top-Down Range Matching)
+## Quy tắc liên quan
+- RULE-PAY-001 (Duyệt chính sách từ trên xuống)
 - RULE-PAY-002 (Tính thâm niên đến ngày 15)
 - RULE-PAY-003 (Lương theo giờ/ngày/tháng)
-- RULE-PAY-008 (Carry-forward debt)
+- RULE-PAY-008 (Nợ chuyển kỳ)
 - EC-PAY-001 (Lương âm)
-- EC-PAY-002 (Double-count lương)
+- EC-PAY-002 (Tính đôi lương)
 
-## Related code
+## Code liên quan
 - `src/lib/businessLogic.payroll.ts:calculateEmployeePayroll()`
 - `src/lib/businessLogic.payroll.ts:determineCurrentPolicy()`
 - `src/lib/businessLogic.payroll.ts:calculateSeniority()`
 - `components/PayrollManager.tsx`
 - `hooks/usePayrollState.ts`
 
-## Confidence level: HIGH
+## Mức độ tin cậy: CAO
