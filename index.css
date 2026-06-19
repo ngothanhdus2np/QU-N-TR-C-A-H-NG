@@ -186,3 +186,23 @@
 /* --- Nền trang sạch hơn --- */
 [data-theme="clarity"] body { background-color: #f0f4f8 !important; }
 [data-theme="clarity"] .bg-slate-50 { background-color: #f8fafc !important; }
+
+/* Uniform table body: all text slate-900, no badge colors or backgrounds */
+tbody td,
+tbody td span,
+tbody td p,
+tbody td div,
+tbody td a {
+  color: rgb(15 23 42) !important;
+}
+
+tbody td span[class*="rounded"],
+tbody td span[class*="bg-"],
+tbody td div[class*="rounded"],
+tbody td div[class*="bg-"] {
+  background-color: transparent !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}

@@ -32,7 +32,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     <td className="px-3 py-2">
       <span className="text-[13px] text-slate-600 whitespace-nowrap">{variant.sku}</span>
     </td>
-    <td className="px-3 py-2 text-slate-700 text-sm min-w-[200px]">
+    <td className="px-3 py-2 text-slate-700 text-sm min-w-[150px]">
       <div className="flex items-center gap-2 pl-8"><span>{variant.name}</span></div>
     </td>
     {visibleColumns.includes('category') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
@@ -47,9 +47,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     )}
     {visibleColumns.includes('stock') && (
       <td className="px-3 py-2 text-right whitespace-nowrap">
-        <span className={`text-sm tabular-nums ${variant.stock <= 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
-        {variant.stock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
-        {variant.stock > 0 && variant.stock <= (variant.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
+        <span className="text-sm tabular-nums">{variant.stock}</span>
       </td>
     )}
     {visibleColumns.includes('customerOrders') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{variant.customerOrders ?? 0}</td>}
@@ -60,7 +58,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     {visibleColumns.includes('directSale') && <td className="px-3 py-2 text-center">{variant.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('status') && (
       <td className="px-3 py-2 text-center">
-        <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${variant.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{variant.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
+        <span className="text-2xs font-normal">{variant.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
       </td>
     )}
     {visibleColumns.includes('warranty') && <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">{variant.warranty || <span className="text-slate-300">—</span>}</td>}
@@ -134,17 +132,17 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
               : <span className="text-slate-300 text-[13px]">—</span>)
         }
       </td>
-      <td className={`px-3 py-2 text-slate-900 text-sm min-w-[200px] ${top}`}>
+      <td className={`px-3 py-2 text-slate-900 text-sm min-w-[150px] ${top}`}>
         <div className="flex items-center gap-2">
           <span>{product.name}</span>
-          {isParent && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-2xs font-normal">({product.variantCount})</span>}
+          {isParent && <span className="text-2xs font-normal">({product.variantCount})</span>}
         </div>
       </td>
       {visibleColumns.includes('category') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{product.categoryId || <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('productType') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{product.productType || 'Hàng hóa'}</td>}
       {visibleColumns.includes('salePrice') && <td className={`px-3 py-2 text-right text-slate-900 text-[13px] tabular-nums whitespace-nowrap ${top}`}>{(Number(product.salePrice) || 0).toLocaleString()}đ</td>}
       {visibleColumns.includes('importPrice') && <td className={`px-3 py-2 text-right text-slate-400 text-[13px] tabular-nums whitespace-nowrap ${top}`}>{(Number(product.importPrice) || 0).toLocaleString()}đ</td>}
-      {visibleColumns.includes('brand') && <td className={`px-3 py-2 text-sm text-slate-500 w-[100px] max-w-[100px] ${top}`}><span className="truncate block">{product.brand || <span className="text-slate-300">—</span>}</span></td>}
+      {visibleColumns.includes('brand') && <td className={`px-3 py-2 text-sm text-slate-500 w-[160px] ${top}`}>{product.brand || <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('location') && (
         <td className={`px-3 py-2 w-[80px] max-w-[80px] ${top}`}>
           {product.location ? <span className="text-[13px] text-slate-600 truncate block">{product.location}</span> : <span className="text-slate-300 text-[13px]">—</span>}
@@ -152,9 +150,7 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       )}
       {visibleColumns.includes('stock') && (
         <td className={`px-3 py-2 text-right whitespace-nowrap ${top}`}>
-          <span className={`text-sm tabular-nums ${totalVariantStock <= 0 ? 'text-rose-600' : !isParent && totalVariantStock <= (product.minStock ?? 5) ? 'text-amber-600' : 'text-slate-800'}`}>{totalVariantStock}</span>
-          {totalVariantStock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
-          {!isParent && totalVariantStock > 0 && totalVariantStock <= (product.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
+          <span className="text-sm tabular-nums">{totalVariantStock}</span>
         </td>
       )}
       {visibleColumns.includes('customerOrders') && <td className={`px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums ${top}`}>{product.customerOrders ?? 0}</td>}
@@ -165,7 +161,7 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       {visibleColumns.includes('directSale') && <td className={`px-3 py-2 text-center ${top}`}>{product.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('status') && (
         <td className={`px-3 py-2 text-center ${top}`}>
-          <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${product.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{product.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
+          <span className="text-2xs font-normal">{product.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
         </td>
       )}
       {visibleColumns.includes('warranty') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{product.warranty || <span className="text-slate-300">—</span>}</td>}

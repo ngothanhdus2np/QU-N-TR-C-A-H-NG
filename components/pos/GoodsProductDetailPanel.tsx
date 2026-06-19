@@ -292,7 +292,7 @@ const DocumentDetailModal: React.FC<{
             <p className="text-2xs font-semibold uppercase tracking-widest text-indigo-500">
               {row.transactionLabel}
             </p>
-            <h3 className="mt-1 font-mono text-xl font-semibold text-slate-900">{row.documentCode}</h3>
+            <h3 className="mt-1 text-xl font-semibold text-slate-900">{row.documentCode}</h3>
             <p className="mt-1 text-xs text-slate-500">
               {new Date(row.date).toLocaleString('vi-VN')} | {isOrder ? 'Khách hàng' : 'Đối tác'}: {row.partner}
             </p>
@@ -353,7 +353,7 @@ const DocumentDetailModal: React.FC<{
                     : Math.max(0, item.quantity * price - discount);
                   return (
                     <tr key={`${item.productId}-${item.sku || item.name}`} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-indigo-600">{item.sku || '—'}</td>
+                      <td className="px-4 py-3 text-indigo-600">{item.sku || '—'}</td>
                       <td className="px-4 py-3 text-slate-800">{item.name || item.productName || item.productId}</td>
                       <td className="px-4 py-3 text-right">{item.quantity}</td>
                       <td className="px-4 py-3 text-right">{formatMoney(price)}đ</td>
@@ -481,7 +481,7 @@ const StockCardTable: React.FC<{
                     <button
                       type="button"
                       onClick={() => setSelectedDocumentRow(row)}
-                      className="font-mono text-xs font-normal text-indigo-600 hover:underline"
+                      className="text-xs font-normal text-indigo-600 hover:underline"
                     >
                       {row.documentCode}
                     </button>
