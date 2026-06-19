@@ -3,6 +3,16 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-19 — Feature: apply-to-variants + Fix import tự tính đủ dữ liệu
+
+- Thêm checkbox "Áp dụng thay đổi cho các hàng hoá cùng loại" vào tab Thông tin của modal chỉnh sửa hàng hoá (dưới section Quyền theo đơn vị tính và thuộc tính), chỉ hiện khi sản phẩm có parentId.
+- Tạo `ApplyToVariantsModal.tsx`: popup chọn sản phẩm cùng loại (parentId), checkbox per-row + "Chọn tất cả", nút "Đồng ý (n)" / "Bỏ qua".
+- Cập nhật `useGoodsProductEditor.ts`: tính diff (loại trừ name/sku/barcode/stock/id/parentId…), tìm siblings, batch upsert surgical cho từng sibling được chọn.
+- Fix `routes/import.ts` — `kiotviet-purchase-details`: tự ghi `product_cost_history` (idempotent qua `stableUuidFromKey`) ngay trong quá trình import phiếu nhập.
+- Fix `routes/import.ts` — `kiotviet-invoices`: (1) tính `total_spent`+`last_visit` từ orderMap thay vì gán 0; (2) ghi `revenue_records` daily từ `dailyMap` với fetch-existing-by-date trước để reuse ID.
+- Ẩn 3 section utility thừa trong `MigrationTab.tsx`: "Khởi tạo lịch sử giá nhập", "Tính lại doanh thu tháng này", "Đồng bộ số liệu khách hàng từ đơn hàng" — dữ liệu này giờ được tính tự động trong import.
+- Files: `components/pos/ApplyToVariantsModal.tsx` (mới), `components/pos/useGoodsProductEditor.ts`, `components/pos/GoodsCreateProductInfoTab.tsx`, `components/pos/GoodsCreateProductModal.tsx`, `components/pos/GoodsInventoryModals.tsx`, `components/pos/GoodsInventory.tsx`, `routes/import.ts`, `components/settings/tabs/MigrationTab.tsx`
+
 ### 2026-06-19 — Xác minh 6 vấn đề chưa xác nhận (NV-001 → NV-006) + Viết lại docs business knowledge sang tiếng Việt
 
 - **NV-001:** Xác nhận `computeNewTier()` hoạt động đúng (đã fix từ AUDIT-010). Tier tự động nâng dựa vào `totalSpent`.

@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import { appDataCache } from '../../../services/appDataCache';
-import ImportFromSourceModal from '../../website/ImportFromSourceModal';
 import {
   Upload,
   Trash2,
@@ -13,10 +12,8 @@ import {
   Loader2,
   AlertTriangle,
   ChevronRight,
-  History,
   RefreshCw,
   FileText,
-  Database,
 } from 'lucide-react';
 
 type ImportStatus = { status: 'running' | 'done' | 'error'; message: string };
@@ -97,14 +94,10 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const [purchaseDetailsStatus, setPurchaseDetailsStatus] = useState<ImportStatus | null>(null);
   const [deleteProductsState, setDeleteProductsState] = useState<DeleteState>('idle');
   const [deleteRevenueState, setDeleteRevenueState] = useState<DeleteState>('idle');
-  const [backfillStatus, setBackfillStatus] = useState<ImportStatus | null>(null);
-  const [recalcRevenueStatus, setRecalcRevenueStatus] = useState<ImportStatus | null>(null);
-  const [syncCustomersStatus, setSyncCustomersStatus] = useState<ImportStatus | null>(null);
   const [invoicesStatus, setInvoicesStatus] = useState<ImportStatus | null>(null);
   const invoicesFileRef = useRef<HTMLInputElement>(null);
   const [returnsStatus, setReturnsStatus] = useState<ImportStatus | null>(null);
   const returnsFileRef = useRef<HTMLInputElement>(null);
-  const [showImportFromSource, setShowImportFromSource] = useState(false);
 
   const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -275,78 +268,42 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   };
 
   const handleImportInvoices = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     e.target.value = '';
-    setInvoicesStatus({ status: 'running', message: `Đang xử lý "${file.name}"...` });
-    try {
-      const fileBase64 = await fileToBase64(file);
-      const res = await fetch('/api/import/kiotviet-invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64 }),
-      });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Import thất bại');
+
+    let totalCustomers = 0, totalOrders = 0, totalDays = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setInvoicesStatus({ status: 'running', message: `(${i + 1}/${files.length}) Đang xử lý "${file.name}"...` });
+      try {
+        const fileBase64 = await fileToBase64(file);
+        const res = await fetch('/api/import/kiotviet-invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64 }),
+        });
+        const data = await readImportResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Import thất bại');
+        totalCustomers += data.customers ?? 0;
+        totalOrders   += data.orders   ?? 0;
+        totalDays     += data.revenuedays ?? 0;
+      } catch (err) {
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`);
+      }
+    }
+
+    if (errors.length > 0 && totalOrders === 0) {
+      setInvoicesStatus({ status: 'error', message: errors.join(' | ') });
+    } else {
+      const suffix = errors.length > 0 ? ` (${errors.length} file lỗi: ${errors.join('; ')})` : '';
       setInvoicesStatus({
-        status: 'done',
-        message: `Hoàn tất: ${data.customers} khách hàng, ${data.orders} đơn hàng, ${data.months} tháng doanh thu. Tải lại trang để thấy dữ liệu.`,
+        status: errors.length > 0 ? 'error' : 'done',
+        message: `Hoàn tất ${files.length} file: ${totalCustomers} khách hàng, ${totalOrders} đơn hàng, ${totalDays} ngày doanh thu.${suffix}`,
       });
       onRefresh?.();
-    } catch (err) {
-      setInvoicesStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
-    }
-  };
-
-  const handleSyncCustomersFromOrders = async () => {
-    setSyncCustomersStatus({ status: 'running', message: 'Đang tính toán từ đơn hàng...' });
-    try {
-      const res = await fetch('/api/customers/sync-from-orders', { method: 'POST' });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Thất bại');
-      setSyncCustomersStatus({
-        status: 'done',
-        message: `Hoàn tất: tạo mới ${data.createdCount ?? 0} khách, cập nhật số liệu ${data.updatedCount ?? 0} khách từ lịch sử đơn hàng.`,
-      });
-      onRefresh?.();
-    } catch (err) {
-      setSyncCustomersStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
-    }
-  };
-
-  const handleRecalcRevenueFromOrders = async () => {
-    const month = new Date().toLocaleDateString('sv-SE').slice(0, 7);
-    setRecalcRevenueStatus({ status: 'running', message: `Đang tính lại doanh thu tháng ${month} từ đơn hàng...` });
-    try {
-      const res = await fetch('/api/analytics/recalculate-revenue-from-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month }),
-      });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Thất bại');
-      setRecalcRevenueStatus({
-        status: 'done',
-        message: `Đã cập nhật doanh thu tháng ${month}: doanh thu thuần ${(data.net_revenue / 1e6).toFixed(1)}M, tổng tiền hàng ${(data.total_gross_revenue / 1e6).toFixed(1)}M.`,
-      });
-      onRefresh?.();
-    } catch (err) {
-      setRecalcRevenueStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
-    }
-  };
-
-  const handleBackfillCostHistory = async () => {
-    setBackfillStatus({ status: 'running', message: 'Đang đọc lịch sử phiếu nhập hàng...' });
-    try {
-      const res = await fetch('/api/analytics/backfill-cost-history', { method: 'POST' });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Thất bại');
-      setBackfillStatus({
-        status: 'done',
-        message: `Đã ghi ${data.written} mục giá nhập từ ${data.transactions} phiếu nhập hàng.`,
-      });
-    } catch (err) {
-      setBackfillStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
     }
   };
 
@@ -371,31 +328,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
 
   return (
     <div className="space-y-6">
-      {/* Nhập từ dữ liệu nguồn cũ */}
-      <section className="rounded-2xl border border-indigo-100 bg-white p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              <Database className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800">Nhập từ dữ liệu nguồn cũ</h3>
-              <p className="mt-0.5 text-xs font-normal text-slate-500">
-                Chuẩn hoá sản phẩm từ Shopee / Website cũ vào danh sách hàng hoá.
-                Sau đó liên kết vào kênh bán để hiển thị trên Catalog Online.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowImportFromSource(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-normal text-white shadow-sm transition-colors hover:bg-indigo-700"
-          >
-            <Database className="h-3.5 w-3.5" />
-            Mở công cụ nhập
-          </button>
-        </div>
-      </section>
 
       {/* Hướng dẫn quy trình */}
       <section id="migration-guide" className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -553,6 +485,7 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
               type="file"
               className="hidden"
               accept=".xlsx,.xls"
+              multiple
               onChange={handleImportInvoices}
             />
           </div>
@@ -781,85 +714,7 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
         </div>
       </section>
 
-      {/* Lịch sử giá nhập */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
-          Khởi tạo lịch sử giá nhập
-        </h3>
-        <p className="mb-4 text-xs font-normal text-slate-500">
-          Chạy 1 lần duy nhất — đọc toàn bộ phiếu nhập hàng và ghi vào bảng lịch sử giá.
-          Sau đó mỗi phiếu nhập mới sẽ tự động ghi lịch sử.
-        </p>
-        <button
-          onClick={handleBackfillCostHistory}
-          disabled={backfillStatus?.status === 'running'}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-        >
-          {backfillStatus?.status === 'running'
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <History className="h-4 w-4" />}
-          Khởi tạo lịch sử giá nhập
-        </button>
-        {backfillStatus && (
-          <StatusBanner status={backfillStatus} onClose={() => setBackfillStatus(null)} />
-        )}
-      </section>
 
-      {/* Tính lại doanh thu tháng này từ đơn hàng */}
-      <section className="rounded-2xl border border-amber-100 bg-white p-6">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
-          Tính lại doanh thu tháng này từ đơn hàng
-        </h3>
-        <p className="mb-4 text-xs font-normal text-slate-500">
-          Dùng khi doanh thu tháng hiện tại bị sai. Đọc toàn bộ đơn hàng trong tháng
-          và tính lại revenue_records từ đầu.
-        </p>
-        <button
-          onClick={handleRecalcRevenueFromOrders}
-          disabled={recalcRevenueStatus?.status === 'running'}
-          className="flex items-center gap-2 rounded-xl border border-amber-200 px-4 py-2 text-sm font-normal text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
-        >
-          {recalcRevenueStatus?.status === 'running'
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <RefreshCw className="h-4 w-4" />}
-          Tính lại doanh thu tháng này
-        </button>
-        {recalcRevenueStatus && (
-          <StatusBanner status={recalcRevenueStatus} onClose={() => setRecalcRevenueStatus(null)} />
-        )}
-      </section>
-
-      {/* Đồng bộ khách hàng từ đơn hàng */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
-          Đồng bộ số liệu khách hàng từ đơn hàng
-        </h3>
-        <p className="mb-4 text-xs font-normal text-slate-500">
-          Tính lại tổng chi tiêu, lần mua cuối và điểm tích lũy của từng khách hàng
-          từ toàn bộ đơn hàng trong hệ thống. Chạy 1 lần để fix dữ liệu cũ từ KiotViet —
-          sau đó mỗi đơn hàng mới sẽ tự động cập nhật.
-        </p>
-        <button
-          onClick={handleSyncCustomersFromOrders}
-          disabled={syncCustomersStatus?.status === 'running'}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-        >
-          {syncCustomersStatus?.status === 'running'
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <RefreshCw className="h-4 w-4" />}
-          Đồng bộ số liệu khách hàng
-        </button>
-        {syncCustomersStatus && (
-          <StatusBanner status={syncCustomersStatus} onClose={() => setSyncCustomersStatus(null)} />
-        )}
-      </section>
-
-      {showImportFromSource && (
-        <ImportFromSourceModal
-          onClose={() => setShowImportFromSource(false)}
-          onDone={() => { setShowImportFromSource(false); onRefresh?.(); }}
-        />
-      )}
     </div>
   );
 };

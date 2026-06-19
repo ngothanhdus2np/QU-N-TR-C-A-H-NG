@@ -1366,6 +1366,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const customerMap  = new Map<string, CustInfo>();
       const orderMap     = new Map<string, OrdData>();
       const monthMap     = new Map<string, MonthAgg>();
+      const dailyMap     = new Map<string, MonthAgg>();
       const seenInvoices = new Set<string>();
 
       for (const row of rows.slice(1)) {
@@ -1426,7 +1427,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           else ord.items.set(sku, { productId, sku, name: String(row[53] || '').trim(), quantity: qty, price: Number(row[61] || 0), discount: Number(row[60] || 0), total: Number(row[62] || 0) });
         }
 
-        // Month aggregation — count each invoice only once
+        // Month + day aggregation — count each invoice only once
         if (!seenInvoices.has(invoiceCode)) {
           seenInvoices.add(invoiceCode);
           const prev = monthMap.get(yearMonth) ?? { totalGross: 0, discount: 0, returnsGross: 0, netRev: 0 };
@@ -1435,6 +1436,12 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           } else {
             monthMap.set(yearMonth, { ...prev, returnsGross: prev.returnsGross + Math.abs(finalAmount), netRev: prev.netRev - Math.abs(finalAmount) });
           }
+          const prevDay = dailyMap.get(date) ?? { totalGross: 0, discount: 0, returnsGross: 0, netRev: 0 };
+          if (!isReturn) {
+            dailyMap.set(date, { ...prevDay, totalGross: prevDay.totalGross + totalAmount, discount: prevDay.discount + discountAmt, netRev: prevDay.netRev + finalAmount });
+          } else {
+            dailyMap.set(date, { ...prevDay, returnsGross: prevDay.returnsGross + Math.abs(finalAmount), netRev: prevDay.netRev - Math.abs(finalAmount) });
+          }
         }
       }
 
@@ -1442,16 +1449,33 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       let firstError: string | null = null;
 
       // ── 1. Khách hàng ──
-      const customersToUpsert = Array.from(customerMap.entries()).map(([code, c]) => ({
-        id: customerIdFromKiotVietCode(code),
-        name:    c.name || code,
-        phone:   c.phone,
-        email:   c.email  || null,
-        address: c.address || null,
-        points:  0,
-        total_spent: 0,
-        tier: 'Standard',
-      }));
+      // Tính customer stats từ orderMap
+      const customerStats = new Map<string, { totalSpent: number; lastVisit: string }>();
+      for (const ord of orderMap.values()) {
+        if (!ord.customerId) continue;
+        const prev = customerStats.get(ord.customerId) ?? { totalSpent: 0, lastVisit: '' };
+        const spentDelta = ord.isReturn ? -Math.abs(ord.finalAmount) : ord.finalAmount;
+        const day = ord.date.slice(0, 10);
+        customerStats.set(ord.customerId, {
+          totalSpent: Math.max(0, prev.totalSpent + spentDelta),
+          lastVisit: day > prev.lastVisit ? day : prev.lastVisit,
+        });
+      }
+      const customersToUpsert = Array.from(customerMap.entries()).map(([code, c]) => {
+        const cid   = customerIdFromKiotVietCode(code);
+        const stats = customerStats.get(cid);
+        return {
+          id:          cid,
+          name:        c.name || code,
+          phone:       c.phone,
+          email:       c.email   || null,
+          address:     c.address || null,
+          points:      0,
+          total_spent: stats?.totalSpent ?? 0,
+          last_visit:  stats?.lastVisit  || null,
+          tier:        'Standard',
+        };
+      });
       for (let i = 0; i < customersToUpsert.length; i += IBATCH) {
         const { error } = await supabase.from('pos_customers').upsert(customersToUpsert.slice(i, i + IBATCH), { onConflict: 'id' });
         if (error && !firstError) firstError = error.message;
@@ -1492,10 +1516,38 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       });
       const skipped = await upsertPosOrdersWithSchemaFallback(supabase, ordersToUpsert, IBATCH);
 
-      // Revenue records KHÔNG được ghi từ file hoá đơn vì file thường chỉ là một khoảng thời gian
-      // → sẽ ghi đè và làm sai tổng tháng. Dùng route kiotviet-revenue để cập nhật revenue_records.
+      // ── 3. Revenue records (daily) ──
+      const revDates = Array.from(dailyMap.keys());
+      if (revDates.length > 0) {
+        const { data: existingRevRecords } = await supabase
+          .from('revenue_records')
+          .select('id, date')
+          .in('date', revDates);
+        const existingDateMap = new Map(
+          (existingRevRecords as ExistingRevenueRecord[] | null)?.map(r => [r.date, r.id]) ?? []
+        );
+        const revenueToUpsert = revDates.map(date => {
+          const d = dailyMap.get(date)!;
+          return {
+            id:                  existingDateMap.get(date) ?? generateId(),
+            date,
+            total_gross_revenue: Math.round(d.totalGross),
+            discount:            Math.round(Math.abs(d.discount)),
+            net_revenue:         Math.round(d.netRev),
+            returns_value:       Math.round(d.returnsGross),
+            revenue_other:       0,
+          };
+        });
+        for (let i = 0; i < revenueToUpsert.length; i += IBATCH) {
+          const { error: e } = await supabase
+            .from('revenue_records')
+            .upsert(revenueToUpsert.slice(i, i + IBATCH), { onConflict: 'id' });
+          if (e && !firstError) firstError = e.message;
+        }
+        if (firstError) throw new Error(firstError);
+      }
 
-      res.json({ success: true, customers: customersToUpsert.length, orders: ordersToUpsert.length, skipped });
+      res.json({ success: true, customers: customersToUpsert.length, orders: ordersToUpsert.length, revenuedays: revDates.length, skipped });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-invoices]', getErrorMessage(error));
       res.status(500).json({ error: getErrorMessage(error) });
@@ -1777,6 +1829,26 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         OPTIONAL_SUPPLIER_DEBT_COLUMNS
       );
 
+      // Ghi product_cost_history — mỗi SKU mỗi phiếu = 1 entry, idempotent qua stableUuid
+      const costHistoryEntries: { id: string; sku: string; product_id: string | null; import_price: number; effective_date: string; source: string }[] = [];
+      for (const p of purchases.values()) {
+        const date = p.date.slice(0, 10);
+        for (const item of p.items.values()) {
+          if (!item.sku || item.price <= 0) continue;
+          costHistoryEntries.push({
+            id: stableUuidFromKey(`cost-history:${p.code}:${item.sku}`),
+            sku: item.sku,
+            product_id: item.productId || null,
+            import_price: item.price,
+            effective_date: date,
+            source: 'purchase',
+          });
+        }
+      }
+      for (let i = 0; i < costHistoryEntries.length; i += BATCH) {
+        await supabase.from('product_cost_history').upsert(costHistoryEntries.slice(i, i + BATCH), { onConflict: 'id' });
+      }
+
       res.json({
         success: true,
         detailRows,
@@ -1784,6 +1856,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         purchases: transactionsToUpsert.length,
         debtRecords: debtRecords.length,
         items: transactionsToUpsert.reduce((sum, p) => sum + (Array.isArray(p.items) ? p.items.length : 0), 0),
+        costHistoryEntries: costHistoryEntries.length,
         skippedByStatus: Object.fromEntries(skippedByStatus),
         skippedSupplierColumns,
         skippedInventoryTransactionColumns,
