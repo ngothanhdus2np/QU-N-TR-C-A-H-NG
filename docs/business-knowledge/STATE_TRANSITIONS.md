@@ -131,14 +131,19 @@ Không có trường `status` riêng — hệ thống check `resignedDate` để
 ## 7. PayrollRecord (chốt lương)
 
 ```
-[unofficial] ──→ [official]
-isOfficial=false    isOfficial=true
-(bản nháp)          (đã chốt, không sửa)
+[chưa chốt]  ──→  [đã chốt]
+(không có       (bản ghi tồn tại
+bản ghi)         trong payroll_records)
 ```
 
-Khi `isOfficial=true`:
-- Ghi thêm `expense_records` (category="Lương tháng MM/YYYY")
-- Ghi `audit_logs`
+**Không có trường status trong `payroll_records`.** "Chốt lương" = upsert bản ghi vào bảng.
+Chưa chốt = bản ghi chưa tồn tại. Đã chốt = bản ghi tồn tại.
+
+Khi chốt lương, hệ thống ghi đồng thời 4 bảng (xem OP-012):
+- `payroll_records` — bản ghi lương
+- `expense_records` — chi phí lương tháng
+- `staff_performance` — hồ sơ hiệu năng
+- `employees.carryForwardDebt` — nợ chuyển kỳ
 
 ---
 

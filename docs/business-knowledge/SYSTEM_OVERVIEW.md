@@ -44,8 +44,8 @@
 | OP-008 | Tạo đơn Website Store | operations/OP-008-tao-don-website.md | ✅ HIGH confidence |
 | OP-009 | Thanh toán nợ khách hàng | operations/OP-009-thanh-toan-no-khach-hang.md | ✅ HIGH confidence |
 | OP-010 | Thanh toán nợ NCC | operations/OP-010-thanh-toan-no-ncc.md | ✅ HIGH confidence |
-| OP-011 | Nhập hàng nhanh | operations/OP-011-nhap-hang-nhanh.md | ⚠️ MEDIUM (chưa đọc đầy đủ source) |
-| OP-012 | Chốt lương | operations/OP-012-chot-luong.md | ⚠️ MEDIUM |
+| OP-011 | Nhập hàng nhanh | operations/OP-011-nhap-hang-nhanh.md | ✅ HIGH confidence |
+| OP-012 | Chốt lương | operations/OP-012-chot-luong.md | ✅ HIGH confidence |
 
 ---
 
