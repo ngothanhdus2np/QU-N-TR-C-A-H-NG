@@ -111,13 +111,14 @@ export const useGoodsPurchase = ({
     setPurchaseItems(prev => prev.filter(item => item.productId !== id));
   };
 
-  const handleCompletePurchase = async () => {
+  const handleCompletePurchase = async (overrideSupplier?: string) => {
     if (purchaseItems.length === 0) return;
     try {
     // Ưu tiên costMethod từ Supabase (inventoryCostMethod prop), fallback về localStorage
     const costMethod = inventoryCostMethod ?? getInventoryCostMethod();
+    const effectiveSupplier = overrideSupplier ?? purchaseSupplier;
     const matchedSupplier = suppliers.find(
-      s => s.name === purchaseSupplier.trim() || s.id === purchaseSupplier.trim()
+      s => s.name === effectiveSupplier.trim() || s.id === effectiveSupplier.trim()
     );
     const updatedProducts = [...products];
     const itemsForTransaction: PurchaseTransactionItem[] = [];
@@ -163,12 +164,13 @@ export const useGoodsPurchase = ({
 
     const transactionId = generateId();
     const totalPayable = Math.max(0, itemsNetTotal - purchaseDiscountAmount);
+    // AUDIT-011: Ghi nợ ngay cả khi không tìm thấy NCC (dùng 'NCC lẻ' làm fallback)
     const debtRecord: SupplierDebtRecord | null =
-      matchedSupplier && totalPayable > 0
+      totalPayable > 0
         ? {
             id: generateId(),
-            supplierId: matchedSupplier.id,
-            supplierName: matchedSupplier.name || purchaseSupplier.trim(),
+            supplierId: matchedSupplier?.id ?? '',
+            supplierName: matchedSupplier?.name || effectiveSupplier.trim() || 'NCC lẻ',
             date: new Date().toISOString(),
             type: 'purchase',
             amount: totalPayable,

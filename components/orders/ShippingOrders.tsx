@@ -127,23 +127,20 @@ const ORDER_DISPLAY_WINDOW_MS = 25 * 24 * 60 * 60 * 1000;
 
 const formatMoney = (value: number) => (value ? `${value.toLocaleString('vi-VN')}đ` : '-');
 
-const formatDate = (value: string) => {
-  if (!value) return '-';
-  // Handle Shopee format: "HH:mm:ss DD/M/YYYY"
+const parseDateTime = (value: string): { time: string; date: string } | null => {
+  if (!value) return null;
+  // Shopee format: "HH:mm:ss DD/M/YYYY"
   const shopeeMatch = value.match(/^(\d{2}:\d{2}):\d{2}\s+(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (shopeeMatch) {
     const [, time, day, month, year] = shopeeMatch;
-    return `${day.padStart(2,'0')}/${month.padStart(2,'0')}/${year} ${time}`;
+    return { time, date: `${day.padStart(2,'0')}/${month.padStart(2,'0')}/${year}` };
   }
   const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
-  return d.toLocaleString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (isNaN(d.getTime())) return null;
+  return {
+    time: d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+    date: d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+  };
 };
 
 type ConnState = 'connecting' | 'connected' | 'session_expired' | 'disconnected';
@@ -821,10 +818,25 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                     const shop = SHOPS[order.shopIdx];
                     return (
                       <tr key={`${order.shopIdx}-${order.order_sn}`} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-xs text-slate-500">
-                          {formatDate(order.order_date) || (() => {
+                        <td className="px-4 py-3 text-xs">
+                          {(() => {
+                            const dt = order.order_date ? parseDateTime(order.order_date) : null;
+                            if (dt) return (
+                              <>
+                                <div className="font-medium text-slate-700">{dt.time}</div>
+                                <div className="text-slate-400">{dt.date}</div>
+                              </>
+                            );
                             const m = order.order_sn.match(/^(\d{2})(\d{2})(\d{2})/);
-                            return m ? `${m[3]}/${m[2]}/20${m[1]}` : formatDate(order.created_at);
+                            if (m) return <div className="text-slate-500">{`${m[3]}/${m[2]}/20${m[1]}`}</div>;
+                            const fb = parseDateTime(order.created_at);
+                            if (fb) return (
+                              <>
+                                <div className="font-medium text-slate-700">{fb.time}</div>
+                                <div className="text-slate-400">{fb.date}</div>
+                              </>
+                            );
+                            return <span className="text-slate-400">-</span>;
                           })()}
                         </td>
                         <td className="px-4 py-3">

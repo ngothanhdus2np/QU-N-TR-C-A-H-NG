@@ -3,6 +3,78 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-19 — Fix Nhóm 7 kiểm toán: Revenue returnDate, dedup serial loop, dead code, gap check (AUDIT-006, 008, 002, 015, 021)
+
+- **AUDIT-006:** `processReturnOrder` trong `posOrderService.ts` — xóa Case B (điều chỉnh ngày bán gốc), luôn ghi revenue vào ngày trả hàng.
+- **AUDIT-008:** `inferIsReturnOrder` trong `dataMapper.ts` — chỉ giữ `explicit === true`, bỏ fallback `/^TH\d/i` và `finalAmount < 0` để tránh false positive.
+- **AUDIT-002:** `SettingsCenter.tsx` — xóa dead state `costMethod / setCostMethod` (localStorage-only, không sync Supabase). `GoodsTab.tsx` đã đọc/ghi đúng từ Supabase.
+- **AUDIT-015:** `inventoryOutSync.ts` — chuyển serial for loop cập nhật đơn sang batch upsert `onConflict: 'order_id,sku'`, tiết kiệm N round-trips mỗi lần sync.
+- **AUDIT-021:** `businessLogic.payroll.ts` — thêm gap check sau overlap check: cảnh báo khi có khoảng thâm niên không có policy nào bao phủ.
+- Files: `services/posOrderService.ts`, `services/dataMapper.ts`, `components/settings/SettingsCenter.tsx`, `routes/inventoryOutSync.ts`, `src/lib/businessLogic.payroll.ts`
+
+### 2026-06-19 — Fix Nhóm 6 kiểm toán: Tier KH tự động + NCC lẻ (AUDIT-010, 011)
+
+- **AUDIT-010:** Thêm `computeNewTier()` vào `POSComputer.tsx` — tự động nâng hạng KH sau mỗi đơn dựa trên `totalSpent` và ngưỡng từ `localStorage`. Chỉ nâng, không hạ. Cập nhật mô tả trong `SettingsCenter.tsx`.
+- **AUDIT-011:** `useGoodsPurchase.ts` ghi nợ ngay cả khi không có NCC (supplierName = 'NCC lẻ', supplierId = ''). `GoodsInventory.tsx` thêm modal cảnh báo trước khi hoàn thành nếu chưa chọn NCC.
+- Files: `components/pos/POSComputer.tsx`, `components/settings/SettingsCenter.tsx`, `components/pos/useGoodsPurchase.ts`, `components/pos/GoodsInventory.tsx`
+
+### 2026-06-19 — Fix Nhóm 5 kiểm toán: Tài liệu business knowledge (AUDIT-001, 004, 017)
+
+- **AUDIT-001:** Sửa mô tả sai `fixed` cost method trong 3 file docs — đổi "ghi đè hoàn toàn" thành "giữ nguyên giá vốn hiện tại, chỉ dùng giá mới khi currentImportPrice = 0"
+- **AUDIT-004:** Thêm warning block COGS fallback vào `REVENUE_PROFIT_LOGIC.md` — cảnh báo khi InventoryTransaction cũ thiếu `nextImportPrice` → fallback về giá hiện tại
+- **AUDIT-017:** Thêm ghi chú fallback behavior vào `REPORT_LOGIC.md` sau `getHistoricalCost()`
+- Files: `docs/business-knowledge/INVENTORY_LOGIC.md`, `docs/business-knowledge/operations/OP-003-nhap-hang.md`, `docs/business-knowledge/REVENUE_PROFIT_LOGIC.md`, `docs/business-knowledge/REPORT_LOGIC.md`
+
+### 2026-06-19 — Fix Nhóm 4 kiểm toán: Schema/DB constraints (AUDIT-019, 022)
+
+- **AUDIT-019:** Đổi `.insert()` → `.upsert({ onConflict: 'order_id,sku', ignoreDuplicates: true })` trong `routes/inventoryOutSync.ts` — tránh lỗi 500 khi 2 sync chạy đồng thời
+- **AUDIT-022:** Thêm migration `supabase_setup.sql` + chạy trên Supabase dashboard:
+  - `ALTER TABLE revenue_records ADD COLUMN branch_id` + `UNIQUE(date, branch_id)`
+  - `ALTER TABLE payroll_records ADD COLUMN branch_id` + `UNIQUE(employee_id, month)`
+- TypeScript clean
+- Files: `routes/inventoryOutSync.ts`, `supabase_setup.sql`
+
+### 2026-06-19 — Fix 10 findings kiểm toán (Nhóm 1–3 / tổng 5 nhóm)
+
+- **Nhóm 1 (phiên trước):** AUDIT-008, 013, 015, 016 — computeGrossProfit(), toLocalDateKey(), các logic đơn lẻ
+- **AUDIT-007:** `processReturnOrder` giờ tự tính `totalSpent` đúng (không phụ thuộc caller) — `services/posOrderService.ts`
+- **AUDIT-006:** Fix hoàn tiền sai ngày doanh thu — thêm `originalOrderId` vào luồng trả hàng, tách logic cùng ngày / khác ngày — 5 files: `types.ts`, `components/pos/types.ts`, `usePOSReturnFlow.ts`, `POSComputer.tsx`, `posOrderService.ts`
+- **AUDIT-005:** Xác nhận đã tự fix (throw exits trước autoUpsertStaffSalesForDate khi rollback)
+- **AUDIT-003/009:** Gộp 2 lần gọi `updateSurgical` riêng thành 1 → kích hoạt atomic RPC `apply_inventory_transaction_with_stock` — `services/posOrderService.ts`
+- **AUDIT-002:** Thêm `useEffect` sync `costMethod` từ Supabase xuống `localStorage` — `App.tsx`
+- **AUDIT-012:** Đổi 5 regex character literal `[̀-ͯ]` → `[̀-ͯ]` (encoding-safe) — `src/lib/businessLogic.revenue.ts`
+- TypeScript clean sau toàn bộ thay đổi (`npx tsc --noEmit`)
+- Files: `App.tsx`, `types.ts`, `components/pos/types.ts`, `components/pos/usePOSReturnFlow.ts`, `components/pos/POSComputer.tsx`, `services/posOrderService.ts`, `src/lib/businessLogic.revenue.ts`
+
+### 2026-06-19 — Kiểm toán logic nghiệp vụ (Senior System Auditor)
+
+- Đọc source: `posOrderService.ts`, `dataMapper.ts`, `inventoryOutSync.ts`, `businessLogic.inventory.ts`, `businessLogic.payroll.ts`, `businessLogic.revenue.ts`, `reportCalculations.ts`, `supabase_setup.sql`
+- Cross-check docs/business-knowledge/ với source code
+- Phát hiện 22 findings: 3 Critical, 9 High, 8 Medium, 2 Low
+- Tạo `docs/business-knowledge/AUDIT_REPORT.md` — đầy đủ Finding ID / Severity / Evidence / Impact / Recommendation
+- Top 3 critical: AUDIT-014 (Shopee dedup multi-SKU), AUDIT-003 (race condition tồn kho), AUDIT-001 (fixed cost method: docs sai)
+- Files: `docs/business-knowledge/AUDIT_REPORT.md` (mới)
+
+### 2026-06-19 — Tạo toàn bộ tài liệu business knowledge (docs/business-knowledge/)
+
+- Đọc toàn bộ codebase (source files, types.ts, businessLogic, reportCalculations, history)
+- Tạo 13 file tài liệu chính + 12 file operations (không sửa code)
+- Files tạo mới:
+  - `docs/business-knowledge/MASTER_FLOW.md` — sơ đồ luồng toàn hệ thống
+  - `docs/business-knowledge/DATABASE_SCHEMA.md` — ~48 bảng + RPC functions
+  - `docs/business-knowledge/BUSINESS_RULES.md` — 20+ rules (PAY/INV/POS/FIN/SHOP/WEB)
+  - `docs/business-knowledge/STATE_TRANSITIONS.md` — 11 state machines
+  - `docs/business-knowledge/CODE_MAPPING.md` — component → hook → service → table
+  - `docs/business-knowledge/INVENTORY_LOGIC.md` — 7 luồng tồn kho
+  - `docs/business-knowledge/ORDER_LOGIC.md` — 5 luồng đơn hàng POS
+  - `docs/business-knowledge/PURCHASE_LOGIC.md` — 6 luồng mua hàng & NCC
+  - `docs/business-knowledge/DEBT_LOGIC.md` — 3 loại công nợ
+  - `docs/business-knowledge/REVENUE_PROFIT_LOGIC.md` — doanh thu, COGS, lợi nhuận
+  - `docs/business-knowledge/REPORT_LOGIC.md` — 9 báo cáo và nguồn dữ liệu
+  - `docs/business-knowledge/EDGE_CASES.md` — edge cases, bugs đã fix, workarounds
+  - `docs/business-knowledge/SYSTEM_OVERVIEW.md` — tổng kết (12 nghiệp vụ, 48 bảng, 11 states, 20+ rules)
+  - `docs/business-knowledge/operations/OP-001` đến `OP-012` — 12 nghiệp vụ chi tiết
+
 ### 2026-06-18 — Fix nhãn shop và mapping bot/DB
 
 - **Phát hiện**: browser profile của 2 bot bị đảo ngược so với ecosystem.config.js:

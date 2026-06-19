@@ -45,7 +45,7 @@ import { createNotificationsRouter, runNotificationScheduler } from './routes/no
 import { createStoreRouter } from './routes/store';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
-import { createInventoryOutSyncRouter } from './routes/inventoryOutSync';
+import { createInventoryOutSyncRouter, runInventoryOutSync } from './routes/inventoryOutSync';
 
 /**
  * Kiểm tra schema local Supabase qua REST API.
@@ -478,6 +478,18 @@ async function startServer() {
         console.error('[Notification Scheduler] Unhandled error:', e);
       });
     }, 60000);
+
+    const INVENTORY_SYNC_INTERVAL = 10 * 60 * 1000; // 10 phút
+    setInterval(() => {
+      runInventoryOutSync(supabase).then(r => {
+        if (r.inserted > 0 || r.updated > 0) {
+          console.log(`[Auto-sync xuất kho] +${r.inserted} mới, ${r.updated} cập nhật trạng thái`);
+        }
+        if (r.botErrors.length > 0) {
+          console.warn('[Auto-sync xuất kho] Bot lỗi:', r.botErrors.join('; '));
+        }
+      }).catch(e => console.error('[Auto-sync xuất kho] Lỗi:', e));
+    }, INVENTORY_SYNC_INTERVAL);
   } catch (error) {
     console.error('CRITICAL ERROR DURING SERVER STARTUP:', error);
     process.exit(1);

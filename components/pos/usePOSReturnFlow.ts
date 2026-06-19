@@ -164,6 +164,7 @@ export const usePOSReturnFlow = ({
           returnDiscount: 0,
           returnFee: 0,
           returnOtherRefund: 0,
+          originalOrderId: order.id,
           splitPayment: { cash: 0, bank: 0, card: 0, momo: 0 },
         },
       ]);

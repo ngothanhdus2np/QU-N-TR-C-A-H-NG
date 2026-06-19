@@ -1327,23 +1327,70 @@ END $$;
 ALTER TABLE shopee_product_variants ADD COLUMN IF NOT EXISTS shopee_price_override INTEGER;
 
 -- ============================================================
--- Migration: chống trùng order_id trong shopee_inventory_out
+-- Migration: chống trùng (order_id, sku) trong shopee_inventory_out
+-- 1 đơn hàng có thể có nhiều SKU → key là composite (order_id, sku)
 -- Chạy theo thứ tự: bước 1 trước (xóa duplicate), bước 2 sau (thêm constraint)
 -- ============================================================
 
--- Bước 1: Xóa các dòng duplicate, giữ lại dòng có id nhỏ nhất (cũ nhất) cho mỗi order_id
--- Chỉ áp dụng cho order_id NOT NULL (dòng nhập tay có order_id NULL không bị ảnh hưởng)
+-- Bước 1: Xóa constraint cũ nếu đã tồn tại (UNIQUE order_id đơn lẻ)
+ALTER TABLE shopee_inventory_out
+  DROP CONSTRAINT IF EXISTS uq_shopee_inventory_out_order_id;
+
+-- Bước 2: Xóa các dòng duplicate (order_id, sku), giữ dòng có sale_price lớn nhất
+-- Tie-break bằng created_at ASC (giữ dòng cũ nhất)
 DELETE FROM shopee_inventory_out
 WHERE id IN (
   SELECT id FROM (
     SELECT id,
-           ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY created_at ASC) AS rn
+           ROW_NUMBER() OVER (
+             PARTITION BY order_id, sku
+             ORDER BY sale_price DESC, created_at ASC
+           ) AS rn
     FROM shopee_inventory_out
     WHERE order_id IS NOT NULL
   ) ranked
   WHERE rn > 1
 );
 
--- Bước 2: Thêm UNIQUE constraint để DB ngăn duplicate từ đây về sau
+-- Bước 3: Thêm UNIQUE constraint composite (order_id, sku)
 ALTER TABLE shopee_inventory_out
-  ADD CONSTRAINT uq_shopee_inventory_out_order_id UNIQUE (order_id);
+  ADD CONSTRAINT uq_shopee_inventory_out_order_sku UNIQUE (order_id, sku);
+
+-- ============================================================
+-- Migration AUDIT-022: Thêm UNIQUE constraints cho revenue_records và payroll_records
+-- Chạy theo thứ tự: dedup trước, thêm constraint sau
+-- ============================================================
+
+-- revenue_records: UNIQUE(date, branch_id) — 1 bản ghi doanh thu / ngày / chi nhánh
+-- Bước 1: Xóa constraint cũ nếu đã tồn tại
+ALTER TABLE revenue_records
+  DROP CONSTRAINT IF EXISTS uq_revenue_records_date_branch;
+
+-- Bước 2: Xóa các dòng duplicate, giữ dòng có ctid lớn nhất (mới nhất vật lý)
+DELETE FROM revenue_records
+WHERE ctid NOT IN (
+  SELECT MAX(ctid)
+  FROM revenue_records
+  GROUP BY date, branch_id
+);
+
+-- Bước 3: Thêm UNIQUE constraint
+ALTER TABLE revenue_records
+  ADD CONSTRAINT uq_revenue_records_date_branch UNIQUE (date, branch_id);
+
+-- payroll_records: UNIQUE(employee_id, month) — 1 bản ghi lương / nhân viên / tháng
+-- Bước 1: Xóa constraint cũ nếu đã tồn tại
+ALTER TABLE payroll_records
+  DROP CONSTRAINT IF EXISTS uq_payroll_records_employee_month;
+
+-- Bước 2: Xóa các dòng duplicate, giữ dòng có ctid lớn nhất (mới nhất vật lý)
+DELETE FROM payroll_records
+WHERE ctid NOT IN (
+  SELECT MAX(ctid)
+  FROM payroll_records
+  GROUP BY employee_id, month
+);
+
+-- Bước 3: Thêm UNIQUE constraint
+ALTER TABLE payroll_records
+  ADD CONSTRAINT uq_payroll_records_employee_month UNIQUE (employee_id, month);

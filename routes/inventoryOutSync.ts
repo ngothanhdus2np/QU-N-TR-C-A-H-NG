@@ -114,99 +114,115 @@ function mapToRow(o: BotOrder) {
   };
 }
 
+export async function runInventoryOutSync(supabase: SupabaseClient): Promise<{
+  inserted: number; updated: number; skipped: number; botErrors: string[];
+}> {
+  // 1. Fetch toàn bộ đơn từ cả 2 bot
+  const allOrders: BotOrder[] = [];
+  const botErrors: string[] = [];
+
+  for (let i = 0; i < SHOP_BOTS.length; i++) {
+    const bot = SHOP_BOTS[i];
+    try {
+      const orders = await fetchAllBotOrders(bot.port, i);
+      allOrders.push(...orders);
+    } catch {
+      botErrors.push(`Bot ${bot.platform} (port ${bot.port}) không phản hồi`);
+    }
+  }
+
+  if (allOrders.length === 0) {
+    return { inserted: 0, updated: 0, skipped: 0, botErrors };
+  }
+
+  // 2. Lấy danh sách (order_id, sku) + status đang có trong Supabase
+  const allExisting: { order_id: string; sku: string; status: string }[] = [];
+  const PAGE = 1000;
+  let exOffset = 0;
+  while (true) {
+    const { data: page } = await supabase
+      .from('shopee_inventory_out')
+      .select('order_id, sku, status')
+      .not('order_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(exOffset, exOffset + PAGE - 1);
+    if (!page || page.length === 0) break;
+    allExisting.push(...page);
+    if (page.length < PAGE) break;
+    exOffset += page.length;
+  }
+
+  // Key: "order_id||sku" để xử lý đúng đơn nhiều SKU
+  const existingMap = new Map<string, string>(
+    allExisting.map((r) => [`${r.order_id}||${r.sku ?? ''}`, r.status])
+  );
+
+  // 3. Tách thành 2 nhóm: đơn mới và đơn cần cập nhật
+  const seenInBatch = new Set<string>();
+  const newOrders: BotOrder[] = [];
+  const toUpdate: BotOrder[] = [];
+
+  for (const o of allOrders) {
+    if (!o.order_sn) continue;
+    const row = mapToRow(o);
+    const batchKey = `${o.order_sn}||${row.sku ?? ''}`;
+    if (seenInBatch.has(batchKey)) continue;
+    seenInBatch.add(batchKey);
+
+    if (!existingMap.has(batchKey)) {
+      newOrders.push(o);
+    } else {
+      // Luôn update lại — để ghi đúng fee từ bot API vào những đơn trước đây bị ghi sai
+      toUpdate.push(o);
+    }
+  }
+
+  // 4. Insert đơn mới — dùng upsert ignoreDuplicates để an toàn khi 2 sync chạy đồng thời (AUDIT-019)
+  let inserted = 0;
+  if (newOrders.length > 0) {
+    const rows = newOrders.map(mapToRow);
+    const { error } = await supabase
+      .from('shopee_inventory_out')
+      .upsert(rows, { onConflict: 'order_id,sku', ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+    inserted = rows.length;
+  }
+
+  // 5. Cập nhật fee fields — batch upsert thay vì serial loop (AUDIT-015)
+  let updated = 0;
+  if (toUpdate.length > 0) {
+    const updateRows = toUpdate.map(mapToRow);
+    const { error: updateError } = await supabase
+      .from('shopee_inventory_out')
+      .upsert(updateRows, { onConflict: 'order_id,sku', ignoreDuplicates: false });
+    if (updateError) throw new Error(updateError.message);
+    updated = updateRows.length;
+  }
+
+  return { inserted, updated, skipped: allOrders.length - inserted - updated, botErrors };
+}
+
 export function createInventoryOutSyncRouter(supabase: SupabaseClient, requireAuth: RequestHandler) {
   const router = Router();
 
   router.post('/api/inventory-out/sync-from-bot', requireAuth, async (req, res) => {
-    // 1. Fetch toàn bộ đơn từ cả 2 bot (tất cả pages)
-    const allOrders: BotOrder[] = [];
-    const botErrors: string[] = [];
-
-    for (let i = 0; i < SHOP_BOTS.length; i++) {
-      const bot = SHOP_BOTS[i];
-      try {
-        const orders = await fetchAllBotOrders(bot.port, i);
-        allOrders.push(...orders);
-      } catch {
-        botErrors.push(`Bot ${bot.platform} (port ${bot.port}) không phản hồi`);
-      }
-    }
-
-    if (allOrders.length === 0) {
-      res.status(503).json({ ok: false, error: `Không lấy được đơn hàng. ${botErrors.join('; ')}` });
-      return;
-    }
-
-    // 2. Lấy danh sách order_id + status đang có trong Supabase (paginate để không bị limit)
-    const allExisting: { order_id: string; status: string }[] = [];
-    const PAGE = 1000;
-    let exOffset = 0;
-    while (true) {
-      const { data: page } = await supabase
-        .from('shopee_inventory_out')
-        .select('order_id, status')
-        .not('order_id', 'is', null)
-        .range(exOffset, exOffset + PAGE - 1);
-      if (!page || page.length === 0) break;
-      allExisting.push(...page);
-      if (page.length < PAGE) break;
-      exOffset += page.length;
-    }
-
-    const existingMap = new Map<string, string>(
-      allExisting.map((r) => [r.order_id, r.status])
-    );
-
-    // 3. Tách thành 2 nhóm: đơn mới và đơn cần cập nhật status
-    // seenInBatch để dedup intra-batch (cùng order_sn từ 2 bot hoặc data trùng)
-    const seenInBatch = new Set<string>();
-    const newOrders: BotOrder[] = [];
-    const toUpdate: { order_id: string; status: string }[] = [];
-
-    for (const o of allOrders) {
-      if (!o.order_sn) continue;
-      if (seenInBatch.has(o.order_sn)) continue;
-      seenInBatch.add(o.order_sn);
-
-      const newStatus = STATUS_MAP[o.status] ?? 'PENDING';
-      if (!existingMap.has(o.order_sn)) {
-        newOrders.push(o);
-      } else if (existingMap.get(o.order_sn) !== newStatus) {
-        toUpdate.push({ order_id: o.order_sn, status: newStatus });
-      }
-    }
-
-    // 4. Upsert đơn mới (onConflict order_id để tránh duplicate nếu có race condition)
-    let inserted = 0;
-    if (newOrders.length > 0) {
-      const rows = newOrders.map(mapToRow);
-      const { error } = await supabase
-        .from('shopee_inventory_out')
-        .upsert(rows, { onConflict: 'order_id', ignoreDuplicates: true });
-      if (error) {
-        res.status(500).json({ ok: false, error: error.message });
+    try {
+      const result = await runInventoryOutSync(supabase);
+      if (result.inserted === 0 && result.updated === 0 && result.botErrors.length === SHOP_BOTS.length) {
+        res.status(503).json({ ok: false, error: `Không lấy được đơn hàng. ${result.botErrors.join('; ')}` });
         return;
       }
-      inserted = rows.length;
+      res.json({
+        ok: true,
+        inserted: result.inserted,
+        updated: result.updated,
+        skipped: result.skipped,
+        botErrors: result.botErrors.length > 0 ? result.botErrors : undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      res.status(500).json({ ok: false, error: msg });
     }
-
-    // 5. Cập nhật status cho đơn đã có (chỉ update status, giữ nguyên giá vốn và dữ liệu tay nhập)
-    let updated = 0;
-    for (const { order_id, status } of toUpdate) {
-      await supabase
-        .from('shopee_inventory_out')
-        .update({ status })
-        .eq('order_id', order_id);
-      updated++;
-    }
-
-    res.json({
-      ok: true,
-      inserted,
-      updated,
-      skipped: allOrders.length - inserted - updated,
-      botErrors: botErrors.length > 0 ? botErrors : undefined,
-    });
   });
 
   return router;

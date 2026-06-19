@@ -13,6 +13,7 @@ import { SIDEBAR_SECTIONS } from './constants/navigation';
 import { registerServiceWorker } from './registerServiceWorker';
 import { getCurrentSession, signOut } from './services/auth';
 import { supabase } from './services/supabase';
+import { INVENTORY_COST_METHOD_STORAGE_KEY } from './src/lib/businessLogic.inventory';
 import type { AppAlert } from './types';
 
 // Tự động thêm Supabase Bearer token cho request API cùng origin.
@@ -90,6 +91,7 @@ const App: React.FC = () => {
   const { themeId, setThemeId } = useTheme();
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
   const [userRole, setUserRole] = useState<string>('owner');
+  const [managerUnlocked, setManagerUnlocked] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -105,19 +107,23 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Thu ngân: nếu không phải /pos thì redirect về /pos
+  // Thu ngân: nếu không phải /pos và chưa được unlock → redirect về /pos
   useEffect(() => {
-    if (userRole === 'cashier' && activeTab !== 'pos') {
+    if (userRole === 'cashier' && !managerUnlocked && activeTab !== 'pos') {
       navigate('/pos', { replace: true });
     }
-  }, [userRole, activeTab, navigate]);
+    // Khi vào /pos → reset unlock
+    if (activeTab === 'pos') {
+      setManagerUnlocked(false);
+    }
+  }, [userRole, activeTab, managerUnlocked, navigate]);
 
   // Chỉ gọi navigate — URL là nguồn sự thật duy nhất
   const handleSetActiveTab = useCallback((id: string) => {
     const normalized = id === 'dashboard' ? 'overview' : id;
-    if (userRole === 'cashier' && normalized !== 'pos') return;
+    if (userRole === 'cashier' && !managerUnlocked && normalized !== 'pos') return;
     navigate(`/${normalized}`);
-  }, [navigate, userRole]);
+  }, [navigate, userRole, managerUnlocked]);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -134,6 +140,15 @@ const App: React.FC = () => {
     const id = setInterval(fetchAlerts, 10 * 60 * 1000);
     return () => clearInterval(id);
   }, [fetchAlerts]);
+
+  // AUDIT-002: Sync costMethod từ Supabase xuống localStorage ngay khi data load.
+  // Đảm bảo getInventoryCostMethod() fallback đúng khi posInventorySettings chưa được propagate.
+  useEffect(() => {
+    const cm = data.posInventorySettings?.costMethod;
+    if (cm === 'fixed' || cm === 'average') {
+      localStorage.setItem(INVENTORY_COST_METHOD_STORAGE_KEY, cm);
+    }
+  }, [data.posInventorySettings?.costMethod]);
 
   // Dùng ref để listener không bị add/remove mỗi khi silentSync đổi reference
   const silentSyncRef = React.useRef(silentSync);
@@ -182,7 +197,11 @@ const App: React.FC = () => {
             className="shrink-0"
           >
             <TopNav
-              sections={SIDEBAR_SECTIONS}
+              sections={SIDEBAR_SECTIONS.filter(s => {
+                if (!('hidden' in s && s.hidden)) return true;
+                // Chỉ ẩn trên production (app.phucsang.com.vn), hiện trên localhost
+                return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+              })}
               activeId={activeTab}
               onSelect={(id: string) => handleSetActiveTab(id)}
               isCloudConnected={isCloudConnected}
@@ -250,6 +269,11 @@ const App: React.FC = () => {
           offlineOrderPendingCount={offlineOrderPendingCount}
           isDraining={isDraining}
           onDrainOfflineQueue={drainQueue}
+          userRole={userRole}
+          onManagerUnlocked={() => {
+            setManagerUnlocked(true);
+            navigate('/overview');
+          }}
         />
       </main>
       <FloatingCFOChat data={data} messages={chatMessages} setMessages={setChatMessages} />

@@ -42,7 +42,7 @@ export const calculateExecutiveInsights = (data: Partial<AppData>) => {
   );
   // Tránh double-count lương: nếu payroll module có dữ liệu, lọc salary ra khỏi ledger
   const normExecVN = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(/[đĐ]/g, 'd');
   const execSalaryKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
   const isExecSalaryEntry = (cat: string) => { const n = normExecVN(cat); return execSalaryKws.some(kw => n.includes(kw)); };
   const nonSalaryMonthExp = projectedPayroll > 0
@@ -85,7 +85,7 @@ export const calculateFinancialHealthScore = (data: Partial<AppData>) => {
   const salaryCategoryKeywords = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
   // Chuẩn hóa tiếng Việt để so sánh keyword không phụ thuộc dấu
   const normVNStr = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(/[đĐ]/g, 'd');
   const isSalaryCategory = (cat: string) => {
     const normalized = normVNStr(cat);
     return salaryCategoryKeywords.some(kw => normalized.includes(kw));
@@ -156,7 +156,7 @@ export const auditFinancials = (data: Partial<AppData>) => {
     leaks.push('🔴 Tỷ lệ tăng ca (OT) cao.');
   const payrollModuleTotal2 = (payroll || []).reduce((sum, p) => sum + (Number(p.netPay) || 0), 0);
   const normVNAudit = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(/[đĐ]/g, 'd');
   const auditSalaryCatKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
   const auditLedgerSalary = (expenses || []).reduce((sum, e) => {
     const norm = normVNAudit(e.category);
@@ -319,7 +319,7 @@ export const calculateExpenseAnalysis = (
 
   // Smart Priority for Personnel Costs — dùng keyword không dấu để tránh miss-match dấu/không dấu
   const normVNExp = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(/[đĐ]/g, 'd');
   const salaryKeywords = ['luong', 'hoa hong', 'thuong doanh so', 'thuong nhan vien', 'phu cap', 'tang ca', 'thuc nhan', 'nhan su'];
   const isSalaryExp = (cat: string) => { const n = normVNExp(cat); return salaryKeywords.some(kw => n.includes(kw)); };
   const isCogsExp = (cat: string) => { const n = normVNExp(cat); return n.includes('gia von') || n.includes('cogs'); };
@@ -439,7 +439,7 @@ export const calculateMISMetrics = (
 
   // Lọc salary/COGS khỏi expenses để tránh double-count khi cộng payroll module
   const normMIS = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036F]/g, '').replace(/[đĐ]/g, 'd');
   const misSalaryKws = ['luong', 'hoa hong', 'thuong doanh so', 'thu nhap nhan su', 'nhan su'];
   const isMISSalary = (cat: string) => { const n = normMIS(cat); return misSalaryKws.some(kw => n.includes(kw)); };
   const isMISCogs = (cat: string) => { const n = normMIS(cat); return n.includes('gia von') || n.includes('cogs'); };

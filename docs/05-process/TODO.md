@@ -9,6 +9,111 @@
 
 ---
 
+### [x] Kiểm toán logic nghiệp vụ (Senior System Auditor) *(xong 2026-06-19)*
+
+> Đọc source + cross-check docs. Tìm ra 22 findings (3 Critical, 9 High, 8 Medium, 2 Low). Output: `docs/business-knowledge/AUDIT_REPORT.md`.  
+> **TOP 3 cần xử lý ngay:** AUDIT-014 (Shopee dedup mất item multi-SKU), AUDIT-003 (race condition stock), AUDIT-001 (fixed cost method: docs sai).
+
+---
+
+### [x] Xử lý AUDIT-014 — Shopee dedup theo orderId mất item nhiều SKU *(đã fix trước đó)*
+
+> Đã dùng key `${record.orderId}||${record.sku || ''}` tại `services/dataMapper.ts:499-500`. Fix thực hiện trong phiên trước, xác nhận lại 2026-06-19.
+
+---
+
+### [x] Xử lý AUDIT-003/009 — Race condition tồn kho: client check không atomic *(xong 2026-06-19)*
+
+> Gộp 2 lần gọi `updateSurgical` riêng (inventoryTransaction + stockUpdates) thành 1 → kích hoạt điều kiện `shouldUseInventoryRpc = true` trong `useAppData.ts` → RPC atomic `apply_inventory_transaction_with_stock`. Sửa `services/posOrderService.ts`.
+
+---
+
+### [x] Xử lý AUDIT-019 — Thiếu UNIQUE constraint bảng shopee_inventory_out *(xong 2026-06-19)*
+
+> SQL UNIQUE(order_id, sku) đã có cuối `supabase_setup.sql`. Đổi `.insert()` → `.upsert({ onConflict: 'order_id,sku', ignoreDuplicates: true })` trong `routes/inventoryOutSync.ts` để tránh lỗi 500 khi 2 sync chạy đồng thời.
+> **Cần chạy thủ công trên Supabase dashboard** nếu chưa chạy migration UNIQUE constraint.
+
+---
+
+### [x] Xử lý AUDIT-022 — Thiếu UNIQUE constraint bảng revenue_records / payroll_records *(xong 2026-06-19)*
+
+> Thêm migration vào cuối `supabase_setup.sql`: dedup + UNIQUE(date, branch_id) cho `revenue_records`, dedup + UNIQUE(employee_id, month) cho `payroll_records`.
+> **Cần chạy thủ công trên Supabase dashboard.**
+
+---
+
+### [x] Xử lý AUDIT-001 — Docs mô tả sai cost method "fixed" *(xong 2026-06-19)*
+
+> Sửa 3 file: `INVENTORY_LOGIC.md`, `OP-003-nhap-hang.md`, `REVENUE_PROFIT_LOGIC.md` — đổi mô tả `fixed = ghi đè` thành đúng: `fixed = giữ nguyên giá vốn hiện tại, chỉ dùng giá mới khi currentImportPrice = 0`.
+
+---
+
+### [x] Xử lý AUDIT-004 — Thiếu ghi chú COGS fallback trong docs *(xong 2026-06-19)*
+
+> Thêm warning block vào `REVENUE_PROFIT_LOGIC.md` sau phần "COGS lịch sử": giải thích fallback về `product.importPrice` hiện tại khi InventoryTransaction cũ thiếu `nextImportPrice`.
+
+### [ ] AUDIT-004/017 — Backfill nextImportPrice vào InventoryTransaction cũ *(Medium, Data)*
+
+> **Vấn đề gốc:** Báo cáo lợi nhuận quá khứ dùng `product.importPrice` hiện tại thay vì giá vốn lúc bán — sai nếu giá vốn đã thay đổi.
+> **Cần làm:** Viết script SQL hoặc migration để backfill `next_import_price` vào các `inventory_transactions` cũ (type='Import') dựa trên `product_cost_history` gần nhất.
+> **Lưu ý:** Chỉ cần thiết nếu giá vốn sản phẩm có thay đổi lớn từ lúc nhập kho.
+
+---
+
+### [x] Xử lý AUDIT-017 — Thiếu ghi chú historical COGS fallback trong REPORT_LOGIC.md *(xong 2026-06-19)*
+
+> Thêm ghi chú sau `cogs ← Tính qua getHistoricalCost()` trong `REPORT_LOGIC.md` về fallback behavior khi thiếu lịch sử giá vốn.
+
+---
+
+### [x] Xử lý AUDIT-010 — Tier khách hàng tự động *(xong 2026-06-19)*
+
+> `computeNewTier()` trong `POSComputer.tsx`: đọc ngưỡng từ `localStorage('customer_tier_settings')`, tự nâng hạng sau mỗi đơn dựa vào `totalSpent`. Chỉ nâng không hạ.
+
+---
+
+### [x] Xử lý AUDIT-011 — Nhập hàng nhanh không có NCC *(xong 2026-06-19)*
+
+> Modal cảnh báo trong `GoodsInventory.tsx` khi bấm "Hoàn thành" mà không chọn NCC. Nếu tiếp tục → ghi vào 'NCC lẻ'. `useGoodsPurchase.ts` luôn tạo debtRecord khi `totalPayable > 0`.
+
+---
+
+### [x] Xử lý AUDIT-006 — processReturnOrder điều chỉnh ngày bán gốc *(xong 2026-06-19)*
+
+> Xóa Case B trong `processReturnOrder` (`posOrderService.ts`): luôn ghi revenue vào ngày trả hàng, không điều chỉnh ngày bán gốc. Đây là thiết kế có chủ đích theo yêu cầu nghiệp vụ.
+
+---
+
+### [x] Xử lý AUDIT-008 — inferIsReturnOrder dùng fallback TH prefix và finalAmount < 0 *(xong 2026-06-19)*
+
+> Đơn giản hoá `inferIsReturnOrder` trong `dataMapper.ts`: chỉ giữ `explicit === true`. Bỏ fallback `/^TH\d/i` và `finalAmount < 0` để tránh false positive.
+
+---
+
+### [x] Xử lý AUDIT-002 — costMethod chỉ lưu localStorage *(xong 2026-06-19)*
+
+> Xóa dead state `costMethod / setCostMethod` trong `SettingsCenter.tsx` (đọc từ localStorage-only, không sync Supabase). `GoodsTab.tsx` đã handle đúng: đọc từ `inventorySettings.costMethod` (Supabase) và lưu qua `onUpdateInventorySettings`.
+
+---
+
+### [x] Xử lý AUDIT-015 — inventoryOutSync cập nhật đơn bằng serial loop *(xong 2026-06-19)*
+
+> Chuyển `for (const o of toUpdate)` serial sang batch upsert `onConflict: 'order_id,sku', ignoreDuplicates: false` trong `routes/inventoryOutSync.ts`. Giảm từ N round-trips xuống 1 request.
+
+---
+
+### [x] Xử lý AUDIT-021 — determineCurrentPolicy thiếu gap check *(xong 2026-06-19)*
+
+> Thêm gap check sau overlap check trong `businessLogic.payroll.ts`: cảnh báo khi `next.endThreshold < curr.startThreshold` — khoảng thâm niên không có policy nào bao phủ.
+
+---
+
+### [x] Tạo tài liệu business knowledge toàn hệ thống *(xong 2026-06-19)*
+
+> Tạo 25 file tài liệu trong `docs/business-knowledge/`: 13 file chính + 12 operations. Ghi lại 12 nghiệp vụ, ~48 bảng, 11 state machines, 20+ business rules, 9 báo cáo, edge cases và bugs đã fix.
+
+---
+
 ### [x] Xóa 81 đơn trùng giữa shop1.db và shop2.db *(xong 2026-06-18)*
 
 > Dùng scan song song cả 2 bot để xác định đúng shop cho từng đơn. Kết quả: shop1=236, shop2=85, 0 trùng.

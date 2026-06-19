@@ -1,4 +1,4 @@
-export type AppThemeId = 'classic' | 'codex' | 'prestige';
+export type AppThemeId = 'classic' | 'codex' | 'prestige' | 'clarity';
 
 export interface AppTheme {
   id: AppThemeId;
@@ -29,6 +29,13 @@ export const APP_THEMES: AppTheme[] = [
     description: 'Giao diện tối cao cấp với tông màu đen ấm và điểm nhấn đỏ thương hiệu.',
     previewBg: '#1A1612',
     previewAccent: '#C8161E',
+  },
+  {
+    id: 'clarity',
+    name: 'Clarity',
+    description: 'Giao diện phẳng, xanh dương đậm, border mỏng — tập trung vào dữ liệu.',
+    previewBg: '#1565C0',
+    previewAccent: '#E3F2FD',
   },
 ];
 

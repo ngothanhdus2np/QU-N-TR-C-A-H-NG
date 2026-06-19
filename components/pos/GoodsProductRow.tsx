@@ -14,58 +14,58 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
   inGroup?: boolean;
 }) => (
   <tr className={`hover:bg-indigo-50/30 group transition-colors border-b border-slate-50 last:border-0 cursor-pointer ${inGroup ? 'bg-indigo-50/40' : 'bg-slate-50/30'}`} onClick={() => onView(variant)}>
-    <td className={`px-4 py-3 w-10 ${inGroup ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+    <td className={`px-3 py-2 w-10 ${inGroup ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isSelected} onChange={() => onSelect(variant.id)} />
     </td>
-    <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
+    <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
       <button onClick={() => onToggleFavorite(variant.id)} className="text-slate-300 hover:text-amber-400 transition-colors">
         <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
       </button>
     </td>
     {visibleColumns.includes('image') && (
-      <td className="px-2 py-3 w-20">
+      <td className="px-2 py-2 w-20">
         <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
           {variant.images?.[0] ? <img src={variant.images[0]} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="h-3.5 w-3.5 text-slate-300" />}
         </div>
       </td>
     )}
-    <td className="px-4 py-3">
-      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-2xs border border-slate-200 tracking-tight whitespace-nowrap">{variant.sku}</span>
+    <td className="px-3 py-2">
+      <span className="text-[13px] text-slate-600 whitespace-nowrap">{variant.sku}</span>
     </td>
-    <td className="px-4 py-3 text-slate-700 text-sm min-w-[200px]">
+    <td className="px-3 py-2 text-slate-700 text-sm min-w-[200px]">
       <div className="flex items-center gap-2 pl-8"><span>{variant.name}</span></div>
     </td>
-    {visibleColumns.includes('category') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
-    {visibleColumns.includes('productType') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.productType || 'Hàng hóa'}</td>}
-    {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-700 text-sm tabular-nums whitespace-nowrap">{(Number(variant.salePrice) || 0).toLocaleString()}đ</td>}
-    {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right font-normal text-slate-400 text-xs tabular-nums whitespace-nowrap">{(Number(variant.importPrice) || 0).toLocaleString()}đ</td>}
-    {visibleColumns.includes('brand') && <td className="px-4 py-3 text-xs text-slate-500 font-normal whitespace-nowrap">{variant.brand || <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('category') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('productType') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.productType || 'Hàng hóa'}</td>}
+    {visibleColumns.includes('salePrice') && <td className="px-3 py-2 text-right text-slate-700 text-[13px] tabular-nums whitespace-nowrap">{(Number(variant.salePrice) || 0).toLocaleString()}đ</td>}
+    {visibleColumns.includes('importPrice') && <td className="px-3 py-2 text-right font-normal text-slate-400 text-xs tabular-nums whitespace-nowrap">{(Number(variant.importPrice) || 0).toLocaleString()}đ</td>}
+    {visibleColumns.includes('brand') && <td className="px-3 py-2 text-xs text-slate-500 font-normal whitespace-nowrap">{variant.brand || <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('location') && (
-      <td className="px-4 py-3 whitespace-nowrap">
+      <td className="px-3 py-2 whitespace-nowrap">
         {variant.location ? <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-normal text-2xs uppercase tracking-tight">{variant.location}</span> : <span className="text-slate-300 text-xs">—</span>}
       </td>
     )}
     {visibleColumns.includes('stock') && (
-      <td className="px-4 py-3 text-right whitespace-nowrap">
+      <td className="px-3 py-2 text-right whitespace-nowrap">
         <span className={`text-sm tabular-nums ${variant.stock <= 0 ? 'text-rose-600' : variant.stock <= (variant.minStock ?? 5) ? 'text-amber-600' : 'text-slate-700'}`}>{variant.stock}</span>
         {variant.stock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
         {variant.stock > 0 && variant.stock <= (variant.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
       </td>
     )}
-    {visibleColumns.includes('customerOrders') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{variant.customerOrders ?? 0}</td>}
-    {visibleColumns.includes('minStock') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{variant.minStock ?? 0}</td>}
-    {visibleColumns.includes('maxStock') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{variant.maxStock === 999999 ? '∞' : (variant.maxStock ?? '—')}</td>}
-    {visibleColumns.includes('weight') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{variant.weight ? `${variant.weight}g` : <span className="text-slate-300">—</span>}</td>}
-    {visibleColumns.includes('allowPoints') && <td className="px-4 py-3 text-center">{variant.allowPoints ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
-    {visibleColumns.includes('directSale') && <td className="px-4 py-3 text-center">{variant.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('customerOrders') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{variant.customerOrders ?? 0}</td>}
+    {visibleColumns.includes('minStock') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{variant.minStock ?? 0}</td>}
+    {visibleColumns.includes('maxStock') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{variant.maxStock === 999999 ? '∞' : (variant.maxStock ?? '—')}</td>}
+    {visibleColumns.includes('weight') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{variant.weight ? `${variant.weight}g` : <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('allowPoints') && <td className="px-3 py-2 text-center">{variant.allowPoints ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('directSale') && <td className="px-3 py-2 text-center">{variant.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('status') && (
-      <td className="px-4 py-3 text-center">
+      <td className="px-3 py-2 text-center">
         <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${variant.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{variant.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
       </td>
     )}
-    {visibleColumns.includes('warranty') && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{variant.warranty || <span className="text-slate-300">—</span>}</td>}
-    {visibleColumns.includes('createdAt') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{variant.createdAt ? new Date(variant.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
-    <td className={`px-3 py-3 ${inGroup ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+    {visibleColumns.includes('warranty') && <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">{variant.warranty || <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('createdAt') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.createdAt ? new Date(variant.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
+    <td className={`px-3 py-2 ${inGroup ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
       <button onClick={() => onEdit(variant)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
         <Edit2 className="h-3.5 w-3.5" />
       </button>
@@ -104,70 +104,70 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   };
   return (
     <tr className={`hover:bg-slate-50/70 group transition-colors border-b border-slate-50 last:border-0 cursor-pointer ${isExpanded ? 'border-t-2 border-indigo-200 bg-indigo-50/60' : ''}`} onClick={handleRowClick}>
-      <td className={`px-4 py-3 w-10 ${isExpanded ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <td className={`px-3 py-2 w-10 ${isExpanded ? 'border-l-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
         <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked={isSelected} onChange={() => onSelect(product.id)} />
       </td>
-      <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
+      <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => onToggleFavorite(product.id)} className="text-slate-300 hover:text-amber-400 transition-colors">
           <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
         </button>
       </td>
       {visibleColumns.includes('image') && (
-        <td className="px-2 py-3 w-20">
+        <td className="px-2 py-2 w-20">
           <div className="w-16 h-16 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
             {product.images?.[0] ? <img src={product.images[0]} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="h-5 w-5 text-slate-300" />}
           </div>
         </td>
       )}
-      <td className="px-4 py-3">
+      <td className="px-3 py-2">
         {isParent
           ? (isExpanded
               ? null
               : skuRange
-                ? <span className="text-xs text-slate-400 font-mono whitespace-nowrap">{skuRange}</span>
-                : <span className="text-slate-300 text-sm">—</span>)
+                ? <span className="text-[13px] text-slate-600 whitespace-nowrap">{skuRange}</span>
+                : <span className="text-slate-300 text-[13px]">—</span>)
           : (product.sku
-              ? <span className="text-sm text-slate-600 whitespace-nowrap">{product.sku}</span>
-              : <span className="text-slate-300 text-sm">—</span>)
+              ? <span className="text-[13px] text-slate-600 whitespace-nowrap">{product.sku}</span>
+              : <span className="text-slate-300 text-[13px]">—</span>)
         }
       </td>
-      <td className="px-4 py-3 text-slate-900 text-sm min-w-[200px]">
+      <td className="px-3 py-2 text-slate-900 text-sm min-w-[200px]">
         <div className="flex items-center gap-2">
           <span>{product.name}</span>
           {isParent && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-2xs font-normal">({product.variantCount})</span>}
         </div>
       </td>
-      {visibleColumns.includes('category') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.categoryId || <span className="text-slate-300">—</span>}</td>}
-      {visibleColumns.includes('productType') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.productType || 'Hàng hóa'}</td>}
-      {visibleColumns.includes('salePrice') && <td className="px-4 py-3 text-right text-slate-900 text-sm tabular-nums whitespace-nowrap">{(Number(product.salePrice) || 0).toLocaleString()}đ</td>}
-      {visibleColumns.includes('importPrice') && <td className="px-4 py-3 text-right text-slate-400 text-sm tabular-nums whitespace-nowrap">{(Number(product.importPrice) || 0).toLocaleString()}đ</td>}
-      {visibleColumns.includes('brand') && <td className="px-4 py-3 text-sm text-slate-500 w-[100px] max-w-[100px]"><span className="truncate block">{product.brand || <span className="text-slate-300">—</span>}</span></td>}
+      {visibleColumns.includes('category') && <td className="px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap">{product.categoryId || <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('productType') && <td className="px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap">{product.productType || 'Hàng hóa'}</td>}
+      {visibleColumns.includes('salePrice') && <td className="px-3 py-2 text-right text-slate-900 text-[13px] tabular-nums whitespace-nowrap">{(Number(product.salePrice) || 0).toLocaleString()}đ</td>}
+      {visibleColumns.includes('importPrice') && <td className="px-3 py-2 text-right text-slate-400 text-[13px] tabular-nums whitespace-nowrap">{(Number(product.importPrice) || 0).toLocaleString()}đ</td>}
+      {visibleColumns.includes('brand') && <td className="px-3 py-2 text-sm text-slate-500 w-[100px] max-w-[100px]"><span className="truncate block">{product.brand || <span className="text-slate-300">—</span>}</span></td>}
       {visibleColumns.includes('location') && (
-        <td className="px-4 py-3 w-[80px] max-w-[80px]">
-          {product.location ? <span className="text-sm text-slate-600 truncate block">{product.location}</span> : <span className="text-slate-300 text-sm">—</span>}
+        <td className="px-3 py-2 w-[80px] max-w-[80px]">
+          {product.location ? <span className="text-[13px] text-slate-600 truncate block">{product.location}</span> : <span className="text-slate-300 text-[13px]">—</span>}
         </td>
       )}
       {visibleColumns.includes('stock') && (
-        <td className="px-4 py-3 text-right whitespace-nowrap">
+        <td className="px-3 py-2 text-right whitespace-nowrap">
           <span className={`text-sm tabular-nums ${totalVariantStock <= 0 ? 'text-rose-600' : !isParent && totalVariantStock <= (product.minStock ?? 5) ? 'text-amber-600' : 'text-slate-800'}`}>{totalVariantStock}</span>
           {totalVariantStock <= 0 && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded font-normal">Hết</span>}
           {!isParent && totalVariantStock > 0 && totalVariantStock <= (product.minStock ?? 5) && <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded font-normal">Sắp hết</span>}
         </td>
       )}
-      {visibleColumns.includes('customerOrders') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{product.customerOrders ?? 0}</td>}
-      {visibleColumns.includes('minStock') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{product.minStock ?? 0}</td>}
-      {visibleColumns.includes('maxStock') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{product.maxStock === 999999 ? '∞' : (product.maxStock ?? '—')}</td>}
-      {visibleColumns.includes('weight') && <td className="px-4 py-3 text-right text-sm text-slate-500 tabular-nums">{product.weight ? `${product.weight}g` : <span className="text-slate-300">—</span>}</td>}
-      {visibleColumns.includes('allowPoints') && <td className="px-4 py-3 text-center">{product.allowPoints ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
-      {visibleColumns.includes('directSale') && <td className="px-4 py-3 text-center">{product.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('customerOrders') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{product.customerOrders ?? 0}</td>}
+      {visibleColumns.includes('minStock') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{product.minStock ?? 0}</td>}
+      {visibleColumns.includes('maxStock') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{product.maxStock === 999999 ? '∞' : (product.maxStock ?? '—')}</td>}
+      {visibleColumns.includes('weight') && <td className="px-3 py-2 text-right text-[13px] text-slate-500 tabular-nums">{product.weight ? `${product.weight}g` : <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('allowPoints') && <td className="px-3 py-2 text-center">{product.allowPoints ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('directSale') && <td className="px-3 py-2 text-center">{product.directSale !== false ? <span className="text-emerald-600 font-normal text-xs">✓</span> : <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('status') && (
-        <td className="px-4 py-3 text-center">
+        <td className="px-3 py-2 text-center">
           <span className={`px-2 py-0.5 rounded-full text-2xs font-normal ${product.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{product.status === 'Active' ? 'Đang KD' : 'Ngừng KD'}</span>
         </td>
       )}
-      {visibleColumns.includes('warranty') && <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{product.warranty || <span className="text-slate-300">—</span>}</td>}
-      {visibleColumns.includes('createdAt') && <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{product.createdAt ? new Date(product.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
-      <td className={`px-3 py-3 ${isExpanded ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
+      {visibleColumns.includes('warranty') && <td className="px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap">{product.warranty || <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('createdAt') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{product.createdAt ? new Date(product.createdAt).toLocaleDateString('vi-VN') : <span className="text-slate-300">—</span>}</td>}
+      <td className={`px-3 py-2 ${isExpanded ? 'border-r-2 border-indigo-200' : ''}`} onClick={(e) => e.stopPropagation()}>
         <button onClick={() => onEdit(product)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
           <Edit2 className="h-3.5 w-3.5" />
         </button>

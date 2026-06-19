@@ -558,6 +558,7 @@ export interface POSOrder {
   refundAmount?: number; // Tiền trả lại khách (> 0 = shop hoàn tiền, 0 = đổi hàng)
   returnFee?: number; // Phí trả hàng shop thu (ghi vào revenueOther)
   returnOtherRefund?: number; // Hoàn trả thu khác (cộng vào tiền hoàn cho khách)
+  originalOrderId?: string; // ID đơn bán gốc — để reverse revenue đúng ngày (AUDIT-006)
   splitPayments?: { cash?: number; bank?: number; card?: number; momo?: number }; // Phân bổ từng PTTT khi chia nhiều
 }
 

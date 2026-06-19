@@ -18,6 +18,7 @@ export interface InvoiceTab {
   returnDiscount: number;
   returnFee: number;
   returnOtherRefund: number;
+  originalOrderId?: string; // ID đơn gốc được chọn để trả (AUDIT-006)
   // Split payment fields
   splitPayment?: {
     cash: number;

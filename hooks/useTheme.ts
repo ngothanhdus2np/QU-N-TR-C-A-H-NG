@@ -4,7 +4,7 @@ import { APP_THEMES, DEFAULT_THEME, AppThemeId } from '../constants/themes';
 const STORAGE_KEY = 'cfo-brain-theme';
 
 const isAppThemeId = (value: string | null): value is AppThemeId =>
-  value === 'classic' || value === 'codex' || value === 'prestige';
+  value === 'classic' || value === 'codex' || value === 'prestige' || value === 'clarity';
 
 export const useTheme = () => {
   const [themeId, setThemeId] = useState<AppThemeId>(() => {

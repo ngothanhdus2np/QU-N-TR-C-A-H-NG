@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export function createAuthRouter(supabase: SupabaseClient) {
   const router = Router();
@@ -133,6 +133,44 @@ export function createAuthRouter(supabase: SupabaseClient) {
     const { error } = await supabase.auth.admin.deleteUser(id);
     if (error) return res.status(400).json({ error: error.message });
     return res.json({ success: true });
+  });
+
+  /**
+   * POST /api/auth/verify-manager
+   * Xác minh credentials của manager/owner mà không đổi session hiện tại.
+   */
+  router.post('/api/auth/verify-manager', async (req, res) => {
+    const { username, password } = req.body as { username?: string; password?: string };
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Thiếu thông tin đăng nhập.' });
+    }
+
+    const email = username.includes('@')
+      ? username
+      : `${username.trim().toLowerCase()}@cfobrain.local`;
+
+    const tempClient = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!
+    );
+
+    const { data, error } = await tempClient.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không đúng.' });
+    }
+
+    const role = data.user.user_metadata?.role || 'owner';
+    await tempClient.auth.signOut();
+
+    if (role !== 'manager' && role !== 'owner') {
+      return res.status(403).json({ error: 'Tài khoản này không có quyền quản lý.' });
+    }
+
+    return res.json({
+      success: true,
+      role,
+      displayName: data.user.user_metadata?.display_name || username,
+    });
   });
 
   return router;

@@ -79,17 +79,17 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   }, [showMoreMenu]);
 
   const btnBase =
-    'flex items-center gap-1.5 px-3 py-2 rounded-xl font-semibold text-2xs uppercase tracking-wide transition-all border';
+    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-normal transition-all border';
 
   return (
   <>
-    <div className="px-4 min-h-[52px] border-b border-slate-100 flex items-center gap-3 shrink-0">
+    <div className="px-4 min-h-[44px] border-b border-slate-200 flex items-center gap-2 shrink-0">
       <div className="flex-1 relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <input
           type="text"
           placeholder="Tìm theo tên, mã hàng..."
-          className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-300"
+          className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm font-normal outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-400"
           value={searchTerm}
           onChange={e => onSearchChange(e.target.value)}
         />
@@ -97,7 +97,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
 
       {selectedCount > 0 ? (
         <div className="flex items-center gap-2 ml-auto">
-          <span className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-2xs font-semibold uppercase tracking-wide border border-indigo-200">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-md text-sm font-normal border border-indigo-200">
             Đã chọn {selectedCount}
             <button onClick={onClearSelection} className="hover:text-indigo-900 transition-colors">
               <X className="h-3 w-3" />
@@ -167,7 +167,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
         </div>
       ) : (
         <div className="flex items-center gap-2 ml-auto">
-          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shrink-0">
+          <div className="flex items-center border border-slate-200 rounded-md overflow-hidden shrink-0">
             <button
               onClick={() => onViewModeChange('table')}
               className={`flex items-center justify-center w-8 h-8 transition-all ${
@@ -193,7 +193,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
           </div>
           <button
             onClick={onOpenCreate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-2xs uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-md text-sm font-normal hover:bg-indigo-700 transition-all"
           >
             <Plus className="h-3.5 w-3.5" /> Tạo mới
           </button>
@@ -202,9 +202,9 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
       )}
     </div>
 
-    <div className="px-4 py-2 bg-slate-50/60 border-b border-slate-100 flex items-center gap-2 flex-wrap shrink-0">
-      <span className="text-2xs font-bold text-slate-500">
-        Hiển thị <span className="font-semibold text-slate-800">{filteredCount}</span> / {totalCount}{' '}
+    <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2 flex-wrap shrink-0">
+      <span className="text-xs font-normal text-slate-500">
+        Hiển thị <span className="font-medium text-slate-700">{filteredCount}</span> / {totalCount}{' '}
         hàng hóa
       </span>
       {filterCategories.map(cat => (

@@ -121,13 +121,19 @@ const InventoryOutTab: React.FC<Props> = ({
 
   // Dedup bằng orderId (mã vận đơn) trước khi filter — lớp bảo vệ cuối cùng
   const dedupedInventoryOut = useMemo(() => {
-    const seen = new Set<string>();
-    return shopeeInventoryOut.filter(item => {
+    const score = (item: typeof shopeeInventoryOut[number]) =>
+      (item.sku ? 100 : 0) +
+      (item.productName && item.productName.toUpperCase() !== 'DEBUG' ? 20 : 0) +
+      (Number(item.salePrice || 0) > 0 ? 10 : 0) +
+      (item.status === 'OK' ? 1 : 0);
+    const bestByOrder = new Map<string, typeof shopeeInventoryOut[number]>();
+    shopeeInventoryOut.forEach(item => {
       const key = item.orderId || item.id;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
+      if (!key) return;
+      const existing = bestByOrder.get(key);
+      if (!existing || score(item) > score(existing)) bestByOrder.set(key, item);
     });
+    return Array.from(bestByOrder.values());
   }, [shopeeInventoryOut]);
 
   const filteredData = useMemo(() => {

@@ -417,11 +417,14 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       sku: item.sku,
       quantity: n(item.quantity),
       sale_price: n(item.salePrice),
+      customer_paid: n(item.customerPaid),
       platform_fee: n(item.platformFee),
       payment_fee: n(item.paymentFee),
       freeship_extra: n(item.freeshipExtra),
       affiliate_fee: n(item.affiliateFee),
       handling_fee: n(item.handlingFee),
+      piship_fee: n(item.pishipFee),
+      vat_tax: n(item.vatTax),
       ads_cost: n(item.adsCost),
       ads_tax: n(item.adsTax),
       personal_income_tax: n(item.personalIncomeTax),
@@ -429,6 +432,10 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       address: item.address,
       shipping_unit: item.shippingUnit,
       product_name: item.productName || null,
+      tracking_number: item.trackingNumber || item.orderId || null,
+      ship_date: item.shipDate || item.date || null,
+      platform: item.platform || null,
+      profit_status: item.profitStatus || null,
     };
   if (key === 'customerDebtHistory')
     return {
@@ -712,13 +719,21 @@ export const apiService = {
   async fetchShopeeInventoryOut() {
     const result = await fetchAllRows('shopee_inventory_out', 'id');
     if (result.data) {
-      const seen = new Set<string>();
-      result.data = result.data.filter((r: any) => {
+      // Dedup theo order_id — giữ hàng có dữ liệu đầy đủ nhất (customer_paid cao nhất)
+      const bestByOrder = new Map<string, any>();
+      const score = (r: any) =>
+        (r.sku ? 100 : 0) +
+        (Number(r.customer_paid ?? 0) > 0 ? 50 : 0) +
+        (Number(r.platform_fee ?? 0) > 0 ? 20 : 0) +
+        (r.product_name ? 10 : 0) +
+        (Number(r.sale_price ?? 0) > 0 ? 5 : 0);
+      for (const r of result.data) {
         const key = r.order_id || r.id;
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+        if (!key) continue;
+        const existing = bestByOrder.get(key);
+        if (!existing || score(r) > score(existing)) bestByOrder.set(key, r);
+      }
+      result.data = Array.from(bestByOrder.values());
     }
     return result;
   },

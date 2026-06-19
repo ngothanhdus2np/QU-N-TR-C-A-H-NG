@@ -295,7 +295,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           }}
           className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
         >
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-3 py-2.5 border-b border-slate-100">
             <span className="text-sm font-bold text-slate-800">Tồn kho</span>
           </div>
           <div className="py-1">
@@ -344,7 +344,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           }}
           className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
         >
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-3 py-2.5 border-b border-slate-100">
             <span className="text-sm font-bold text-slate-800">Nhà cung cấp</span>
           </div>
           <div className="px-3 py-2 border-b border-slate-100">
@@ -498,8 +498,8 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
 
       {/* === Filter Aside === */}
       <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-        <div className="px-4 min-h-[52px] border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Hàng hoá</h2>
+        <div className="px-4 min-h-[44px] border-b border-slate-100 shrink-0 flex items-center justify-between">
+          <h2 className="text-xs font-medium text-slate-500 uppercase tracking-wide">Hàng hoá</h2>
           <div className="flex items-center gap-2">
             {hasActiveFilters && (
               <button
@@ -514,9 +514,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
           {/* 1. Nhóm hàng */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700">Nhóm hàng</span>
+          <div className="px-3 py-2.5 border-b border-slate-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-500">Nhóm hàng</span>
               <button className="text-2xs text-indigo-500 font-semibold hover:underline">
                 Tạo mới
               </button>
@@ -536,9 +536,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           </div>
 
           {/* 2. Nhà cung cấp */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700">Nhà cung cấp</span>
+          <div className="px-3 py-2.5 border-b border-slate-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-500">Nhà cung cấp</span>
               {filterSupplier.length > 0 && (
                 <button
                   onClick={() => { setFilterSupplier([]); onResetPage(); }}
@@ -563,7 +563,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                 setSupplierSearch('');
                 setShowSupplierPopup(true);
               }}
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
+              className="w-full px-3 py-1.5 text-[13px] bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
             >
               <span className={filterSupplier.length > 0 ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
                 {filterSupplier.length === 0
@@ -577,9 +577,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           </div>
 
           {/* 3. Thương hiệu */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700">Thương hiệu</span>
+          <div className="px-3 py-2.5 border-b border-slate-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-500">Thương hiệu</span>
               {filterBrand && (
                 <button
                   onClick={() => {
@@ -595,7 +595,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
             <div
               ref={brandTriggerRef}
               onClick={openBrandPopup}
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
+              className="w-full px-3 py-1.5 text-[13px] bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
             >
               <span className={filterBrand ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
                 {filterBrand || 'Chọn thương hiệu'}
@@ -605,9 +605,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           </div>
 
           {/* 4. Thuộc tính */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-700 mb-2 block">Thuộc tính</span>
-            <div className="space-y-2">
+          <div className="px-3 py-2.5 border-b border-slate-100">
+            <span className="text-xs font-medium text-slate-500 mb-1.5 block">Thuộc tính</span>
+            <div className="space-y-1">
               {Object.entries(attrValuesByName).map(([attrName, attrData]) => {
                 const selectedCount = attrData.values.filter(v => filterAttrs.includes(v)).length;
                 return (
@@ -627,10 +627,10 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                       setAttrPopupSearch('');
                       setShowAttrPopup(true);
                     }}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
+                    className="w-full px-3 py-1.5 text-[13px] bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-slate-700">
+                      <span className="block truncate font-normal text-slate-700">
                         {attrName}
                       </span>
                       {selectedCount > 0 && (
@@ -652,8 +652,8 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           </div>
 
           {/* 5. Vị trí */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-700 mb-2 block">Vị trí</span>
+          <div className="px-3 py-2.5 border-b border-slate-100">
+            <span className="text-xs font-medium text-slate-500 mb-2 block">Vị trí</span>
             <input
               type="text"
               placeholder="Chọn vị trí"
@@ -674,7 +674,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
 
           {/* 6. Tồn kho */}
           <div className="px-4 py-3">
-            <span className="text-xs font-bold text-slate-700 mb-2 block">Tồn kho</span>
+            <span className="text-xs font-medium text-slate-500 mb-2 block">Tồn kho</span>
             <div
               ref={stockTriggerRef}
               onClick={() => {
@@ -688,7 +688,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                 }
                 setShowStockPopup(true);
               }}
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
+              className="w-full px-3 py-1.5 text-[13px] bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
             >
               <span
                 className={

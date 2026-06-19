@@ -83,6 +83,7 @@ export const SIDEBAR_SECTIONS = [
   },
   {
     title: 'Online',
+    hidden: true,
     items: [
       { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Package },
       { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
@@ -178,6 +179,7 @@ export const SIDEBAR_SECTIONS = [
   },
   {
     title: 'Marketing',
+    hidden: true,
     items: [
       { id: 'promotions', label: 'Khuyến Mãi', icon: Tag },
       { id: 'marketing', label: 'Nội dung Fanpage', icon: Megaphone },
@@ -185,6 +187,7 @@ export const SIDEBAR_SECTIONS = [
   },
   {
     title: 'Hệ thống',
+    hidden: true,
     groups: [
       {
         header: 'Hệ thống',

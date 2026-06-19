@@ -66,7 +66,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
     : (activeFormTab as DetailTab);
 
   return (
-    <tbody className="divide-y divide-slate-50">
+    <tbody className="divide-y divide-slate-100">
       {currentProducts.length === 0 ? (
         <tr>
           <td colSpan={colCount} className="py-20 text-center text-slate-400">

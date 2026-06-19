@@ -687,6 +687,11 @@ export function useAppData() {
             customerPaid: Number(r.customer_paid ?? r.customerPaid ?? r.sale_price ?? r.salePrice ?? 0),
             address: (r.address ?? '') as string,
             shippingUnit: (r.shipping_unit ?? r.shippingUnit ?? '') as string,
+            platform: (r.platform ?? 'Shopee 2') as string,
+            productName: (r.product_name ?? r.productName ?? '') as string,
+            trackingNumber: (r.tracking_number ?? r.trackingNumber ?? r.order_id ?? r.orderId ?? '') as string,
+            shipDate: (r.ship_date ?? r.shipDate ?? r.date ?? '') as string,
+            profitStatus: (r.profit_status ?? r.profitStatus ?? '') as string,
           }));
           dispatch({ type: 'SET_DATA', payload: { shopeeInventoryOut: mapped } });
         }).catch(() => { /* silent — không block UI */ });

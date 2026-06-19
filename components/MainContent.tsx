@@ -87,6 +87,8 @@ interface MainContentProps {
   offlineOrderPendingCount?: number;
   isDraining?: boolean;
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
+  userRole?: string;
+  onManagerUnlocked?: () => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -112,6 +114,8 @@ const MainContent: React.FC<MainContentProps> = ({
   offlineOrderPendingCount,
   isDraining,
   onDrainOfflineQueue,
+  userRole,
+  onManagerUnlocked,
 }) => {
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
   const [eodDismissed, setEodDismissed] = useState(false);
@@ -815,6 +819,8 @@ const MainContent: React.FC<MainContentProps> = ({
               brandProfile={brandProfile}
               currentStaffName={brandProfile?.name || 'Quản lý'}
               onGoToManagement={() => handleSetActiveTab('overview')}
+              requireManagerAuth={userRole === 'cashier'}
+              onManagerUnlocked={onManagerUnlocked}
               offlineOrderPendingCount={offlineOrderPendingCount}
               isDraining={isDraining}
               onDrainOfflineQueue={onDrainOfflineQueue}

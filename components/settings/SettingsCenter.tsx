@@ -597,15 +597,6 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   const [inventorySaveStatus, setInventorySaveStatus] = useState<
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
-  const [costMethod, setCostMethod] = useState<InventoryCostMethod>(() => {
-    try {
-      const saved = localStorage.getItem(INVENTORY_COST_METHOD_STORAGE_KEY);
-      return saved === 'fixed' || saved === 'average' ? saved : 'fixed';
-    } catch {
-      return 'fixed';
-    }
-  });
-
   const [tierSettings, setTierSettings] = useState<CustomerTierMap>(() => {
     try {
       const saved = localStorage.getItem(CUSTOMER_TIER_STORAGE_KEY);
@@ -1505,7 +1496,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
         <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
           <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
           <p className="text-xs text-blue-700 leading-relaxed">
-            Tiêu chí bên dưới là tham chiếu để nhân viên biết khi nào nên nâng hạng khách. Hệ thống chưa tự động tính — gán nhóm thủ công trong form khách hàng.
+            Hệ thống tự động nâng hạng sau mỗi đơn hàng dựa trên tổng chi tiêu tích lũy. Chỉ nâng hạng, không tự động hạ. Gán thủ công trong form khách hàng vẫn được ưu tiên.
           </p>
         </div>
 

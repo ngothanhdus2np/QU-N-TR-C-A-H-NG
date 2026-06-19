@@ -6,6 +6,7 @@ import POSReceiptModal from './POSReceiptModal';
 import POSReturnModal from './POSReturnModal';
 import POSHeaderToolbar from './POSHeaderToolbar';
 import EndOfDayReport from './EndOfDayReport';
+import ManagerUnlockModal from './ManagerUnlockModal';
 import POSItemDiscountPopup, { ItemDiscountPopupState } from './POSItemDiscountPopup';
 import POSBillDiscountPopup from './POSBillDiscountPopup';
 import POSToasts from './POSToasts';
@@ -53,6 +54,26 @@ function useIsMobile() {
 }
 
 const SKU_COLLATOR = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+
+// AUDIT-010: Tự động nâng hạng KH sau mỗi đơn. Chỉ upgrade, không downgrade.
+function computeNewTier(newTotalSpentVnd: number, currentTier: POSCustomer['tier']): POSCustomer['tier'] {
+  try {
+    const stored = localStorage.getItem('customer_tier_settings');
+    const s = stored ? JSON.parse(stored) : {};
+    const diamondMin = (s.Diamond?.minSpend ?? 100) as number;
+    const goldMin    = (s.Gold?.minSpend    ?? 20)  as number;
+    const silverMin  = (s.Silver?.minSpend  ?? 5)   as number;
+    const spent = newTotalSpentVnd / 1_000_000;
+    const computed: POSCustomer['tier'] =
+      spent >= diamondMin ? 'Diamond' :
+      spent >= goldMin    ? 'Gold'    :
+      spent >= silverMin  ? 'Silver'  : 'Standard';
+    const rank: Record<string, number> = { Standard: 0, Silver: 1, Gold: 2, Diamond: 3 };
+    return (rank[computed] ?? 0) > (rank[currentTier] ?? 0) ? computed : currentTier;
+  } catch {
+    return currentTier;
+  }
+}
 const EMPTY_SPLIT_PAYMENT = { cash: 0, bank: 0, card: 0, momo: 0 } as const;
 const DEFAULT_POS_STAFF = [
   { id: 'ngo-thanh-du', name: 'Ngô Thành Du', kiotvietId: '3458a3f9-2a12-551f-88b5-3b710078f807' },
@@ -81,6 +102,8 @@ interface POSComputerProps {
   ) => Promise<void>;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
+  requireManagerAuth?: boolean;
+  onManagerUnlocked?: () => void;
   brandProfile?: BrandProfile;
   paymentSettings?: POSPaymentSettings;
   inventorySettings?: POSInventorySettings;
@@ -103,6 +126,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
   onReturnOrder,
   onAddCustomer,
   onGoToManagement,
+  requireManagerAuth,
+  onManagerUnlocked,
   brandProfile,
   paymentSettings,
   inventorySettings,
@@ -114,6 +139,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   revenue = [],
 }) => {
   const { showToast } = useToast();
+  const [showManagerUnlock, setShowManagerUnlock] = useState(false);
   // Use custom hook for all state management
   const posState = usePOSState({ paymentSettings, isActive });
 
@@ -790,6 +816,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
         refundAmount: amountToPayCustomer, // tự tính: > 0 → hoàn tiền, 0 → đổi hàng
         returnFee: returnFee > 0 ? returnFee : undefined,
         returnOtherRefund: returnOtherRefund > 0 ? returnOtherRefund : undefined,
+        originalOrderId: activeTab.originalOrderId,
       };
 
       const returnedByProduct = new Map(returnCart.map(item => [item.productId, item.quantity]));
@@ -885,10 +912,12 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
     if (selectedCustomer) {
       const debtAdded = isDebtMode ? netPayable : 0;
+      const newTotalSpent = selectedCustomer.totalSpent + netPayable;
       updatedCustomer = {
         ...selectedCustomer,
         points: selectedCustomer.points + pointsEarned,
-        totalSpent: selectedCustomer.totalSpent + netPayable,
+        totalSpent: newTotalSpent,
+        tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
         lastVisit: new Date().toISOString(),
         debtAmount: (selectedCustomer.debtAmount ?? 0) + debtAdded,
       };
@@ -1308,7 +1337,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
         setIsAutoPrintEnabled={setIsAutoPrintEnabled}
         showGridMenu={showGridMenu}
         setShowGridMenu={setShowGridMenu}
-        onGoToManagement={onGoToManagement}
+        onGoToManagement={
+          requireManagerAuth
+            ? () => setShowManagerUnlock(true)
+            : onGoToManagement
+        }
         onViewEODReport={() => setShowEODReport(true)}
         onManualSync={handleManualSync}
         onProcessOrders={() => {
@@ -1526,6 +1559,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
       />
 
       <POSToasts scanFeedback={scanFeedback} stockWarning={stockWarning} />
+
+      {showManagerUnlock && (
+        <ManagerUnlockModal
+          onSuccess={() => {
+            setShowManagerUnlock(false);
+            onManagerUnlocked?.();
+          }}
+          onCancel={() => setShowManagerUnlock(false)}
+        />
+      )}
     </div>
   );
 };

@@ -99,6 +99,11 @@ export const determineCurrentPolicy = (
     if (currEnd > (next.startThreshold || 0)) {
       console.warn(`[Payroll] Policy overlap: "${curr.name}" [${curr.startThreshold}-${currEnd}) vs "${next.name}" [${next.startThreshold}-...)`);
     }
+    // AUDIT-021: kiểm tra gap — khoảng thâm niên không có policy nào bao phủ
+    const nextEnd = next.endThreshold === 0 || next.endThreshold == null ? Infinity : next.endThreshold;
+    if (nextEnd < (curr.startThreshold || 0)) {
+      console.warn(`[Payroll] Policy gap: không có policy cho thâm niên [${nextEnd}-${curr.startThreshold}) ngày`);
+    }
   }
 
   const match = sortedCandidates.find(p => {

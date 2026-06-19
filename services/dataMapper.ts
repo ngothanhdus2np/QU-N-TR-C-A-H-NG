@@ -26,8 +26,10 @@ import { buildVariantProductName } from '../src/lib';
 type DbRow = Record<string, unknown>;
 type ConfigRow = DbRow & { key?: string; value?: unknown };
 
-const inferIsReturnOrder = (orderCode: unknown, finalAmount: number, explicit: unknown) =>
-  explicit === true || /^TH/i.test(String(orderCode || '')) || finalAmount < 0;
+// AUDIT-008: chỉ dùng is_return (explicit) — loại bỏ fallback prefix TH\d và finalAmount < 0
+// để tránh false positive (đơn giảm giá 100% hoặc mã bắt đầu TH).
+const inferIsReturnOrder = (_orderCode: unknown, _finalAmount: number, explicit: unknown) =>
+  explicit === true;
 
 interface DataMapperResults {
   brandProfile?: DbRow | null;
@@ -457,14 +459,19 @@ export const dataMapper = {
           (results.shopeeInventoryOut || []).map(r => ({
             id: r.id,
             date: r.date,
+            shipDate: r.ship_date || r.shipDate || r.date,
             status: r.status,
             orderId: r.order_id || r.orderId,
+            trackingNumber: r.tracking_number || r.trackingNumber || r.order_id || r.orderId,
             sku: r.sku,
             quantity: r.quantity || r.Quantity || 0,
             salePrice: r.sale_price || r.salePrice || 0,
+            customerPaid: r.customer_paid || r.customerPaid || 0,
             platformFee: r.platform_fee || r.platformFee || 0,
             paymentFee: r.payment_fee || r.paymentFee || 0,
             freeshipExtra: r.freeship_extra || r.freeshipExtra || 0,
+            pishipFee: r.piship_fee || r.pishipFee || 0,
+            vatTax: r.vat_tax || r.vatTax || 0,
             affiliateFee: r.affiliate_fee || r.affiliateFee || 0,
             handlingFee: r.handling_fee || r.handlingFee || 0,
             adsCost: r.ads_cost || r.adsCost || 0,
@@ -475,17 +482,27 @@ export const dataMapper = {
             shippingUnit: r.shipping_unit || r.shippingUnit,
             platform: r.platform || 'Shopee 2',
             productName: r.product_name || r.productName || '',
+            profitStatus: r.profit_status || r.profitStatus || '',
           })),
           localData?.shopeeInventoryOut || []
         );
-        // Dedup bằng orderId (mã vận đơn) — primary key thực tế
-        const seen = new Set<string>();
-        return merged.filter(r => {
-          const key = r.orderId || r.id;
-          if (!key || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+        // Dedup theo (orderId + sku) — 1 Shopee order có thể có nhiều SKU khác nhau.
+        // Ưu tiên dòng có SKU/tên thật để dòng debug rỗng không che dữ liệu đúng.
+        const score = (record: typeof merged[number]) =>
+          (record.sku ? 100 : 0) +
+          (record.productName && record.productName.toUpperCase() !== 'DEBUG' ? 20 : 0) +
+          (Number(record.salePrice || 0) > 0 ? 10 : 0) +
+          (record.status === 'OK' ? 1 : 0);
+        const bestByOrder = new Map<string, typeof merged[number]>();
+        for (const record of merged) {
+          const key = record.orderId
+            ? `${record.orderId}||${record.sku || ''}`
+            : record.id;
+          if (!key) continue;
+          const existing = bestByOrder.get(key);
+          if (!existing || score(record) > score(existing)) bestByOrder.set(key, record);
+        }
+        return Array.from(bestByOrder.values());
       })(),
       posProducts: this.mergeBy(
         (results.posProducts || []).map(p => {

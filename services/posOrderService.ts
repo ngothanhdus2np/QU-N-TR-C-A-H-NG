@@ -144,6 +144,10 @@ function buildExchangeTransaction(
   };
 }
 
+function computeGrossProfit(netRevenue: number, revenueOther: number, cogs: number): number {
+  return netRevenue + revenueOther - cogs;
+}
+
 function buildRevenueUpdate(
   existingRevenue: RevenueRecord | undefined,
   order: POSOrder,
@@ -169,7 +173,7 @@ function buildRevenueUpdate(
       revenueOther: updatedRevenueOther,
       netRevenue: updatedNetRevenue,
       totalCogs: updatedTotalCogs,
-      grossProfit: updatedNetRevenue + updatedRevenueOther - updatedTotalCogs,
+      grossProfit: computeGrossProfit(updatedNetRevenue, updatedRevenueOther, updatedTotalCogs),
     };
   }
 
@@ -182,14 +186,15 @@ function buildRevenueUpdate(
     returnsValue: 0,
     netRevenue: orderNetRevenue,
     totalCogs: orderCogs,
-    grossProfit: orderNetRevenue + orderOtherFees - orderCogs,
+    grossProfit: computeGrossProfit(orderNetRevenue, orderOtherFees, orderCogs),
   };
 }
 
+// sv-SE = YYYY-MM-DD format, nhất quán với businessLogic.revenue.ts
 function toLocalDateKey(dateString: string): string {
   const date = new Date(dateString);
-  if (!Number.isNaN(date.getTime())) return date.toLocaleDateString('en-CA');
-  return new Date().toLocaleDateString('en-CA');
+  if (!Number.isNaN(date.getTime())) return date.toLocaleDateString('sv-SE');
+  return new Date().toLocaleDateString('sv-SE');
 }
 
 function buildOrdersForStaffSales(existingOrders: POSOrder[] = [], order: POSOrder) {
@@ -258,7 +263,10 @@ export async function processPlaceOrder({
       await updateSurgical([{ key: 'posOrders', item: { id: order.id }, isDelete: true }]);
     });
 
-    // Bước 2: Cập nhật stock và inventory transaction
+    // Bước 2: Ghi inventory transaction + cập nhật stock trong 1 lần gọi.
+    // updateSurgical phát hiện có cả inventoryTransactions + posProducts → kích hoạt
+    // apply_inventory_transaction_with_stock RPC (atomic INSERT + UPDATE trong 1 SQL transaction).
+    // AUDIT-003/009: gộp 2 lần gọi riêng lẻ thành 1 để đảm bảo atomicity.
     const stockUpdates = order.items
       .map(item => ({
         key: 'posProducts' as const,
@@ -266,25 +274,18 @@ export async function processPlaceOrder({
       }))
       .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
 
-    // [FIX I1] Tách thành 2 bước riêng — nếu bước sau fail, rollback được cả 2
-    // Bước 2a: Ghi inventory transaction trước
-    await updateSurgical([{ key: 'inventoryTransactions', item: inventoryTransaction }]);
+    await updateSurgical([{ key: 'inventoryTransactions', item: inventoryTransaction }, ...stockUpdates]);
     rollbackSteps.push(async () => {
-      console.error('[ROLLBACK] Xóa inventory transaction:', inventoryTransaction.id);
-      await updateSurgical([{ key: 'inventoryTransactions', item: { id: inventoryTransaction.id }, isDelete: true }]);
+      console.error('[ROLLBACK] Xóa inventory transaction + hoàn tồn kho:', inventoryTransaction.id);
+      const revertStockUpdates = order.items
+        .map(item => ({ key: 'posProducts' as const, item: findProduct(currentMap, item.productId) }))
+        .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
+      // Rollback cũng gộp 1 lần → RPC atomic deleteInventoryTransactionWithStock
+      await updateSurgical([
+        { key: 'inventoryTransactions', item: { id: inventoryTransaction.id }, isDelete: true },
+        ...revertStockUpdates,
+      ]);
     });
-
-    // Bước 2b: Cập nhật stock sau — nếu fail, bước rollback trên sẽ xóa transaction
-    if (stockUpdates.length > 0) {
-      await updateSurgical(stockUpdates);
-      rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Hoàn tồn kho cho order:', order.id);
-        const revertStockUpdates = order.items
-          .map(item => ({ key: 'posProducts' as const, item: findProduct(currentMap, item.productId) }))
-          .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
-        await updateSurgical(revertStockUpdates);
-      });
-    }
 
     // Bước 3: Cập nhật customer (nếu có)
     if (updatedCustomer) {
@@ -396,25 +397,21 @@ export async function processReturnOrder({
   const returnCogs = calculateOrderCogs(currentMap, returnedItems);
   const exchangeCogs = calculateOrderCogs(currentMap, exchangeItems);
 
-  // Cập nhật revenue: trừ tiền trả, cộng tiền đổi, điều chỉnh COGS
-  const orderDate = toLocalDateKey(returnOrder.date);
-  const existingRevenue = (data.revenue || []).find(r => r.date === orderDate);
-
   const totalReturnValue = returnedItems.reduce((sum, item) => sum + item.total, 0);
   const totalExchangeValue = exchangeItems.reduce((sum, item) => sum + item.total, 0);
   // returnFee (phí trả hàng shop thu) ghi vào revenueOther để phản ánh đúng doanh thu thực
   const orderReturnFee = Number(returnOrder.returnFee) || 0;
 
+  // AUDIT-006: thiết kế có chủ đích — trả hàng ghi vào ngày trả, không điều chỉnh ngày bán gốc.
+  const returnDate = toLocalDateKey(returnOrder.date);
+
   const rollbackSteps: Array<() => Promise<void>> = [];
 
   try {
-    // Bước 1: Ghi revenue
+    // Bước 1: Ghi revenue vào ngày trả
+    const existingRevenue = (data.revenue || []).find(r => r.date === returnDate);
     if (existingRevenue) {
-      // BUG-19 fix: không để netRevenue âm khi trả đơn từ ngày khác
-      const updatedNetRevenue = Math.max(
-        0,
-        existingRevenue.netRevenue - totalReturnValue + totalExchangeValue
-      );
+      const updatedNetRevenue = Math.max(0, existingRevenue.netRevenue - totalReturnValue + totalExchangeValue);
       const updatedTotalCogs = existingRevenue.totalCogs - returnCogs + exchangeCogs;
       const revenueUpdate: RevenueRecord = {
         ...existingRevenue,
@@ -422,7 +419,7 @@ export async function processReturnOrder({
         netRevenue: updatedNetRevenue,
         revenueOther: (existingRevenue.revenueOther || 0) + orderReturnFee,
         totalCogs: updatedTotalCogs,
-        grossProfit: updatedNetRevenue + (existingRevenue.revenueOther || 0) + orderReturnFee - updatedTotalCogs,
+        grossProfit: computeGrossProfit(updatedNetRevenue, (existingRevenue.revenueOther || 0) + orderReturnFee, updatedTotalCogs),
       };
       await updateSurgical([{ key: 'revenue', item: revenueUpdate }]);
       rollbackSteps.push(async () => {
@@ -433,19 +430,17 @@ export async function processReturnOrder({
       const totalCogs = -returnCogs + exchangeCogs;
       const newRecord: RevenueRecord = {
         id: crypto.randomUUID(),
-        date: orderDate,
+        date: returnDate,
         totalGrossRevenue: 0,
         discount: 0,
         revenueOther: orderReturnFee,
         returnsValue: totalReturnValue,
         netRevenue,
         totalCogs,
-        grossProfit: netRevenue + orderReturnFee - totalCogs,
+        grossProfit: computeGrossProfit(netRevenue, orderReturnFee, totalCogs),
       };
       await pushBatch('revenue', [newRecord]);
-      // BUG-18 fix: đăng ký rollback để xóa record mới nếu bước sau fail
       rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Xóa revenue mới (ngày không có đơn bán):', newRecord.id);
         await updateSurgical([{ key: 'revenue', item: { id: newRecord.id }, isDelete: true }]);
       });
     }
@@ -497,7 +492,15 @@ export async function processReturnOrder({
     // Bước 4: Cập nhật khách hàng
     if (updatedCustomer) {
       const originalCustomer = (data.posCustomers || []).find(c => c.id === updatedCustomer.id);
-      await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+      // AUDIT-007: Service tự tính totalSpent — không phụ thuộc caller tính đúng.
+      // Trừ giá trị hàng trả thực tế, cộng giá trị hàng đổi (mua mới).
+      const totalReturnValue = returnedItems.reduce((sum, item) => sum + item.total, 0);
+      const totalExchangeValue = exchangeItems.reduce((sum, item) => sum + item.total, 0);
+      const correctedCustomer: POSCustomer = {
+        ...updatedCustomer,
+        totalSpent: Math.max(0, (originalCustomer?.totalSpent || 0) - totalReturnValue + totalExchangeValue),
+      };
+      await updateSurgical([{ key: 'posCustomers', item: correctedCustomer }]);
       if (originalCustomer) {
         rollbackSteps.push(async () => {
           await updateSurgical([{ key: 'posCustomers', item: originalCustomer }]);

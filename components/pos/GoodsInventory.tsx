@@ -173,6 +173,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const [changeGroupModal, setChangeGroupModal] = useState<{ isOpen: boolean; selectedGroupId: string }>({ isOpen: false, selectedGroupId: '' });
   const [createGroupModal, setCreateGroupModal] = useState<{ isOpen: boolean; name: string; parentId: string }>({ isOpen: false, name: '', parentId: '' });
 
+  // AUDIT-011: Cảnh báo khi hoàn thành nhập hàng mà chưa chọn NCC
+  const [showNoSupplierConfirm, setShowNoSupplierConfirm] = useState(false);
+
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -227,6 +230,15 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     invoiceFile,
     setInvoiceFile,
   } = useGoodsPurchase({ products, suppliers, inventoryCostMethod, onUpdateProducts, onUpdateSurgical, onAddTransaction, showToast });
+
+  // AUDIT-011: Intercept "Hoàn thành nhập hàng" — cảnh báo nếu chưa nhập NCC
+  const handleCompletePurchaseWithCheck = () => {
+    if (!purchaseSupplier.trim()) {
+      setShowNoSupplierConfirm(true);
+    } else {
+      handleCompletePurchase();
+    }
+  };
   const {
     auditSearchTerm,
     setAuditSearchTerm,
@@ -846,7 +858,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             setPurchaseDiscountType={setPurchaseDiscountType}
             onUpdatePurchaseItem={updatePurchaseItem}
             onRemovePurchaseItem={removePurchaseItem}
-            onCompletePurchase={handleCompletePurchase}
+            onCompletePurchase={handleCompletePurchaseWithCheck}
             onDownloadTemplate={downloadTemplate}
             invoiceStatus={invoiceStatus}
             setInvoiceStatus={setInvoiceStatus}
@@ -1249,6 +1261,34 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         onAddUnit={handleAddUnitInView}
         onAddAttribute={handleAddAttributeInView}
       />
+    )}
+    {/* AUDIT-011: Modal cảnh báo khi chưa chọn NCC */}
+    {showNoSupplierConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-[400px] p-6">
+          <h2 className="text-base font-semibold text-slate-900 mb-2">Chưa nhập nhà cung cấp</h2>
+          <p className="text-sm text-slate-600 mb-5">
+            Phiếu nhập chưa chọn nhà cung cấp. Tiếp tục sẽ ghi vào <strong>NCC lẻ</strong>.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowNoSupplierConfirm(false)}
+              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors"
+            >
+              Quay lại
+            </button>
+            <button
+              onClick={() => {
+                setShowNoSupplierConfirm(false);
+                handleCompletePurchase('NCC lẻ');
+              }}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Tiếp tục
+            </button>
+          </div>
+        </div>
+      </div>
     )}
     </div>
   );
