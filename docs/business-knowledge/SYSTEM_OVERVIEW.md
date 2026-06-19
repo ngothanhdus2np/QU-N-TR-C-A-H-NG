@@ -108,7 +108,7 @@ Xem chi tiết tại: [BUSINESS_RULES.md](BUSINESS_RULES.md)
 | NV-001 | Tier upgrade KH (Standard→Silver→Gold→Diamond) — không tìm thấy rule tự động trong code | Xác nhận với owner: tier được set thủ công hay có logic? |
 | NV-002 | Tần suất check cảnh báo tồn kho thấp | `routes/notifications.ts` — chưa đọc |
 | NV-003 | Limit 2000 rows enforce cho tất cả bảng? | `services/apiService.ts:fetchTablePage()` |
-| NV-004 | `product_cost_history` bảng có được dùng hay chỉ dùng `buildCostHistory()` từ transactions | `reportCalculations.ts` comment: "chưa được dùng" |
+| NV-004 | `product_cost_history` được dùng server-side (recalculate-cogs, ma trận năm) nhưng chỉ được ghi khi nhập hàng OP-003 — nhập hàng nhanh OP-011 bỏ qua `writeCostHistory()` nên bảng thiếu dữ liệu. Client-side dùng `buildCostHistory()` từ `inventory_transactions` thay thế. | ⚠️ Rủi ro: báo cáo server-side có thể sai COGS cho hàng nhập qua OP-011 |
 | NV-005 | Nghiệp vụ xuất kho nội bộ (`goods-internal-use`) — đọc từ INVENTORY_LOGIC nhưng chưa đọc source đầy đủ | `components/inventory/GoodsInternalUse.tsx` |
 | NV-006 | Nghiệp vụ hủy hàng lỗi (`goods-disposal`) | `components/inventory/GoodsDisposal.tsx` |
 
