@@ -90,6 +90,10 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   const totalVariantStock = isParent && variants?.length
     ? variants.reduce((s, v) => s + (v.stock || 0), 0)
     : product.stock;
+  // Ảnh đại diện: cha dùng ảnh đầu của variant đầu tiên có ảnh
+  const thumbnailImg = isParent && variants?.length
+    ? variants.find(v => v.images?.[0])?.images?.[0]
+    : product.images?.[0];
 
   const skuRange = (() => {
     if (!isParent || !variants || variants.length === 0) return null;
@@ -116,7 +120,7 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
       {visibleColumns.includes('image') && (
         <td className={`px-2 py-2 w-20 ${top}`}>
           <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
-            {product.images?.[0] ? <img src={product.images[0]} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="h-3.5 w-3.5 text-slate-300" />}
+            {thumbnailImg ? <img src={thumbnailImg} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="h-3.5 w-3.5 text-slate-300" />}
           </div>
         </td>
       )}

@@ -641,10 +641,17 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   const [isQROpen, setIsQROpen] = React.useState(false);
   const [liveImages, setLiveImages] = React.useState<string[]>(product.images ?? []);
   const [localIp, setLocalIp] = React.useState<string | null>(null);
+  const [activeImageIdx, setActiveImageIdx] = React.useState(0);
 
   React.useEffect(() => {
     setLiveImages(product.images ?? []);
   }, [product.images]);
+
+  // Fetch ảnh mới nhất từ DB ngay khi panel mở
+  React.useEffect(() => {
+    supabase.from('pos_products').select('images').eq('id', product.id).single()
+      .then(({ data }) => { if (data && Array.isArray(data.images)) setLiveImages(data.images); });
+  }, [product.id]);
 
   React.useEffect(() => {
     const channel = supabase
@@ -654,12 +661,28 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         { event: 'UPDATE', schema: 'public', table: 'pos_products', filter: `id=eq.${product.id}` },
         (payload) => {
           const updated = payload.new as POSProduct;
-          if (updated.images) setLiveImages(updated.images);
+          if (Array.isArray(updated.images)) setLiveImages(updated.images);
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [product.id]);
+
+  // Polling khi QR đang mở, và fetch 1 lần nữa sau khi đóng QR
+  React.useEffect(() => {
+    const fetchImages = async () => {
+      const { data } = await supabase.from('pos_products').select('images').eq('id', product.id).single();
+      if (data && Array.isArray(data.images)) setLiveImages(data.images);
+    };
+    if (!isQROpen) {
+      // Fetch 1 lần sau khi đóng QR (ảnh có thể vừa được upload)
+      const t = setTimeout(fetchImages, 1000);
+      return () => clearTimeout(t);
+    }
+    fetchImages();
+    const timer = setInterval(fetchImages, 3000);
+    return () => clearInterval(timer);
+  }, [isQROpen, product.id]);
 
   const uploadUrl = `${localIp ? `http://${localIp}:${window.location.port || 3000}` : window.location.origin}/upload-image/${product.id}`;
 
@@ -695,6 +718,44 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     action?.(product);
   };
 
+  const hasImages = liveImages.length > 0;
+  const mainImg = liveImages[activeImageIdx] ?? liveImages[0];
+  const thumbs = liveImages.slice(0, 3);
+  const productText = (
+    <>
+      <h2 className="text-xl font-normal text-slate-900 mb-2">{product.name}</h2>
+      <p className="text-sm text-slate-600 mb-3">Nhóm hàng: <span className="font-normal">{product.categoryId || 'Chưa phân loại'}</span></p>
+      <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
+        <span className="flex items-center gap-1">
+          <input type="checkbox" checked readOnly disabled className="rounded border-slate-300" />
+          Hàng hóa thương
+        </span>
+        <span className="flex items-center gap-1">
+          <input type="checkbox" checked readOnly disabled className="rounded border-slate-300" />
+          Bán trực tiếp
+        </span>
+        <span className="flex items-center gap-1">
+          <input type="checkbox" checked={product.allowPoints} readOnly disabled className="rounded border-slate-300" />
+          Tích điểm
+        </span>
+      </div>
+      {product.variantAttributes ? (
+        <div className="mb-3">
+          <span className="text-sm text-slate-500 font-normal">Thuộc tính: </span>
+          {Object.entries(product.variantAttributes).map(([key, value]) => (
+            <span key={key} className="inline-block px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-normal mr-2">
+              {key}: {value}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <button className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
+          🔗 Xem phần tích
+        </button>
+      )}
+    </>
+  );
+
   return (
     <>
     <div className={`bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`}>
@@ -718,143 +779,143 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
 
       <div className="max-h-[600px] overflow-auto bg-slate-50 p-6">
         {activeTab === 'info' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <div className="flex gap-6">
-                <div className="w-40 self-stretch shrink-0 flex flex-col gap-2">
-                  <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200 overflow-hidden min-h-[120px]">
-                    {liveImages[0]
-                      ? <img src={liveImages[0]} alt={product.name} className="w-full h-full object-cover" />
-                      : <ImageIcon className="h-16 w-16 text-slate-300" />
-                    }
-                  </div>
-                  <button
-                    onClick={handleOpenQR}
-                    className="w-full py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                    Thêm ảnh
-                  </button>
+          <div className={hasImages ? 'flex gap-6 items-start' : 'space-y-6'}>
+
+            {/* Cột ảnh — chỉ hiện khi có ảnh */}
+            {hasImages && (
+              <div className="w-1/3 shrink-0 flex flex-col gap-2">
+                <div className="aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                  <img src={mainImg} alt={product.name} className="w-full h-full object-cover" />
                 </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-normal text-slate-900 mb-2">{product.name}</h2>
-                  <p className="text-sm text-slate-600 mb-3">Nhóm hàng: <span className="font-normal">{product.categoryId || 'Chưa phân loại'}</span></p>
-                  <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
-                    <span className="flex items-center gap-1">
-                      <input type="checkbox" checked readOnly disabled className="rounded border-slate-300" />
-                      Hàng hóa thương
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <input type="checkbox" checked readOnly disabled className="rounded border-slate-300" />
-                      Bán trực tiếp
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <input type="checkbox" checked={product.allowPoints} readOnly disabled className="rounded border-slate-300" />
-                      Tích điểm
-                    </span>
-                  </div>
-                  {product.variantAttributes ? (
-                    <div className="mb-3">
-                      <span className="text-sm text-slate-500 font-normal">Thuộc tính: </span>
-                      {Object.entries(product.variantAttributes).map(([key, value]) => (
-                        <span key={key} className="inline-block px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-normal mr-2">
-                          {key}: {value}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <button className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
-                      🔗 Xem phần tích
+                <div className="grid grid-cols-3 gap-2">
+                  {thumbs.map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveImageIdx(i)}
+                      className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
+                        (activeImageIdx === i || (activeImageIdx >= liveImages.length && i === 0))
+                          ? 'border-indigo-500'
+                          : 'border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      <img src={img} alt={`Ảnh ${i + 1}`} className="w-full h-full object-cover" />
                     </button>
-                  )}
+                  ))}
+                  {thumbs.length < 3 && Array.from({ length: 3 - thumbs.length }).map((_, i) => (
+                    <div key={`empty-${i}`} className="aspect-square rounded-lg border-2 border-dashed border-slate-200 bg-slate-50" />
+                  ))}
                 </div>
+                <button
+                  onClick={handleOpenQR}
+                  className="w-full py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  Thêm ảnh
+                </button>
               </div>
-            </div>
+            )}
 
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <div className="grid grid-cols-4 gap-6">
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Mã hàng</label>
-                  <div className="text-sm font-normal text-slate-900">{product.sku}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Tồn kho</label>
-                  <div className="text-sm font-normal text-slate-900">{product.stock}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Định mức tồn</label>
-                  <div className="text-sm font-normal text-slate-900">{product.minStock ?? 0} - {product.maxStock ?? 999999999}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Giá vốn</label>
-                  <div className="text-sm font-normal text-slate-900">{(Number(product.importPrice) || 0).toLocaleString()}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Giá bán</label>
-                  <div className="text-sm font-normal text-slate-900">{(Number(product.salePrice) || 0).toLocaleString()}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Thương hiệu</label>
-                  <div className="text-sm text-slate-600">{product.brand || 'Chưa có'}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Vị trí</label>
-                  <div className="text-sm text-slate-600">{product.location || 'Chưa có'}</div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-normal mb-2 block">Trọng lượng</label>
-                  <div className="text-sm text-slate-600">
-                    {product.weight ? `${product.weight} ${product.weightUnit || 'g'}` : 'Chưa có'}
+            {/* Cột thông tin */}
+            <div className="flex-1 space-y-6">
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                {hasImages ? (
+                  <div>{productText}</div>
+                ) : (
+                  <div className="flex gap-6">
+                    <div className="w-40 self-stretch shrink-0 flex flex-col gap-2">
+                      <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200 overflow-hidden min-h-[120px]">
+                        <ImageIcon className="h-16 w-16 text-slate-300" />
+                      </div>
+                      <button
+                        onClick={handleOpenQR}
+                        className="w-full py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                        Thêm ảnh
+                      </button>
+                    </div>
+                    <div className="flex-1">{productText}</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <div className="grid grid-cols-4 gap-6">
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Mã hàng</label>
+                    <div className="text-sm font-normal text-slate-900">{product.sku}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Tồn kho</label>
+                    <div className="text-sm font-normal text-slate-900">{product.stock}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Định mức tồn</label>
+                    <div className="text-sm font-normal text-slate-900">{product.minStock ?? 0} - {product.maxStock ?? 999999999}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Giá vốn</label>
+                    <div className="text-sm font-normal text-slate-900">{(Number(product.importPrice) || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Giá bán</label>
+                    <div className="text-sm font-normal text-slate-900">{(Number(product.salePrice) || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Thương hiệu</label>
+                    <div className="text-sm text-slate-600">{product.brand || 'Chưa có'}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Vị trí</label>
+                    <div className="text-sm text-slate-600">{product.location || 'Chưa có'}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-normal mb-2 block">Trọng lượng</label>
+                    <div className="text-sm text-slate-600">
+                      {product.weight ? `${product.weight} ${product.weightUnit || 'g'}` : 'Chưa có'}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {(() => {
-              const supplierNames = getSupplierNames(product, transactions);
-              return (
-                <div className="bg-white rounded-lg border border-slate-200 p-6">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3">Nhà cung cấp</h3>
-                  {supplierNames.length === 0 ? (
-                    <span className="text-sm text-slate-400">Chưa có</span>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {supplierNames.map(name => (
-                        <span key={name} className="px-3 py-1 bg-slate-100 text-slate-700 rounded text-sm font-normal">
-                          {name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Nhà cung cấp</h3>
+                {getSupplierNames(product, transactions).length === 0 ? (
+                  <span className="text-sm text-slate-400">Chưa có</span>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {getSupplierNames(product, transactions).map(name => (
+                      <span key={name} className="px-3 py-1 bg-slate-100 text-slate-700 rounded text-sm font-normal">
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            {showSupplierActions ? (() => {
-              const hasUnits = (product.units?.length ?? 0) > 0;
-              const hasAttributes = (product.attributes?.length ?? 0) > 0;
-              if (hasUnits && hasAttributes) return null;
-              return (
+              {showSupplierActions && !((product.units?.length ?? 0) > 0 && (product.attributes?.length ?? 0) > 0) && (
                 <div className="space-y-2">
-                  {!hasUnits && (
+                  {(product.units?.length ?? 0) === 0 && (
                     <button onClick={onAddUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
                       🔗 Thêm đơn vị tính
                     </button>
                   )}
-                  {!hasAttributes && (
+                  {(product.attributes?.length ?? 0) === 0 && (
                     <button onClick={onAddAttribute} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
                       🔗 Thêm thuộc tính
                     </button>
                   )}
                 </div>
-              );
-            })() : (onAddUnit && (product.units?.length ?? 0) === 0) ? (
-              <div className="space-y-2">
-                <button onClick={onAddUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
-                  🔗 Thêm đơn vị tính
-                </button>
-              </div>
-            ) : null}
+              )}
+
+              {!showSupplierActions && onAddUnit && (product.units?.length ?? 0) === 0 && (
+                <div className="space-y-2">
+                  <button onClick={onAddUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
+                    🔗 Thêm đơn vị tính
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

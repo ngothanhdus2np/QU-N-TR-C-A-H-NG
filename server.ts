@@ -175,8 +175,7 @@ app.get('/health', healthHandler);
 app.head('/health', healthHandler);
 
 app.get('/api/local-ip', (_req, res) => {
-  const { networkInterfaces } = require('os');
-  const nets = networkInterfaces();
+  const nets = os.networkInterfaces();
   let localIp = '127.0.0.1';
   for (const iface of Object.values(nets) as any[]) {
     for (const alias of iface) {
@@ -189,6 +188,40 @@ app.get('/api/local-ip', (_req, res) => {
   }
   res.json({ ip: localIp });
 });
+
+// Upload ảnh hàng hóa — nhận raw JPEG, lưu base64 data URL thẳng vào DB (bypass Storage + RLS)
+app.post('/api/upload-product-image/:productId',
+  express.raw({ type: 'image/*', limit: '5mb' }),
+  async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    if (!productId) return res.status(400).json({ error: 'Thiếu productId' });
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Không nhận được dữ liệu file' });
+    }
+
+    const contentType = (req.headers['content-type'] || 'image/jpeg').split(';')[0].trim();
+    const dataUrl = `data:${contentType};base64,${req.body.toString('base64')}`;
+
+    const { data: product, error: fetchError } = await supabase
+      .from('pos_products')
+      .select('images')
+      .eq('id', productId)
+      .single();
+
+    if (fetchError) return res.status(500).json({ error: fetchError.message });
+
+    const currentImages: string[] = Array.isArray(product?.images) ? product.images : [];
+    const { error: updateError } = await supabase
+      .from('pos_products')
+      .update({ images: [...currentImages, dataUrl] })
+      .eq('id', productId);
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    res.json({ url: dataUrl });
+  }
+);
+
 app.get('/', (req, res, next) => {
   if (!viteReady && process.env.NODE_ENV !== 'production') {
     return res.send(`

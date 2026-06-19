@@ -517,6 +517,7 @@ const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'parent_id',
   'is_parent',
   'variant_count',
+  'images',
 ].join(',');
 
 const fetchAllRows = async (
