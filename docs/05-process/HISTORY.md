@@ -3,6 +3,20 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-19 — Xác minh 6 vấn đề chưa xác nhận (NV-001 → NV-006) + Viết lại docs business knowledge sang tiếng Việt
+
+- **NV-001:** Xác nhận `computeNewTier()` hoạt động đúng (đã fix từ AUDIT-010). Tier tự động nâng dựa vào `totalSpent`.
+- **NV-002:** Xác nhận scheduler: critical alerts mỗi 6 tiếng, EOD report 21:00 VN, cooldown 6h, distributed lock chống gửi trùng.
+- **NV-003:** Xác nhận limit không đồng nhất: 2000 (hầu hết), 5000 (metadata), 500 (employees), 90 ngày (pos_orders).
+- **NV-004:** Phát hiện `product_cost_history` không được ghi khi nhập hàng qua OP-011. Đã fix: thêm `writeCostHistory()` vào `routes/data.ts` cho payload `type='Import'`.
+- **NV-005:** Xác nhận luồng xuất kho nội bộ: type='internal_use', validate tồn kho thực tế, trừ stock và INSERT transaction.
+- **NV-006:** Xác nhận luồng trừ hàng lỗi: type='disposal', SET stock=actualStock (không cộng/trừ), INSERT transaction, có rollback tự động.
+- Cập nhật `SYSTEM_OVERVIEW.md`: thay bảng NEEDS_VERIFICATION bằng kết quả xác minh đầy đủ, sửa state machine #7 (không có trường status).
+- Viết lại toàn bộ 26 file `docs/business-knowledge/` sang tiếng Việt (tài liệu 1 nguồn, AI + người đọc được).
+- Sửa sai nghiêm trọng trong `OP-012-chot-luong.md`: doc cũ mô tả "UPDATE status='official'" sai hoàn toàn — thực tế là upsert 4 bảng đồng thời.
+- Sửa sai trong `OP-011-nhap-hang-nhanh.md`: luôn ghi supplier_debts với 'NCC lẻ' fallback, có chiết khấu toàn phiếu, có upload hóa đơn.
+- Files: `routes/data.ts`, `docs/business-knowledge/SYSTEM_OVERVIEW.md`, `docs/business-knowledge/STATE_TRANSITIONS.md`, `docs/business-knowledge/operations/OP-011-nhap-hang-nhanh.md`, `docs/business-knowledge/operations/OP-012-chot-luong.md`, tất cả file trong `docs/business-knowledge/`, `docs/05-process/HISTORY.md`, `docs/05-process/TODO.md`
+
 ### 2026-06-19 — Fix Nhóm 7 kiểm toán: Revenue returnDate, dedup serial loop, dead code, gap check (AUDIT-006, 008, 002, 015, 021)
 
 - **AUDIT-006:** `processReturnOrder` trong `posOrderService.ts` — xóa Case B (điều chỉnh ngày bán gốc), luôn ghi revenue vào ngày trả hàng.

@@ -78,7 +78,7 @@ Xem chi tiết tại: [STATE_TRANSITIONS.md](STATE_TRANSITIONS.md)
 4. `tax_filing_periods.status` — Trạng thái kỳ khai thuế
 5. Shopee Order Status (Vietnamese → enum)
 6. Employee `status` (active / resigned)
-7. `payroll_records.status` (unofficial → official)
+7. `payroll_records` (chưa chốt → đã chốt) — không có trường status, sự tồn tại bản ghi = đã chốt
 8. `pos_products.status` (Active / Inactive)
 9. `suppliers.status` (active / inactive)
 10. Store Order (`pos_orders WHERE channel='website'`)
@@ -101,16 +101,16 @@ Xem chi tiết tại: [BUSINESS_RULES.md](BUSINESS_RULES.md)
 
 ---
 
-## Phần chưa xác định (NEEDS_VERIFICATION)
+## Kết quả xác minh (đã giải quyết hết NEEDS_VERIFICATION)
 
-| # | Vấn đề | Nơi cần kiểm tra |
-|---|--------|-----------------|
-| NV-001 | Tier upgrade KH (Standard→Silver→Gold→Diamond) — không tìm thấy rule tự động trong code | Xác nhận với owner: tier được set thủ công hay có logic? |
-| NV-002 | Tần suất check cảnh báo tồn kho thấp | `routes/notifications.ts` — chưa đọc |
-| NV-003 | Limit 2000 rows enforce cho tất cả bảng? | `services/apiService.ts:fetchTablePage()` |
-| NV-004 | `product_cost_history` được dùng server-side (recalculate-cogs, ma trận năm) nhưng chỉ được ghi khi nhập hàng OP-003 — nhập hàng nhanh OP-011 bỏ qua `writeCostHistory()` nên bảng thiếu dữ liệu. Client-side dùng `buildCostHistory()` từ `inventory_transactions` thay thế. | ⚠️ Rủi ro: báo cáo server-side có thể sai COGS cho hàng nhập qua OP-011 |
-| NV-005 | Nghiệp vụ xuất kho nội bộ (`goods-internal-use`) — đọc từ INVENTORY_LOGIC nhưng chưa đọc source đầy đủ | `components/inventory/GoodsInternalUse.tsx` |
-| NV-006 | Nghiệp vụ hủy hàng lỗi (`goods-disposal`) | `components/inventory/GoodsDisposal.tsx` |
+| # | Vấn đề | Kết quả |
+|---|--------|---------|
+| NV-001 | Tier upgrade KH | ✅ **Đã giải quyết** — AUDIT-010 thêm `computeNewTier()` vào `posOrderService.ts`. Tier tự động nâng khi tổng chi tiêu vượt ngưỡng. |
+| NV-002 | Tần suất check cảnh báo | ✅ **Xác nhận** — `runNotificationScheduler` chạy mỗi 2 phút. Critical alerts gửi mỗi **6 tiếng** (`vnHour % 6 === 0`), cooldown 6h/NCC. EOD report vào **21:00 giờ VN**. Dùng distributed lock (`app_state`) chống gửi trùng. |
+| NV-003 | Limit rows có uniform không | ✅ **Xác nhận** — KHÔNG đồng nhất: `DEFAULT_LIMIT=2000` (hầu hết time-series), `DEFAULT_META_LIMIT=5000` (knowledge_base, system_configs, product_groups, promotions), `employees=500`, `pos_orders` bootstrap 90 ngày gần nhất (chỉ load cột cần thiết). |
+| NV-004 | `product_cost_history` thiếu dữ liệu OP-011 | ✅ **Đã fix** — thêm `writeCostHistory()` vào `routes/data.ts` cho payload `type='Import'`. Từ nay OP-011 cũng ghi cost history. |
+| NV-005 | Xuất kho nội bộ (`internal_use`) | ✅ **Xác nhận** — type=`'internal_use'`, re-validate tồn kho thực tế trước khi ghi. Save: (1) trừ `pos_products.stock -= quantity`, (2) INSERT `inventory_transactions`. Delete: hoàn stock + DELETE transaction. |
+| NV-006 | Hủy hàng lỗi/hư (`disposal`) | ✅ **Xác nhận** — type=`'disposal'`, dùng `GoodsAuditForm` (giống kiểm kho). quantity=diff (actualStock - currentStock, âm = giảm). Save: (1) SET `pos_products.stock = actualStock`, (2) INSERT `inventory_transactions` với `previousStock`/`newStock`. Có rollback tự động nếu save lỗi. `totalAmount = sum(|diff| × importPrice)`. |
 
 ---
 
