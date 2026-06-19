@@ -103,8 +103,6 @@ type SettingsTab =
   | 'accounts';
 
 interface SettingsCenterProps {
-  isOpen: boolean;
-  onClose: () => void;
   onNavigate: (id: string) => void;
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
@@ -426,8 +424,8 @@ const SettingsSidebar: React.FC<{
   activeTab: SettingsTab;
   setActiveTab: (tab: SettingsTab) => void;
 }> = ({ activeTab, setActiveTab }) => (
-  <aside className="hidden w-72 shrink-0 border-r border-slate-100 bg-white p-4 lg:block">
-    <div className="px-2 pb-4">
+  <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+    <div className="p-4 border-b border-slate-100 shrink-0">
       <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-3">
         <ServerCog className="h-5 w-5" />
       </div>
@@ -437,7 +435,7 @@ const SettingsSidebar: React.FC<{
       </p>
     </div>
 
-    <nav className="space-y-4">
+    <nav className="flex-1 overflow-y-auto p-3 space-y-4">
       {SETTINGS_GROUPS.map(group => (
         <div key={group.title}>
           <div className="px-3 pb-1 text-xs font-normal uppercase tracking-wider text-slate-400">
@@ -539,8 +537,6 @@ const StatusPill: React.FC<{
 };
 
 const SettingsCenter: React.FC<SettingsCenterProps> = ({
-  isOpen,
-  onClose,
   onNavigate,
   activeThemeId,
   onThemeChange,
@@ -710,7 +706,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 
   // Lazy load notification status - only fetch when user visits notifications tab
   useEffect(() => {
-    if (!isOpen || activeTab !== 'notifications') return;
+    if (activeTab !== 'notifications') return;
 
     fetch('/api/notifications/status')
       .then(r => r.json())
@@ -724,32 +720,29 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
         setEmailConfigured(false);
         setZaloConfigured(false);
       });
-  }, [isOpen, activeTab]);
+  }, [activeTab]);
 
   // Lazy load alert config - only fetch when user visits notifications tab
   useEffect(() => {
-    if (!isOpen || activeTab !== 'notifications') return;
+    if (activeTab !== 'notifications') return;
 
     fetch('/api/alerts/config')
       .then(r => r.json())
       .then(d => setAlertConfig(d))
       .catch(() => {});
-  }, [isOpen, activeTab]);
+  }, [activeTab]);
 
   const handleNavigateAndClose = useCallback(
     (id: string) => {
       onNavigate(id);
-      onClose();
     },
-    [onNavigate, onClose]
+    [onNavigate]
   );
 
   const handleGoodsSetActiveTab = useCallback(
     (tab: string) => handleSetActiveTab(tab as SettingsTab),
     [handleSetActiveTab]
   );
-
-  if (!isOpen) return null;
 
   const navigateAndClose = handleNavigateAndClose;
 
@@ -1613,45 +1606,30 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
 
   const ActiveIcon = activeTabMeta.icon;
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-modal bg-slate-950/35 px-4 pt-4 pb-0 md:px-8 md:pt-8">
-      <div className="mx-auto flex h-full w-full overflow-hidden rounded-xl bg-slate-100 shadow-xl">
+    <div className="flex h-full min-h-0 flex-col px-4 py-4 md:px-8 bg-slate-50">
+      <div className="flex flex-1 min-h-0 gap-4">
         <SettingsSidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="shrink-0 border-b border-slate-100 bg-white px-4 py-4 md:px-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-indigo-600 mb-1">
-                  <ActiveIcon className="h-4 w-4" />
-                  <span className="text-xs font-normal uppercase tracking-widest">Cài đặt</span>
-                </div>
-                <h2 className="text-xl font-bold text-slate-900">{activeTabMeta.label}</h2>
-                <p className="text-sm text-slate-500 mt-1">{activeTabMeta.description}</p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <header className="shrink-0 border-b border-slate-100 px-4 py-4 md:px-6">
+            <div className="flex items-center gap-2 text-indigo-600 mb-1">
+              <ActiveIcon className="h-4 w-4" />
+              <span className="text-xs font-normal uppercase tracking-widest">Cài đặt</span>
             </div>
+            <h2 className="text-xl font-bold text-slate-900">{activeTabMeta.label}</h2>
+            <p className="text-sm text-slate-500 mt-1">{activeTabMeta.description}</p>
 
             <MobileSettingsNav activeTab={activeTab} setActiveTab={handleSetActiveTab} />
           </header>
 
           <main
-            className={`min-h-0 flex-1 overflow-y-auto bg-slate-100 p-4 md:p-6 transition-opacity duration-150 ${isPending ? 'opacity-50' : ''}`}
+            className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 transition-opacity duration-150 ${isPending ? 'opacity-50' : ''}`}
           >
             <div className="flex gap-5">
               <div className="min-w-0 flex-1 space-y-4">
-                {/* Inline tabs — conditionally rendered (cheap) */}
                 {!isComponentTab(activeTab) && renderInlineTab()}
 
-                {/* Heavy tabs are mounted only while active to avoid background work */}
                 <Suspense fallback={<SettingsTabLoader />}>
                   {activeTab === 'goods' && (
                     <GoodsTab

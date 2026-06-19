@@ -20,15 +20,7 @@ import {
 } from 'lucide-react';
 import type { AppThemeId } from '../constants/themes';
 import { APP_THEMES } from '../constants/themes';
-import type {
-  AppAlert,
-  BrandProfile,
-  POSInventorySettings,
-  POSPaymentSettings,
-  POSProduct,
-} from '../types';
-
-const SettingsCenter = lazy(() => import('./settings/SettingsCenter'));
+import type { AppAlert } from '../types';
 
 interface NavItem {
   id: string;
@@ -59,13 +51,6 @@ interface TopNavProps {
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
-  brandProfile: BrandProfile;
-  onUpdateBrand: (profile: BrandProfile) => void;
-  products?: POSProduct[];
-  paymentSettings?: POSPaymentSettings;
-  onUpdatePaymentSettings: (settings: POSPaymentSettings) => Promise<void>;
-  inventorySettings?: POSInventorySettings;
-  onUpdateInventorySettings: (settings: POSInventorySettings) => Promise<void>;
   onSignOut?: () => void;
 }
 
@@ -91,16 +76,8 @@ const TopNav: React.FC<TopNavProps> = ({
   onDrainOfflineQueue,
   activeThemeId,
   onThemeChange,
-  brandProfile,
-  onUpdateBrand,
-  products = [],
-  paymentSettings,
-  onUpdatePaymentSettings,
-  inventorySettings,
-  onUpdateInventorySettings,
   onSignOut,
 }) => {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -303,7 +280,7 @@ const TopNav: React.FC<TopNavProps> = ({
 
           {/* Settings */}
           <button
-            onClick={() => setIsSettingsOpen(true)}
+            onClick={() => onSelect('settings')}
             className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all"
           >
             <Settings className="w-4 h-4" />
@@ -615,41 +592,6 @@ const TopNav: React.FC<TopNavProps> = ({
         </button>
       </div>
 
-      {isSettingsOpen && (
-        <Suspense
-          fallback={
-            <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/35 p-6">
-              <div className="rounded-xl bg-white px-5 py-3 text-sm text-slate-600 shadow-xl">
-                Đang mở cài đặt...
-              </div>
-            </div>
-          }
-        >
-          <SettingsCenter
-            isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
-            onNavigate={onSelect}
-            activeThemeId={activeThemeId}
-            onThemeChange={onThemeChange}
-            isCloudConnected={isCloudConnected}
-            isSyncing={isSyncing}
-            syncErrors={syncErrors}
-            lastSyncTime={lastSyncTime}
-            pendingCount={pendingCount}
-            offlinePendingCount={offlinePendingCount}
-            onRefresh={onRefresh}
-            onImportRefresh={onImportRefresh}
-            onDrainOfflineQueue={onDrainOfflineQueue}
-            brandProfile={brandProfile}
-            onUpdateBrand={onUpdateBrand}
-            products={products}
-            paymentSettings={paymentSettings}
-            onUpdatePaymentSettings={onUpdatePaymentSettings}
-            inventorySettings={inventorySettings}
-            onUpdateInventorySettings={onUpdateInventorySettings}
-          />
-        </Suspense>
-      )}
     </>
   );
 };

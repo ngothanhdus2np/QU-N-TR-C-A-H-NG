@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TopNav from './components/TopNav';
@@ -15,6 +15,8 @@ import { getCurrentSession, signOut } from './services/auth';
 import { supabase } from './services/supabase';
 import { INVENTORY_COST_METHOD_STORAGE_KEY } from './src/lib/businessLogic.inventory';
 import type { AppAlert } from './types';
+
+const SettingsCenter = lazy(() => import('./components/settings/SettingsCenter'));
 
 // Tự động thêm Supabase Bearer token cho request API cùng origin.
 // Không dùng VITE_INTERNAL_API_KEY ở client vì biến VITE_* nằm trong bundle public.
@@ -173,6 +175,8 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSetActiveTab]);
 
+  const isSettingsTab = activeTab === 'settings';
+
   const isFixedViewportTab =
     activeTab === 'staff' ||
     activeTab === 'staff-ledger' ||
@@ -216,13 +220,6 @@ const App: React.FC = () => {
               onDrainOfflineQueue={drainQueue}
               activeThemeId={themeId}
               onThemeChange={setThemeId}
-              brandProfile={brandProfile}
-              onUpdateBrand={setBrandProfile}
-              products={data.posProducts || []}
-              paymentSettings={data.posPaymentSettings}
-              onUpdatePaymentSettings={settings => updateData('posPaymentSettings', settings)}
-              inventorySettings={data.posInventorySettings}
-              onUpdateInventorySettings={settings => updateData('posInventorySettings', settings)}
               onSignOut={() => signOut()}
             />
           </motion.div>
@@ -232,10 +229,12 @@ const App: React.FC = () => {
         className={`relative z-0 ${
           activeTab === 'pos' || isFixedViewportTab
             ? 'flex-1 flex flex-col overflow-hidden min-h-0 px-4 md:px-8'
-            : 'flex-1 overflow-y-auto no-scrollbar px-4 md:px-8'
+            : isSettingsTab
+              ? 'flex-1 flex flex-col overflow-hidden min-h-0'
+              : 'flex-1 overflow-y-auto no-scrollbar px-4 md:px-8'
         }`}
         style={
-          activeTab === 'pos' || isFixedViewportTab
+          activeTab === 'pos' || isFixedViewportTab || isSettingsTab
             ? {
                 flex: '1 1 0',
                 display: 'flex',
@@ -246,35 +245,61 @@ const App: React.FC = () => {
             : { flex: '1 1 0', overflowY: 'auto' }
         }
       >
-        <MainContent
-          activeTab={activeTab}
-          setActiveTab={handleSetActiveTab}
-          data={data}
-          brandProfile={brandProfile}
-          setBrandProfile={setBrandProfile}
-          showResigned={showResigned}
-          setShowResigned={setShowResigned}
-          diagnosisRange={diagnosisRange}
-          setDiagnosisRange={setDiagnosisRange}
-          diagStartDate={diagStartDate}
-          setDiagStartDate={setDiagStartDate}
-          diagEndDate={diagEndDate}
-          setDiagEndDate={setDiagEndDate}
-          suggestedFocusProducts={suggestedFocusProducts}
-          breakEvenAnalysis={breakEvenAnalysis}
-          updateData={updateData}
-          updateSurgical={updateSurgical}
-          pushBatch={pushBatch}
-          offlinePendingCount={offlinePendingCount}
-          offlineOrderPendingCount={offlineOrderPendingCount}
-          isDraining={isDraining}
-          onDrainOfflineQueue={drainQueue}
-          userRole={userRole}
-          onManagerUnlocked={() => {
-            setManagerUnlocked(true);
-            navigate('/overview');
-          }}
-        />
+        {isSettingsTab ? (
+          <Suspense fallback={null}>
+            <SettingsCenter
+              onNavigate={handleSetActiveTab}
+              activeThemeId={themeId}
+              onThemeChange={setThemeId}
+              isCloudConnected={isCloudConnected}
+              isSyncing={isSyncing || isDraining}
+              syncErrors={syncErrors}
+              lastSyncTime={lastSyncTime}
+              pendingCount={pendingCount}
+              offlinePendingCount={offlinePendingCount}
+              onRefresh={() => fetchData(true)}
+              onImportRefresh={() => fetchData(false, true)}
+              onDrainOfflineQueue={drainQueue}
+              brandProfile={brandProfile}
+              onUpdateBrand={setBrandProfile}
+              products={data.posProducts || []}
+              paymentSettings={data.posPaymentSettings}
+              onUpdatePaymentSettings={settings => updateData('posPaymentSettings', settings)}
+              inventorySettings={data.posInventorySettings}
+              onUpdateInventorySettings={settings => updateData('posInventorySettings', settings)}
+            />
+          </Suspense>
+        ) : (
+          <MainContent
+            activeTab={activeTab}
+            setActiveTab={handleSetActiveTab}
+            data={data}
+            brandProfile={brandProfile}
+            setBrandProfile={setBrandProfile}
+            showResigned={showResigned}
+            setShowResigned={setShowResigned}
+            diagnosisRange={diagnosisRange}
+            setDiagnosisRange={setDiagnosisRange}
+            diagStartDate={diagStartDate}
+            setDiagStartDate={setDiagStartDate}
+            diagEndDate={diagEndDate}
+            setDiagEndDate={setDiagEndDate}
+            suggestedFocusProducts={suggestedFocusProducts}
+            breakEvenAnalysis={breakEvenAnalysis}
+            updateData={updateData}
+            updateSurgical={updateSurgical}
+            pushBatch={pushBatch}
+            offlinePendingCount={offlinePendingCount}
+            offlineOrderPendingCount={offlineOrderPendingCount}
+            isDraining={isDraining}
+            onDrainOfflineQueue={drainQueue}
+            userRole={userRole}
+            onManagerUnlocked={() => {
+              setManagerUnlocked(true);
+              navigate('/overview');
+            }}
+          />
+        )}
       </main>
       <FloatingCFOChat data={data} messages={chatMessages} setMessages={setChatMessages} />
     </div>
