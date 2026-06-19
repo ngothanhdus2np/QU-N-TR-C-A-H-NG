@@ -114,6 +114,13 @@ export function useRealtimeSync(
   const stableMerge = useCallback(mergeRemoteUpdate, []);
 
   useEffect(() => {
+    // Bỏ qua nếu Supabase URL là ws:// nhưng trang đang trên HTTPS (mixed content)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string ?? '';
+    if (supabaseUrl.startsWith('http:') && window.location.protocol === 'https:') {
+      console.warn('[Realtime] Bỏ qua kết nối — mixed content (ws:// trên HTTPS)');
+      return;
+    }
+
     const channel = supabase
       .channel('cfo-realtime-sync')
       .on(

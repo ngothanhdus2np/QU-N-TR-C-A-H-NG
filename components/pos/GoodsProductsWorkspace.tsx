@@ -58,6 +58,7 @@ interface GoodsProductsWorkspaceProps {
   onBulkChangeGroup: () => void;
   onGoToWarranty: () => void;
   onResetPage: () => void;
+  onCreateGroup: () => void;
   viewMode: 'table' | 'grid';
   onViewModeChange: (mode: 'table' | 'grid') => void;
 }
@@ -110,6 +111,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   onBulkChangeGroup,
   onGoToWarranty,
   onResetPage,
+  onCreateGroup,
   viewMode,
   onViewModeChange,
 }) => (
@@ -146,6 +148,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
       uniqueBrands={uniqueBrands}
       uniqueSuppliers={uniqueSuppliers}
       lowStockCount={lowStockCount}
+      onCreateGroup={onCreateGroup}
     />
 
     <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

@@ -19,6 +19,7 @@ interface GoodsFilterSidebarProps {
   onCollapse: () => void;
   onClearAllFilters: () => void;
   onResetPage: () => void;
+  onCreateGroup?: () => void;
   productGroups: ProductGroup[];
   uniqueCategories: string[];
   categoryCounts: Record<string, number>;
@@ -45,6 +46,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
   onCollapse: _onCollapse,
   onClearAllFilters,
   onResetPage,
+  onCreateGroup,
   productGroups,
   categoryCounts,
   attrValuesByName,
@@ -517,7 +519,10 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
           <div className="px-3 py-2.5 border-b border-slate-100">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-slate-500">Nhóm hàng</span>
-              <button className="text-2xs text-indigo-500 font-semibold hover:underline">
+              <button
+                onClick={onCreateGroup}
+                className="text-2xs text-indigo-500 font-semibold hover:underline"
+              >
                 Tạo mới
               </button>
             </div>

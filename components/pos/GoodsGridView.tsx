@@ -7,6 +7,7 @@ interface GoodsGridViewProps {
   viewingProductId?: string | null;
   onToggleView: (product: POSProduct) => void;
   onCardWidthChange?: (width: number) => void;
+  variantsByParentId?: Map<string, POSProduct[]>;
 }
 
 const GoodsGridCard = React.memo(
@@ -14,10 +15,14 @@ const GoodsGridCard = React.memo(
     product,
     isSelected,
     onToggleView,
+    firstChildImage,
+    firstChildSku,
   }: {
     product: POSProduct;
     isSelected: boolean;
     onToggleView: (p: POSProduct) => void;
+    firstChildImage?: string;
+    firstChildSku?: string;
   }) => {
     const stockQty = product.stock ?? 0;
     const stockColor =
@@ -37,9 +42,9 @@ const GoodsGridCard = React.memo(
         }`}
       >
         <div className="bg-slate-100/60 relative w-full aspect-square flex-shrink-0 flex items-center justify-center overflow-hidden">
-          {product.images?.[0] ? (
+          {(product.images?.[0] || firstChildImage) ? (
             <img
-              src={product.images[0]}
+              src={product.images?.[0] ?? firstChildImage!}
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
@@ -64,15 +69,18 @@ const GoodsGridCard = React.memo(
         </div>
 
         <div className="px-2.5 py-2 flex flex-col gap-1 flex-1">
-          <p className="text-xs font-normal text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">
+          <p className="text-xs font-normal text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors text-center">
             {product.name}
           </p>
           <div className="flex items-center justify-between mt-auto pt-1">
-            {product.sku && (
-              <span className="text-[9px] text-slate-400 truncate">{product.sku}</span>
-            )}
+            {(() => {
+              const displaySku = product.sku?.startsWith('__') ? firstChildSku : product.sku;
+              return displaySku ? (
+                <span className="text-[9px] text-slate-400 truncate">{displaySku}</span>
+              ) : null;
+            })()}
             <span className={`text-[9px] font-normal px-1.5 py-0.5 rounded-full ml-auto ${stockColor}`}>
-              Tồn: {stockQty}
+              {stockQty}
             </span>
           </div>
         </div>
@@ -88,6 +96,7 @@ export const GoodsGridView: React.FC<GoodsGridViewProps> = ({
   viewingProductId,
   onToggleView,
   onCardWidthChange,
+  variantsByParentId,
 }) => {
   const firstCellRef = useRef<HTMLDivElement>(null);
 
@@ -117,15 +126,26 @@ export const GoodsGridView: React.FC<GoodsGridViewProps> = ({
 
   return (
     <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3">
-      {products.map((product, index) => (
-        <div key={product.id} ref={index === 0 ? firstCellRef : undefined} className="w-full h-full">
-          <GoodsGridCard
-            product={product}
-            isSelected={viewingProductId === product.id}
-            onToggleView={onToggleView}
-          />
-        </div>
-      ))}
+      {products.map((product, index) => {
+        const children = product.isParent ? variantsByParentId?.get(product.id) : undefined;
+        const firstChildImage = product.isParent && !product.images?.[0]
+          ? children?.find(v => v.images?.[0])?.images?.[0]
+          : undefined;
+        const firstChildSku = product.sku?.startsWith('__')
+          ? children?.find(v => v.sku && !v.sku.startsWith('__'))?.sku
+          : undefined;
+        return (
+          <div key={product.id} ref={index === 0 ? firstCellRef : undefined} className="w-full h-full">
+            <GoodsGridCard
+              product={product}
+              isSelected={viewingProductId === product.id}
+              onToggleView={onToggleView}
+              firstChildImage={firstChildImage}
+              firstChildSku={firstChildSku}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };

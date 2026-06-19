@@ -799,6 +799,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   viewingProductId={gridDetailProduct?.id}
                   onToggleView={handleGridCardClick}
                   onCardWidthChange={setGridCardWidth}
+                  variantsByParentId={variantsByParentId}
                 />
               ) : (
               <table className="w-full text-sm">
@@ -1017,6 +1018,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           onBulkChangeGroup={handleBulkChangeGroup}
           onGoToWarranty={handleGoToWarranty}
           onResetPage={() => setCurrentPage(1)}
+          onCreateGroup={() => setCreateGroupModal({ isOpen: true, name: '', parentId: '' })}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
         >

@@ -222,6 +222,60 @@ app.post('/api/upload-product-image/:productId',
   }
 );
 
+// Lấy thông tin cơ bản sản phẩm để hiện trên trang chụp ảnh điện thoại
+app.get('/api/product-info/:productId', async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  if (!productId) return res.status(400).json({ error: 'Thiếu productId' });
+
+  const { data, error } = await supabase
+    .from('pos_products')
+    .select('name, sku, attributes')
+    .eq('id', productId)
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+
+  res.json(data);
+});
+
+// Tìm sản phẩm theo mã vạch để hiện trên trang chụp ảnh điện thoại
+app.get('/api/product-info/barcode/:barcode', async (req: Request, res: Response) => {
+  const { barcode } = req.params;
+  if (!barcode) return res.status(400).json({ error: 'Thiếu barcode' });
+
+  const { data, error } = await supabase
+    .from('pos_products')
+    .select('id, name, sku, attributes')
+    .eq('barcode', barcode)
+    .limit(1)
+    .single();
+
+  if (error) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+  if (!data) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+
+  res.json(data);
+});
+
+// Xóa ảnh hàng hóa — nhận mảng images đã lọc, ghi đè vào DB
+app.delete('/api/upload-product-image/:productId',
+  express.json(),
+  async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    if (!productId) return res.status(400).json({ error: 'Thiếu productId' });
+    const { images } = req.body;
+    if (!Array.isArray(images)) return res.status(400).json({ error: 'images phải là mảng' });
+
+    const { error } = await supabase
+      .from('pos_products')
+      .update({ images })
+      .eq('id', productId);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+  }
+);
+
 app.get('/', (req, res, next) => {
   if (!viteReady && process.env.NODE_ENV !== 'production') {
     return res.send(`

@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   Camera,
+  ChevronLeft,
+  ChevronRight,
   Edit2,
   FileText,
   Image as ImageIcon,
@@ -642,6 +644,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   const [liveImages, setLiveImages] = React.useState<string[]>(product.images ?? []);
   const [localIp, setLocalIp] = React.useState<string | null>(null);
   const [activeImageIdx, setActiveImageIdx] = React.useState(0);
+  const [imagesBeforeQR, setImagesBeforeQR] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     setLiveImages(product.images ?? []);
@@ -684,10 +687,15 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     return () => clearInterval(timer);
   }, [isQROpen, product.id]);
 
-  const uploadUrl = `${localIp ? `http://${localIp}:${window.location.port || 3000}` : window.location.origin}/upload-image/${product.id}`;
+  // Khi đang trên HTTPS (tunnel), dùng origin hiện tại → phone cũng dùng HTTPS đúng URL
+  // Khi trên HTTP (LAN trực tiếp), dùng local IP để phone kết nối được
+  const uploadUrl = (localIp && window.location.protocol === 'http:')
+    ? `http://${localIp}:${window.location.port || 3000}/upload-image/${product.id}`
+    : `${window.location.origin}/upload-image/${product.id}`;
 
   const handleOpenQR = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setImagesBeforeQR(liveImages);
     setIsQROpen(true);
     if (!localIp) {
       fetch('/api/local-ip')
@@ -695,6 +703,16 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         .then(d => setLocalIp(d.ip))
         .catch(() => {});
     }
+  };
+
+  const handleDeleteSessionImage = async (imgUrl: string) => {
+    const newList = liveImages.filter(u => u !== imgUrl);
+    setLiveImages(newList);
+    await fetch(`/api/upload-product-image/${product.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: newList }),
+    });
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -719,8 +737,21 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   };
 
   const hasImages = liveImages.length > 0;
-  const mainImg = liveImages[activeImageIdx] ?? liveImages[0];
-  const thumbs = liveImages.slice(0, 3);
+  const safeIdx = Math.min(activeImageIdx, Math.max(0, liveImages.length - 1));
+  const mainImg = liveImages[safeIdx] ?? liveImages[0];
+  const canSlide = liveImages.length > 4;
+  const thumbStart = Math.max(0, Math.min(safeIdx - 1, liveImages.length - 3));
+  const thumbs = liveImages.slice(thumbStart, thumbStart + 3);
+
+  const handlePrevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveImageIdx(i => (i <= 0 ? liveImages.length - 1 : i - 1));
+  };
+
+  const handleNextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveImageIdx(i => (i >= liveImages.length - 1 ? 0 : i + 1));
+  };
   const productText = (
     <>
       <h2 className="text-xl font-normal text-slate-900 mb-2">{product.name}</h2>
@@ -777,30 +808,52 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         </div>
       </div>
 
-      <div className="max-h-[600px] overflow-auto bg-slate-50 p-6">
+      <div className="bg-slate-50 p-6">
         {activeTab === 'info' && (
           <div className={hasImages ? 'flex gap-6 items-start' : 'space-y-6'}>
 
             {/* Cột ảnh — chỉ hiện khi có ảnh */}
             {hasImages && (
               <div className="w-1/3 shrink-0 flex flex-col gap-2">
-                <div className="aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                <div className="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200 group">
                   <img src={mainImg} alt={product.name} className="w-full h-full object-cover" />
+                  {canSlide && (
+                    <>
+                      <button
+                        onClick={handlePrevImage}
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow transition-opacity opacity-0 group-hover:opacity-100"
+                      >
+                        <ChevronLeft className="h-4 w-4 text-slate-700" />
+                      </button>
+                      <button
+                        onClick={handleNextImage}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow transition-opacity opacity-0 group-hover:opacity-100"
+                      >
+                        <ChevronRight className="h-4 w-4 text-slate-700" />
+                      </button>
+                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-black/40 text-white text-[10px] px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                        {safeIdx + 1} / {liveImages.length}
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  {thumbs.map((img, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveImageIdx(i)}
-                      className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
-                        (activeImageIdx === i || (activeImageIdx >= liveImages.length && i === 0))
-                          ? 'border-indigo-500'
-                          : 'border-slate-200 hover:border-slate-400'
-                      }`}
-                    >
-                      <img src={img} alt={`Ảnh ${i + 1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+                  {thumbs.map((img, i) => {
+                    const realIdx = thumbStart + i;
+                    return (
+                      <button
+                        key={realIdx}
+                        onClick={() => setActiveImageIdx(realIdx)}
+                        className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
+                          safeIdx === realIdx
+                            ? 'border-indigo-500'
+                            : 'border-slate-200 hover:border-slate-400'
+                        }`}
+                      >
+                        <img src={img} alt={`Ảnh ${realIdx + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    );
+                  })}
                   {thumbs.length < 3 && Array.from({ length: 3 - thumbs.length }).map((_, i) => (
                     <div key={`empty-${i}`} className="aspect-square rounded-lg border-2 border-dashed border-slate-200 bg-slate-50" />
                   ))}
@@ -1055,29 +1108,87 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
       )}
     </div>
 
-    {isQROpen && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-        onClick={() => setIsQROpen(false)}
-      >
+    {isQROpen && (() => {
+      const sessionImages = liveImages.filter(url => !imagesBeforeQR.includes(url));
+      const isConnected = sessionImages.length > 0;
+      return (
         <div
-          className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-4 w-72"
-          onClick={e => e.stopPropagation()}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setIsQROpen(false)}
         >
-          <div className="flex items-center justify-between w-full">
-            <h3 className="text-sm font-semibold text-slate-800">Quét để chụp ảnh</h3>
-            <button onClick={() => setIsQROpen(false)} className="text-slate-400 hover:text-slate-600">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <QRCodeSVG value={uploadUrl} size={180} />
-          <p className="text-xs text-slate-500 text-center">
-            Dùng điện thoại quét mã QR → chụp ảnh → ảnh tự cập nhật tại đây
-          </p>
-          <p className="text-[10px] text-slate-300 break-all text-center select-all">{uploadUrl}</p>
+          {isConnected ? (
+            /* Bố cục 2 cột khi đã có ảnh từ điện thoại */
+            <div
+              className="bg-white rounded-2xl shadow-2xl flex overflow-hidden w-[960px] max-h-[780px]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Cột trái: QR */}
+              <div className="w-80 shrink-0 flex flex-col items-center justify-center gap-4 p-8 border-r border-slate-100">
+                <div className="flex items-center justify-between w-full">
+                  <h3 className="text-sm font-semibold text-slate-800">Thêm ảnh</h3>
+                  <button onClick={() => setIsQROpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <QRCodeSVG value={uploadUrl} size={220} />
+                <p className="text-xs text-slate-500 text-center leading-relaxed">
+                  Quét để chụp thêm ảnh
+                </p>
+                <p className="text-[9px] text-slate-300 break-all text-center select-all">{uploadUrl}</p>
+              </div>
+
+              {/* Cột phải: ảnh từ điện thoại */}
+              <div className="flex-1 flex flex-col p-7 overflow-hidden">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Ảnh từ điện thoại</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">{sessionImages.length} ảnh đã chụp</p>
+                  </div>
+                </div>
+                <div className="overflow-y-auto max-h-[284px]">
+                  <div className="grid grid-cols-4 gap-4">
+                    {sessionImages.map((url, i) => (
+                      <div key={i} className="relative aspect-square group">
+                        <img
+                          src={url}
+                          alt={`Ảnh ${i + 1}`}
+                          className="w-full h-full object-cover rounded-xl border border-slate-200"
+                        />
+                        <button
+                          onClick={() => handleDeleteSessionImage(url)}
+                          className="absolute top-2 right-2 bg-white/90 hover:bg-rose-50 rounded-full p-1 shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Xóa ảnh này"
+                        >
+                          <X className="h-4 w-4 text-slate-500 hover:text-rose-600" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Bố cục ban đầu: chỉ QR */
+            <div
+              className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-5 w-[432px]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-sm font-semibold text-slate-800">Quét để chụp ảnh</h3>
+                <button onClick={() => setIsQROpen(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <QRCodeSVG value={uploadUrl} size={270} />
+              <p className="text-xs text-slate-500 text-center">
+                Dùng điện thoại quét mã QR → chụp ảnh → ảnh tự cập nhật tại đây
+              </p>
+              <p className="text-[10px] text-slate-300 break-all text-center select-all">{uploadUrl}</p>
+            </div>
+          )}
         </div>
-      </div>
-    )}
+      );
+    })()}
     </>
   );
 };

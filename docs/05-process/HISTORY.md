@@ -3,6 +3,25 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-20 — Fix trang chụp ảnh mobile: camera + load thông tin sản phẩm
+
+- Fix trang `/upload-image/:productId` trả về HTML thay vì JSON: root cause là server đang chạy bản cũ (started 23:23 nhưng `server.ts` sửa lúc 23:54). Restart server để pick up route `/api/product-info/:productId`.
+- Thêm route GET `/api/product-info/:productId` vào `server.ts` (public, không cần auth): query Supabase lấy `name, sku, attributes` theo productId.
+- Fix camera trên điện thoại: thay `getUserMedia()` (bị block trên HTTP) bằng `<input type="file" capture="environment">` trong `MobileImageUploadPage.tsx`.
+- Redesign giao diện chụp ảnh mobile (`MobileImageUploadPage.tsx`): card vuông ảnh/camera icon, tên sản phẩm + màu phía dưới, nút "Chụp ảnh" dạng pill, flash overlay ✓/✗, badge đếm ảnh, chụp liên tục tự động.
+- Fix grid view hàng hoá: căn giữa tên sản phẩm, ẩn SKU dạng `__PARENT_...`, hiện SKU con đầu tiên thay thế, bỏ text "Tồn:", fix ảnh con fallback cho sản phẩm cha.
+- Files: `server.ts`, `components/pos/MobileImageUploadPage.tsx`, `components/pos/GoodsGridView.tsx`, `App.tsx`
+
+### 2026-06-19 — Fix stacking context + UI improvements trang danh sách hàng hoá
+
+- Fix modal bị che bởi navbar: bỏ `z-0` khỏi `<main>` trong `App.tsx` — loại bỏ stacking context khiến `fixed z-modal(400)` bị nhốt dưới z-index của navbar.
+- Popup QR "Thêm ảnh": chuyển sang layout 2 cột (QR trái / ảnh phải) khi điện thoại upload ảnh đầu tiên; lưới 4 cột × 2 hàng có scroll; nút X xoá từng ảnh phiên; QR-only mode khi chưa kết nối.
+- Thêm nút mũi tên trượt ảnh trên main image trong `GoodsProductDetailPanel` khi có hơn 4 ảnh; counter overlay "1/N" khi hover.
+- Fix nút "Tạo mới" nhóm hàng trong sidebar bộ lọc không phản hồi: thread `onCreateGroup` prop qua `GoodsProductsWorkspace` → `GoodsFilterSidebar` → button.
+- Fix ảnh sản phẩm cha trong grid view: hiện ảnh con đầu tiên nếu sản phẩm cha không có ảnh riêng (`firstChildImage` fallback).
+- Thêm DELETE `/api/upload-product-image/:productId` vào `server.ts` để xoá ảnh khỏi mảng.
+- Files: `App.tsx`, `server.ts`, `components/pos/GoodsProductDetailPanel.tsx`, `components/pos/GoodsFilterSidebar.tsx`, `components/pos/GoodsProductsWorkspace.tsx`, `components/pos/GoodsInventory.tsx`, `components/pos/GoodsGridView.tsx`
+
 ### 2026-06-19 — Feature: apply-to-variants + Fix import tự tính đủ dữ liệu
 
 - Thêm checkbox "Áp dụng thay đổi cho các hàng hoá cùng loại" vào tab Thông tin của modal chỉnh sửa hàng hoá (dưới section Quyền theo đơn vị tính và thuộc tính), chỉ hiện khi sản phẩm có parentId.

@@ -226,7 +226,7 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
       <main
-        className={`relative z-0 ${
+        className={`relative ${
           activeTab === 'pos' || isFixedViewportTab
             ? 'flex-1 flex flex-col overflow-hidden min-h-0 px-4 md:px-8'
             : isSettingsTab
