@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-20 — Help Center: Viết bài + Chụp screenshot dạng step-by-step
+
+- Tạo script `scripts/capture-help-screenshots.cjs` với Playwright: chụp 45 ảnh cho 4 bài viết (pos-intro, pos-create-order, goods-search, goods-adjust).
+- Thêm highlight đỏ (#E63329) trực tiếp lên element trước khi chụp: dùng `highlight` (CSS selector) và `locatorHighlight` (Playwright locator) để bypass giới hạn `querySelector` trong browser context.
+- Viết lại toàn bộ 4 bài viết trong `data/helpArticles.ts` theo format step-by-step mật độ cao: mỗi bước hành động có ảnh minh hoạ ngay bên dưới, highlight chỉ thẳng vào UI element.
+- Xử lý các lỗi khi chụp: `{ force: true }` cho click bị overlay, `Escape` để đóng modal, URL navigation thay vì click nav.
+- Files: `scripts/capture-help-screenshots.cjs`, `data/helpArticles.ts`, `public/help/images/` (45 ảnh)
+
 ### 2026-06-20 — Theme Phúc Sang
 
 - Tạo theme `phuc-sang` mới: đỏ `#E63329` chủ đạo, vàng `#F8C21C` accent, nền trắng sạch.

@@ -95,74 +95,83 @@ export const HELP_ARTICLES: Record<string, HelpArticle> = {
     categoryId: 'sales',
     title: 'Giới thiệu màn hình bán hàng',
     sections: [
-      { id: 'overview', title: 'I. Tổng quan giao diện' },
-      { id: 'search-bar', title: 'II. Thanh tìm kiếm hàng hóa' },
-      { id: 'invoice-tabs', title: 'III. Tab hóa đơn' },
-      { id: 'cart', title: 'IV. Giỏ hàng' },
-      { id: 'menu', title: 'V. Menu tùy chọn' },
+      { id: 'tong-quan-giao-dien', title: 'I. Tổng quan giao diện' },
+      { id: 'tim-kiem-hang-hoa', title: 'II. Tìm kiếm hàng hóa' },
+      { id: 'tab-hoa-don', title: 'III. Tab hóa đơn' },
+      { id: 'gio-hang', title: 'IV. Giỏ hàng' },
+      { id: 'menu-tuy-chon', title: 'V. Menu tùy chọn' },
     ],
     content: `## I. Tổng quan giao diện
 
-Màn hình **Bán hàng** được chia làm 3 vùng chính:
+Click nút **BÁN HÀNG** màu đỏ ở góc trên phải → màn hình bán hàng mở ra toàn bộ.
 
-| Vùng | Vị trí | Chức năng |
+![Màn hình bán hàng POS khi mới vào — bên trái là tìm kiếm, giữa là giỏ hàng, phải là thanh toán](/help/images/pos-intro/01-overview.jpg)
+
+Giao diện gồm 3 vùng chính:
+
+| Vùng | Vị trí | Làm gì |
 |---|---|---|
-| **Thanh công cụ** | Trên cùng | Tìm kiếm hàng, chọn tab hóa đơn |
-| **Giỏ hàng** | Giữa / trái | Danh sách sản phẩm đang bán |
-| **Thanh toán** | Phải | Chọn khách, chọn PTTT, xác nhận đơn |
-
-Để vào màn hình bán hàng, click nút **BÁN HÀNG** màu đỏ ở góc trên phải thanh điều hướng.
+| **Tìm kiếm** | Trên cùng bên trái | Gõ tên/mã hàng, kết quả xuất hiện bên dưới |
+| **Giỏ hàng** | Khu vực giữa | Danh sách hàng đã thêm, số lượng, giá |
+| **Thanh toán** | Bên phải | Chọn khách, chọn phương thức, nhấn thanh toán |
 
 ---
 
-## II. Thanh tìm kiếm hàng hóa
+## II. Tìm kiếm hàng hóa
 
-Ô tìm kiếm nằm ở **trên cùng bên trái**. Phím tắt nhanh: **F3** để focus vào ô tìm kiếm.
+**Bước 1** — Nhấp vào ô tìm kiếm ở phía trên bên trái, hoặc nhấn phím **F3** để focus nhanh.
 
-- Gõ tên hàng, mã SKU, hoặc mã vạch → kết quả xuất hiện ngay bên dưới
-- Dùng ↑ ↓ để di chuyển trong danh sách kết quả
-- Nhấn **Enter** để thêm sản phẩm vào giỏ
-- Click vào **biểu tượng sắp xếp** (góc phải ô tìm kiếm) để đổi thứ tự kết quả: theo mã hàng hoặc theo giá
+![Ô tìm kiếm hàng hóa — nhấp vào đây hoặc nhấn F3](/help/images/pos-intro/02-searchbox.jpg)
 
-> **Lưu ý**: Khi đang ở chế độ Trả hàng, ô tìm kiếm sẽ bị khóa. Dùng ô tìm kiếm riêng trong panel trả hàng.
+**Bước 2** — Gõ tên sản phẩm, mã SKU, hoặc quét mã vạch. Danh sách kết quả hiện ra ngay bên dưới.
+
+![Kết quả tìm kiếm hiện ra bên dưới ô nhập — dùng ↑↓ để di chuyển](/help/images/pos-intro/03-results.jpg)
+
+**Bước 3** — Nhấn **Enter** hoặc click vào sản phẩm để thêm vào giỏ. Sản phẩm xuất hiện ngay trong giỏ hàng.
+
+![Sản phẩm đã được thêm vào giỏ hàng](/help/images/pos-intro/04-cart.jpg)
+
+> Khi đang ở chế độ Trả hàng, ô tìm kiếm chính bị khóa — dùng ô tìm kiếm riêng trong panel trả hàng.
 
 ---
 
 ## III. Tab hóa đơn
 
-Hệ thống hỗ trợ **nhiều hóa đơn song song** (đa tab). Mỗi tab là một đơn hàng độc lập.
+Hệ thống cho phép mở **nhiều hóa đơn cùng lúc**. Mỗi tab là một đơn hàng riêng biệt, không ảnh hưởng nhau.
 
-- Click **+** để mở tab hóa đơn mới
-- Click **×** trên tab để đóng (hàng trong giỏ sẽ mất)
-- Tab hiện tại được tô đậm và có gạch dưới màu đỏ
-- Mỗi tab có trạng thái riêng: **Đang bán** hoặc **Đang trả hàng**
+![Thanh tab hóa đơn — tab đang chọn được tô đậm và gạch đỏ bên dưới](/help/images/pos-intro/05-tabs.jpg)
+
+- Click **+** ở cuối thanh tab để mở hóa đơn mới
+- Click **×** trên một tab để đóng hóa đơn đó (hàng trong giỏ sẽ bị xóa)
+- Tab hiện tại có trạng thái: **Đang bán** hoặc **Đang trả hàng**
 
 ---
 
 ## IV. Giỏ hàng
 
-Danh sách sản phẩm đã thêm vào đơn. Mỗi dòng sản phẩm hiển thị:
-- Tên hàng và mã SKU
-- Số lượng (có thể sửa trực tiếp)
-- Đơn giá
-- Thành tiền
+Mỗi dòng trong giỏ hiển thị: tên hàng · mã SKU · số lượng · đơn giá · thành tiền.
 
-**Thao tác nhanh trong giỏ:**
-- Click vào **số lượng** để sửa
-- Click **biểu tượng %** cạnh dòng sản phẩm để thêm giảm giá theo mặt hàng
-- Click **×** để xóa sản phẩm khỏi giỏ
+**Chỉnh số lượng** — click trực tiếp vào con số, gõ số mới, nhấn Enter để xác nhận.
+
+![Click vào số lượng để sửa trực tiếp không cần mở popup](/help/images/pos-intro/06-qty.jpg)
+
+Các thao tác khác trên từng dòng:
+- Click biểu tượng **%** → nhập giảm giá riêng cho sản phẩm đó (% hoặc tiền)
+- Click **×** → xóa sản phẩm khỏi giỏ
 
 ---
 
 ## V. Menu tùy chọn
 
-Click **biểu tượng ⋮** hoặc icon lưới ở thanh công cụ để mở menu:
+Click biểu tượng **lưới** hoặc **⋮** trên thanh toolbar để mở menu thêm.
 
-- **Báo cáo cuối ngày** — tổng kết doanh thu, số đơn trong ca
+![Menu tùy chọn mở ra — truy cập báo cáo cuối ngày, phím tắt, QR điện thoại](/help/images/pos-intro/07-menu.jpg)
+
+- **Báo cáo cuối ngày** — tổng kết doanh thu, số đơn trong ca làm việc
 - **Xử lý đơn đặt hàng** — quản lý đơn đặt trước chưa hoàn tất
-- **Xử lý sửa chữa** — theo dõi đơn bảo hành / sửa chữa
-- **Phím tắt** — xem toàn bộ phím tắt bàn phím
-- **QR điện thoại** — mở màn hình bán hàng nhanh trên thiết bị di động`,
+- **Xử lý sửa chữa** — theo dõi sản phẩm đang bảo hành / sửa chữa
+- **Phím tắt** — xem bảng phím tắt bàn phím đầy đủ
+- **QR điện thoại** — mở màn hình bán hàng nhanh trên điện thoại`,
   },
 
   'pos-create-order': {
@@ -170,82 +179,104 @@ Click **biểu tượng ⋮** hoặc icon lưới ở thanh công cụ để m�
     categoryId: 'sales',
     title: 'Tạo đơn và thanh toán',
     sections: [
-      { id: 'add-product', title: 'I. Thêm sản phẩm vào đơn' },
-      { id: 'select-customer', title: 'II. Chọn khách hàng' },
-      { id: 'discount', title: 'III. Giảm giá' },
-      { id: 'payment', title: 'IV. Thanh toán' },
-      { id: 'receipt', title: 'V. In hóa đơn' },
-      { id: 'return', title: 'VI. Trả hàng' },
+      { id: 'them-san-pham', title: 'I. Thêm sản phẩm' },
+      { id: 'chon-khach-hang', title: 'II. Chọn khách hàng' },
+      { id: 'giam-gia', title: 'III. Giảm giá' },
+      { id: 'thanh-toan', title: 'IV. Thanh toán' },
+      { id: 'in-hoa-don', title: 'V. In hóa đơn' },
+      { id: 'tra-hang', title: 'VI. Trả hàng' },
     ],
-    content: `## I. Thêm sản phẩm vào đơn
+    content: `## I. Thêm sản phẩm
 
-**Cách 1 — Tìm kiếm:** Gõ tên / mã SKU / mã vạch vào ô tìm kiếm (F3), chọn sản phẩm bằng Enter hoặc click.
+**Bước 1** — Nhấp vào ô tìm kiếm ở phía trên bên trái (hoặc nhấn **F3**).
 
-**Cách 2 — Quét mã vạch:** Dùng máy quét mã vạch kết nối USB, quét vào ô tìm kiếm — sản phẩm tự động được thêm vào giỏ.
+![Nhấp vào ô tìm kiếm — viền đỏ chỉ đúng vị trí cần click](/help/images/pos-create-order/01-search-highlight.jpg)
 
-Sau khi thêm, bạn có thể:
-- Đổi **số lượng** bằng cách click vào con số và gõ lại
-- Xem **tồn kho hiện tại** hiển thị nhỏ bên cạnh mỗi sản phẩm
+**Bước 2** — Gõ tên, mã SKU, hoặc quét mã vạch. Danh sách khớp hiện ngay bên dưới.
+
+![Danh sách kết quả — mỗi dòng hiện tên, giá và tồn kho hiện tại](/help/images/pos-create-order/02-results.jpg)
+
+**Bước 3** — Nhấn **Enter** hoặc click vào sản phẩm muốn thêm. Lặp lại để thêm nhiều loại.
+
+![Giỏ hàng sau khi thêm sản phẩm — số lượng, đơn giá, thành tiền hiện rõ từng dòng](/help/images/pos-create-order/03-cart.jpg)
+
+> **Quét mã vạch:** Kết nối máy quét USB, đặt con trỏ vào ô tìm kiếm rồi quét — sản phẩm tự thêm vào giỏ, không cần nhấn thêm phím nào.
 
 ---
 
 ## II. Chọn khách hàng
 
-Panel bên phải có ô **Tìm khách hàng**. Gõ tên hoặc số điện thoại để tìm.
+Ô **Tìm khách hàng** nằm ở panel bên phải. Để trống nếu bán lẻ không cần ghi tên.
 
-- Nếu khách chưa có trong hệ thống: click **+ Thêm khách nhanh** để tạo mới ngay
-- Khi chọn khách, hệ thống hiển thị **hạng thành viên** (Standard / Silver / Gold / Diamond) và tự động áp dụng chiết khấu tương ứng nếu có cấu hình
-- Bỏ chọn khách: click **×** cạnh tên khách
+**Bước 1** — Nhấp vào ô tìm khách (hoặc nhấn **F4**).
+
+![Ô tìm khách hàng ở panel bên phải — click vào đây](/help/images/pos-create-order/05-customer-highlight.jpg)
+
+**Bước 2** — Gõ tên hoặc số điện thoại → danh sách gợi ý xuất hiện. Nhấp để chọn.
+
+![Kết quả tìm kiếm khách — hiển thị tên, điện thoại, hạng thành viên](/help/images/pos-create-order/06-customer-results.jpg)
+
+- Chưa có khách trong hệ thống → click **+ Thêm khách nhanh** ngay trong dropdown
+- Đã chọn nhầm → click **×** cạnh tên khách để bỏ chọn
+- Khi chọn khách có hạng thành viên, chiết khấu được áp tự động
 
 ---
 
 ## III. Giảm giá
 
-**Giảm giá từng sản phẩm:**
-- Click biểu tượng **%** cạnh dòng sản phẩm trong giỏ → nhập giá trị giảm (% hoặc số tiền cụ thể)
+**Giảm giá theo hóa đơn** — nhập % chiết khấu ở ô bên dưới tổng tiền.
 
-**Giảm giá cả hóa đơn:**
-- Trong panel thanh toán bên phải, click **Chiết khấu hóa đơn** → nhập %
+![Ô chiết khấu hóa đơn ở panel thanh toán bên phải](/help/images/pos-create-order/07-discount.jpg)
 
-> Giảm giá sản phẩm và giảm giá hóa đơn có thể áp dụng đồng thời. Tổng cộng hiển thị ở phần **Tổng cộng**.
+**Giảm giá theo từng sản phẩm** — click biểu tượng **%** cạnh dòng sản phẩm trong giỏ → nhập giá trị giảm bằng % hoặc số tiền cụ thể.
+
+> Hai loại giảm giá có thể áp dụng đồng thời. Số tiền tiết kiệm được tổng hợp ở phần **Tổng cộng**.
 
 ---
 
 ## IV. Thanh toán
 
-Sau khi hoàn tất giỏ hàng, chọn **Phương thức thanh toán** ở panel phải:
+**Bước 1** — Chọn phương thức thanh toán ở panel bên phải.
 
-| Phương thức | Ghi chú |
+![Panel thanh toán — chọn Tiền mặt, Chuyển khoản, Momo hoặc Thẻ](/help/images/pos-create-order/08-payment.jpg)
+
+| Phương thức | Hệ thống làm gì |
 |---|---|
-| **Tiền mặt** | Nhập số tiền khách đưa → hệ thống tính tiền thối |
-| **Chuyển khoản** | Hiện QR VietQR động theo số tiền thực tế |
-| **Momo** | Hiện mã QR ví điện tử |
-| **Thẻ** | Ghi nhận thanh toán thẻ POS |
+| **Tiền mặt** | Nhập tiền khách đưa → tự tính tiền thối |
+| **Chuyển khoản** | Hiện mã QR VietQR theo đúng số tiền |
+| **Momo / Thẻ** | Ghi nhận phương thức, không cần nhập thêm |
 
-**Thanh toán kết hợp nhiều phương thức:** Bật chế độ "Chia thanh toán" → nhập từng phần cho mỗi phương thức.
+**Bước 2** — Nhấn nút **Thanh toán** (hoặc phím **F12**) để hoàn tất đơn.
 
-Nhấn **Thanh toán** (hoặc **F12**) để xác nhận đơn.
+![Nút Thanh toán — nhấn ở đây hoặc dùng phím F12](/help/images/pos-create-order/09-pay-btn.jpg)
+
+**Thanh toán chuyển khoản** → mã QR VietQR xuất hiện ngay, khách quét bằng app ngân hàng bất kỳ.
+
+![Mã QR VietQR hiện theo đúng số tiền cần thanh toán](/help/images/pos-create-order/10-bank-qr.jpg)
+
+> **Thanh toán kết hợp:** Bật "Chia thanh toán" → nhập từng phần cho mỗi phương thức. Hệ thống cộng lại và báo còn thiếu bao nhiêu.
 
 ---
 
 ## V. In hóa đơn
 
-Sau khi thanh toán thành công, hộp thoại **In hóa đơn** xuất hiện tự động.
+Sau khi nhấn Thanh toán thành công, hộp thoại **In hóa đơn** tự mở ra.
 
-- Click **In** để in ngay
-- Click **Bỏ qua** nếu không cần in
-- Bật **In tự động** (icon máy in trên thanh công cụ) để in mà không cần xác nhận mỗi lần
+- Click **In** để in ngay qua máy in nhiệt / A4
+- Click **Bỏ qua** nếu không cần in lần này
+- Bật **In tự động** (icon máy in trên toolbar) để bỏ qua hộp thoại xác nhận mỗi lần
 
 ---
 
 ## VI. Trả hàng
 
-Để xử lý đơn trả hàng:
+**Bước 1** — Click nút **Trả hàng** trên toolbar (hoặc vào menu ⋮ → "Tìm đơn trả hàng").
 
-1. Click **Trả hàng** trên thanh công cụ (hoặc chọn từ menu ⋮ → "Tìm đơn trả hàng")
-2. Tìm hóa đơn gốc theo số đơn hoặc tên khách
-3. Chọn sản phẩm cần trả và số lượng
-4. Xác nhận → tồn kho được cộng lại tự động`,
+**Bước 2** — Tìm hóa đơn gốc bằng số đơn hoặc tên khách.
+
+**Bước 3** — Tích chọn sản phẩm cần trả và nhập số lượng trả.
+
+**Bước 4** — Xác nhận → tồn kho tự động được cộng lại, công nợ điều chỉnh nếu có.`,
   },
 
   'goods-search': {
@@ -253,68 +284,87 @@ Sau khi thanh toán thành công, hộp thoại **In hóa đơn** xuất hiện 
     categoryId: 'inventory',
     title: 'Tra cứu sản phẩm',
     sections: [
-      { id: 'intro', title: 'I. Vào trang Hàng hóa' },
-      { id: 'search', title: 'II. Tìm kiếm' },
-      { id: 'filter', title: 'III. Bộ lọc sidebar' },
-      { id: 'view', title: 'IV. Chế độ xem' },
-      { id: 'detail', title: 'V. Xem chi tiết sản phẩm' },
+      { id: 'vao-trang', title: 'I. Vào trang Hàng hóa' },
+      { id: 'tim-kiem', title: 'II. Tìm kiếm' },
+      { id: 'bo-loc', title: 'III. Bộ lọc sidebar' },
+      { id: 'che-do-xem', title: 'IV. Chế độ xem' },
+      { id: 'chi-tiet', title: 'V. Xem chi tiết sản phẩm' },
     ],
     content: `## I. Vào trang Hàng hóa
 
-Click **HÀNG HÓA** trên thanh điều hướng. Trang gồm:
-- **Sidebar trái**: bộ lọc nâng cao
-- **Vùng giữa**: danh sách sản phẩm
-- **Toolbar trên**: tìm kiếm + thao tác nhanh
+Click **HÀNG HÓA** trên thanh điều hướng phía trên. Trang danh sách hàng hóa hiện ra với 3 khu vực:
+
+![Toàn trang danh sách hàng hóa — sidebar lọc bên trái, danh sách ở giữa, toolbar bên trên](/help/images/goods-search/01-list.jpg)
+
+- **Sidebar trái** — bộ lọc theo nhóm hàng, tồn kho, thương hiệu, nhà cung cấp
+- **Vùng giữa** — bảng danh sách sản phẩm
+- **Toolbar trên** — ô tìm kiếm, nút thêm mới, chuyển chế độ xem
 
 ---
 
 ## II. Tìm kiếm
 
-Ô tìm kiếm ở toolbar trên: gõ **tên sản phẩm**, **mã SKU**, hoặc **mã vạch** để lọc tức thì.
+**Bước 1** — Nhấp vào ô tìm kiếm trên toolbar.
 
-Kết quả hiển thị số lượng phù hợp ở góc trái toolbar: **"X / Y sản phẩm"**.
+![Ô tìm kiếm trên toolbar — gõ tên, mã SKU hoặc mã vạch để lọc](/help/images/goods-search/02-searchbox.jpg)
+
+**Bước 2** — Gõ từ khóa (tên sản phẩm, mã SKU, hoặc mã vạch). Danh sách lọc ngay tức thì, không cần nhấn Enter.
+
+![Kết quả sau khi gõ từ khóa — số lượng khớp hiển thị ở góc toolbar](/help/images/goods-search/03-filtered.jpg)
+
+> Góc trái toolbar hiện **"X / Y sản phẩm"** — X là số đang hiện, Y là tổng kho.
 
 ---
 
 ## III. Bộ lọc sidebar
 
-Sidebar bên trái có các nhóm lọc:
+Sidebar bên trái cho phép lọc kết hợp nhiều tiêu chí cùng lúc.
 
-| Bộ lọc | Chức năng |
+![Sidebar bộ lọc — nhấp vào nhóm để mở rộng và tick chọn giá trị lọc](/help/images/goods-search/04-sidebar.jpg)
+
+| Nhóm lọc | Dùng khi nào |
 |---|---|
-| **Nhóm hàng** | Lọc theo cây danh mục sản phẩm |
-| **Tồn kho** | Còn hàng / Hết hàng / Sắp hết |
+| **Nhóm hàng** | Xem hàng thuộc một danh mục cụ thể |
+| **Tồn kho** | Tìm hàng sắp hết / đã hết để nhập thêm |
 | **Thương hiệu** | Lọc theo brand |
-| **Vị trí** | Lọc theo khu vực lưu kho |
-| **Thuộc tính** | Màu sắc, kích cỡ, chất liệu... |
-| **Nhà cung cấp** | Lọc theo NCC đã nhập hàng |
+| **Nhà cung cấp** | Xem hàng nhập từ NCC cụ thể |
 
-Có thể kết hợp nhiều bộ lọc cùng lúc. Nút **Xóa bộ lọc** ở cuối sidebar để reset toàn bộ.
+Sau khi tick chọn một nhóm, danh sách tự thu hẹp lại ngay.
 
-> **Lưu ý**: Số trong ngoặc cạnh mỗi giá trị lọc là số sản phẩm thuộc nhóm đó.
+![Danh sách đã lọc theo nhóm hàng — số sản phẩm giảm xuống, dễ tìm hơn](/help/images/goods-search/05-filter-active.jpg)
+
+Nhấn **Xóa bộ lọc** ở cuối sidebar để bỏ toàn bộ điều kiện lọc.
 
 ---
 
 ## IV. Chế độ xem
 
-Góc phải toolbar có 2 chế độ:
+Góc phải toolbar có 2 nút chuyển chế độ xem.
 
-- **Dạng bảng** (mặc định) — xem nhiều thông tin: mã, tên, giá, tồn kho, nhóm hàng
-- **Dạng lưới** — xem ảnh sản phẩm, phù hợp khi cần nhận diện bằng hình ảnh
+**Dạng bảng** (mặc định) — hiện đầy đủ cột: mã hàng, tên, giá bán, giá vốn, tồn kho, nhóm hàng.
 
-Trong dạng bảng, click **biểu tượng cột** (góc phải) để ẩn/hiện các cột không cần thiết.
+**Dạng lưới** — mỗi sản phẩm là một ô ảnh, phù hợp nhận diện bằng hình.
+
+![Chế độ xem dạng lưới — nhìn ảnh sản phẩm dễ nhận biết hơn bảng chữ](/help/images/goods-search/06-grid.jpg)
+
+> Trong dạng bảng: click biểu tượng cột ở góc phải bảng để ẩn/hiện các cột không cần.
 
 ---
 
 ## V. Xem chi tiết sản phẩm
 
-Click vào **tên sản phẩm** để mở panel chi tiết bên phải. Panel có các tab:
+**Bước 1** — Click vào bất kỳ dòng sản phẩm nào trong bảng.
 
+**Bước 2** — Panel chi tiết trượt ra từ bên phải.
+
+![Panel chi tiết sản phẩm — hiện đầy đủ thông tin, ảnh, đơn vị, bảo hành](/help/images/goods-search/07-detail.jpg)
+
+Panel gồm các tab:
 - **Thông tin** — tên, mã SKU, giá bán, giá vốn, nhóm hàng, thuộc tính
-- **Mô tả** — mô tả chi tiết, hình ảnh
-- **Đơn vị** — đơn vị tính và quy đổi
-- **Bảo hành** — chính sách bảo hành sản phẩm
-- **Kênh bán** — liên kết với website / Shopee`,
+- **Mô tả** — nội dung mô tả sản phẩm, thư viện ảnh
+- **Đơn vị** — đơn vị tính và quy đổi (hộp/cái, kg/g...)
+- **Bảo hành** — chính sách và thời hạn bảo hành
+- **Kênh bán** — liên kết đồng bộ với website / Shopee`,
   },
 
   'goods-adjust': {
@@ -322,72 +372,89 @@ Click vào **tên sản phẩm** để mở panel chi tiết bên phải. Panel 
     categoryId: 'inventory',
     title: 'Điều chỉnh tồn kho',
     sections: [
-      { id: 'tabs', title: 'I. Các tab trong Hàng hóa' },
-      { id: 'audit', title: 'II. Kiểm kê tồn kho' },
-      { id: 'audit-history', title: 'III. Lịch sử kiểm kho' },
-      { id: 'purchase', title: 'IV. Nhập hàng' },
-      { id: 'labels', title: 'V. In tem mã hàng' },
+      { id: 'cac-tab', title: 'I. Các tab trong Hàng hóa' },
+      { id: 'kiem-ke', title: 'II. Kiểm kê tồn kho' },
+      { id: 'lich-su-kiem-kho', title: 'III. Lịch sử kiểm kho' },
+      { id: 'nhap-hang', title: 'IV. Nhập hàng' },
+      { id: 'in-tem', title: 'V. In tem mã hàng' },
     ],
     content: `## I. Các tab trong Hàng hóa
 
-Trang Hàng hóa có thanh tab phụ ngay dưới toolbar chính:
+Trang Hàng hóa có thanh tab phụ ngay dưới toolbar — mỗi tab là một chức năng riêng biệt.
 
-| Tab | Chức năng |
+![Trang hàng hóa với thanh tab phụ — Hàng hóa, Nhập hàng, Kiểm kho, Bảng giá, Bảo hành](/help/images/goods-adjust/01-overview.jpg)
+
+| Tab | Dùng để làm gì |
 |---|---|
-| **Hàng hóa** | Danh sách sản phẩm, tìm kiếm, lọc |
-| **Nhập hàng** | Tạo phiếu nhập từ nhà cung cấp |
-| **Kiểm kho** | Kiểm kê và cân bằng tồn kho |
-| **Bảng giá** | Thiết lập giá bán theo nhóm / kỳ |
-| **Bảo hành** | Quản lý sản phẩm đang sửa chữa |
+| **Hàng hóa** | Xem danh sách, tìm kiếm, lọc sản phẩm |
+| **Nhập hàng** | Tạo và quản lý phiếu nhập từ nhà cung cấp |
+| **Kiểm kho** | Đối chiếu và cân bằng số lượng tồn kho |
+| **Bảng giá** | Thiết lập giá bán theo nhóm khách hoặc theo kỳ |
+| **Bảo hành** | Theo dõi sản phẩm đang gửi sửa chữa |
 
 ---
 
 ## II. Kiểm kê tồn kho
 
-Vào tab **Kiểm kho** để đối chiếu tồn kho thực tế với số liệu trong hệ thống.
+Kiểm kê dùng để đối chiếu **số lượng thực tế trong kho** với **số liệu hệ thống đang ghi nhận**.
 
-**Các bước thực hiện kiểm kê:**
+**Bước 1** — Click vào tab **Kiểm kho** trên thanh tab phụ.
 
-1. Click **Tạo phiếu kiểm kho**
-2. Lọc theo nhóm hàng nếu muốn kiểm một phần kho
-3. Với mỗi sản phẩm, nhập **Tồn thực tế** vào cột bên phải
-4. Hệ thống tự tính **Chênh lệch** = Tồn thực tế − Tồn hệ thống
-5. Click **Hoàn thành kiểm kho** để lưu và cân bằng số liệu
+![Tab Kiểm kho được highlight — click vào đây để vào chức năng kiểm kê](/help/images/goods-adjust/02-audit-highlight.jpg)
 
-> **Lưu ý**: Sau khi hoàn thành, tồn kho trong hệ thống sẽ được **cập nhật theo số thực tế**. Thao tác này không thể hoàn tác.
+**Bước 2** — Trang Kiểm kho hiện ra với danh sách sản phẩm và tồn kho hệ thống.
 
-**Chế độ kiểm hàng hỏng:** Dùng khi cần ghi nhận hàng hư hỏng riêng mà không ảnh hưởng số liệu kiểm kê chính.
+![Trang Kiểm kho — cột bên phải để nhập số lượng thực tế đếm được](/help/images/goods-adjust/03-audit.jpg)
+
+**Bước 3** — Click **Tạo phiếu kiểm kho** để bắt đầu.
+
+![Nút Tạo phiếu kiểm kho — click để mở form nhập số lượng thực tế](/help/images/goods-adjust/04-audit-create-btn.jpg)
+
+**Bước 4** — Điền cột **Tồn thực tế** theo từng sản phẩm đếm được trong kho. Hệ thống tự tính chênh lệch.
+
+**Bước 5** — Click **Hoàn thành kiểm kho** → tồn kho hệ thống được cập nhật theo số thực tế.
+
+> **Quan trọng:** Sau khi hoàn thành không thể hoàn tác. Kiểm tra kỹ trước khi xác nhận.
 
 ---
 
 ## III. Lịch sử kiểm kho
 
-Bên dưới form kiểm kê có bảng **Lịch sử kiểm kho**. Mỗi phiếu hiển thị:
-- Mã phiếu (click để xem chi tiết)
-- Ngày kiểm
-- Tổng chênh lệch (số lượng)
-- Trạng thái: **Đã cân bằng**
+Bên dưới form kiểm kê có bảng **Lịch sử kiểm kho** ghi lại toàn bộ lần kiểm trước đó.
+
+Mỗi phiếu hiển thị: mã phiếu · ngày kiểm · tổng chênh lệch · trạng thái **Đã cân bằng**. Click vào mã phiếu để xem chi tiết từng sản phẩm trong lần kiểm đó.
 
 ---
 
 ## IV. Nhập hàng
 
-Vào tab **Nhập hàng** để tạo phiếu nhập từ nhà cung cấp. Tồn kho được cộng tự động sau khi xác nhận phiếu nhập.
+**Bước 1** — Click vào tab **Nhập hàng**.
 
-Xem hướng dẫn chi tiết tại bài: **Tạo đơn nhập hàng** (mục Mua hàng).
+![Tab Nhập hàng được highlight — click vào đây để xem phiếu nhập](/help/images/goods-adjust/05-purchase-highlight.jpg)
+
+**Bước 2** — Danh sách phiếu nhập hàng xuất hiện, lọc được theo ngày, nhà cung cấp, trạng thái.
+
+![Trang nhập hàng — danh sách phiếu nhập, mỗi dòng là một lần nhập từ NCC](/help/images/goods-adjust/06-purchase.jpg)
+
+Sau khi xác nhận phiếu nhập, tồn kho tự động được cộng thêm số lượng trong phiếu. Xem hướng dẫn tạo phiếu nhập chi tiết tại bài **Tạo đơn nhập hàng** (mục Mua hàng).
 
 ---
 
 ## V. In tem mã hàng
 
-Trong danh sách sản phẩm (tab Hàng hóa):
+Dùng để in tem nhãn dán lên sản phẩm, kệ hàng, hoặc thùng kho.
 
-1. Tích chọn một hoặc nhiều sản phẩm (checkbox đầu dòng)
-2. Toolbar chuyển sang chế độ **Đã chọn X sản phẩm**
-3. Click **In tem** → chọn số lượng tem mỗi sản phẩm
-4. Trang in xuất hiện với tem 3 cột, định dạng A4
+**Bước 1** — Về tab **Hàng hóa**, tick chọn sản phẩm cần in tem bằng checkbox đầu dòng.
 
-Mỗi tem in gồm: tên sản phẩm, mã vạch / mã SKU, giá bán.`,
+![Tích chọn sản phẩm — toolbar phía trên chuyển sang chế độ "Đã chọn X sản phẩm"](/help/images/goods-adjust/08-label-select.jpg)
+
+**Bước 2** — Toolbar hiện nút **In tem** — click vào để mở cài đặt in.
+
+![Nút In tem xuất hiện khi đã chọn ít nhất 1 sản phẩm](/help/images/goods-adjust/09-label-btn.jpg)
+
+**Bước 3** — Chọn số lượng tem cho mỗi sản phẩm → nhấn **In** → trang in A4 xuất hiện với tem 3 cột.
+
+Mỗi tem gồm: tên sản phẩm · mã vạch / mã SKU · giá bán hiện tại.`,
   },
 
   'overview-dashboard': {

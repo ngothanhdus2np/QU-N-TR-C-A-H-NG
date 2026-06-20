@@ -307,6 +307,30 @@ interface ParentRow {
 
 ---
 
+## 🟠 P1 — Help Center: Giai đoạn tiếp theo
+
+### [x] Giai đoạn 1+2 — Cơ sở hạ tầng + Bài BÁN HÀNG + HÀNG HÓA *(xong 2026-06-20)*
+
+- Tạo `components/help/HelpCenter.tsx` với sidebar danh mục, TOC phải, render Markdown + ảnh.
+- Viết 4 bài đầu (pos-intro, pos-create-order, goods-search, goods-adjust) dạng step-by-step mật độ cao.
+- Script Playwright chụp 45 screenshot với highlight đỏ chỉ thẳng vào UI element.
+
+### [ ] Giai đoạn 3 — Bài MUA HÀNG + KHÁCH HÀNG & NCC
+
+- [ ] **Mua hàng**: bài "Nhập hàng và tạo phiếu mua hàng" (màn hình PurchaseOrdersPage, form nhập hàng nhanh)
+- [ ] **Khách hàng**: bài "Quản lý khách hàng và hạng thành viên"
+- [ ] **Nhà cung cấp**: bài "Quản lý nhà cung cấp và công nợ"
+- [ ] Screenshot tương ứng cho mỗi bài
+
+### [ ] Giai đoạn 4 — Bài NHÂN SỰ & LƯƠNG + BÁO CÁO + CÀI ĐẶT
+
+- [ ] **Nhân sự**: bài "Quản lý nhân viên và tính lương"
+- [ ] **Báo cáo**: bài "Xem báo cáo doanh thu và lợi nhuận"
+- [ ] **Cài đặt**: bài "Cấu hình hệ thống cơ bản"
+- [ ] Screenshot tương ứng
+
+---
+
 ## 🟠 P1 — Ưu tiên trung bình
 
 - [x] ~~**Type hóa `services/dataMapper.ts` + `hooks/useAppData.ts`**~~ — giảm ~110 warning `any` còn lại *(xong 2026-05-15)*
@@ -1230,14 +1254,15 @@ rclone ls mega:cfobrain-backup/daily/
 - [x] ~~**Giai đoạn 1: Tạo bảng Supabase + Store API**~~ — 8 bảng store_*, PostgreSQL function create_store_order, routes/store.ts với 5 endpoint ✅ *(2026-06-16)*
 - [x] ~~**Giai đoạn 2: Kết nối website → Store API**~~ — store-api.js (API client + fallback data tĩnh), cập nhật all-products.js / product-detail.js / checkout.js / 3 HTML files ✅ *(2026-06-16)*
 - [x] ~~**Giai đoạn 3: Fix PostgREST schema cache**~~ — nguyên nhân thật không phải cache mà `shopee_products`+`shopee_product_variants` **chưa từng được tạo** trong DB; chạy `CREATE TABLE` trực tiếp qua `docker exec supabase-db psql` (terminal trên iMac, không cần mật khẩu Studio) → verify lại bằng curl: cả `store_products`, `store_product_variants`, `shopee_products`, `shopee_product_variants` đều đã đọc được (200, `[]`) ✅ *(2026-06-16)*
-- [x] ~~**Giai đoạn 4: Nhập 43 sản phẩm vào store_products**~~ — **30/43 sản phẩm đã có** trong store_products (is_published=true). SQL fix slug + parse color_name/size đã viết vào `supabase_setup.sql`, cần chạy thủ công trên iMac. 13 sản phẩm còn thiếu (DBDN01-07, DDDN01-03, DXNN01-03) chưa tồn tại trong pos_products — cần nhập tay trước. *(2026-06-20)*
-  - ⏳ **Việc còn lại:** (1) Chạy 2 SQL UPDATE trên iMac (`docker exec supabase-db psql`); (2) Nhập 13 SKU vào pos_products; (3) Dùng tab "Kênh bán" để bật Website=ON
+- [x] ~~**Giai đoạn 4: Nhập 43 sản phẩm vào store_products**~~ — **30/43 sản phẩm đã có** trong store_products (is_published=true). Đã xác nhận production: 30 slug chuẩn và toàn bộ 180 biến thể đã có `color_name` + `size`. 13 sản phẩm còn thiếu (DBDN01-07, DDDN01-03, DXNN01-03) chưa tồn tại trong pos_products — cần nhập tay trước. *(2026-06-20, xác nhận lại 2026-06-20)*
+  - ⏳ **Việc còn lại:** (1) Nhập 13 SKU vào pos_products; (2) Dùng tab "Kênh bán" để bật Website=ON
   - Riêng kênh Shopee: hạ tầng đã sẵn sàng, chỉ cần bấm lại "Nhập từ Dữ liệu nguồn cũ" trong trang Sản phẩm Shopee (đã fix bug duplicate-key + bảng đã tồn tại) là chạy được hết — chưa xác nhận đã bấm
 - [ ] **Giai đoạn 5: UI admin "Quản lý Website"** — trang trong app để: thêm/sửa store_products, liên kết variants, quản lý collections, xem đơn website
 - [x] ~~**OnlineCatalogPage.tsx viết lại giống layout Hàng hoá + nối fetch thật**~~ — sidebar/toolbar/table clone GoodsFilterSidebar+GoodsToolbar+GoodsProductTableHeader, cột Mã hàng/Nhóm hàng (leaf)/Giá vốn/Tồn kho/Vị trí/Thương hiệu/Nền tảng, cha-con expand giống GoodsProductRow, bảng chi tiết 5 tab clone GoodsProductDetailPanel, fetch thật từ store_product_variants+shopee_product_variants (mỗi bảng try/catch riêng để không sập trang nếu 1 bảng lỗi) ✅ *(2026-06-16)*
   - **Vẫn đang rỗng** vì chưa có sản phẩm nào thực sự liên kết — hạ tầng đã sẵn sàng (xem Giai đoạn 3), chỉ còn thiếu Giai đoạn 4
   - Đã dọn 30 sản phẩm cha rỗng (`variant_count=0`) tạo ra bởi lần "Nhập từ Dữ liệu nguồn cũ" bị lỗi trước đó trong `pos_products`
 - [x] ~~**Workflow huỷ/hoàn hàng đơn website + cộng tồn kho đúng 2 luồng**~~ — RPC `update_website_order_status` (huỷ trước khi giao ĐVVC cộng tồn ngay; hoàn sau khi giao chỉ cộng tồn sau khi nhân viên xác nhận đã nhận lại hàng), fix bug case-mismatch status `'Pending'`→`'pending'`, fix thiếu cột `pos_orders.updated_at`, fix query bảng `pos_order_items` không tồn tại trong `WebsiteOrdersPage.tsx` ✅ *(2026-06-16)*
+  - [x] ~~**Production migration 014**~~ — đã chạy qua internal `pg/query`, xác nhận `website_price_override`, gộp SKU trùng khi trừ/cộng tồn, và state machine chống cộng tồn hai lần ✅ *(2026-06-20)*
 
 ## ⏸️ Blocked — Chờ hình mẫu từ user
 

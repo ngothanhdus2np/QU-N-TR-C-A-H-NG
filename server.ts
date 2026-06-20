@@ -551,6 +551,11 @@ async function startServer() {
       } catch {}
     }
 
+    // Serve help images from persistent folder on iMac (outside git repo)
+    // Dev (MacBook): folder không tồn tại → falls through → Vite serve từ public/help/images/
+    // Prod (iMac): ~/cfobrain-assets/help/images/ chứa ảnh thực
+    app.use('/help/images', express.static(path.join(os.homedir(), 'cfobrain-assets', 'help', 'images')));
+
     if (!IS_PROD) {
       try {
         const { createServer: createViteServer } = await import('vite');

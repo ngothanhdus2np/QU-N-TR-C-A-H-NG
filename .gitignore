@@ -42,3 +42,6 @@ public/imports/
 tmpImage*.JPG
 tmpImage*.PNG
 tmp*
+
+# Help Center screenshots — lưu trên iMac tại ~/cfobrain-assets/help/images/
+public/help/images/
