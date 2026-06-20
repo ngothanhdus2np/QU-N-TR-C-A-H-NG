@@ -3,6 +3,27 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-20 — Fix trang Hoá đơn: Người tạo/Người bán hiện ID số thay vì tên
+
+- Root cause: `OrderInvoices.tsx` hiển thị `order.createdBy || order.staffId` — cả 2 đều là ID nhân viên. Component không nhận `employees` prop nên không tra cứu được tên.
+- Fix: Thêm `employees?: Employee[]` prop + `getStaffName()` lookup. Fallback chain: `staffName → employee.name(by id) → createdBy → staffId`.
+- Truyền `employees={data.employees || []}` từ `MainContent.tsx` và `ProcessOrdersModal` → `POSComputer`.
+- Files: `components/orders/OrderInvoices.tsx`, `components/MainContent.tsx`, `components/pos/ProcessOrdersModal.tsx`, `components/pos/POSComputer.tsx`
+
+### 2026-06-20 — Chạy production migrations: AUDIT-019, AUDIT-022, AUDIT-004/017
+
+- AUDIT-019: Xóa 1 duplicate (order 260527G97D8P3T / SKU "Không rõ") và thêm `UNIQUE(order_id, sku)` vào `shopee_inventory_out`. Chạy qua internal pg/query API (port 8000).
+- AUDIT-022: Thêm `UNIQUE(date)` vào `revenue_records` và `UNIQUE(employee_id, month)` vào `payroll_records`. Không có duplicate trong revenue. payroll có 2 null employee_id khác nhau — không vi phạm UNIQUE (NULL ≠ NULL trong PostgreSQL).
+- AUDIT-004/017: Backfill `nextImportPrice` vào 1057 Import transactions. 4 item của 2 transaction cũ (SP010315, SP005693/5692/5691) không thể backfill vì `importPrice = null` và không có lịch sử giá — dữ liệu gốc thiếu.
+- Files: Production DB (không có thay đổi code), `docs/05-process/TODO.md`
+
+### 2026-06-20 — Fix 2 test thất bại + BUG-F1 + AUDIT-004/017
+
+- Fix 2 test trong `posOrderService.test.ts`: đổi 2 `toHaveBeenCalledWith` riêng biệt sang 1 `arrayContaining` — phản ánh đúng behavior sau AUDIT-003/009 (inventoryTransaction + stockUpdates gộp thành 1 atomic call). 286/286 tests pass, TypeScript clean.
+- BUG-F1: Xóa bộ lọc "Hạch toán kết quả kinh doanh" khỏi `CashLedgerPage.tsx` — filter này chưa bao giờ có tác dụng do `LedgerEntry` không có field tương ứng. Xóa: type `BusinessFilter`, state `businessFilter`, UI FilterSection, references trong `hasActiveFilters` + `clearFilters`.
+- AUDIT-004/017: Viết SQL migration backfill `nextImportPrice` vào cuối `supabase_setup.sql` — cập nhật JSONB items trong `inventory_transactions` (type='Import', nextImportPrice=0/null) dựa vào `product_cost_history` gần nhất theo SKU + ngày. Cần chạy thủ công trên Supabase Dashboard.
+- Files: `services/posOrderService.test.ts`, `components/finance/CashLedgerPage.tsx`, `supabase_setup.sql`, `docs/05-process/TODO.md`
+
 ### 2026-06-20 — Fix trang chụp ảnh mobile: camera + load thông tin sản phẩm
 
 - Fix trang `/upload-image/:productId` trả về HTML thay vì JSON: root cause là server đang chạy bản cũ (started 23:23 nhưng `server.ts` sửa lúc 23:54). Restart server để pick up route `/api/product-info/:productId`.

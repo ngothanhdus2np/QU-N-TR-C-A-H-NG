@@ -65,15 +65,15 @@ export function ListPageTable<T>({
   };
 
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="min-w-full border-collapse text-sm">
       <thead
-        className={`bg-slate-50 border-b border-slate-200 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}
+        className={`bg-indigo-50/60 border-b border-indigo-100 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}
       >
         <tr>
           {columns.map(col => (
             <th
               key={col.key}
-              className={`px-4 py-3 font-normal text-xs uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 ${
+              className={`px-4 py-3 font-normal text-xs uppercase tracking-widest text-slate-700 border-r border-slate-100 last:border-r-0 whitespace-nowrap ${
                 col.align === 'center'
                   ? 'text-center'
                   : col.align === 'right'
@@ -86,7 +86,7 @@ export function ListPageTable<T>({
               ) : col.sortable && onSort ? (
                 <button
                   onClick={() => onSort(col.key)}
-                  className="flex items-center gap-2 hover:text-indigo-600 transition-colors w-full"
+                  className="flex items-center gap-2 hover:text-indigo-600 transition-colors w-full uppercase tracking-widest"
                 >
                   <span className="flex-1">{col.label}</span>
                   {getSortIcon(col.key)}
@@ -100,7 +100,7 @@ export function ListPageTable<T>({
       </thead>
       <tbody>
         {summaryCells && (
-          <tr className="bg-indigo-50/60 border-b border-indigo-100">
+          <tr className="bg-slate-50 border-b border-slate-200">
             {columns.map(col => (
               <td
                 key={col.key}

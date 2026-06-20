@@ -1089,6 +1089,7 @@ export interface Supplier {
   // Computed fields (không lưu DB, tính runtime từ transactions và debts)
   totalPurchase?: number; // Tổng giá trị mua hàng
   currentDebt?: number; // Nợ hiện tại cần trả
+  productCategories?: string[]; // Nhóm hàng NCC cung cấp (tính từ phiếu nhập)
 }
 
 export interface SupplierDebtRecord {

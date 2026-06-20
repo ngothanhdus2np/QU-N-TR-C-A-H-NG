@@ -117,29 +117,47 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     );
   };
 
-  // Compute totalPurchase and currentDebt for each supplier
+  // Compute totalPurchase, currentDebt, productCategories for each supplier
+  const productCatMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (data.posProducts || []).forEach(p => {
+      const cat = p.categoryPath?.trim();
+      if (cat) map.set(p.id, cat);
+    });
+    return map;
+  }, [data.posProducts]);
+
   const suppliersWithComputed = useMemo(() => {
     return rawSuppliers.map(supplier => {
-      const totalPurchase = inventoryTransactions
-        .filter(
-          transaction =>
-            transaction.type === 'Import' && transactionBelongsToSupplier(transaction, supplier)
-        )
-        .reduce((sum, transaction) => sum + (transaction.totalAmount || 0), 0);
+      const importTxns = inventoryTransactions.filter(
+        transaction =>
+          transaction.type === 'Import' && transactionBelongsToSupplier(transaction, supplier)
+      );
+      const totalPurchase = importTxns.reduce(
+        (sum, transaction) => sum + (transaction.totalAmount || 0), 0
+      );
       const currentDebt = supplierDebts
         .filter(debt => debtBelongsToSupplier(debt, supplier))
         .reduce(
           (sum, debt) => sum + (debt.type === 'purchase' ? debt.amount : -debt.amount),
           0
         );
+      const categorySet = new Set<string>();
+      importTxns.forEach(t => {
+        t.items.forEach(item => {
+          const cat = productCatMap.get(item.productId);
+          if (cat) categorySet.add(cat);
+        });
+      });
 
       return {
         ...supplier,
         totalPurchase,
         currentDebt,
+        productCategories: Array.from(categorySet),
       };
     });
-  }, [rawSuppliers, supplierDebts, inventoryTransactions]);
+  }, [rawSuppliers, supplierDebts, inventoryTransactions, productCatMap]);
 
   const handleCreateSupplier = () => {
     setEditingSupplier(null);

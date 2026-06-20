@@ -20,7 +20,7 @@ import {
   Plus,
   Upload,
 } from 'lucide-react';
-import { AppData, AppDataSurgicalUpdate } from '../../types';
+import { AppData, AppDataSurgicalUpdate, Employee } from '../../types';
 import { apiService } from '../../services/apiService';
 import { FilterSection, FilterDateRange, FilterCheckboxGroup } from '../shared';
 
@@ -29,6 +29,7 @@ interface OrderInvoicesProps {
   customers: AppData['posCustomers'];
   products: AppData['posProducts'];
   revenue: AppData['revenue'];
+  employees?: Employee[];
   storeName: string;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
@@ -61,7 +62,11 @@ function formatOrderDateTime(value: string) {
   });
 }
 
-export default function OrderInvoices({ orders, customers, products, revenue, storeName, onUpdateSurgical }: OrderInvoicesProps) {
+export default function OrderInvoices({ orders, customers, products, revenue, storeName, employees = [], onUpdateSurgical }: OrderInvoicesProps) {
+  const getStaffName = (staffId?: string) => {
+    if (!staffId) return undefined;
+    return employees.find(e => e.id === staffId)?.name;
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState(() => {
     const d = new Date();
@@ -628,8 +633,8 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                     <h3 className="text-lg font-semibold text-slate-900">
                       {order.customerName || 'Khách lẻ'}
                     </h3>
-                    <span className="text-sm font-bold text-slate-600">{order.orderCode}</span>
-                    <span className={`rounded-md px-2 py-1 text-xs font-bold ${
+                    <span className="text-sm font-normal text-slate-500">{order.orderCode}</span>
+                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${
                       order.status === 'cancelled'
                         ? 'bg-rose-50 text-rose-600'
                         : order.status === 'pending'
@@ -639,53 +644,53 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                       {order.status === 'cancelled' ? 'Đã hủy' : order.status === 'pending' ? 'Đang xử lý' : 'Hoàn thành'}
                     </span>
                     {order.isReturn && (
-                      <span className="rounded-md bg-rose-50 px-2 py-1 text-xs font-bold text-rose-600">
+                      <span className="rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-600">
                         Trả hàng
                       </span>
                     )}
                   </div>
                   {customer?.phone && (
-                    <p className="mt-1 text-xs font-medium text-slate-500">SĐT: {customer.phone}</p>
+                    <p className="mt-1 text-xs font-normal text-slate-500">SĐT: {customer.phone}</p>
                   )}
                 </div>
-                <div className="text-sm font-semibold text-slate-700">{storeName || 'Chi nhánh trung tâm'}</div>
+                <div className="text-sm font-normal text-slate-500">{storeName || 'Chi nhánh trung tâm'}</div>
               </div>
 
               <div className="mt-5 grid grid-cols-3 gap-x-8 gap-y-3 text-sm">
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Người tạo:</span>
+                  <span className="font-normal text-slate-400">Người tạo:</span>
                   {isEditing ? (
                     <input
                       value={draftOrder.createdBy}
                       onChange={event => setDraftOrder(prev => ({ ...prev, createdBy: event.target.value }))}
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400"
+                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
                     />
                   ) : (
-                    <span className="font-semibold text-slate-800">{order.createdBy || order.staffId || '—'}</span>
+                    <span className="font-normal text-slate-700">{order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}</span>
                   )}
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Người bán:</span>
+                  <span className="font-normal text-slate-400">Người bán:</span>
                   <input
                     readOnly={!isEditing}
-                    value={isEditing ? draftOrder.createdBy : order.createdBy || order.staffId || '—'}
+                    value={isEditing ? draftOrder.createdBy : order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}
                     onChange={event => setDraftOrder(prev => ({ ...prev, createdBy: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
                   />
                 </div>
                 <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Ngày bán:</span>
-                  <div className="inline-flex h-8 w-fit items-center rounded-md bg-slate-100 px-3 text-sm font-semibold text-slate-600">
+                  <span className="font-normal text-slate-400">Ngày bán:</span>
+                  <div className="inline-flex h-8 w-fit items-center rounded-md bg-slate-100 px-3 text-sm font-normal text-slate-600">
                     {formatOrderDateTime(order.date)}
                   </div>
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Kênh bán:</span>
+                  <span className="font-normal text-slate-400">Kênh bán:</span>
                   <select
                     disabled={!isEditing}
                     value={isEditing ? draftOrder.channelName : order.channelName || 'Bán trực tiếp'}
                     onChange={event => setDraftOrder(prev => ({ ...prev, channelName: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50"
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50"
                   >
                     <option>Bán trực tiếp</option>
                     <option>Online</option>
@@ -694,17 +699,17 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                   </select>
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Bảng giá:</span>
+                  <span className="font-normal text-slate-400">Bảng giá:</span>
                   <input
                     readOnly={!isEditing}
                     value={isEditing ? draftOrder.priceBookName : order.priceBookName || 'Bảng giá chung'}
                     onChange={event => setDraftOrder(prev => ({ ...prev, priceBookName: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
                   />
                 </div>
                 <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-                  <span className="font-bold text-slate-500">Thanh toán:</span>
-                  <span className="font-semibold text-slate-800">
+                  <span className="font-normal text-slate-400">Thanh toán:</span>
+                  <span className="font-normal text-slate-700">
                     {PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}
                   </span>
                 </div>
@@ -714,13 +719,13 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                 <table className="w-full border-collapse text-sm">
                   <thead className="bg-slate-100">
                     <tr>
-                      <th className="px-3 py-3 text-left font-semibold text-slate-700">Mã hàng</th>
-                      <th className="px-3 py-3 text-left font-semibold text-slate-700">Tên hàng</th>
-                      <th className="px-3 py-3 text-right font-semibold text-slate-700">Số lượng</th>
-                      <th className="px-3 py-3 text-right font-semibold text-slate-700">Đơn giá</th>
-                      <th className="px-3 py-3 text-right font-semibold text-slate-700">Giảm giá</th>
-                      <th className="px-3 py-3 text-right font-semibold text-slate-700">Giá bán</th>
-                      <th className="px-3 py-3 text-right font-semibold text-slate-700">Thành tiền</th>
+                      <th className="px-3 py-3 text-left font-medium text-slate-500">Mã hàng</th>
+                      <th className="px-3 py-3 text-left font-medium text-slate-500">Tên hàng</th>
+                      <th className="px-3 py-3 text-right font-medium text-slate-500">Số lượng</th>
+                      <th className="px-3 py-3 text-right font-medium text-slate-500">Đơn giá</th>
+                      <th className="px-3 py-3 text-right font-medium text-slate-500">Giảm giá</th>
+                      <th className="px-3 py-3 text-right font-medium text-slate-500">Giá bán</th>
+                      <th className="px-3 py-3 text-right font-medium text-slate-500">Thành tiền</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -751,20 +756,20 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                 />
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-600">Tổng tiền hàng ({fmt(totalQuantity)})</span>
-                    <span className="font-medium text-slate-900">{fmt(order.totalAmount)}</span>
+                    <span className="font-normal text-slate-500">Tổng tiền hàng ({fmt(totalQuantity)})</span>
+                    <span className="font-normal text-slate-700">{fmt(order.totalAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-600">Giảm giá hóa đơn</span>
-                    <span className="font-medium text-slate-900">{order.discount > 0 ? fmt(order.discount) : '0'}</span>
+                    <span className="font-normal text-slate-500">Giảm giá hóa đơn</span>
+                    <span className="font-normal text-slate-700">{order.discount > 0 ? fmt(order.discount) : '0'}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-600">Khách cần trả</span>
-                    <span className="font-medium text-slate-900">{fmt(order.finalAmount)}</span>
+                    <span className="font-normal text-slate-500">Khách cần trả</span>
+                    <span className="font-normal text-slate-900">{fmt(order.finalAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-600">Khách đã trả</span>
-                    <span className="font-medium text-slate-900">{fmt(order.finalAmount)}</span>
+                    <span className="font-normal text-slate-500">Khách đã trả</span>
+                    <span className="font-normal text-slate-700">{fmt(order.finalAmount)}</span>
                   </div>
                 </div>
               </div>
@@ -1040,22 +1045,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
 
         {/* Table */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full text-sm border-collapse table-fixed">
-            {/* Column widths */}
-            <colgroup>
-              <col style={{ width: 36 }} />   {/* checkbox */}
-              <col style={{ width: 32 }} />   {/* star */}
-              <col style={{ width: 110 }} />  {/* mã HĐ */}
-              <col style={{ width: 140 }} />  {/* thời gian */}
-              <col style={{ width: 100 }} />  {/* mã trả hàng */}
-              <col style={{ width: 88 }} />   {/* mã KH */}
-              <col style={{ width: 150 }} />  {/* khách hàng */}
-              <col style={{ width: 112 }} />  {/* tổng tiền hàng */}
-              <col style={{ width: 80 }} />   {/* giảm giá */}
-              <col style={{ width: 120 }} />  {/* tổng sau giảm */}
-              <col style={{ width: 112 }} />  {/* khách đã trả */}
-              {showPaymentColumn && <col style={{ width: 96 }} />} {/* thanh toán */}
-            </colgroup>
+          <table className="min-w-full text-sm border-collapse">
             {/* Header */}
             <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
               <tr>
@@ -1068,35 +1058,35 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                   />
                 </th>
                 <th className="px-2 py-2.5 text-center" />
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã hóa đơn
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Thời gian
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã trả hàng
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã KH
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Khách hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Tổng tiền hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Giảm giá
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Tổng sau giảm giá
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Khách đã trả
                 </th>
                 {showPaymentColumn && (
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                     Thanh toán
                   </th>
                 )}

@@ -61,18 +61,11 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Filters
-  const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [debtRangeMin, setDebtRangeMin] = useState('');
   const [debtRangeMax, setDebtRangeMax] = useState('');
   const [purchaseRangeMin, setPurchaseRangeMin] = useState('');
   const [purchaseRangeMax, setPurchaseRangeMax] = useState('');
-
-  // Get unique groups
-  const uniqueGroups = useMemo(() => {
-    const groups = new Set(suppliers.map(s => s.group).filter(Boolean));
-    return Array.from(groups) as string[];
-  }, [suppliers]);
 
   // Apply filters
   const filteredSuppliers = useMemo(() => {
@@ -88,11 +81,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
           supplier.phone?.toLowerCase().includes(term) ||
           supplier.email?.toLowerCase().includes(term)
       );
-    }
-
-    // Group filter
-    if (groupFilter.length > 0) {
-      result = result.filter(supplier => supplier.group && groupFilter.includes(supplier.group));
     }
 
     // Status filter
@@ -124,7 +112,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   }, [
     suppliers,
     searchTerm,
-    groupFilter,
     statusFilter,
     debtRangeMin,
     debtRangeMax,
@@ -215,7 +202,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   };
 
   const handleClearFilters = () => {
-    setGroupFilter([]);
     setStatusFilter([]);
     setDebtRangeMin('');
     setDebtRangeMax('');
@@ -245,7 +231,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   };
 
   const hasActiveFilters =
-    groupFilter.length > 0 ||
     statusFilter.length > 0 ||
     debtRangeMin !== '' ||
     debtRangeMax !== '' ||
@@ -276,21 +261,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
         />
       </FilterSection>
 
-      {uniqueGroups.length > 0 && (
-        <FilterSection title="Nhóm nhà cung cấp">
-          <FilterCheckboxGroup
-            label="Nhóm nhà cung cấp"
-            options={uniqueGroups.map(group => ({
-              value: group,
-              label: group,
-              count: suppliers.filter(s => s.group === group).length,
-            }))}
-            selected={groupFilter}
-            onChange={setGroupFilter}
-            searchable={false}
-          />
-        </FilterSection>
-      )}
 
       <FilterSection title="Nợ hiện tại">
         <div className="space-y-2">
@@ -447,14 +417,35 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       key: 'name',
       label: 'Tên nhà cung cấp',
       sortable: true,
-      render: supplier => (
-        <div>
-          <div className="font-normal text-slate-800 text-sm">{supplier.name}</div>
-          {supplier.group && (
-            <div className="text-2xs text-slate-400 mt-0.5">{supplier.group}</div>
-          )}
-        </div>
-      ),
+      render: supplier => {
+        const cats = supplier.productCategories || [];
+        const lastSegments = [...new Set(cats.map(c => c.split('>>').pop()?.trim() || c))];
+        return (
+          <div className="relative group">
+            <div className="font-normal text-slate-800 text-sm">{supplier.name}</div>
+            {lastSegments.length > 0 && (
+              <>
+                <div className="text-2xs text-slate-400 mt-0.5 truncate">
+                  {lastSegments.slice(0, 3).join(', ')}
+                  {lastSegments.length > 3 && ` +${lastSegments.length - 3}`}
+                </div>
+                <div className="hidden group-hover:block absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3">
+                  <div
+                    className="grid gap-1.5"
+                    style={{ gridTemplateColumns: `repeat(${Math.min(lastSegments.length, 3)}, auto)` }}
+                  >
+                    {lastSegments.map((cat, i) => (
+                      <div key={i} className="text-xs text-slate-700 px-2 py-1 bg-slate-50 rounded whitespace-nowrap">
+                        {cat}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'phone',
@@ -551,11 +542,6 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
             expandedRowId={viewingSupplier?.id}
             expandedRowContent={expandedRowContent}
             summaryCells={{
-              name: (
-                <span className="text-xs font-semibold uppercase tracking-widest text-indigo-700">
-                  Tổng cộng
-                </span>
-              ),
               currentDebt: (
                 <span
                   className={`text-sm font-semibold ${

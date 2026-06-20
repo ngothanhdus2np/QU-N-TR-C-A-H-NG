@@ -28,17 +28,17 @@
 
 ---
 
-### [x] Xử lý AUDIT-019 — Thiếu UNIQUE constraint bảng shopee_inventory_out *(xong 2026-06-19)*
+### [x] Xử lý AUDIT-019 — Thiếu UNIQUE constraint bảng shopee_inventory_out *(xong 2026-06-20 — đã chạy production)*
 
 > SQL UNIQUE(order_id, sku) đã có cuối `supabase_setup.sql`. Đổi `.insert()` → `.upsert({ onConflict: 'order_id,sku', ignoreDuplicates: true })` trong `routes/inventoryOutSync.ts` để tránh lỗi 500 khi 2 sync chạy đồng thời.
-> **Cần chạy thủ công trên Supabase dashboard** nếu chưa chạy migration UNIQUE constraint.
+> ✅ **Đã chạy trực tiếp trên production 2026-06-20** qua pg/query API. Xóa 1 duplicate (order 260527G97D8P3T / SKU "Không rõ"). Constraint `uq_shopee_inventory_out_order_sku` đã active.
 
 ---
 
-### [x] Xử lý AUDIT-022 — Thiếu UNIQUE constraint bảng revenue_records / payroll_records *(xong 2026-06-19)*
+### [x] Xử lý AUDIT-022 — Thiếu UNIQUE constraint bảng revenue_records / payroll_records *(xong 2026-06-20 — đã chạy production)*
 
-> Thêm migration vào cuối `supabase_setup.sql`: dedup + UNIQUE(date, branch_id) cho `revenue_records`, dedup + UNIQUE(employee_id, month) cho `payroll_records`.
-> **Cần chạy thủ công trên Supabase dashboard.**
+> Thêm migration vào cuối `supabase_setup.sql`: UNIQUE(date) cho `revenue_records` (không có cột branch_id), UNIQUE(employee_id, month) cho `payroll_records`.
+> ✅ **Đã chạy trực tiếp trên production 2026-06-20**. Constraints `uq_revenue_records_date` và `uq_payroll_records_emp_month` đã active. Không có duplicate trong revenue_records. payroll_records có 2 bản null employee_id (Cẩm Tú + PHẠM THỊ VUI) — không vi phạm vì NULL ≠ NULL trong PostgreSQL UNIQUE.
 
 ---
 
@@ -52,11 +52,10 @@
 
 > Thêm warning block vào `REVENUE_PROFIT_LOGIC.md` sau phần "COGS lịch sử": giải thích fallback về `product.importPrice` hiện tại khi InventoryTransaction cũ thiếu `nextImportPrice`.
 
-### [ ] AUDIT-004/017 — Backfill nextImportPrice vào InventoryTransaction cũ *(Medium, Data)*
+### [x] AUDIT-004/017 — Backfill nextImportPrice vào InventoryTransaction cũ *(xong 2026-06-20 — đã chạy production)*
 
-> **Vấn đề gốc:** Báo cáo lợi nhuận quá khứ dùng `product.importPrice` hiện tại thay vì giá vốn lúc bán — sai nếu giá vốn đã thay đổi.
-> **Cần làm:** Viết script SQL hoặc migration để backfill `next_import_price` vào các `inventory_transactions` cũ (type='Import') dựa trên `product_cost_history` gần nhất.
-> **Lưu ý:** Chỉ cần thiết nếu giá vốn sản phẩm có thay đổi lớn từ lúc nhập kho.
+> SQL migration đã viết vào cuối `supabase_setup.sql`. Cập nhật JSONB items trong inventory_transactions type='Import' từ product_cost_history gần nhất theo ngày + SKU. An toàn: chỉ update item có nextImportPrice = 0 hoặc null.
+> ✅ **Đã chạy trực tiếp trên production 2026-06-20**. 1057 Import transactions, còn 4 item của 2 transaction (SKU SP010315, SP005693, SP005692, SP005691) không backfill được vì import_price = null và không có lịch sử trong product_cost_history — dữ liệu gốc thiếu, không thể phục hồi.
 
 ---
 
