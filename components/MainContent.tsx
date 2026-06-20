@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
+import HelpCenter from './help/HelpCenter';
 import OverviewPage from './overview/OverviewPage';
 import RevenueManager from './RevenueManager';
 import ExpenseManager from './ExpenseManager';
@@ -294,6 +295,8 @@ const MainContent: React.FC<MainContentProps> = ({
     );
 
     switch (activeTab) {
+      case 'help':
+        return <HelpCenter />;
       case 'overview':
         return <OverviewPage data={data} />;
       case 'orders':

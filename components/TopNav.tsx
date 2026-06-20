@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Bell,
   Settings,
+  HelpCircle,
   UserCircle,
   CheckCircle2,
   PackageX,
@@ -277,6 +278,14 @@ const TopNav: React.FC<TopNavProps> = ({
               </>
             )}
           </div>
+
+          {/* Help */}
+          <button
+            onClick={() => onSelect('help')}
+            className="p-2.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-all"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
 
           {/* Settings */}
           <button
