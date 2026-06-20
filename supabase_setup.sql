@@ -1425,3 +1425,80 @@ CREATE POLICY "Allow public read product images"
 ON storage.objects FOR SELECT
 TO public
 USING (bucket_id = 'product-images');
+
+-- ============================================================
+-- AUDIT-004/017 — Backfill nextImportPrice vào inventory_transactions cũ
+-- Mục đích: Báo cáo lợi nhuận quá khứ dùng giá vốn đúng lúc bán,
+--           không phải importPrice hiện tại của sản phẩm.
+-- Chỉ chạy khi: giá vốn sản phẩm đã thay đổi kể từ khi nhập kho ban đầu.
+-- An toàn: chỉ cập nhật item có nextImportPrice = 0 hoặc null.
+-- Chạy thủ công trên Supabase Dashboard > SQL Editor.
+-- ============================================================
+
+UPDATE inventory_transactions
+SET items = (
+  SELECT jsonb_agg(
+    CASE
+      WHEN COALESCE((item ->> 'nextImportPrice')::numeric, 0) = 0 THEN
+        jsonb_set(
+          item,
+          '{nextImportPrice}',
+          to_jsonb(COALESCE(
+            (
+              SELECT pch.import_price
+              FROM product_cost_history pch
+              WHERE pch.sku = item ->> 'sku'
+                AND pch.effective_date <= inventory_transactions.date
+              ORDER BY pch.effective_date DESC
+              LIMIT 1
+            ),
+            (item ->> 'importPrice')::numeric,
+            0
+          ))
+        )
+      ELSE item
+    END
+  )
+  FROM jsonb_array_elements(items) AS item
+)
+WHERE type = 'Import'
+  AND EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(items) AS item
+    WHERE COALESCE((item ->> 'nextImportPrice')::numeric, 0) = 0
+  );
+
+-- ============================================================
+-- GIAI ĐOẠN 4: Fix store_products + store_product_variants (2026-06-20)
+-- Chạy trên iMac: docker exec supabase-db psql -U postgres -d postgres
+-- ============================================================
+
+-- Bước 1: Fix slug
+-- Slug hiện tại sai dạng "dbd01-den-38-1781686887459" → đúng là "dbd01"
+UPDATE store_products
+SET slug = LOWER(name)
+WHERE deleted_at IS NULL
+  AND slug LIKE '%-%';
+-- Kết quả mong đợi: UPDATE 30
+
+-- Bước 2: Parse size và color_name từ SKU variant
+-- SKU dạng "DBD01-Đen-38" → color_name='Đen', size='38'
+UPDATE store_product_variants
+SET
+  color_name = SPLIT_PART(sku, '-', 2),
+  size       = SPLIT_PART(sku, '-', 3)
+WHERE color_name IS NULL
+  AND size IS NULL
+  AND sku LIKE '%-%-%';
+-- Kết quả mong đợi: UPDATE 180
+
+-- Xác nhận kết quả
+-- SELECT name, slug FROM store_products ORDER BY name;
+-- SELECT sku, color_name, size FROM store_product_variants LIMIT 10;
+
+-- ============================================================
+-- LƯU Ý: 13 sản phẩm từ website chưa có trong pos_products
+-- (DBDN01-07, DDDN01-03, DXNN01-03)
+-- → Cần nhập vào pos_products trước, sau đó dùng tab "Kênh bán"
+--   trong app để toggle lên store_products.
+-- ============================================================

@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-20 — Giai đoạn 4 tích hợp website: SQL fix + tài liệu API cho web team
+
+- Viết SQL Giai đoạn 4 vào `supabase_setup.sql`: (1) fix slug từ `dbd01-den-38-timestamp` → `dbd01`, (2) parse `color_name` + `size` từ SKU format `DBD01-Den-38` cho 180 `store_product_variants`. Cần chạy thủ công trên iMac.
+- Phát hiện 13 sản phẩm từ website (DBDN01-07, DDDN01-03, DXNN01-03) chưa có trong `pos_products` — cần nhập tay trong app trước khi có thể link lên website.
+- Cập nhật `docs/02-development/KE-HOACH-DATABASE-VA-TICH-HOP-APP.md`: thêm section 23 (tiến độ thực hiện — 30/43 sản phẩm đã có) + section 24 (hướng dẫn đầy đủ cho web team: 5 endpoint, format request/response JSON, những gì không được làm, cách test ngay).
+- Files: `supabase_setup.sql`, `docs/02-development/KE-HOACH-DATABASE-VA-TICH-HOP-APP.md`
+
 ### 2026-06-20 — Fix trang Hoá đơn: Người tạo/Người bán hiện ID số thay vì tên
 
 - Root cause: `OrderInvoices.tsx` hiển thị `order.createdBy || order.staffId` — cả 2 đều là ID nhân viên. Component không nhận `employees` prop nên không tra cứu được tên.

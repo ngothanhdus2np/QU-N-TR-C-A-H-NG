@@ -46,6 +46,7 @@ import { createStoreRouter } from './routes/store';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
 import { createInventoryOutSyncRouter, runInventoryOutSync } from './routes/inventoryOutSync';
+import { createPosMobileRouter } from './routes/posMobile';
 
 /**
  * Kiểm tra schema local Supabase qua REST API.
@@ -244,17 +245,30 @@ app.get('/api/product-info/barcode/:barcode', async (req: Request, res: Response
   const { barcode } = req.params;
   if (!barcode) return res.status(400).json({ error: 'Thiếu barcode' });
 
-  const { data, error } = await supabase
+  const COLS = 'id, name, sku, barcode, sale_price, stock, import_price, attributes';
+
+  // Tìm theo cột barcode trước
+  let { data } = await supabase
     .from('pos_products')
-    .select('id, name, sku, attributes')
+    .select(COLS)
     .eq('barcode', barcode)
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (error) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+  // Fallback: tìm theo SKU (nhiều sản phẩm lưu barcode = sku)
+  if (!data) {
+    ({ data } = await supabase
+      .from('pos_products')
+      .select(COLS)
+      .eq('sku', barcode)
+      .limit(1)
+      .maybeSingle());
+  }
+
   if (!data) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
 
-  res.json(data);
+  // Map sale_price → price
+  res.json({ ...data, price: (data as Record<string, unknown>).sale_price });
 });
 
 // Xóa ảnh hàng hóa — nhận mảng images đã lọc, ghi đè vào DB
@@ -510,6 +524,7 @@ async function startServer() {
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
     app.use(createShopeeSyncRouter(requireAuth));
     app.use(createInventoryOutSyncRouter(supabase, requireAuth));
+    app.use(createPosMobileRouter(supabase));
 
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
     if (!IS_PROD) {

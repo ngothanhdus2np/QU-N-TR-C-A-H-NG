@@ -65,20 +65,20 @@ describe('posOrderService', () => {
         grossProfit: 50000,
       }),
     ]);
-    // [FIX I1] inventory transaction và stock update gọi riêng biệt
-    expect(updateSurgical).toHaveBeenCalledWith([
-      expect.objectContaining({
-        key: 'inventoryTransactions',
-        item: expect.objectContaining({
-          type: 'Sale',
-          referenceId: 'order-1',
-          items: [expect.objectContaining({ previousStock: 10, newStock: 8 })],
+    // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
+    expect(updateSurgical).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'inventoryTransactions',
+          item: expect.objectContaining({
+            type: 'Sale',
+            referenceId: 'order-1',
+            items: [expect.objectContaining({ previousStock: 10, newStock: 8 })],
+          }),
         }),
-      }),
-    ]);
-    expect(updateSurgical).toHaveBeenCalledWith([
-      expect.objectContaining({ key: 'posProducts' }),
-    ]);
+        expect.objectContaining({ key: 'posProducts' }),
+      ])
+    );
   });
 
   it('blocks checkout when stock is insufficient by default', async () => {
@@ -116,19 +116,19 @@ describe('posOrderService', () => {
       updateSurgical,
     });
 
-    // [FIX I1] inventory transaction và stock update gọi riêng biệt
-    expect(updateSurgical).toHaveBeenCalledWith([
-      expect.objectContaining({
-        key: 'inventoryTransactions',
-        item: expect.objectContaining({ allowNegativeStock: true }),
-      }),
-    ]);
-    expect(updateSurgical).toHaveBeenCalledWith([
-      expect.objectContaining({
-        key: 'posProducts',
-        item: expect.objectContaining({ stock: -1 }),
-      }),
-    ]);
+    // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
+    expect(updateSurgical).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'inventoryTransactions',
+          item: expect.objectContaining({ allowNegativeStock: true }),
+        }),
+        expect.objectContaining({
+          key: 'posProducts',
+          item: expect.objectContaining({ stock: -1 }),
+        }),
+      ])
+    );
   });
 
   it('uses updatedProducts for return and exchange stock snapshots', async () => {

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { getCurrentSession } from '../services/auth';
+import AppLoadingScreen from './AppLoadingScreen';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthGateProps {
@@ -49,12 +49,7 @@ export default function AuthGate({ children }: AuthGateProps) {
 
   // Đang kiểm tra session → hiện loading (tránh flash)
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-rose-50">
-      <div className="flex flex-col items-center gap-4">
-        <img src="/logo.png" alt="Logo" className="h-14 w-14 object-contain opacity-80" />
-        <Loader2 className="h-6 w-6 animate-spin text-rose-400" />
-      </div>
-    </div>
+    <AppLoadingScreen visible={true} stageLabel="Đang kiểm tra đăng nhập..." />
   );
 
   if (session) return <>{children}</>;

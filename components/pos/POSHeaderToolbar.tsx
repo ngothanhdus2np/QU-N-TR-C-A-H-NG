@@ -101,10 +101,19 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   const [displayLimit, setDisplayLimit] = React.useState(50);
   const [showMobileQR, setShowMobileQR] = React.useState(false);
   const [showVisitorStats, setShowVisitorStats] = React.useState(false);
-  const mobileUrl = window.location.origin;
+  const [lanIp, setLanIp] = React.useState<string>('');
   const isLocalhost =
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const mobileUrl = isLocalhost && lanIp
+    ? `http://${lanIp}:${window.location.port || 3000}/pos-quick`
+    : window.location.origin + '/pos-quick';
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mobileUrl)}`;
+
+  React.useEffect(() => {
+    if (isLocalhost && !lanIp) {
+      fetch('/api/local-ip').then(r => r.json()).then(d => { if (d.ip) setLanIp(d.ip); }).catch(() => {});
+    }
+  }, [isLocalhost, lanIp]);
   const sortOptions = [
     { value: 'skuDesc' as const, label: 'Theo mã hàng', helper: 'Cao - thấp' },
     { value: 'priceDesc' as const, label: 'Theo giá tiền', helper: 'Cao - thấp' },
@@ -416,10 +425,9 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-slate-800 text-sm">Mở POS trên điện thoại</h3>
                 </div>
-                {isLocalhost ? (
+                {isLocalhost && !lanIp ? (
                   <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-3">
-                    Đang dùng localhost. Kết nối cùng WiFi và truy cập bằng địa chỉ IP mạng LAN của
-                    máy tính.
+                    Đang lấy IP mạng LAN...
                   </p>
                 ) : (
                   <>

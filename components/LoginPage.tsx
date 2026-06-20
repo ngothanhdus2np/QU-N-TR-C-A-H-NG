@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Eye, EyeOff, ShoppingCart, LayoutDashboard, LogOut } from 'lucide-react';
 import { signIn, signOut } from '../services/auth';
+import { triggerCashierTransition } from './LoginTransitionOverlay';
 
 const ROLE_LABEL: Record<string, string> = {
   cashier: 'Thu ngân',
@@ -9,10 +10,6 @@ const ROLE_LABEL: Record<string, string> = {
   owner: 'Chủ cửa hàng',
 };
 
-// Tự nhận diện format input → email Supabase
-// - Có @ → email thật (quản lý/chủ)
-// - Toàn số / bắt đầu 0 / bắt đầu +84 → SĐT → @sdt.local
-// - Còn lại → tên đăng nhập thu ngân → @cfobrain.local
 const resolveEmail = (input: string): string => {
   const trimmed = input.trim().toLowerCase();
   if (trimmed.includes('@')) return trimmed;
@@ -46,7 +43,8 @@ export default function LoginPage() {
     const meta = result.user?.user_metadata || {};
     const role = meta.role || 'owner';
     if (role === 'cashier') {
-      navigate('/pos');
+      fetch('/api/pos-mobile/products?q=').catch(() => null);
+      triggerCashierTransition(() => navigate('/pos'));
       return;
     }
     const displayName = meta.display_name || result.user?.email?.split('@')[0] || '';
@@ -88,7 +86,6 @@ export default function LoginPage() {
           </div>
 
           {loggedIn ? (
-            /* Sau khi đăng nhập: chọn chế độ */
             <div className="flex flex-col items-center gap-6">
               <div className="text-center">
                 <p className="text-lg font-bold text-slate-800">Xin chào, {loggedIn.displayName}</p>
@@ -132,7 +129,6 @@ export default function LoginPage() {
               </button>
             </div>
           ) : (
-            /* Form đăng nhập */
             <>
               <h1 className="text-2xl font-bold text-slate-800 mb-1">Chào mừng trở lại</h1>
               <p className="text-sm text-slate-400 mb-6">Nhập tên đăng nhập, email hoặc số điện thoại</p>

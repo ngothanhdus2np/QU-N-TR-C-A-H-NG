@@ -9,6 +9,8 @@ import AuthGate from './components/AuthGate';
 import { ToastProvider } from './components/ui/Toast';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import { MobileImageUploadPage } from './components/pos/MobileImageUploadPage';
+import { POSQuickPage } from './components/pos/POSQuickPage';
+import LoginTransitionOverlay from './components/LoginTransitionOverlay';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -21,10 +23,12 @@ root.render(
     <BrowserRouter>
       <ErrorBoundary moduleName="App">
         <ToastProvider>
+          <LoginTransitionOverlay />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/launcher" element={<AuthGate><LauncherPage /></AuthGate>} />
             <Route path="/upload-image/:productId" element={<MobileImageUploadPage />} />
+            <Route path="/pos-quick" element={<POSQuickPage />} />
             <Route path="/*" element={<App />} />
           </Routes>
         </ToastProvider>

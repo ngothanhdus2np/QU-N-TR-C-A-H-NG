@@ -1273,4 +1273,420 @@ Huong trien khai duoc chon:
 - Tat ca thao tac ghi quan trong di qua Express Store API.
 - `phucsang.com.vn` va `www.phucsang.com.vn` danh cho website.
 - `app.phucsang.com.vn` danh cho app quan tri.
+
+---
+
+## 23. Tien do thuc hien (cap nhat 2026-06-20)
+
+### Da hoan thanh
+
+| Giai doan | Noi dung | Ngay |
+|---|---|---|
+| Giai doan 1 | Tao 8 bang Supabase (store_*, shipments, store_order_addresses...) + PostgreSQL function `create_store_order` + `routes/store.ts` voi 5 endpoint | 2026-06-16 |
+| Giai doan 2 | Ket noi website → Store API: tao `store-api.js`, cap nhat `all-products.js` / `product-detail.js` / `checkout.js` / 3 file HTML | 2026-06-16 |
+| Giai doan 3 | Fix PostgREST schema cache: chay `CREATE TABLE` truc tiep qua `docker exec supabase-db psql`; verify `store_products`, `store_product_variants`, `shopee_products`, `shopee_product_variants` deu accessible | 2026-06-16 |
+| Workflow huy/hoan hang | RPC `update_website_order_status`: huy truoc khi giao cong ton ngay; hoan sau khi giao chi cong ton khi nhan vien xac nhan nhan lai hang | 2026-06-16 |
+| Trang OnlineCatalogPage | UI trong app de xem san pham online, co tab "Kenh ban" de toggle Website/Shopee | 2026-06-16 |
+
+### Giai doan 4: Nhap san pham vao store_products (2026-06-20)
+
+**Trang thai:** 30/43 san pham da co. Con thieu 13.
+
+**30 san pham da co trong `store_products` (is_published = true):**
+
+```
+DBD01  DBD10  DBD11  DBD16  DBD20  DBD21
+DKD02  DKD03  DKD05  DKD06
+DQC01  DQC02
+DQH01  DQH02  DQH03  DQH04
+DQND01  DQND02  DQND03  DQND08  DQND09  DQND10
+DQND21  DQND22  DQND23  DQND24  DQND25  DQND26  DQND27  DQND28
+```
+
+180 `store_product_variants` tuong ung (trung binh 6 size/mau moi san pham).
+
+**SQL can chay tren iMac** (da ghi vao `supabase_setup.sql`):
+
+```sql
+-- Fix slug: "dbd01-den-38-timestamp" → "dbd01"
+UPDATE store_products
+SET slug = LOWER(name)
+WHERE deleted_at IS NULL AND slug LIKE '%-%';
+
+-- Parse size/color_name tu SKU: "DBD01-Den-38" → color_name='Den', size='38'
+UPDATE store_product_variants
+SET color_name = SPLIT_PART(sku, '-', 2),
+    size       = SPLIT_PART(sku, '-', 3)
+WHERE color_name IS NULL AND size IS NULL AND sku LIKE '%-%-%';
+```
+
+Cach chay tren iMac:
+```bash
+docker exec supabase-db psql -U postgres -d postgres -f /path/to/migration.sql
+# Hoac copy-paste 2 lenh UPDATE o tren vao psql
+```
+
+**13 san pham con thieu** (chua co trong `pos_products`):
+
+```
+DBDN01  DBDN02  DBDN03  DBDN04  DBDN05  DBDN06  DBDN07
+DDDN01  DDDN02  DDDN03
+DXNN01  DXNN02  DXNN03
+```
+
+→ Can nhap cac san pham nay vao pos_products trong app truoc. Sau do dung tab "Kenh ban" trong trang Hang hoa de bat Website = ON.
+
+### Giai doan 5: UI admin "Quan ly Website" (chua lam)
+
+Trang trong app de:
+- Them ten day du, mo ta, chat lieu, huong dan bao quan cho tung san pham
+- Upload anh len Supabase Storage
+- Quan ly collections (bo suu tap)
+- Xem va xu ly don hang website
+- Toggle xuat ban tung san pham/variant
+
+---
+
+## 24. Huong dan cho ben web (doc ki truoc khi viet code)
+
+> **Doc section nay neu ban la developer lam website phucsang.com.vn**
+
+### 24.1 API da chay tren server
+
+Server dang chay tai: `https://app.phucsang.com.vn`
+
+Tat ca endpoint public khong can token/API key.
+
+### 24.2 Danh sach endpoint
+
+#### GET /api/store/products
+
+Lay danh sach san pham da xuat ban.
+
+Query params tuy chon:
+
+| Param | Gia tri | Mo ta |
+|---|---|---|
+| `featured` | `true` | Chi lay san pham noi bat |
+| `new` | `true` | Chi lay san pham moi |
+| `best_seller` | `true` | Chi lay san pham ban chay |
+| `collection` | `ten-collection` | Loc theo bo suu tap (slug) |
+
+Vi du:
+
+```
+GET https://app.phucsang.com.vn/api/store/products
+GET https://app.phucsang.com.vn/api/store/products?featured=true
+GET https://app.phucsang.com.vn/api/store/products?collection=dep-da-nam
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "DBD01",
+      "slug": "dbd01",
+      "short_description": null,
+      "cover_image_url": null,
+      "gallery": null,
+      "is_featured": false,
+      "is_new": false,
+      "is_best_seller": false,
+      "display_order": 0,
+      "variants": [
+        {
+          "id": "uuid",
+          "sku": "DBD01-Den-38",
+          "size": "38",
+          "color_name": "Den",
+          "color_hex": null,
+          "price": 329000,
+          "compare_at_price": null,
+          "in_stock": true,
+          "pos_product_id": "uuid"
+        }
+      ]
+    }
+  ],
+  "total": 30
+}
+```
+
+Luu y:
+- `cover_image_url` va `gallery` hien dang null vi chua upload anh len server (con phu thuoc vao anh tinh trong thu muc `assets/`).
+- `price` lay tu `pos_products.sale_price` (gia ban thuc te tu app).
+- `in_stock = true` khi `status = 'Active'` va `stock > 0`.
+
+#### GET /api/store/products/:slug
+
+Lay chi tiet san pham theo slug.
+
+Vi du:
+
+```
+GET https://app.phucsang.com.vn/api/store/products/dbd01
+```
+
+Response tuong tu GET /api/store/products nhung them cac truong:
+
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "DBD01",
+    "slug": "dbd01",
+    "short_description": null,
+    "description": null,
+    "material": null,
+    "sole_material": null,
+    "origin": null,
+    "care_instructions": null,
+    "size_guide": null,
+    "cover_image_url": null,
+    "gallery": null,
+    "video_url": null,
+    "seo_title": null,
+    "seo_description": null,
+    "og_image_url": null,
+    "variants": [...]
+  }
+}
+```
+
+Tra 404 neu san pham khong tim thay hoac chua xuat ban.
+
+#### POST /api/store/orders
+
+Tao don hang. Khong can dang nhap.
+
+Request body (JSON):
+
+```json
+{
+  "customer": {
+    "name": "Nguyen Van A",
+    "phone": "0912345678",
+    "email": "email@example.com"
+  },
+  "shippingAddress": {
+    "addressLine": "123 Duong ABC",
+    "ward": "Phuong 1",
+    "district": "Quan 3",
+    "province": "TP Ho Chi Minh"
+  },
+  "paymentMethod": "cod",
+  "note": "Ghi chu them neu co",
+  "items": [
+    {
+      "posProductId": "uuid-cua-pos-product",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+Quy tac:
+- `phone`: bat buoc, 10 chu so bat dau bang 0.
+- `paymentMethod`: chi chap nhan `"cod"` hoac `"bank"`.
+- `addressLine` + `district` + `province`: bat buoc.
+- `items`: it nhat 1 san pham, so luong 1-100.
+- `posProductId` lay tu truong `variants[].pos_product_id` trong response GET /api/store/products.
+
+Response thanh cong (201):
+
+```json
+{
+  "order_code": "WEB240001",
+  "total_amount": 658000
+}
+```
+
+Response loi (400/500):
+
+```json
+{
+  "error": "Mo ta loi cu the"
+}
+```
+
+Cac loi nghiep vu co the gap:
+
+| Loi | Y nghia |
+|---|---|
+| `"Het hang"` | San pham het stock khi dat |
+| `"San pham khong con xuat ban"` | San pham bi an tren website |
+| `"So luong dat vuot qua ton kho"` | Dat nhieu hon so con hang |
+
+Luu y bao mat:
+- Server tu tinh lai gia, khong tin gia do browser gui len.
+- Server kiem tra ton kho bang atomic PostgreSQL transaction — khong the ban vuot ton du 2 khach dat cung luc.
+
+#### POST /api/store/preorders
+
+Gui thong tin dat truoc khi het hang. Chi thu thong tin, khong tao don that.
+
+Request body:
+
+```json
+{
+  "customerName": "Nguyen Van A",
+  "phone": "0912345678",
+  "posProductId": "uuid (tuy chon)",
+  "sku": "DBD01-Den-38 (tuy chon)",
+  "size": "38 (tuy chon)",
+  "note": "Ghi chu them"
+}
+```
+
+Response (201):
+
+```json
+{
+  "ok": true,
+  "message": "Da nhan thong tin dat truoc"
+}
+```
+
+#### POST /api/store/orders/lookup
+
+Tra cuu don hang theo ma don + so dien thoai.
+
+Request body:
+
+```json
+{
+  "orderCode": "WEB240001",
+  "phone": "0912345678"
+}
+```
+
+Response thanh cong:
+
+```json
+{
+  "data": {
+    "order_code": "WEB240001",
+    "date": "2026-06-20",
+    "created_at": "2026-06-20T10:30:00Z",
+    "status": "pending",
+    "payment_method": "cod",
+    "total_amount": 658000,
+    "items": [
+      {
+        "productName": "Dep Da Nam DBD01",
+        "sku": "DBD01-Den-38",
+        "size": "38",
+        "color": "Den",
+        "quantity": 2,
+        "price": 329000,
+        "subtotal": 658000
+      }
+    ],
+    "shipping_address": {
+      "recipient_name": "Nguyen Van A",
+      "phone": "0912345678",
+      "address_line": "123 Duong ABC",
+      "ward": "Phuong 1",
+      "district": "Quan 3",
+      "province": "TP Ho Chi Minh"
+    },
+    "shipment": {
+      "tracking_code": "GHN123456",
+      "provider": "GHN",
+      "status": "shipping",
+      "shipped_at": "2026-06-21T08:00:00Z",
+      "delivered_at": null
+    }
+  }
+}
+```
+
+`shipment` co the la `null` neu don chua co van don.
+
+Tra 404 neu sai ma don hoac sai so dien thoai (cung mot loi de tranh doan).
+
+### 24.3 Trang thai don hang
+
+| Gia tri `status` | Hien thi cho khach |
+|---|---|
+| `pending` | Cho xac nhan |
+| `confirmed` | Da xac nhan |
+| `packing` | Dang dong goi |
+| `ready_to_ship` | San sang giao |
+| `shipping` | Dang giao hang |
+| `completed` | Da giao thanh cong |
+| `cancelled` | Da huy |
+| `return_requested` | Dang hoan hang |
+| `returned` | Da hoan hang |
+
+### 24.4 Cach goi API tu JavaScript
+
+File `store-api.js` da co san trong thu muc website. Dung cach nay:
+
+```javascript
+// Lay danh sach san pham
+const res = await fetch('https://app.phucsang.com.vn/api/store/products');
+const { data, total } = await res.json();
+
+// Lay chi tiet san pham
+const res2 = await fetch('https://app.phucsang.com.vn/api/store/products/dbd01');
+const { data: product } = await res2.json();
+
+// Tao don hang
+const res3 = await fetch('https://app.phucsang.com.vn/api/store/orders', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    customer: { name: 'Nguyen Van A', phone: '0912345678' },
+    shippingAddress: { addressLine: '123 ABC', district: 'Quan 3', province: 'TP HCM' },
+    paymentMethod: 'cod',
+    items: [{ posProductId: 'uuid-day', quantity: 1 }]
+  })
+});
+const { order_code, total_amount } = await res3.json();
+```
+
+**Quan trong:** `posProductId` trong items phai la `variants[].pos_product_id` lay tu API, khong phai id tu file `products-data.js`.
+
+### 24.5 Nhung thu phai doi (chua lam duoc ngay)
+
+Cac truong nay trong API dang tra `null` vi chua co du lieu:
+
+| Truong | Ly do | Can lam |
+|---|---|---|
+| `cover_image_url` | Anh chua upload len server | Dung UI quan ly website trong app de upload |
+| `gallery` | Anh chua upload | Tuong tu |
+| `short_description` | Chua nhap | Dung UI quan ly website |
+| `description` | Chua nhap | Tuong tu |
+| `material`, `origin`... | Chua nhap | Tuong tu |
+
+Trong thoi gian cho, website van co the dung `cover_image_url || fallbackLocalImage` de hien anh tu thu muc `assets/` cu.
+
+### 24.6 Nhung thu KHONG duoc lam
+
+- Khong ket noi truc tiep vao Supabase tu frontend (khong dung `@supabase/supabase-js` phia client).
+- Khong dua `service_role_key` vao bat ky file JS nao cua website.
+- Khong doc bang `pos_products` truc tiep (co the lo `import_price`).
+- Khong tu tinh gia hoac kiem tra ton kho phia browser — de server lam.
+- Khong luu don hang vao `localStorage` (`phuc-sang-orders-v1`) nua.
+
+### 24.7 Test API ngay bay gio
+
+Chay ngay trong browser hoac terminal:
+
+```bash
+# Lay danh sach san pham (nen tra 30 san pham)
+curl https://app.phucsang.com.vn/api/store/products
+
+# Lay chi tiet DBD01
+curl https://app.phucsang.com.vn/api/store/products/dbd01
+
+# Tra cuu don (thay ma don va SDD that)
+curl -X POST https://app.phucsang.com.vn/api/store/orders/lookup \
+  -H 'Content-Type: application/json' \
+  -d '{"orderCode":"WEB240001","phone":"0912345678"}'
+```
 - `api.phucsang.com.vn` danh cho Store API trong giai doan dau.

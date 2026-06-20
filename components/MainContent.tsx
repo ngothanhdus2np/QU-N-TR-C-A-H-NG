@@ -595,6 +595,7 @@ const MainContent: React.FC<MainContentProps> = ({
             customers={data.posCustomers || []}
             products={data.posProducts || []}
             revenue={data.revenue || []}
+            employees={data.employees || []}
             storeName={brandProfile.name}
             onUpdateSurgical={updateSurgical}
           />

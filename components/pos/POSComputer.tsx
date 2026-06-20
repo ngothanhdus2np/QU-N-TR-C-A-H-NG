@@ -1519,6 +1519,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           customers={customers}
           products={products}
           revenue={revenue}
+          employees={employees}
           storeName={brandProfile?.name}
           onClose={() => setShowProcessOrdersModal(false)}
           onUpdateSurgical={onUpdateSurgical}

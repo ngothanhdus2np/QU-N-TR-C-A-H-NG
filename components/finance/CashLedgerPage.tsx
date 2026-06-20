@@ -22,7 +22,6 @@ interface Props {
 type FundType = 'cash' | 'bank' | 'momo' | 'all';
 type VoucherType = 'all' | 'thu' | 'chi';
 type StatusFilter = 'all' | 'active' | 'cancelled';
-type BusinessFilter = 'all' | 'yes' | 'no';
 type FormTab = 'chi' | 'thu';
 type CashOutType = 'customer_refund' | 'store_expense';
 type CashOutFilter = 'all' | CashOutType;
@@ -338,7 +337,6 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
   const [customEnd, setCustomEnd] = useState(() => today());
   const [voucherType, setVoucherType] = useState<VoucherType>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
-  const [businessFilter, setBusinessFilter] = useState<BusinessFilter>('all');
   const [cashOutFilter, setCashOutFilter] = useState<CashOutFilter>('all');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -539,7 +537,6 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
     customEnd !== today() ||
     voucherType !== 'all' ||
     statusFilter !== 'active' ||
-    businessFilter !== 'all' ||
     cashOutFilter !== 'all' ||
     expenseCategoryFilter !== 'all' ||
     !!search.trim();
@@ -550,7 +547,6 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
     setCustomEnd(today());
     setVoucherType('all');
     setStatusFilter('active');
-    setBusinessFilter('all');
     setCashOutFilter('all');
     setExpenseCategoryFilter('all');
     setSearch('');
@@ -715,30 +711,6 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
         </div>
       </FilterSection>
 
-      <FilterSection title="Hạch toán kết quả kinh doanh">
-        <div className="flex gap-1.5">
-          {([
-            { value: 'all', label: 'Tất cả' },
-            { value: 'yes', label: 'Có' },
-            { value: 'no', label: 'Không' },
-          ] as { value: BusinessFilter; label: string }[]).map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => {
-                setBusinessFilter(opt.value);
-                setPage(1);
-              }}
-              className={`flex-1 rounded-lg border py-1 text-xs transition-colors ${
-                businessFilter === opt.value
-                  ? 'border-indigo-600 bg-indigo-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </FilterSection>
     </div>
   );
 
