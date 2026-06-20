@@ -1686,3 +1686,125 @@ END;
 $$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================
+-- Migration 015: Auto-import 13 sản phẩm dép kiểu nữ từ website
+-- Danh mục: Dép kiểu nữ | Size: 35–40 | Giá = 0 (điền sau)
+-- An toàn: bỏ qua nếu SKU đã tồn tại (idempotent)
+-- ============================================================
+DO $$
+DECLARE
+  v_products JSONB[] := ARRAY[
+    '{"sku":"DBDN01","name":"DBDN01 XANH LÁ","color":"Xanh Lá"}'::JSONB,
+    '{"sku":"DBDN02","name":"DBDN02 NÂU","color":"Nâu"}'::JSONB,
+    '{"sku":"DBDN03","name":"DBDN03 CAM","color":"Cam"}'::JSONB,
+    '{"sku":"DBDN04","name":"DBDN04 DA","color":"Da"}'::JSONB,
+    '{"sku":"DBDN05","name":"DBDN05 TRẮNG","color":"Trắng"}'::JSONB,
+    '{"sku":"DBDN06","name":"DBDN06 ĐEN","color":"Đen"}'::JSONB,
+    '{"sku":"DBDN07","name":"DBDN07 TRẮNG","color":"Trắng"}'::JSONB,
+    '{"sku":"DDDN01","name":"DDDN01 TRẮNG","color":"Trắng"}'::JSONB,
+    '{"sku":"DDDN02","name":"DDDN02 ĐEN","color":"Đen"}'::JSONB,
+    '{"sku":"DDDN03","name":"DDDN03 NÂU","color":"Nâu"}'::JSONB,
+    '{"sku":"DXNN01","name":"DXNN01 TRẮNG","color":"Trắng"}'::JSONB,
+    '{"sku":"DXNN02","name":"DXNN02 ĐEN","color":"Đen"}'::JSONB,
+    '{"sku":"DXNN03","name":"DXNN03 DA","color":"Da"}'::JSONB
+  ];
+  v_sizes     INT[] := ARRAY[35, 36, 37, 38, 39, 40];
+  v_prod      JSONB;
+  v_parent_id UUID;
+  v_store_id  UUID;
+  v_var       RECORD;
+  v_size      INT;
+BEGIN
+  FOREACH v_prod IN ARRAY v_products LOOP
+
+    IF EXISTS (SELECT 1 FROM pos_products WHERE sku = v_prod->>'sku') THEN
+      RAISE NOTICE 'SKU % đã tồn tại — bỏ qua', v_prod->>'sku';
+      CONTINUE;
+    END IF;
+
+    v_parent_id := gen_random_uuid();
+
+    -- 1. Sản phẩm cha
+    INSERT INTO pos_products (
+      id, sku, name,
+      category_id, category_path,
+      sale_price, import_price, stock,
+      unit, status, is_parent, variant_count,
+      branch_id, tenant_id, product_type
+    ) VALUES (
+      v_parent_id,
+      v_prod->>'sku',
+      v_prod->>'name',
+      'Dép kiểu nữ', 'Dép kiểu nữ',
+      0, 0, 0,
+      'Đôi', 'Active', TRUE, 6,
+      'main', 'phuc-sang', 'Hàng hóa'
+    );
+
+    -- 2. 6 biến thể (size 35–40)
+    FOREACH v_size IN ARRAY v_sizes LOOP
+      INSERT INTO pos_products (
+        id, sku, name,
+        category_id, category_path,
+        sale_price, import_price, stock,
+        unit, status, is_parent, parent_id,
+        variant_attributes, attributes_text,
+        branch_id, tenant_id, product_type
+      ) VALUES (
+        gen_random_uuid(),
+        (v_prod->>'sku') || '-' || (v_prod->>'color') || '-' || v_size,
+        (v_prod->>'name') || ' - ' || (v_prod->>'color') || ' - ' || v_size,
+        'Dép kiểu nữ', 'Dép kiểu nữ',
+        0, 0, 0,
+        'Đôi', 'Active', FALSE, v_parent_id::TEXT,
+        jsonb_build_object('Màu', v_prod->>'color', 'Size', v_size::TEXT),
+        'Màu: ' || (v_prod->>'color') || ', Size: ' || v_size,
+        'main', 'phuc-sang', 'Hàng hóa'
+      );
+    END LOOP;
+
+    -- 3. store_products (website listing)
+    IF NOT EXISTS (SELECT 1 FROM store_products WHERE slug = LOWER(v_prod->>'sku')) THEN
+      v_store_id := gen_random_uuid();
+      INSERT INTO store_products (
+        id, name, slug,
+        is_published, is_new,
+        created_at, updated_at
+      ) VALUES (
+        v_store_id,
+        v_prod->>'name',
+        LOWER(v_prod->>'sku'),
+        TRUE, TRUE,
+        NOW(), NOW()
+      );
+    ELSE
+      SELECT id INTO v_store_id FROM store_products WHERE slug = LOWER(v_prod->>'sku');
+    END IF;
+
+    -- 4. store_product_variants (liên kết pos_products ↔ store_products)
+    FOR v_var IN
+      SELECT id, sku FROM pos_products
+      WHERE parent_id = v_parent_id::TEXT
+    LOOP
+      IF NOT EXISTS (
+        SELECT 1 FROM store_product_variants WHERE pos_product_id = v_var.id
+      ) THEN
+        INSERT INTO store_product_variants (
+          id, store_product_id, pos_product_id, sku,
+          color_name, size, is_published, display_order
+        ) VALUES (
+          gen_random_uuid(),
+          v_store_id,
+          v_var.id,
+          v_var.sku,
+          v_prod->>'color',
+          SPLIT_PART(v_var.sku, '-', 3),
+          TRUE, 0
+        );
+      END IF;
+    END LOOP;
+
+    RAISE NOTICE 'Đã tạo: % + 6 biến thể + store entry', v_prod->>'sku';
+  END LOOP;
+END $$;

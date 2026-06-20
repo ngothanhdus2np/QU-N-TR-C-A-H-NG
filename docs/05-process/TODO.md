@@ -1067,6 +1067,35 @@ Thêm dòng:
 
 ---
 
+## 🔴 P0 — Setup SSH key để push GitHub từ iMac
+
+> Làm khi gần iMac. Code đã commit đủ trên máy (6 commit chưa push), chỉ còn bước xác thực.
+
+### Các bước thực hiện (mở Terminal trên iMac)
+
+```bash
+# Bước 1 — Tạo SSH key
+ssh-keygen -t ed25519 -C "ngothanhdus2np@gmail.com"
+# Hỏi lưu ở đâu → Enter (giữ mặc định)
+# Hỏi passphrase → Enter 2 lần (bỏ trống)
+
+# Bước 2 — Copy public key vào clipboard
+cat ~/.ssh/id_ed25519.pub | pbcopy
+```
+
+Sau đó vào **GitHub → Settings → SSH and GPG keys → New SSH key**:
+- Title: `iMac Phúc Sang`
+- Dán key (Cmd+V) → Add SSH key
+
+```bash
+# Bước 3 — Chuyển remote sang SSH + push
+cd "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG"
+git remote set-url origin git@github.com:ngothanhdus2np/QU-N-TR-C-A-H-NG.git
+git push origin main
+```
+
+---
+
 ## 🟠 P1 — Setup backup tự động lên Mega.nz
 
 > Cần làm trên iMac cá nhân (iMac chạy server). Tài khoản Mega free 20GB đã có sẵn.
