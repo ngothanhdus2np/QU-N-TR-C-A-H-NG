@@ -1131,6 +1131,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         addingToParentId={addingToParentId}
         onCloseAddMoreVariants={closeAddMoreVariantsModal}
         onSaveMoreVariants={handleSaveMoreVariants}
+        brands={uniqueBrands}
         applyToVariants={applyToVariants}
         onApplyToVariantsChange={setApplyToVariants}
       />

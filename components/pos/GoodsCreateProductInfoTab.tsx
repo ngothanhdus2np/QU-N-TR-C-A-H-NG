@@ -1,9 +1,8 @@
 import React from 'react';
-import { ChevronRight, Image as ImageIcon, Info, Link2, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Image as ImageIcon, Info, Link2, Trash2, X } from 'lucide-react';
 import { POSProduct, ProductGroup } from '../../types';
 import { AUTO_SKU_PLACEHOLDER, generateId, isAutoSkuValue } from '../../src/lib';
 import { GoodsPriceSetupModal } from './GoodsPriceSetupModal';
-import ProductGroupTreePicker from '../shared/ProductGroupTreePicker';
 
 const GOODS_BARCODE_MANUAL_MODE_STORAGE_KEY = 'goods_barcode_manual_mode';
 const GOODS_BARCODE_MODE_CHANGED_EVENT = 'goods-barcode-mode-changed';
@@ -29,6 +28,7 @@ interface GoodsCreateProductInfoTabProps {
   showUnitsSection: boolean;
   setShowUnitsSection: React.Dispatch<React.SetStateAction<boolean>>;
   addBaseUnit: () => void;
+  brands?: string[];
   applyToVariants?: boolean;
   onApplyToVariantsChange?: (checked: boolean) => void;
 }
@@ -46,11 +46,133 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   showUnitsSection,
   setShowUnitsSection,
   addBaseUnit,
+  brands = [],
   applyToVariants,
   onApplyToVariantsChange,
 }) => {
   const [showPriceSetup, setShowPriceSetup] = React.useState(false);
   const [barcodeManualMode, setBarcodeManualMode] = React.useState(getGoodsBarcodeManualMode);
+  const [showBrandDropdown, setShowBrandDropdown] = React.useState(false);
+  const [brandDropdownPos, setBrandDropdownPos] = React.useState({ top: 0, left: 0, width: 0 });
+  const brandContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showBrandDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (!brandContainerRef.current?.contains(e.target as Node)) setShowBrandDropdown(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showBrandDropdown]);
+
+  const openBrandDropdown = () => {
+    if (!brandContainerRef.current) return;
+    const rect = brandContainerRef.current.getBoundingClientRect();
+    setBrandDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setShowBrandDropdown(true);
+  };
+
+  const filteredBrands = React.useMemo(() => {
+    const q = String(formData.brand || '').trim().toLowerCase();
+    return brands.filter(b => b.toLowerCase().includes(q));
+  }, [brands, formData.brand]);
+
+  const [showGroupDropdown, setShowGroupDropdown] = React.useState(false);
+  const [groupDropdownPos, setGroupDropdownPos] = React.useState({ top: 0, left: 0, width: 0 });
+  const [groupSearchText, setGroupSearchText] = React.useState('');
+  const groupContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showGroupDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (!groupContainerRef.current?.contains(e.target as Node)) setShowGroupDropdown(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showGroupDropdown]);
+
+  const openGroupDropdown = () => {
+    if (!groupContainerRef.current) return;
+    const rect = groupContainerRef.current.getBoundingClientRect();
+    setGroupDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setGroupSearchText('');
+    setShowGroupDropdown(true);
+  };
+
+  const getGroupLeafName = (path: string) => {
+    const parts = path.split(/\s*(?:>>|>|\/)\s*/g).map(p => p.trim()).filter(Boolean);
+    return parts[parts.length - 1] || path;
+  };
+
+  const selectedGroupLeaf = formData.categoryPath ? getGroupLeafName(formData.categoryPath) :
+    formData.categoryId ? getGroupLeafName(formData.categoryId) : '';
+
+  type GroupFlatItem = { fullPath: string; leafName: string; level: number; id: string };
+
+  const groupFlatTree = React.useMemo((): GroupFlatItem[] => {
+    const splitPath = (s: string) => s.split(/\s*(?:>>|>|\/)\s*/g).map(p => p.trim()).filter(Boolean);
+    const joinPath = (parts: string[]) => parts.join(' >> ');
+
+    type TNode = { id: string; name: string; fullPath: string; children: TNode[] };
+    const nodeMap = new Map<string, TNode>();
+    const roots: TNode[] = [];
+
+    const allPaths = new Set<string>();
+    productGroups.forEach(g => {
+      const parts = splitPath(g.name);
+      parts.forEach((_, i) => allPaths.add(joinPath(parts.slice(0, i + 1))));
+    });
+
+    allPaths.forEach(path => {
+      const parts = splitPath(path);
+      let currentPath = '';
+      parts.forEach((part, i) => {
+        const parentPath = currentPath;
+        currentPath = joinPath(parts.slice(0, i + 1));
+        if (!nodeMap.has(currentPath)) {
+          const g = productGroups.find(x => x.name === currentPath);
+          const node: TNode = { id: g?.id || currentPath, name: part, fullPath: currentPath, children: [] };
+          nodeMap.set(currentPath, node);
+          if (!parentPath) {
+            roots.push(node);
+          } else {
+            const parent = nodeMap.get(parentPath);
+            if (parent && !parent.children.some(c => c.fullPath === currentPath)) parent.children.push(node);
+          }
+        }
+      });
+    });
+
+    const sortNodes = (nodes: TNode[]) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name, 'vi-VN'));
+      nodes.forEach(n => sortNodes(n.children));
+    };
+    sortNodes(roots);
+
+    const result: GroupFlatItem[] = [];
+    const flatten = (nodes: TNode[], level: number) => {
+      nodes.forEach(node => {
+        result.push({ fullPath: node.fullPath, leafName: node.name, level, id: node.id });
+        flatten(node.children, level + 1);
+      });
+    };
+    flatten(roots, 0);
+    return result;
+  }, [productGroups]);
+
+  const displayGroupItems = React.useMemo((): GroupFlatItem[] => {
+    const q = groupSearchText.trim().toLowerCase();
+    if (!q) return groupFlatTree;
+    const matching = new Set<string>();
+    groupFlatTree.forEach(item => {
+      if (item.leafName.toLowerCase().includes(q) || item.fullPath.toLowerCase().includes(q)) {
+        matching.add(item.fullPath);
+        const parts = item.fullPath.split(/\s*>>\s*/);
+        for (let i = 1; i < parts.length; i++) matching.add(parts.slice(0, i).join(' >> '));
+      }
+    });
+    return groupFlatTree.filter(item => matching.has(item.fullPath));
+  }, [groupFlatTree, groupSearchText]);
   const [firstAttributeDraft, setFirstAttributeDraft] = React.useState({
     name: '',
     values: [] as string[],
@@ -182,16 +304,56 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
       <div>
         <label className="text-sm font-normal text-slate-700 mb-2 block">*Nhóm hàng</label>
         <div className="flex gap-2">
-          <ProductGroupTreePicker
-            groups={productGroups}
-            selectedPaths={formData.categoryPath || formData.categoryId ? [formData.categoryPath || formData.categoryId || ''] : []}
-            onSelectionChange={paths => {
-              const categoryPath = paths[paths.length - 1] || '';
-              setFormData({ ...formData, categoryId: categoryPath, categoryPath });
-            }}
-            placeholder="Chọn nhóm hàng (Bắt buộc)"
-            className="flex-1"
-          />
+          <div ref={groupContainerRef} className="flex-1 relative">
+            <input
+              className="w-full px-3 py-2 pr-8 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+              value={showGroupDropdown ? groupSearchText : selectedGroupLeaf}
+              onChange={e => setGroupSearchText(e.target.value)}
+              onFocus={openGroupDropdown}
+              onClick={openGroupDropdown}
+              placeholder="Chọn nhóm hàng (Bắt buộc)"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={openGroupDropdown}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+
+            {showGroupDropdown && (
+              <div
+                className="fixed z-toast overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+                style={{ top: groupDropdownPos.top, left: groupDropdownPos.left, width: groupDropdownPos.width }}
+              >
+                <div className="max-h-56 overflow-y-auto">
+                  {displayGroupItems.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-slate-400">Không tìm thấy nhóm hàng</div>
+                  ) : displayGroupItems.map(item => {
+                    const isSelected = (formData.categoryPath || formData.categoryId) === item.fullPath;
+                    return (
+                      <button
+                        key={item.fullPath}
+                        type="button"
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setFormData({ ...formData, categoryId: item.fullPath, categoryPath: item.fullPath });
+                          setShowGroupDropdown(false);
+                        }}
+                        className={`block w-full py-2 pr-4 text-left border-b border-slate-50 last:border-0 hover:bg-indigo-50 ${isSelected ? 'bg-indigo-50' : ''}`}
+                        style={{ paddingLeft: `${16 + item.level * 20}px` }}
+                      >
+                        <span className={`text-sm ${item.level === 0 ? 'font-medium text-slate-900' : 'text-slate-700'}`}>
+                          {item.leafName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors">
             Tạo mới
           </button>
@@ -200,12 +362,48 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
       <div>
         <label className="text-sm font-normal text-slate-700 mb-2 block">Thương hiệu</label>
         <div className="flex gap-2">
-          <input
-            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
-            value={formData.brand}
-            onChange={e => setFormData({ ...formData, brand: e.target.value })}
-            placeholder="Chọn thương hiệu"
-          />
+          <div ref={brandContainerRef} className="flex-1 relative">
+            <input
+              className="w-full px-3 py-2 pr-8 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+              value={formData.brand ?? ''}
+              onChange={e => setFormData({ ...formData, brand: e.target.value })}
+              onFocus={openBrandDropdown}
+              onClick={openBrandDropdown}
+              placeholder="Chọn hoặc nhập thương hiệu"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={openBrandDropdown}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+
+            {showBrandDropdown && filteredBrands.length > 0 && (
+              <div
+                className="fixed z-toast overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+                style={{ top: brandDropdownPos.top, left: brandDropdownPos.left, width: brandDropdownPos.width }}
+              >
+                <div className="max-h-52 overflow-y-auto">
+                  {filteredBrands.map(brand => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        setFormData({ ...formData, brand });
+                        setShowBrandDropdown(false);
+                      }}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border-b border-slate-50 last:border-0"
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors">
             Tạo mới
           </button>

@@ -44,6 +44,7 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [rightPopupPosition, setRightPopupPosition] = useState({ top: 0, left: 0 });
+  const [bottomPopupPosition, setBottomPopupPosition] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -67,6 +68,16 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
     });
   };
 
+  const updateBottomPopupPosition = () => {
+    if (popupPlacement !== 'bottom' || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const popupWidth = 384; // w-96
+    setBottomPopupPosition({
+      top: rect.bottom + 8,
+      left: Math.max(8, rect.right - popupWidth),
+    });
+  };
+
   useEffect(() => {
     if (!isOpen || popupPlacement !== 'right') return;
     updateRightPopupPosition();
@@ -75,6 +86,17 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
     return () => {
       window.removeEventListener('resize', updateRightPopupPosition);
       window.removeEventListener('scroll', updateRightPopupPosition, true);
+    };
+  }, [isOpen, popupPlacement]);
+
+  useEffect(() => {
+    if (!isOpen || popupPlacement !== 'bottom') return;
+    updateBottomPopupPosition();
+    window.addEventListener('resize', updateBottomPopupPosition);
+    window.addEventListener('scroll', updateBottomPopupPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateBottomPopupPosition);
+      window.removeEventListener('scroll', updateBottomPopupPosition, true);
     };
   }, [isOpen, popupPlacement]);
 
@@ -209,12 +231,12 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
   const popupClassName =
     popupPlacement === 'right'
       ? 'fixed z-toast w-[440px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl'
-      : 'absolute right-0 top-full z-30 mt-2 w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl';
+      : 'fixed z-toast w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl';
 
   const popupStyle =
     popupPlacement === 'right'
       ? { top: rightPopupPosition.top, left: rightPopupPosition.left }
-      : undefined;
+      : { top: bottomPopupPosition.top, left: bottomPopupPosition.left };
 
   return (
     <div ref={pickerRef} className={`relative ${className}`}>
@@ -222,7 +244,10 @@ const ProductGroupTreePicker: React.FC<ProductGroupTreePickerProps> = ({
         ref={buttonRef}
         type="button"
         onClick={() => {
-          if (!isOpen) updateRightPopupPosition();
+          if (!isOpen) {
+            updateRightPopupPosition();
+            updateBottomPopupPosition();
+          }
           setIsOpen(prev => !prev);
           setSearchTerm('');
         }}
