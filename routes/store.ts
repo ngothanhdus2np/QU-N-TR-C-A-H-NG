@@ -302,6 +302,8 @@ export function createStoreRouter(supabase: SupabaseClient) {
 
       return res.status(201).json({
         order_code: data.order_code,
+        subtotal: data.subtotal,
+        shipping_fee: data.shipping_fee,
         total_amount: data.total_amount,
       });
     } catch (err) {
@@ -372,7 +374,7 @@ export function createStoreRouter(supabase: SupabaseClient) {
       // Tìm đơn theo order_code, chỉ lấy đơn channel='website'
       const { data: order, error: orderError } = await supabase
         .from('pos_orders')
-        .select('id, order_code, date, customer_id, customer_name, items, total_amount, final_amount, status, payment_method, created_at')
+        .select('id, order_code, date, customer_id, customer_name, items, shipping_fee, total_amount, final_amount, status, payment_method, created_at')
         .eq('order_code', orderCode.trim().toUpperCase())
         .eq('channel', 'website')
         .single();
@@ -439,7 +441,8 @@ export function createStoreRouter(supabase: SupabaseClient) {
           created_at: order.created_at,
           status: order.status,
           payment_method: order.payment_method,
-          total_amount: order.final_amount ?? order.total_amount,
+          shipping_fee: order.shipping_fee ?? 0,
+          total_amount: order.total_amount,
           items: safeItems,
           shipping_address: address,
           shipment: shipment

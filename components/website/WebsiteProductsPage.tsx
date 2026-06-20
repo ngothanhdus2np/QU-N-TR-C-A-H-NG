@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, X, Check, RefreshCw, Globe, ExternalLink,
   Eye, EyeOff, ChevronRight, Save, Loader2, Package, ImageIcon,
-  Tag, Link2,
+  Tag, Link2, FileText, SearchIcon,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { useToast } from '../ui/Toast';
@@ -16,7 +16,18 @@ interface StoreProduct {
   name: string;
   slug: string;
   short_description: string | null;
+  description: string | null;
+  material: string | null;
+  sole_material: string | null;
+  origin: string | null;
+  care_instructions: string | null;
+  size_guide: string | null;
   cover_image_url: string | null;
+  gallery: string[] | null;
+  video_url: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  og_image_url: string | null;
   is_featured: boolean;
   is_new: boolean;
   is_best_seller: boolean;
@@ -30,6 +41,8 @@ interface StoreVariant {
   sku: string;
   size: string | null;
   color_name: string | null;
+  color_hex: string | null;
+  compare_at_price: number | null;
   pos_product_id: string;
   is_published: boolean;
   display_order: number;
@@ -49,16 +62,29 @@ interface VariantDraft {
   sku: string;
   size: string;
   color_name: string;
+  color_hex: string;
+  compare_at_price: string;
   website_price_override: string;
 }
 
-type DetailTab = 'info' | 'media' | 'labels' | 'variants';
+type DetailTab = 'info' | 'media' | 'detail' | 'labels' | 'variants' | 'seo';
 
 interface EditForm {
   name: string;
   slug: string;
   short_description: string;
+  description: string;
+  material: string;
+  sole_material: string;
+  origin: string;
+  care_instructions: string;
+  size_guide: string;
   cover_image_url: string;
+  gallery: string[];
+  video_url: string;
+  seo_title: string;
+  seo_description: string;
+  og_image_url: string;
   is_featured: boolean;
   is_new: boolean;
   is_best_seller: boolean;
@@ -83,7 +109,18 @@ function makeEditForm(p: StoreProduct): EditForm {
     name: p.name,
     slug: p.slug,
     short_description: p.short_description ?? '',
+    description: p.description ?? '',
+    material: p.material ?? '',
+    sole_material: p.sole_material ?? '',
+    origin: p.origin ?? '',
+    care_instructions: p.care_instructions ?? '',
+    size_guide: p.size_guide ?? '',
     cover_image_url: p.cover_image_url ?? '',
+    gallery: Array.isArray(p.gallery) ? p.gallery : [],
+    video_url: p.video_url ?? '',
+    seo_title: p.seo_title ?? '',
+    seo_description: p.seo_description ?? '',
+    og_image_url: p.og_image_url ?? '',
     is_featured: p.is_featured,
     is_new: p.is_new,
     is_best_seller: p.is_best_seller,
@@ -96,22 +133,29 @@ function makeEditForm(p: StoreProduct): EditForm {
         sku: v.sku,
         size: v.size ?? '',
         color_name: v.color_name ?? '',
+        color_hex: v.color_hex ?? '',
+        compare_at_price: v.compare_at_price != null ? String(v.compare_at_price) : '',
         website_price_override: v.website_price_override != null ? String(v.website_price_override) : '',
       })),
   };
 }
 
 const EMPTY_FORM: EditForm = {
-  name: '', slug: '', short_description: '', cover_image_url: '',
+  name: '', slug: '', short_description: '', description: '',
+  material: '', sole_material: '', origin: '', care_instructions: '', size_guide: '',
+  cover_image_url: '', gallery: [], video_url: '',
+  seo_title: '', seo_description: '', og_image_url: '',
   is_featured: false, is_new: false, is_best_seller: false,
   is_published: false, display_order: 0, variantDrafts: [],
 };
 
 const TAB_ITEMS: { id: DetailTab; label: string; icon: React.ElementType }[] = [
   { id: 'info', label: 'Thông tin', icon: Package },
-  { id: 'media', label: 'Ảnh & Mô tả', icon: ImageIcon },
+  { id: 'media', label: 'Ảnh & Media', icon: ImageIcon },
+  { id: 'detail', label: 'Chi tiết', icon: FileText },
   { id: 'labels', label: 'Nhãn', icon: Tag },
   { id: 'variants', label: 'SKU liên kết', icon: Link2 },
+  { id: 'seo', label: 'SEO', icon: SearchIcon },
 ];
 
 // ─── SKU search hook ──────────────────────────────────────────────────────────
@@ -161,7 +205,7 @@ function VariantsEditor({
     if (drafts.some(v => v.pos_product_id === pos.id)) return;
     onChange([...drafts, {
       pos_product_id: pos.id, sku: pos.sku,
-      size: '', color_name: '', website_price_override: '',
+      size: '', color_name: '', color_hex: '', compare_at_price: '', website_price_override: '',
     }]);
     clearSearch();
   };
@@ -171,6 +215,7 @@ function VariantsEditor({
 
   const updateVariant = (posId: string, field: keyof Omit<VariantDraft, 'pos_product_id' | 'sku'>, value: string) =>
     onChange(drafts.map(v => v.pos_product_id === posId ? { ...v, [field]: value } : v));
+
 
   return (
     <div className="space-y-3">
@@ -223,8 +268,10 @@ function VariantsEditor({
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-3 py-2 font-medium text-slate-500">SKU</th>
                 <th className="text-left px-3 py-2 font-medium text-slate-500">Size</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Màu</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá web (để trống = lấy giá POS)</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Tên màu</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Mã màu HEX</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá gốc</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá web</th>
                 <th className="px-2 py-2 w-8" />
               </tr>
             </thead>
@@ -249,11 +296,36 @@ function VariantsEditor({
                     />
                   </td>
                   <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      {v.color_hex && (
+                        <span
+                          className="w-4 h-4 rounded-full border border-slate-200 shrink-0"
+                          style={{ backgroundColor: v.color_hex }}
+                        />
+                      )}
+                      <input
+                        value={v.color_hex}
+                        onChange={e => updateVariant(v.pos_product_id, 'color_hex', e.target.value)}
+                        placeholder="#000000"
+                        className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="number"
+                      value={v.compare_at_price}
+                      onChange={e => updateVariant(v.pos_product_id, 'compare_at_price', e.target.value)}
+                      placeholder="Giá gốc"
+                      className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
                     <input
                       type="number"
                       value={v.website_price_override}
                       onChange={e => updateVariant(v.pos_product_id, 'website_price_override', e.target.value)}
-                      placeholder="0"
+                      placeholder="Giá POS"
                       className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </td>
@@ -305,7 +377,18 @@ function DetailPanel({
         name: form.name,
         slug: form.slug,
         short_description: form.short_description || null,
+        description: form.description || null,
+        material: form.material || null,
+        sole_material: form.sole_material || null,
+        origin: form.origin || null,
+        care_instructions: form.care_instructions || null,
+        size_guide: form.size_guide || null,
         cover_image_url: form.cover_image_url || null,
+        gallery: form.gallery.length > 0 ? form.gallery : [],
+        video_url: form.video_url || null,
+        seo_title: form.seo_title || null,
+        seo_description: form.seo_description || null,
+        og_image_url: form.og_image_url || null,
         is_featured: form.is_featured,
         is_new: form.is_new,
         is_best_seller: form.is_best_seller,
@@ -324,6 +407,8 @@ function DetailPanel({
             sku: v.sku,
             size: v.size || null,
             color_name: v.color_name || null,
+            color_hex: v.color_hex || null,
+            compare_at_price: v.compare_at_price ? Number(v.compare_at_price) : null,
             website_price_override: v.website_price_override ? Number(v.website_price_override) : null,
             is_published: true,
             display_order: i,
@@ -348,7 +433,7 @@ function DetailPanel({
       <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50 border-b border-blue-100">
         <div className="flex items-center gap-2">
           <ChevronRight size={14} className="text-blue-400" />
-          <span className="text-sm font-medium text-blue-800 truncate max-w-[280px]">{product.name}</span>
+          <span className="text-sm font-medium text-blue-800">phucsang.com.vn</span>
           {dirty && <span className="text-[10px] text-orange-500 font-medium bg-orange-50 px-1.5 py-0.5 rounded">Chưa lưu</span>}
         </div>
         <div className="flex items-center gap-2">
@@ -462,9 +547,19 @@ function DetailPanel({
         )}
 
         {tab === 'media' && (
-          <div className="space-y-3 max-w-xl">
+          <div className="space-y-4 max-w-xl">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">URL ảnh bìa</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Mô tả ngắn</label>
+              <textarea
+                value={form.short_description}
+                onChange={e => setF({ short_description: e.target.value })}
+                placeholder="1-2 câu hiển thị trên trang danh sách"
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Ảnh bìa (URL)</label>
               <input
                 value={form.cover_image_url}
                 onChange={e => setF({ cover_image_url: e.target.value })}
@@ -475,17 +570,116 @@ function DetailPanel({
                 <img
                   src={form.cover_image_url}
                   alt="preview"
-                  className="mt-2 h-24 w-24 object-cover rounded-lg border border-slate-200"
+                  className="mt-2 h-20 w-20 object-cover rounded-lg border border-slate-200"
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Mô tả ngắn</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Ảnh bổ sung (gallery)
+                <span className="ml-1 text-slate-400 font-normal">— mỗi dòng 1 URL</span>
+              </label>
+              <div className="space-y-1.5">
+                {form.gallery.map((url, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      value={url}
+                      onChange={e => {
+                        const g = [...form.gallery];
+                        g[i] = e.target.value;
+                        setF({ gallery: g });
+                      }}
+                      placeholder="https://..."
+                      className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {url && (
+                      <img src={url} alt="" className="h-8 w-8 object-cover rounded border border-slate-200 shrink-0"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    )}
+                    <button onClick={() => setF({ gallery: form.gallery.filter((_, j) => j !== i) })}
+                      className="text-slate-300 hover:text-red-500 transition-colors p-0.5 shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setF({ gallery: [...form.gallery, ''] })}
+                  className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors mt-1"
+                >
+                  <Plus size={12} /> Thêm ảnh
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">URL video sản phẩm</label>
+              <input
+                value={form.video_url}
+                onChange={e => setF({ video_url: e.target.value })}
+                placeholder="https://..."
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {tab === 'detail' && (
+          <div className="space-y-3 max-w-xl">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Mô tả đầy đủ</label>
               <textarea
-                value={form.short_description}
-                onChange={e => setF({ short_description: e.target.value })}
-                placeholder="Mô tả 1-2 câu hiển thị trên trang danh sách"
+                value={form.description}
+                onChange={e => setF({ description: e.target.value })}
+                placeholder="Mô tả chi tiết hiển thị trên trang sản phẩm..."
+                rows={5}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Chất liệu mũ/thân</label>
+                <input
+                  value={form.material}
+                  onChange={e => setF({ material: e.target.value })}
+                  placeholder="VD: Da bò thật, Vải canvas..."
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Chất liệu đế</label>
+                <input
+                  value={form.sole_material}
+                  onChange={e => setF({ sole_material: e.target.value })}
+                  placeholder="VD: Cao su thiên nhiên..."
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Xuất xứ</label>
+                <input
+                  value={form.origin}
+                  onChange={e => setF({ origin: e.target.value })}
+                  placeholder="VD: Việt Nam"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Hướng dẫn bảo quản</label>
+              <textarea
+                value={form.care_instructions}
+                onChange={e => setF({ care_instructions: e.target.value })}
+                placeholder="VD: Không giặt máy, lau bằng vải ẩm..."
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Hướng dẫn chọn size</label>
+              <textarea
+                value={form.size_guide}
+                onChange={e => setF({ size_guide: e.target.value })}
+                placeholder="VD: Size 40 = 25.5cm, Size 41 = 26cm..."
                 rows={3}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
@@ -522,11 +716,74 @@ function DetailPanel({
         )}
 
         {tab === 'variants' && (
-          <div className="max-w-2xl">
+          <div className="max-w-4xl">
             <VariantsEditor
               drafts={form.variantDrafts}
               onChange={drafts => setF({ variantDrafts: drafts })}
             />
+          </div>
+        )}
+
+        {tab === 'seo' && (
+          <div className="space-y-3 max-w-xl">
+            <p className="text-xs text-slate-500">Thông tin SEO hiển thị trên Google và khi chia sẻ link.</p>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Tiêu đề SEO
+                <span className="ml-1 text-slate-400 font-normal">— để trống = dùng tên sản phẩm</span>
+              </label>
+              <input
+                value={form.seo_title}
+                onChange={e => setF({ seo_title: e.target.value })}
+                placeholder={form.name || 'Tiêu đề hiển thị trên Google...'}
+                maxLength={60}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-[11px] text-slate-400 mt-0.5 text-right">{form.seo_title.length}/60</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Mô tả SEO
+                <span className="ml-1 text-slate-400 font-normal">— để trống = dùng mô tả ngắn</span>
+              </label>
+              <textarea
+                value={form.seo_description}
+                onChange={e => setF({ seo_description: e.target.value })}
+                placeholder={form.short_description || 'Mô tả hiển thị dưới tiêu đề Google...'}
+                maxLength={160}
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+              <p className="text-[11px] text-slate-400 mt-0.5 text-right">{form.seo_description.length}/160</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Ảnh Open Graph (OG Image)
+                <span className="ml-1 text-slate-400 font-normal">— để trống = dùng ảnh bìa</span>
+              </label>
+              <input
+                value={form.og_image_url}
+                onChange={e => setF({ og_image_url: e.target.value })}
+                placeholder="https://..."
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {form.og_image_url && (
+                <img src={form.og_image_url} alt="OG preview"
+                  className="mt-2 h-20 rounded-lg border border-slate-200 object-cover"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              )}
+            </div>
+            {/* Preview snippet Google */}
+            <div className="mt-2 p-3 bg-white border border-slate-200 rounded-xl">
+              <p className="text-[11px] text-slate-400 mb-1.5 font-medium uppercase tracking-wide">Preview Google</p>
+              <p className="text-sm text-blue-700 font-medium truncate">
+                {form.seo_title || form.name || 'Tên sản phẩm'}
+              </p>
+              <p className="text-xs text-green-700">phucsang.com.vn/{form.slug || 'slug'}.html</p>
+              <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                {form.seo_description || form.short_description || 'Mô tả sản phẩm hiển thị ở đây...'}
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -750,10 +1007,14 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
     const { data, error } = await supabase
       .from('store_products')
       .select(`
-        id, name, slug, short_description, cover_image_url,
+        id, name, slug, short_description, description,
+        material, sole_material, origin, care_instructions, size_guide,
+        cover_image_url, gallery, video_url,
+        seo_title, seo_description, og_image_url,
         is_featured, is_new, is_best_seller, is_published, display_order,
         store_product_variants (
-          id, sku, size, color_name, pos_product_id, is_published, display_order, website_price_override
+          id, sku, size, color_name, color_hex, compare_at_price,
+          pos_product_id, is_published, display_order, website_price_override
         )
       `)
       .is('deleted_at', null)

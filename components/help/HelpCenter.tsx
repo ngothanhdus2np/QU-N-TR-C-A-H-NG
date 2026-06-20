@@ -25,6 +25,28 @@ function renderMarkdown(content: string): React.ReactNode[] {
   while (i < lines.length) {
     const line = lines[i];
 
+    // Image: ![caption](url)
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (imgMatch) {
+      const [, caption, src] = imgMatch;
+      elements.push(
+        <figure key={key++} className="my-5">
+          <img
+            src={src}
+            alt={caption}
+            className="w-full rounded-xl border border-slate-200 shadow-sm"
+            loading="lazy"
+          />
+          {caption && (
+            <figcaption className="mt-2 text-center text-xs text-slate-400 italic">
+              {caption}
+            </figcaption>
+          )}
+        </figure>
+      );
+      i++; continue;
+    }
+
     if (line.startsWith('## ')) {
       const id = line.slice(3).toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
       elements.push(

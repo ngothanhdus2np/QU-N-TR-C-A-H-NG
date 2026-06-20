@@ -45,9 +45,6 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   returned: { label: 'Đã hoàn hàng', color: 'bg-slate-200 text-slate-600' },
 };
 
-// Trạng thái cộng lại tồn kho — phải khớp đúng với RPC update_website_order_status
-const RESTOCK_STATUSES = new Set(['cancelled', 'returned']);
-
 const STATUS_ORDER: Record<string, string[]> = {
   pending: ['confirmed', 'cancelled'],
   confirmed: ['shipping', 'cancelled'],
@@ -129,7 +126,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
       showToast(`Lỗi cập nhật trạng thái: ${data?.error ?? error?.message}`, 'error');
     } else {
       showToast(
-        RESTOCK_STATUSES.has(newStatus)
+        data?.restocked
           ? `Đã chuyển sang "${STATUS_LABELS[newStatus]?.label}" — đã cộng lại tồn kho`
           : `Đã chuyển sang "${STATUS_LABELS[newStatus]?.label}"`,
         'success'

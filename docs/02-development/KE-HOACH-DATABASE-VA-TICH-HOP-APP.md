@@ -1305,7 +1305,7 @@ DQND21  DQND22  DQND23  DQND24  DQND25  DQND26  DQND27  DQND28
 
 180 `store_product_variants` tuong ung (trung binh 6 size/mau moi san pham).
 
-**SQL can chay tren iMac** (da ghi vao `supabase_setup.sql`):
+**SQL da duoc ap dung va xac nhan tren production** (ghi trong `supabase_setup.sql` de tham chieu):
 
 ```sql
 -- Fix slug: "dbd01-den-38-timestamp" → "dbd01"
@@ -1320,11 +1320,7 @@ SET color_name = SPLIT_PART(sku, '-', 2),
 WHERE color_name IS NULL AND size IS NULL AND sku LIKE '%-%-%';
 ```
 
-Cach chay tren iMac:
-```bash
-docker exec supabase-db psql -U postgres -d postgres -f /path/to/migration.sql
-# Hoac copy-paste 2 lenh UPDATE o tren vao psql
-```
+Ket qua xac nhan: 30/30 slug dung va 180/180 variants da co `color_name` + `size`.
 
 **13 san pham con thieu** (chua co trong `pos_products`):
 
@@ -1344,6 +1340,17 @@ Trang trong app de:
 - Quan ly collections (bo suu tap)
 - Xem va xu ly don hang website
 - Toggle xuat ban tung san pham/variant
+
+### Giai doan 4.1: Dam bao toan ven don website (2026-06-20)
+
+Migration `supabase_migrations/014_store_order_inventory_integrity.sql` cap nhat 2 RPC website:
+
+- `create_store_order` lay gia tu `website_price_override` neu co, neu khong moi dung `pos_products.sale_price`; khong tin gia gui tu website.
+- Cac dong gio hang trung `pos_product_id` duoc gop truoc khi khoa, kiem tra va tru ton kho.
+- `update_website_order_status` chi cho phep chuyen trang thai mot chieu theo workflow; retry cung trang thai la idempotent va khong cong ton lai.
+- Khi huy/hoan, cac dong SKU trung trong don cu cung duoc gop truoc khi cong ton.
+
+Da chay migration tren production ngay 2026-06-20 va xac minh definition cua ca 2 RPC.
 
 ---
 

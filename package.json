@@ -19,7 +19,8 @@
     "security:audit": "tsx scripts/security-audit.ts",
     "supabase:keepalive": "node scripts/supabase-keepalive.mjs",
     "generate:icons": "node scripts/generate-pwa-icons.js",
-    "pwa:test": "npx serve dist -p 3000"
+    "pwa:test": "npx serve dist -p 3000",
+    "help:capture": "node scripts/capture-help-screenshots.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
@@ -60,6 +61,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.0",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.14",
