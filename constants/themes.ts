@@ -1,4 +1,4 @@
-export type AppThemeId = 'classic' | 'codex' | 'prestige' | 'clarity';
+export type AppThemeId = 'classic' | 'codex' | 'phuc-sang';
 
 export interface AppTheme {
   id: AppThemeId;
@@ -24,18 +24,11 @@ export const APP_THEMES: AppTheme[] = [
     previewAccent: '#e4e4e7',
   },
   {
-    id: 'prestige',
-    name: 'Prestige',
-    description: 'Giao diện tối cao cấp với tông màu đen ấm và điểm nhấn đỏ thương hiệu.',
-    previewBg: '#1A1612',
-    previewAccent: '#C8161E',
-  },
-  {
-    id: 'clarity',
-    name: 'Clarity',
-    description: 'Giao diện phẳng, xanh dương đậm, border mỏng — tập trung vào dữ liệu.',
-    previewBg: '#1565C0',
-    previewAccent: '#E3F2FD',
+    id: 'phuc-sang',
+    name: 'Phúc Sang',
+    description: 'Giao diện thương hiệu Giày Dép Phúc Sang — đỏ chủ đạo, trắng sạch, chuẩn cảm ứng.',
+    previewBg: '#E63329',
+    previewAccent: '#F8C21C',
   },
 ];
 

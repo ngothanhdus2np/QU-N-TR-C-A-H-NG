@@ -3,6 +3,40 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-20 — Theme Phúc Sang
+
+- Tạo theme `phuc-sang` mới: đỏ `#E63329` chủ đạo, vàng `#F8C21C` accent, nền trắng sạch.
+- Xoá theme Prestige và Clarity khỏi `constants/themes.ts`, `hooks/useTheme.ts`, `index.css`.
+- Sửa TopNav: nền trắng khi dùng theme Phúc Sang, nav item text slate, active item đỏ nhạt, nút BÁN HÀNG đỏ.
+- Icon "Hoạt động gần đây": nền `#FEF2F2` (nhạt như icon Doanh thu), icon màu vàng `#F8C21C`.
+- Recharts: bar đỏ, line chart vàng, dots vàng.
+- Dữ liệu trong bảng tbody: reset về màu đen.
+- Files: `index.css`, `constants/themes.ts`, `hooks/useTheme.ts`, `phuc-sang-ui.css` (thêm mới)
+
+### 2026-06-20 — Deploy Store API sau migration 014
+
+- Deploy lên iMac thành công: đồng bộ mã, Vite production build, restart `com.cfobrain.app`, health check trả `OK`.
+- Smoke test read-only `GET /api/store/products`: HTTP 200, trả 30 sản phẩm (sản phẩm đầu có 6 biến thể) và không lộ trường `import_price`.
+
+### 2026-06-20 — Deploy production migration 014 cho đơn website
+
+- Chạy `supabase_migrations/014_store_order_inventory_integrity.sql` trong transaction qua internal `pg/query` trên production; response thành công.
+- Xác minh chỉ-đọc definition RPC: `create_store_order` đã dùng `website_price_override` và gộp cart line; `update_website_order_status` có `search_path=public`, idempotency và gộp dữ liệu hoàn tồn.
+- Không tạo đơn thử để không làm thay đổi tồn kho vận hành.
+
+### 2026-06-20 — Tăng toàn vẹn RPC đơn website
+
+- Thêm migration `014_store_order_inventory_integrity.sql`: `create_store_order` dùng `website_price_override`, gộp cart line trùng SKU trước khi kiểm/trừ tồn; `update_website_order_status` áp dụng state machine một chiều, retry idempotent và gộp SKU trùng trước khi hoàn tồn.
+- Đồng bộ RPC vào `supabase_setup.sql`; UI đơn website chỉ báo đã cộng tồn khi RPC xác nhận `restocked=true`.
+- Thêm test hồi quy cho các điều kiện của migration.
+- Files: `supabase_migrations/014_store_order_inventory_integrity.sql`, `supabase_setup.sql`, `components/website/WebsiteOrdersPage.tsx`, `tests/unit/storeOrderRpcMigration.test.ts`, tài liệu kế hoạch/TODO.
+
+### 2026-06-20 — Xác nhận dữ liệu Giai đoạn 4 tích hợp website
+
+- Kiểm tra production qua Supabase: 30 `store_products` đều đã có slug chuẩn; 180 `store_product_variants` đều đã có `color_name` và `size`. Hai SQL fix ghi trong `supabase_setup.sql` đã được áp dụng, không cần chạy lại.
+- Cập nhật kế hoạch và TODO: bỏ bước chạy SQL cũ; còn lại 13 SKU chưa tồn tại trong `pos_products` (DBDN01–07, DDDN01–03, DXNN01–03) cần dữ liệu hàng hoá/vận hành trước khi xuất bản.
+- Files: `docs/05-process/TODO.md`, `docs/02-development/KE-HOACH-DATABASE-VA-TICH-HOP-APP.md`, `docs/05-process/HISTORY.md`
+
 ### 2026-06-20 — Giai đoạn 4 tích hợp website: SQL fix + tài liệu API cho web team
 
 - Viết SQL Giai đoạn 4 vào `supabase_setup.sql`: (1) fix slug từ `dbd01-den-38-timestamp` → `dbd01`, (2) parse `color_name` + `size` từ SKU format `DBD01-Den-38` cho 180 `store_product_variants`. Cần chạy thủ công trên iMac.

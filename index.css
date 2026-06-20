@@ -1,3 +1,5 @@
+@import './phuc-sang-ui.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -85,107 +87,6 @@
   }
 }
 
-/* ============================================================
-   CLARITY THEME — flat, business-blue, no shadows
-   Ghi đè Tailwind indigo → blue #1565C0, xoá shadow, giảm radius
-   ============================================================ */
-[data-theme="clarity"] {
-  /* --- Màu nền trang --- */
-  --tw-bg-opacity: 1;
-
-  /* --- Indigo → Blue overrides --- */
-  /* bg-indigo-* */
-  --clarity-50:  #E3F2FD;
-  --clarity-100: #BBDEFB;
-  --clarity-200: #90CAF9;
-  --clarity-300: #64B5F6;
-  --clarity-400: #42A5F5;
-  --clarity-500: #1976D2;
-  --clarity-600: #1565C0;
-  --clarity-700: #1251A3;
-  --clarity-800: #0D47A1;
-  --clarity-900: #0A3880;
-  --clarity-950: #072660;
-}
-
-[data-theme="clarity"] .bg-indigo-50  { background-color: #E3F2FD !important; }
-[data-theme="clarity"] .bg-indigo-100 { background-color: #BBDEFB !important; }
-[data-theme="clarity"] .bg-indigo-200 { background-color: #90CAF9 !important; }
-[data-theme="clarity"] .bg-indigo-300 { background-color: #64B5F6 !important; }
-[data-theme="clarity"] .bg-indigo-400 { background-color: #42A5F5 !important; }
-[data-theme="clarity"] .bg-indigo-500 { background-color: #1976D2 !important; }
-[data-theme="clarity"] .bg-indigo-600 { background-color: #1565C0 !important; }
-[data-theme="clarity"] .bg-indigo-700 { background-color: #1251A3 !important; }
-[data-theme="clarity"] .bg-indigo-800 { background-color: #0D47A1 !important; }
-[data-theme="clarity"] .bg-indigo-900 { background-color: #0A3880 !important; }
-[data-theme="clarity"] .bg-indigo-950 { background-color: #072660 !important; }
-
-[data-theme="clarity"] .text-indigo-50  { color: #E3F2FD !important; }
-[data-theme="clarity"] .text-indigo-100 { color: #BBDEFB !important; }
-[data-theme="clarity"] .text-indigo-200 { color: #90CAF9 !important; }
-[data-theme="clarity"] .text-indigo-300 { color: #64B5F6 !important; }
-[data-theme="clarity"] .text-indigo-400 { color: #42A5F5 !important; }
-[data-theme="clarity"] .text-indigo-500 { color: #1976D2 !important; }
-[data-theme="clarity"] .text-indigo-600 { color: #1565C0 !important; }
-[data-theme="clarity"] .text-indigo-700 { color: #1251A3 !important; }
-[data-theme="clarity"] .text-indigo-800 { color: #0D47A1 !important; }
-[data-theme="clarity"] .text-indigo-900 { color: #0A3880 !important; }
-[data-theme="clarity"] .text-indigo-950 { color: #072660 !important; }
-
-[data-theme="clarity"] .border-indigo-50  { border-color: #E3F2FD !important; }
-[data-theme="clarity"] .border-indigo-100 { border-color: #BBDEFB !important; }
-[data-theme="clarity"] .border-indigo-200 { border-color: #90CAF9 !important; }
-[data-theme="clarity"] .border-indigo-300 { border-color: #64B5F6 !important; }
-[data-theme="clarity"] .border-indigo-400 { border-color: #42A5F5 !important; }
-[data-theme="clarity"] .border-indigo-500 { border-color: #1976D2 !important; }
-[data-theme="clarity"] .border-indigo-600 { border-color: #1565C0 !important; }
-[data-theme="clarity"] .border-indigo-700 { border-color: #1251A3 !important; }
-[data-theme="clarity"] .border-indigo-800 { border-color: #0D47A1 !important; }
-
-[data-theme="clarity"] .ring-indigo-50  { --tw-ring-color: #E3F2FD !important; }
-[data-theme="clarity"] .ring-indigo-100 { --tw-ring-color: #BBDEFB !important; }
-[data-theme="clarity"] .ring-indigo-300 { --tw-ring-color: #64B5F6 !important; }
-[data-theme="clarity"] .ring-indigo-400 { --tw-ring-color: #42A5F5 !important; }
-[data-theme="clarity"] .ring-indigo-500 { --tw-ring-color: #1976D2 !important; }
-[data-theme="clarity"] .ring-indigo-600 { --tw-ring-color: #1565C0 !important; }
-
-/* Gradient stops */
-[data-theme="clarity"] .from-indigo-500 { --tw-gradient-from: #1976D2 !important; }
-[data-theme="clarity"] .from-indigo-600 { --tw-gradient-from: #1565C0 !important; }
-[data-theme="clarity"] .to-indigo-600   { --tw-gradient-to:   #1565C0 !important; }
-[data-theme="clarity"] .to-indigo-700   { --tw-gradient-to:   #1251A3 !important; }
-
-/* --- Xoá shadow (flat design) --- */
-[data-theme="clarity"] .shadow-sm,
-[data-theme="clarity"] .shadow,
-[data-theme="clarity"] .shadow-md,
-[data-theme="clarity"] .shadow-lg,
-[data-theme="clarity"] .shadow-xl,
-[data-theme="clarity"] .shadow-2xl,
-[data-theme="clarity"] .shadow-card,
-[data-theme="clarity"] .shadow-panel,
-[data-theme="clarity"] .shadow-dropdown,
-[data-theme="clarity"] .shadow-modal {
-  box-shadow: none !important;
-}
-
-/* Giữ lại shadow indigo (glow button) nhưng chuyển sang blue */
-[data-theme="clarity"] [class*="shadow-indigo"] {
-  box-shadow: 0 2px 8px 0 rgba(21, 101, 192, 0.25) !important;
-}
-
-/* --- Giảm border-radius --- */
-[data-theme="clarity"] .rounded-3xl { border-radius: 12px !important; }
-[data-theme="clarity"] .rounded-2xl { border-radius: 8px  !important; }
-[data-theme="clarity"] .rounded-xl  { border-radius: 6px  !important; }
-
-/* --- Border mỏng hơn, rõ hơn --- */
-[data-theme="clarity"] .border-slate-100 { border-color: #e2e8f0 !important; }
-[data-theme="clarity"] .border-slate-200 { border-color: #cbd5e1 !important; }
-
-/* --- Nền trang sạch hơn --- */
-[data-theme="clarity"] body { background-color: #f0f4f8 !important; }
-[data-theme="clarity"] .bg-slate-50 { background-color: #f8fafc !important; }
 
 /* Uniform table body: all text slate-900, no badge colors or backgrounds */
 tbody td,
@@ -203,4 +104,235 @@ tbody td span[class*="bg-"] {
   padding-right: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
+}
+
+/* ============================================================
+   PHÚC SANG THEME — đỏ thương hiệu, trắng sạch, chuẩn cảm ứng
+   Ghi đè indigo → đỏ Phúc Sang (#E63329), giữ shadow + spacing
+   ============================================================ */
+[data-theme="phuc-sang"] {
+  /* --- Bảng màu đỏ thương hiệu --- */
+  --ps-50:  #FEF2F2;
+  --ps-100: #FEE2E1;
+  --ps-200: #FECACA;
+  --ps-300: #FCA5A5;
+  --ps-400: #F87171;
+  --ps-500: #E63329;
+  --ps-600: #CE2A20;
+  --ps-700: #A50F15;
+  --ps-800: #7F0E12;
+  --ps-900: #5C0A0D;
+  --ps-950: #3D0709;
+}
+
+/* bg-indigo-* → đỏ PS */
+[data-theme="phuc-sang"] .bg-indigo-50  { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .bg-indigo-100 { background-color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .bg-indigo-200 { background-color: #FECACA !important; }
+[data-theme="phuc-sang"] .bg-indigo-300 { background-color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .bg-indigo-400 { background-color: #F87171 !important; }
+[data-theme="phuc-sang"] .bg-indigo-500 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .bg-indigo-600 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .bg-indigo-700 { background-color: #CE2A20 !important; }
+[data-theme="phuc-sang"] .bg-indigo-800 { background-color: #A50F15 !important; }
+[data-theme="phuc-sang"] .bg-indigo-900 { background-color: #7F0E12 !important; }
+[data-theme="phuc-sang"] .bg-indigo-950 { background-color: #3D0709 !important; }
+
+/* text-indigo-* → đỏ PS */
+[data-theme="phuc-sang"] .text-indigo-50  { color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .text-indigo-100 { color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .text-indigo-200 { color: #FECACA !important; }
+[data-theme="phuc-sang"] .text-indigo-300 { color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .text-indigo-400 { color: #F87171 !important; }
+[data-theme="phuc-sang"] .text-indigo-500 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-indigo-600 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-indigo-700 { color: #CE2A20 !important; }
+[data-theme="phuc-sang"] .text-indigo-800 { color: #A50F15 !important; }
+[data-theme="phuc-sang"] .text-indigo-900 { color: #7F0E12 !important; }
+
+/* border-indigo-* → đỏ PS */
+[data-theme="phuc-sang"] .border-indigo-50  { border-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .border-indigo-100 { border-color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .border-indigo-200 { border-color: #FECACA !important; }
+[data-theme="phuc-sang"] .border-indigo-300 { border-color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .border-indigo-400 { border-color: #F87171 !important; }
+[data-theme="phuc-sang"] .border-indigo-500 { border-color: #E63329 !important; }
+[data-theme="phuc-sang"] .border-indigo-600 { border-color: #E63329 !important; }
+[data-theme="phuc-sang"] .border-indigo-700 { border-color: #CE2A20 !important; }
+[data-theme="phuc-sang"] .border-indigo-800 { border-color: #A50F15 !important; }
+
+/* ring-indigo-* → đỏ PS */
+[data-theme="phuc-sang"] .ring-indigo-50  { --tw-ring-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .ring-indigo-100 { --tw-ring-color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .ring-indigo-200 { --tw-ring-color: #FECACA !important; }
+[data-theme="phuc-sang"] .ring-indigo-300 { --tw-ring-color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .ring-indigo-400 { --tw-ring-color: #F87171 !important; }
+[data-theme="phuc-sang"] .ring-indigo-500 { --tw-ring-color: #E63329 !important; }
+[data-theme="phuc-sang"] .ring-indigo-600 { --tw-ring-color: #E63329 !important; }
+
+/* Gradient stops */
+[data-theme="phuc-sang"] .from-indigo-500 { --tw-gradient-from: #E63329 !important; }
+[data-theme="phuc-sang"] .from-indigo-600 { --tw-gradient-from: #E63329 !important; }
+[data-theme="phuc-sang"] .to-indigo-600   { --tw-gradient-to:   #CE2A20 !important; }
+[data-theme="phuc-sang"] .to-indigo-700   { --tw-gradient-to:   #A50F15 !important; }
+
+/* --- Shadow đỏ thay shadow indigo --- */
+[data-theme="phuc-sang"] [class*="shadow-indigo"] {
+  box-shadow: 0 4px 14px rgba(230,51,41,.30) !important;
+}
+
+/* --- Focus ring đỏ --- */
+[data-theme="phuc-sang"] .focus\:border-indigo-300:focus { border-color: #FECACA !important; }
+[data-theme="phuc-sang"] .focus\:ring-indigo-500:focus   { --tw-ring-color: #E63329 !important; }
+
+/* --- Checkbox / input accent đỏ --- */
+[data-theme="phuc-sang"] input[type="checkbox"],
+[data-theme="phuc-sang"] input[type="radio"] {
+  accent-color: #E63329;
+}
+
+/* --- TopNav row 2: nền trắng, không còn đỏ --- */
+[data-theme="phuc-sang"] header + div.bg-indigo-600 {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08) !important;
+}
+
+/* Nav button inactive: text slate-600 (thay indigo-200 = hồng nhạt invisible) */
+[data-theme="phuc-sang"] header + div nav button.text-indigo-200 {
+  color: #475569 !important;
+}
+
+/* Nav button hover: nền xám nhạt + text đậm */
+[data-theme="phuc-sang"] header + div nav button:hover,
+[data-theme="phuc-sang"] header + div nav button.hover\:text-white:hover {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* Nav button active: nền đỏ nhạt + text đỏ (thay bg-indigo-800 text-white) */
+[data-theme="phuc-sang"] header + div nav .bg-indigo-800 {
+  background-color: #FEF2F2 !important;
+  color: #E63329 !important;
+}
+
+/* BÁN HÀNG button: bg-white → đỏ, text → trắng (tương phản trên nền nav trắng) */
+[data-theme="phuc-sang"] header + div a.bg-white {
+  background-color: #E63329 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(230,51,41,.28) !important;
+}
+[data-theme="phuc-sang"] header + div a.bg-white:hover {
+  background-color: #CE2A20 !important;
+}
+
+/* --- primary color token cho .ps-* --- */
+[data-theme="phuc-sang"] {
+  --ps-primary: #E63329;
+  --ps-primary-press: #A50F15;
+}
+
+/* -------- blue-* → đỏ PS -------- */
+[data-theme="phuc-sang"] .bg-blue-50  { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .bg-blue-100 { background-color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .bg-blue-200 { background-color: #FECACA !important; }
+[data-theme="phuc-sang"] .bg-blue-300 { background-color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .bg-blue-400 { background-color: #F87171 !important; }
+[data-theme="phuc-sang"] .bg-blue-500 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .bg-blue-600 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .bg-blue-700 { background-color: #CE2A20 !important; }
+
+[data-theme="phuc-sang"] .text-blue-400 { color: #F87171 !important; }
+[data-theme="phuc-sang"] .text-blue-500 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-blue-600 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-blue-700 { color: #CE2A20 !important; }
+
+[data-theme="phuc-sang"] .border-blue-200 { border-color: #FECACA !important; }
+[data-theme="phuc-sang"] .border-blue-300 { border-color: #FCA5A5 !important; }
+[data-theme="phuc-sang"] .border-blue-500 { border-color: #E63329 !important; }
+[data-theme="phuc-sang"] .border-blue-600 { border-color: #E63329 !important; }
+
+[data-theme="phuc-sang"] .hover\:bg-blue-50:hover   { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .hover\:text-blue-600:hover { color: #E63329 !important; }
+
+/* -------- violet-* / purple-* → đỏ PS -------- */
+[data-theme="phuc-sang"] .bg-violet-50  { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .bg-violet-100 { background-color: #FEE2E1 !important; }
+[data-theme="phuc-sang"] .bg-violet-500 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .bg-violet-600 { background-color: #E63329 !important; }
+
+[data-theme="phuc-sang"] .text-violet-400 { color: #F87171 !important; }
+[data-theme="phuc-sang"] .text-violet-500 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-violet-600 { color: #E63329 !important; }
+
+[data-theme="phuc-sang"] .bg-purple-50  { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .bg-purple-500 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-purple-500 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-purple-600 { color: #CE2A20 !important; }
+
+/* -------- sky-* → đỏ PS -------- */
+[data-theme="phuc-sang"] .bg-sky-50  { background-color: #FEF2F2 !important; }
+[data-theme="phuc-sang"] .bg-sky-500 { background-color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-sky-500 { color: #E63329 !important; }
+[data-theme="phuc-sang"] .text-sky-600 { color: #CE2A20 !important; }
+
+/* -------- Recharts: ghi đè màu biểu đồ bằng CSS -------- */
+/* Bar chart fill */
+[data-theme="phuc-sang"] .recharts-bar-rectangle path,
+[data-theme="phuc-sang"] .recharts-bar-rectangle rect {
+  fill: #E63329 !important;
+}
+/* Line chart stroke → vàng thương hiệu */
+[data-theme="phuc-sang"] .recharts-line-curve {
+  stroke: #F8C21C !important;
+}
+/* Dot trên đường line → vàng */
+[data-theme="phuc-sang"] circle.recharts-dot,
+[data-theme="phuc-sang"] circle.recharts-line-dot,
+[data-theme="phuc-sang"] .recharts-line-dots circle {
+  fill: #F8C21C !important;
+  stroke: #fff !important;
+}
+/* Area chart */
+[data-theme="phuc-sang"] .recharts-area-curve {
+  stroke: #E63329 !important;
+}
+[data-theme="phuc-sang"] .recharts-area-area {
+  fill: #E63329 !important;
+}
+/* Progress bar inline dùng bg-blue-*/
+[data-theme="phuc-sang"] [class*="bg-blue-"].rounded-full,
+[data-theme="phuc-sang"] [class*="bg-indigo-"].rounded-full {
+  background-color: #E63329 !important;
+}
+
+/* -------- Bảng dữ liệu: mọi text về đen --------
+   Specificity (0,2,1) > (0,2,0) của các rule text-* bên trên
+   nên reset này thắng khi nằm trong tbody.              */
+[data-theme="phuc-sang"] tbody .text-indigo-400,
+[data-theme="phuc-sang"] tbody .text-indigo-500,
+[data-theme="phuc-sang"] tbody .text-indigo-600,
+[data-theme="phuc-sang"] tbody .text-indigo-700,
+[data-theme="phuc-sang"] tbody .text-blue-400,
+[data-theme="phuc-sang"] tbody .text-blue-500,
+[data-theme="phuc-sang"] tbody .text-blue-600,
+[data-theme="phuc-sang"] tbody .text-blue-700,
+[data-theme="phuc-sang"] tbody .text-violet-400,
+[data-theme="phuc-sang"] tbody .text-violet-500,
+[data-theme="phuc-sang"] tbody .text-violet-600,
+[data-theme="phuc-sang"] tbody .text-purple-500,
+[data-theme="phuc-sang"] tbody .text-purple-600,
+[data-theme="phuc-sang"] tbody .text-sky-500,
+[data-theme="phuc-sang"] tbody .text-sky-600 {
+  color: rgb(15 23 42) !important;
+}
+
+/* -------- Hoạt động gần đây: nền nhạt như icon Doanh thu + icon vàng -------- */
+/* Specificity (0,3,1) > rule rounded-full (0,3,0) */
+[data-theme="phuc-sang"] aside .bg-blue-50.rounded-full,
+[data-theme="phuc-sang"] aside .bg-orange-50.rounded-full {
+  background-color: #FEF2F2 !important;
+}
+[data-theme="phuc-sang"] aside .text-blue-400,
+[data-theme="phuc-sang"] aside .text-orange-400 {
+  color: #F8C21C !important;
 }

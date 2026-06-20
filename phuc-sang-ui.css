@@ -1,0 +1,572 @@
+/* ============================================================
+   PHÚC SANG · UI FOUNDATION
+   Token + class dùng chung. Dán file này vào src/, import 1 lần
+   ở entry (index.css / main). Mọi màn dùng .ps-* để tự động đúng
+   spec. Hoạt động song song với Tailwind (không xung đột).
+   Nguồn số đo: Layout Spec lấy chuẩn từ trang Hàng hóa.
+   ============================================================ */
+
+:root {
+  /* ---- Màu thương hiệu ---- */
+  --ps-red-50:  #FEF2F2;
+  --ps-red-100: #FEE2E1;
+  --ps-red-200: #FECACA;
+  --ps-red-500: #E63329;   /* primary */
+  --ps-red-600: #CE2A20;
+  --ps-red-700: #A50F15;   /* press / đỏ trầm */
+  --ps-red-900: #6B0D08;
+
+  --ps-yellow-50:  #FEFCE8;
+  --ps-yellow-100: #FEF3C7;
+  --ps-yellow-500: #F8C21C; /* accent */
+  --ps-yellow-700: #A16207; /* chữ trên nền vàng */
+
+  /* ---- Slate trung tính ---- */
+  --ps-slate-50:  #F8FAFC;
+  --ps-slate-100: #F1F5F9;
+  --ps-slate-200: #E2E8F0;
+  --ps-slate-300: #CBD5E1;
+  --ps-slate-400: #94A3B8;
+  --ps-slate-500: #64748B;
+  --ps-slate-600: #475569;
+  --ps-slate-700: #334155;
+  --ps-slate-800: #1E293B;
+  --ps-slate-900: #0F172A;
+
+  /* ---- Semantic ---- */
+  --ps-success: #059669;  --ps-success-bg: #ECFDF5;  --ps-success-border: #A7F3D0;
+  --ps-warning: #A16207;  --ps-warning-bg: #FEF3C7;  --ps-warning-border: #F8C21C;
+  --ps-danger:  #E63329;  --ps-danger-bg:  #FEF2F2;  --ps-danger-border:  #FECACA;
+
+  /* ---- Vai trò ---- */
+  --ps-bg-app:     var(--ps-slate-50);
+  --ps-surface:    #FFFFFF;
+  --ps-bg-muted:   var(--ps-slate-100);
+  --ps-border:     var(--ps-slate-200);
+  --ps-border-soft:var(--ps-slate-100);
+  --ps-fg:         var(--ps-slate-800);
+  --ps-fg-strong:  var(--ps-slate-900);
+  --ps-fg-muted:   var(--ps-slate-500);
+  --ps-fg-faint:   var(--ps-slate-400);
+  --ps-primary:    var(--ps-red-500);
+  --ps-primary-press: var(--ps-red-700);
+
+  /* ---- Spacing · gốc 4px ---- */
+  --ps-sp-1: 4px;
+  --ps-sp-2: 8px;
+  --ps-sp-3: 12px;
+  --ps-sp-4: 16px;
+  --ps-sp-5: 20px;
+  --ps-sp-6: 24px;
+  --ps-sp-8: 32px;
+
+  /* ---- Chiều cao chuẩn ---- */
+  --ps-toolbar-h: 48px;
+  --ps-header-h:  36px;   /* header bảng */
+  --ps-row-h:     44px;   /* dòng bảng */
+  --ps-row-h-dense: 40px;
+  --ps-ctrl-h:    32px;   /* input / nút mặc định */
+  --ps-ctrl-h-touch: 44px;/* nút chạm quan trọng */
+
+  /* ---- Bo góc ---- */
+  --ps-r-xs:  6px;   /* chip nhỏ */
+  --ps-r-sm:  8px;   /* nút / input */
+  --ps-r-md:  12px;  /* panel nhỏ */
+  --ps-r-lg:  16px;  /* card */
+  --ps-r-xl:  24px;  /* card lớn */
+  --ps-r-pill: 9999px;
+
+  /* ---- Bóng đổ ---- */
+  --ps-sh-xs: 0 1px 2px rgba(15,23,42,.04);
+  --ps-sh-sm: 0 1px 3px rgba(15,23,42,.08);
+  --ps-sh-md: 0 4px 12px rgba(15,23,42,.06);
+  --ps-sh-lg: 0 12px 30px rgba(15,23,42,.12);
+  --ps-sh-brand: 0 6px 14px rgba(230,51,41,.28);
+
+  /* ---- Font chữ ---- */
+  /* UI = Inter. Cần thẻ <link> Inter trong index.html (đã có sẵn).
+     Tiêu đề thương hiệu = Playfair Display — thêm link nếu muốn dùng .ps-display.
+     Số/SKU = monospace hệ thống. */
+  --ps-font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ps-font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --ps-font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+
+  /* ---- Type · KHÔNG dùng cỡ tùy ý ngoài thang này ---- */
+  --ps-fs-dense: 12px;  /* cột bảng dày, nhãn phụ */
+  --ps-fs-body:  13px;  /* thân, mặc định */
+  --ps-fs-md:    14px;  /* nhấn nhẹ */
+  --ps-fs-title: 15px;  /* tiêu đề card */
+  --ps-fs-lg:    18px;  /* tiêu đề mục */
+  --ps-fs-xl:    22px;  /* số liệu lớn */
+  --ps-fs-2xl:   28px;  /* tiêu đề trang */
+
+  --ps-fw-regular: 400;
+  --ps-fw-medium:  500;
+  --ps-fw-semibold:600;
+  --ps-fw-bold:    700;
+  --ps-fw-black:   900;
+
+  --ps-ease: cubic-bezier(.4,0,.2,1);
+
+  /* ---- Thời lượng chuyển động ---- */
+  --ps-dur-fast: .15s;
+  --ps-dur-base: .2s;
+  --ps-dur-slow: .3s;
+
+  /* ---- Thang z-index (đừng chế số rời) ---- */
+  --ps-z-base:     1;
+  --ps-z-sticky:   10;   /* header bảng, toolbar dính */
+  --ps-z-dropdown: 1000; /* menu, popover, select */
+  --ps-z-overlay:  1100; /* scrim modal */
+  --ps-z-modal:    1110; /* hộp thoại */
+  --ps-z-toast:    1200; /* thông báo nổi */
+}
+
+/* ============================================================
+   TYPOGRAPHY  — thang chữ. Dùng class, không đặt cỡ tuỳ ý.
+   ============================================================ */
+body, .ps-root { font-family: var(--ps-font-sans); color: var(--ps-fg); }
+
+.ps-display {            /* tiêu đề thương hiệu / hero (serif) */
+  font-family: var(--ps-font-display);
+  font-size: var(--ps-fs-2xl); font-weight: 800;
+  line-height: 1.15; letter-spacing: -.01em; color: var(--ps-fg-strong);
+}
+.ps-page-title {         /* tiêu đề trang */
+  font-size: var(--ps-fs-2xl); font-weight: 800;
+  line-height: 1.2; letter-spacing: -.01em; color: var(--ps-fg-strong);
+}
+.ps-section-title {      /* tiêu đề mục */
+  font-size: var(--ps-fs-lg); font-weight: 800;
+  line-height: 1.3; color: var(--ps-fg-strong);
+}
+.ps-card-title {         /* tiêu đề card */
+  font-size: var(--ps-fs-title); font-weight: 700;
+  line-height: 1.35; color: var(--ps-fg-strong);
+}
+.ps-body {               /* thân — mặc định */
+  font-size: var(--ps-fs-body); font-weight: 400;
+  line-height: 1.55; color: var(--ps-fg);
+}
+.ps-dense {              /* cột bảng dày / nhãn phụ */
+  font-size: var(--ps-fs-dense); font-weight: 400;
+  line-height: 1.45; color: var(--ps-fg-muted);
+}
+.ps-caption {            /* chú thích nhạt */
+  font-size: var(--ps-fs-dense); font-weight: 400;
+  line-height: 1.45; color: var(--ps-fg-faint);
+}
+.ps-stat {               /* số liệu lớn */
+  font-size: var(--ps-fs-xl); font-weight: 800;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  color: var(--ps-fg-strong);
+}
+.ps-mono { font-family: var(--ps-font-mono); font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   NÚT
+   ============================================================ */
+.ps-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--ps-sp-2);
+  height: var(--ps-ctrl-h);
+  padding: 0 var(--ps-sp-4);
+  border-radius: var(--ps-r-sm);
+  font-size: var(--ps-fs-body);
+  font-weight: var(--ps-fw-bold);
+  line-height: 1;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color .15s var(--ps-ease), border-color .15s var(--ps-ease), transform .15s var(--ps-ease), box-shadow .15s var(--ps-ease);
+}
+.ps-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(230,51,41,.12);
+}
+.ps-btn--touch { height: var(--ps-ctrl-h-touch); padding: 0 var(--ps-sp-6); }
+
+.ps-btn--primary {
+  background: var(--ps-primary); color: #fff;
+  box-shadow: var(--ps-sh-brand);
+}
+.ps-btn--primary:hover { background: var(--ps-red-600); transform: translateY(-1px); }
+.ps-btn--primary:active { background: var(--ps-primary-press); transform: translateY(0); }
+
+.ps-btn--secondary {
+  background: var(--ps-surface); color: var(--ps-slate-600);
+  border-color: var(--ps-border); box-shadow: var(--ps-sh-xs);
+}
+.ps-btn--secondary:hover { background: var(--ps-slate-50); border-color: var(--ps-slate-300); }
+
+.ps-btn--ghost { background: transparent; color: var(--ps-slate-500); }
+.ps-btn--ghost:hover { background: var(--ps-bg-muted); color: var(--ps-slate-800); }
+
+.ps-btn--danger { background: var(--ps-danger); color: #fff; }
+.ps-btn--danger:hover { background: var(--ps-red-700); }
+
+.ps-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* nút icon vuông (toolbar) */
+.ps-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--ps-ctrl-h); height: var(--ps-ctrl-h);
+  border-radius: var(--ps-r-sm);
+  color: var(--ps-slate-400); background: transparent; border: none; cursor: pointer;
+  transition: background-color .15s var(--ps-ease), color .15s var(--ps-ease);
+}
+.ps-icon-btn:hover { background: var(--ps-bg-muted); color: var(--ps-slate-700); }
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+.ps-input {
+  height: var(--ps-ctrl-h);
+  width: 100%;
+  padding: 0 var(--ps-sp-3);
+  background: var(--ps-slate-50);
+  border: 1px solid var(--ps-border);
+  border-radius: var(--ps-r-sm);
+  font-size: var(--ps-fs-body);
+  font-weight: var(--ps-fw-medium);
+  color: var(--ps-fg);
+  outline: none;
+  transition: border-color .15s var(--ps-ease), box-shadow .15s var(--ps-ease), background-color .15s var(--ps-ease);
+}
+.ps-input::placeholder { color: var(--ps-slate-400); }
+.ps-input:focus {
+  background: #fff;
+  border-color: var(--ps-primary);
+  box-shadow: 0 0 0 4px rgba(230,51,41,.10);
+}
+
+/* ============================================================
+   CHIP / BADGE
+   ============================================================ */
+.ps-chip {
+  display: inline-flex; align-items: center; gap: var(--ps-sp-1);
+  height: 22px; padding: 0 var(--ps-sp-2);
+  border-radius: var(--ps-r-pill);
+  font-size: var(--ps-fs-dense); font-weight: var(--ps-fw-bold);
+  line-height: 1; white-space: nowrap;
+}
+.ps-chip--red    { background: var(--ps-red-50);    color: var(--ps-red-600);    border: 1px solid var(--ps-red-200); }
+.ps-chip--yellow { background: var(--ps-yellow-100); color: var(--ps-yellow-700); border: 1px solid var(--ps-yellow-500); }
+.ps-chip--green  { background: var(--ps-success-bg); color: var(--ps-success);    border: 1px solid var(--ps-success-border); }
+.ps-chip--slate  { background: var(--ps-slate-100);  color: var(--ps-slate-600);  border: 1px solid var(--ps-slate-200); }
+
+/* nhãn "Mới" */
+.ps-badge-new {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: var(--ps-r-pill);
+  background: var(--ps-yellow-100); color: var(--ps-yellow-700);
+  border: 1px solid var(--ps-yellow-500);
+  font-size: 11px; font-weight: var(--ps-fw-black);
+  letter-spacing: .12em; text-transform: uppercase;
+}
+
+/* micro-label ALLCAPS đặc trưng */
+.ps-eyebrow {
+  font-size: 11px; font-weight: var(--ps-fw-black);
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ps-slate-500);
+}
+
+/* ============================================================
+   CARD
+   ============================================================ */
+.ps-card {
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border-soft);
+  border-radius: var(--ps-r-lg);
+  box-shadow: var(--ps-sh-sm);
+}
+.ps-card--flat { border-radius: var(--ps-r-md); box-shadow: var(--ps-sh-xs); border-color: var(--ps-border); }
+.ps-card--brand {
+  background: var(--ps-primary); color: #fff; border: none;
+  border-radius: var(--ps-r-lg); box-shadow: var(--ps-sh-brand);
+}
+
+/* ============================================================
+   TOOLBAR
+   ============================================================ */
+.ps-toolbar {
+  display: flex; align-items: center; gap: var(--ps-sp-2);
+  height: var(--ps-toolbar-h);
+  padding: 0 var(--ps-sp-4);
+  border-bottom: 1px solid var(--ps-border);
+  background: var(--ps-surface);
+}
+
+/* ============================================================
+   BẢNG  — bọc <table> trong .ps-table
+   ============================================================ */
+.ps-table { width: 100%; border-collapse: collapse; font-size: var(--ps-fs-body); }
+.ps-table thead th {
+  height: var(--ps-header-h);
+  padding: 0 var(--ps-sp-3);
+  background: var(--ps-slate-50);
+  border-bottom: 1px solid var(--ps-border);
+  font-size: var(--ps-fs-dense);
+  font-weight: var(--ps-fw-semibold);
+  color: var(--ps-slate-500);
+  text-align: left;
+  text-transform: none;          /* KHÔNG viết hoa header */
+  letter-spacing: 0;
+  white-space: nowrap;
+  position: sticky; top: 0; z-index: 10;
+}
+.ps-table tbody td {
+  height: var(--ps-row-h);
+  padding: 0 var(--ps-sp-3);
+  border-bottom: 1px solid var(--ps-slate-100);
+  color: var(--ps-slate-700);
+  white-space: nowrap;
+}
+.ps-table tbody tr:hover { background: var(--ps-slate-50); }
+.ps-table tbody tr[aria-selected="true"] {
+  background: var(--ps-red-50);
+  box-shadow: inset 3px 0 0 var(--ps-primary);
+}
+.ps-table--dense tbody td { height: var(--ps-row-h-dense); }
+.ps-table .ps-num { font-variant-numeric: tabular-nums; text-align: right; }
+.ps-table th.ps-num { text-align: right; }
+
+/* cột cố định chuẩn */
+.ps-col-check  { width: 40px; text-align: center; }
+.ps-col-flag   { width: 32px; text-align: center; }
+.ps-col-image  { width: 64px; }
+.ps-col-action { width: 48px; text-align: center; }
+
+/* thumbnail ảnh trong dòng */
+.ps-thumb {
+  width: 32px; height: 32px; border-radius: var(--ps-r-sm);
+  background: var(--ps-slate-100); object-fit: cover;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ps-slate-300);
+}
+
+/* nút sửa trong dòng — LUÔN hiện trên thiết bị chạm */
+.ps-row-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: var(--ps-r-sm);
+  color: var(--ps-slate-300); background: transparent; border: none; cursor: pointer;
+  opacity: .55;  /* mờ nhẹ, KHÔNG ẩn hẳn */
+  transition: opacity .15s var(--ps-ease), color .15s var(--ps-ease), background-color .15s var(--ps-ease);
+}
+tr:hover .ps-row-action { opacity: 1; }
+.ps-row-action:hover { color: var(--ps-primary); background: var(--ps-red-50); }
+@media (hover: none) {           /* máy cảm ứng: luôn rõ */
+  .ps-row-action { opacity: 1; }
+}
+
+/* ============================================================
+   STEPPER SỐ LƯỢNG  — cho giỏ POS. Nút LUÔN hiện (chạm).
+   <div class="ps-stepper"><button>−</button><span>1</span><button>+</button></div>
+   ============================================================ */
+.ps-stepper { display: inline-flex; align-items: center; gap: var(--ps-sp-1); }
+.ps-stepper button {
+  width: 32px; height: 32px;        /* hit-target đủ rộng cho chạm */
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ps-border); border-radius: var(--ps-r-sm);
+  background: var(--ps-surface); color: var(--ps-slate-600);
+  font-size: 18px; line-height: 1; cursor: pointer;
+  transition: background-color .15s var(--ps-ease), border-color .15s var(--ps-ease), color .15s var(--ps-ease);
+}
+.ps-stepper button:hover { background: var(--ps-slate-50); border-color: var(--ps-slate-300); }
+.ps-stepper button.ps-minus:hover { color: var(--ps-danger); border-color: var(--ps-red-200); }
+.ps-stepper button.ps-plus:hover  { color: var(--ps-primary); border-color: var(--ps-red-200); }
+.ps-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.ps-stepper .ps-qty {
+  min-width: 36px; text-align: center;
+  font-variant-numeric: tabular-nums; font-weight: var(--ps-fw-bold);
+  color: var(--ps-slate-900);
+}
+
+/* ============================================================
+   #1 · TIỀN & SỐ
+   <span class="ps-money ps-money--neg">−1.299.000đ</span>
+   Định dạng VN: dùng Intl.NumberFormat('vi-VN'); âm/lỗ = đỏ, dương/lãi = lá.
+   ============================================================ */
+.ps-num   { font-variant-numeric: tabular-nums; text-align: right; }
+.ps-money { font-variant-numeric: tabular-nums; font-weight: var(--ps-fw-semibold); color: var(--ps-fg-strong); }
+.ps-money--pos { color: var(--ps-success); }   /* lãi / dương */
+.ps-money--neg { color: var(--ps-danger); }    /* lỗ / âm */
+.ps-money--muted { color: var(--ps-fg-faint); font-weight: var(--ps-fw-regular); }
+
+/* ============================================================
+   #2 · TRẠNG THÁI DỮ LIỆU — rỗng / tải / lỗi
+   ============================================================ */
+.ps-empty { text-align: center; padding: 40px 24px; }
+.ps-empty-icon {
+  width: 56px; height: 56px; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--ps-r-pill); background: var(--ps-slate-100); color: var(--ps-slate-400);
+}
+.ps-empty-icon--ok { background: var(--ps-success-bg); color: var(--ps-success); }
+.ps-empty-title { font-size: var(--ps-fs-md); font-weight: var(--ps-fw-semibold); color: var(--ps-fg-strong); }
+.ps-empty-sub   { font-size: var(--ps-fs-body); color: var(--ps-fg-faint); margin-top: 4px; }
+
+.ps-skeleton {
+  background: linear-gradient(90deg, var(--ps-slate-100) 25%, var(--ps-slate-200) 37%, var(--ps-slate-100) 63%);
+  background-size: 400% 100%; border-radius: var(--ps-r-sm);
+  animation: ps-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes ps-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+.ps-error-box {
+  display: flex; align-items: flex-start; gap: var(--ps-sp-2);
+  padding: 12px 14px; border-radius: var(--ps-r-md);
+  background: var(--ps-danger-bg); border: 1px solid var(--ps-danger-border);
+  color: var(--ps-red-700); font-size: var(--ps-fs-body); line-height: 1.5;
+}
+
+/* ============================================================
+   #3 · MODAL & HỘP XÁC NHẬN
+   ============================================================ */
+.ps-scrim {
+  position: fixed; inset: 0; background: rgba(15,23,42,.5);  /* đen 50%, KHÔNG blur */
+  z-index: var(--ps-z-overlay);
+  display: flex; align-items: center; justify-content: center; padding: var(--ps-sp-4);
+}
+.ps-modal {
+  position: relative; z-index: var(--ps-z-modal);
+  width: 100%; max-width: 560px; max-height: 90vh; display: flex; flex-direction: column;
+  background: var(--ps-surface); border-radius: var(--ps-r-xl);  /* 24 */
+  box-shadow: var(--ps-sh-lg); overflow: hidden;
+}
+.ps-modal--sm { max-width: 420px; }
+.ps-modal--lg { max-width: 800px; }
+.ps-modal-header {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--ps-sp-4);
+  padding: var(--ps-sp-5) var(--ps-sp-6); border-bottom: 1px solid var(--ps-border-soft);
+  font-size: var(--ps-fs-title); font-weight: var(--ps-fw-bold); color: var(--ps-fg-strong);
+}
+.ps-modal-body { padding: var(--ps-sp-6); overflow-y: auto; }
+.ps-modal-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--ps-sp-2);
+  padding: var(--ps-sp-4) var(--ps-sp-6); border-top: 1px solid var(--ps-border-soft);
+  background: var(--ps-slate-50);
+}
+/* hộp xác nhận xoá — bắt buộc trước thao tác phá huỷ */
+.ps-confirm-icon {
+  width: 44px; height: 44px; border-radius: var(--ps-r-pill);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ps-danger-bg); color: var(--ps-danger);
+}
+
+/* ============================================================
+   #4 · TOAST
+   ============================================================ */
+.ps-toast-stack {
+  position: fixed; right: var(--ps-sp-5); bottom: var(--ps-sp-5);
+  z-index: var(--ps-z-toast); display: flex; flex-direction: column; gap: var(--ps-sp-2);
+}
+.ps-toast {
+  display: flex; align-items: flex-start; gap: var(--ps-sp-2);
+  min-width: 280px; max-width: 380px; padding: 12px 14px;
+  background: var(--ps-surface); border: 1px solid var(--ps-border);
+  border-left: 4px solid var(--ps-slate-400);
+  border-radius: var(--ps-r-md); box-shadow: var(--ps-sh-lg);
+  font-size: var(--ps-fs-body); color: var(--ps-fg);
+  animation: ps-toast-in var(--ps-dur-fast) var(--ps-ease);
+}
+.ps-toast--success { border-left-color: var(--ps-success); }
+.ps-toast--warning { border-left-color: var(--ps-yellow-500); }
+.ps-toast--danger  { border-left-color: var(--ps-danger); }
+@keyframes ps-toast-in { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* ============================================================
+   #6 · FORM
+   ============================================================ */
+.ps-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--ps-sp-4); }
+.ps-label { font-size: var(--ps-fs-dense); font-weight: var(--ps-fw-semibold); color: var(--ps-slate-600); }
+.ps-required::after { content: ' *'; color: var(--ps-danger); }
+.ps-help  { font-size: var(--ps-fs-dense); color: var(--ps-fg-faint); }
+.ps-input--error { border-color: var(--ps-danger) !important; }
+.ps-input--error:focus { box-shadow: 0 0 0 4px rgba(230,51,41,.12) !important; }
+.ps-error-text { font-size: var(--ps-fs-dense); color: var(--ps-danger); font-weight: var(--ps-fw-medium); }
+
+/* ============================================================
+   #7 · TRẠNG THÁI NGHIỆP VỤ — map màu cố định
+   <span class="ps-status ps-status--low"><i></i>Sắp hết</span>
+   ============================================================ */
+.ps-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--ps-fs-dense); font-weight: var(--ps-fw-bold);
+}
+.ps-status i { width: 7px; height: 7px; border-radius: var(--ps-r-pill); background: currentColor; }
+.ps-status--ok,  .ps-status--in   { color: var(--ps-success); }   /* còn hàng / hoàn tất */
+.ps-status--low, .ps-status--wait { color: var(--ps-yellow-700); }/* sắp hết / chờ xử lý */
+.ps-status--out, .ps-status--err  { color: var(--ps-danger); }    /* hết hàng / lỗi / huỷ */
+.ps-status--off { color: var(--ps-slate-400); }                   /* ngừng KD */
+
+/* ============================================================
+   #8 · BẢNG NÂNG CAO
+   ============================================================ */
+.ps-table th.ps-th--sortable { cursor: pointer; user-select: none; }
+.ps-table th.ps-th--sortable:hover { color: var(--ps-slate-700); }
+.ps-table th.ps-th--sortable[aria-sort] { color: var(--ps-primary); }
+.ps-col-sticky-left  { position: sticky; left: 0;  background: var(--ps-surface); z-index: 2; box-shadow: 2px 0 0 var(--ps-border-soft); }
+.ps-col-sticky-right { position: sticky; right: 0; background: var(--ps-surface); z-index: 2; box-shadow: -2px 0 0 var(--ps-border-soft); }
+/* thanh bulk-action khi chọn nhiều dòng */
+.ps-bulkbar {
+  display: flex; align-items: center; gap: var(--ps-sp-2);
+  height: var(--ps-toolbar-h); padding: 0 var(--ps-sp-4);
+  background: var(--ps-red-50); border-bottom: 1px solid var(--ps-red-200);
+}
+.ps-bulkbar-count { font-size: var(--ps-fs-body); font-weight: var(--ps-fw-bold); color: var(--ps-red-700); }
+/* phân trang */
+.ps-pagination { display: flex; align-items: center; gap: 4px; }
+.ps-pagination button {
+  min-width: 32px; height: 32px; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ps-border); border-radius: var(--ps-r-sm);
+  background: var(--ps-surface); color: var(--ps-slate-600);
+  font-size: var(--ps-fs-body); font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.ps-pagination button[aria-current="page"] { background: var(--ps-primary); border-color: var(--ps-primary); color: #fff; font-weight: var(--ps-fw-bold); }
+.ps-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ============================================================
+   #9 · ICON & MOTION  (quy ước, không phải class bắt buộc)
+   Lucide, stroke-width 2, currentColor. Cỡ: 14 (dòng dày) ·
+   16 (toolbar) · 18 (card) · 24–32 (empty state).
+   Chuyển động: --ps-dur-fast/base/slow + --ps-ease. Không bounce.
+   ============================================================ */
+
+/* ============================================================
+   #10 · ACCESSIBILITY
+   ============================================================ */
+.ps-input:focus-visible, .ps-icon-btn:focus-visible, .ps-stepper button:focus-visible {
+  outline: none; box-shadow: 0 0 0 4px rgba(230,51,41,.12);
+}
+.ps-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+/* hit-target tối thiểu cho mọi nút bấm trên thiết bị chạm */
+@media (hover: none) {
+  .ps-btn, .ps-icon-btn, .ps-stepper button, .ps-pagination button, .ps-row-action { min-height: 44px; min-width: 44px; }
+}
+
+/* ============================================================
+   #11 · PHÍM TẮT
+   ============================================================ */
+.ps-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  font-family: var(--ps-font-mono); font-size: 11px; font-weight: var(--ps-fw-bold);
+  color: var(--ps-slate-600); background: var(--ps-slate-100);
+  border: 1px solid var(--ps-border); border-bottom-width: 2px; border-radius: var(--ps-r-xs);
+}
+
+/* ============================================================
+   #12 · IN ẤN  — hoá đơn 80mm / A4
+   ============================================================ */
+.ps-receipt { width: 80mm; margin: 0 auto; font-family: var(--ps-font-mono); font-size: 12px; color: #000; }
+@media print {
+  .ps-no-print { display: none !important; }
+  .ps-receipt { width: 80mm; }
+  @page { margin: 8mm; }
+}
