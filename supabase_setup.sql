@@ -1081,7 +1081,7 @@ CREATE TABLE IF NOT EXISTS shopee_products (
 CREATE TABLE IF NOT EXISTS shopee_product_variants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   shopee_product_id UUID NOT NULL REFERENCES shopee_products(id) ON DELETE CASCADE,
-  pos_product_id UUID NOT NULL REFERENCES pos_products(id),
+  pos_product_id UUID REFERENCES pos_products(id),
   sku TEXT NOT NULL,
   size TEXT,
   color_name TEXT,

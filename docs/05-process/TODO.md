@@ -9,6 +9,21 @@
 
 ---
 
+### [ ] Nối sản phẩm Shopee với sản phẩm POS (link SKU)
+
+> Bot đã lưu toàn bộ sản phẩm Shopee (94 SP, 905 variants). `pos_product_id` hiện đang null vì SKU Shopee (`DKD06`, `DBD01-Đen-43-Kèm Hộp`) không khớp với SKU POS. Cần:
+> 1. UI để user tự match: chọn variant Shopee → chọn sản phẩm POS tương ứng
+> 2. Hoặc chạy fuzzy match tự động theo tên/SKU
+> Ưu tiên sau khi đã lưu hết dữ liệu (đã xong 2026-06-22).
+
+---
+
+### [ ] Lấy description/weight/brand từ Shopee (detail API)
+
+> API `/api/v2/product/get_item_detail` trả về 404. `description`, `weight`, `brand_name`, `category_id` hiện null trong DB. Cần tìm đúng endpoint detail API mới của Shopee Seller Center (v3?) — có thể intercept network request khi mở trang edit sản phẩm.
+
+---
+
 ### [x] Kiểm toán logic nghiệp vụ (Senior System Auditor) *(xong 2026-06-19)*
 
 > Đọc source + cross-check docs. Tìm ra 22 findings (3 Critical, 9 High, 8 Medium, 2 Low). Output: `docs/business-knowledge/AUDIT_REPORT.md`.  
@@ -612,6 +627,54 @@ npm test           # 43 tests phải pass
 > - Thay ~320 `transition-all` còn lại trong file có transform (case-by-case)
 > - Migrate các modal tự viết sang `Modal` component chuẩn
 > - Migrate các empty state inline sang `EmptyState` component
+
+---
+
+## 🟠 P1 — Shared Hooks (tái sử dụng, tránh viết lại từ đầu)
+
+> Triết lý: build 1 lần chuẩn → trang mới chỉ truyền thêm điều kiện đặc thù.
+> Giống như `ListPageLayout`, `ListPageToolbar`, `FilterDateRange` đã làm cho UI.
+
+### [ ] `useChannelProducts` — **Ưu tiên cao nhất**
+
+Đang duplicate logic ở 4 chỗ: `OnlineCatalogPage`, `ShopeeProductsPage`, `GoodsChannelLinksTab`, `ProductContentTab`. Mỗi chỗ tự gọi `/api/channel-links/catalog-links` + fetch products theo ID chunk riêng.
+
+- File: `hooks/useChannelProducts.ts`
+- Return: `{ allProducts, shopeeProducts, websiteProducts, shopeeIds, websiteIds, loading }`
+- Logic: fetch catalog-links → chunk 30 ID → fetch pos_products → build 3 list
+- Sau khi xong: refactor 4 component trên dùng hook này
+
+### [ ] `useDateRangeFilter` — **Ưu tiên cao**
+
+30+ file tự quản lý `startDate`/`endDate` state riêng. Tất cả trang analysis, reports, orders đều viết lại logic tính ngày mặc định, shortcut "tháng này / quý này / năm nay".
+
+- File: `hooks/useDateRangeFilter.ts`
+- Return: `{ startDate, endDate, setStartDate, setEndDate, preset, setPreset, reset }`
+- Presets: `'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'custom'`
+- Mỗi trang truyền thêm điều kiện đặc thù (filter theo channel, nhân viên...) bên ngoài hook
+
+### [ ] `usePagination(total, pageSize)` — **Ưu tiên trung bình**
+
+Nhiều list page (audit, customers, orders, finance) tự tính `totalPages`, `currentPage`, slice data. `ListPagePagination` component đã có nhưng logic tính toán vẫn nằm rải rác.
+
+- File: `hooks/usePagination.ts`
+- Return: `{ page, setPage, totalPages, pageSize, setPageSize, paginatedItems }`
+
+### [ ] `useSupabaseQuery<T>` — **Ưu tiên trung bình**
+
+27 component tự gọi `supabase.from()` + tự quản lý `loading`, `error`, `data`. Boilerplate lặp lại ở khắp nơi.
+
+- File: `hooks/useSupabaseQuery.ts`
+- Return: `{ data, loading, error, refetch }`
+- Accept: query builder function, dependencies array
+
+### [ ] `useClipboard(timeout?)` — **Ưu tiên thấp**
+
+Pattern `copied` state + `navigator.clipboard.writeText` + `setTimeout reset` lặp ở 6 chỗ.
+
+- File: `hooks/useClipboard.ts`
+- Return: `{ copy(text), copied }`
+- Default timeout: 2000ms
 
 ---
 

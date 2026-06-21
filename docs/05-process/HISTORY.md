@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-22 — Bot lấy thông tin sản phẩm Shopee + lưu vào DB
+
+- Sửa lỗi NOT NULL constraint trên `shopee_product_variants.pos_product_id`: chạy `ALTER TABLE ... DROP NOT NULL` qua API pg/query. Bot code cũ bỏ sót field khi không match SKU — sửa để luôn ghi `pos_product_id: null` thay vì bỏ qua.
+- Viết lại hoàn toàn `/Users/apple/shopee-monitor/bots/products.js`: lấy TẤT CẢ thông tin có thể từ Shopee (dual-source: list API + detail API), lưu vào DB mà không cần match POS SKU (pos_product_id nullable). Thêm cột `raw_data JSONB`, `gallery`, `price_min`, `price_max`, `stock_total`, `item_sku`, `brand_name`, `weight`, `description`, `model_id`, `model_name`, `stock` cho variants.
+- Phát hiện API detail (`/api/v2/product/get_item_detail`) trả về 404 — thử nhiều GET/POST endpoints đều fail. Xác định `model_list` trong list response đã có đủ variant data (sku, giá, stock).
+- Sửa field mapping variant: `model_id` từ `model.id`, `price` từ `price_detail.origin_price`, `stock` từ `stock_detail.total_available_stock`.
+- Chạy bot thành công: shop1 = 29 sản phẩm, shop2 = 34 sản phẩm. DB: 94 sản phẩm, 905 variants, 415 variants có price/stock.
+- Files: `/Users/apple/shopee-monitor/bots/products.js`
+
 ### 2026-06-21 — Sửa màn hình trắng + lỗi tải sản phẩm website
 
 - Fix màn hình trắng toàn app: icon `Settings` dùng trong `constants/navigation.ts` (route website-operations) nhưng thiếu import từ `lucide-react` → thêm vào import list.

@@ -16,15 +16,28 @@ interface SimpleProduct {
   id: string;
   sku: string;
   name: string;
-  categoryPath: string | null;
-  salePrice: number;
+  category_path: string | null;
+  sale_price: number;
   brand: string | null;
   description: string | null;
   warranty: string | null;
+  is_parent: boolean | null;
+  parent_id: string | null;
 }
 
+const PLATFORM_CHANNEL: Record<string, 'shopee' | 'website' | 'all'> = {
+  shopee_product_description: 'shopee',
+  website_product_description: 'website',
+  facebook_product_caption: 'all',
+  blog_seo_article: 'all',
+};
+
 const ProductContentTab: React.FC = () => {
-  const [products, setProducts] = useState<SimpleProduct[]>([]);
+  const [allProducts, setAllProducts] = useState<SimpleProduct[]>([]);
+  const [shopeeIds, setShopeeIds] = useState<Set<string>>(new Set());
+  const [websiteIds, setWebsiteIds] = useState<Set<string>>(new Set());
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
   const [productSearch, setProductSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SimpleProduct | null>(null);
@@ -45,15 +58,44 @@ const ProductContentTab: React.FC = () => {
 
   const activePlatform = CONTENT_PLATFORMS.find(p => p.id === platformId);
 
+  // Load channel links, sau đó fetch đúng sản phẩm theo ID (giống OnlineCatalogPage)
   useEffect(() => {
-    supabase
-      .from('pos_products')
-      .select('id, sku, name, categoryPath, salePrice, brand, description, warranty')
-      .order('name')
-      .limit(500)
-      .then(({ data }) => {
-        if (data) setProducts(data as SimpleProduct[]);
-      });
+    const fetchAll = async () => {
+      setLoadingProducts(true);
+      try {
+        const catalogRes = await fetch('/api/channel-links/catalog-links', { credentials: 'include' });
+        if (!catalogRes.ok) return;
+        const json: { ok: boolean; shopee: string[]; website: string[] } = await catalogRes.json();
+        if (!json.ok) return;
+
+        setShopeeIds(new Set(json.shopee));
+        setWebsiteIds(new Set(json.website));
+
+        // Gom tất cả ID cần fetch (shopee + website, dedup)
+        const allIds = [...new Set([...json.shopee, ...json.website])];
+        if (allIds.length === 0) return;
+
+        // Chunk 30 ID/request để tránh URI too long
+        const CHUNK = 30;
+        const chunks: string[][] = [];
+        for (let i = 0; i < allIds.length; i += CHUNK) chunks.push(allIds.slice(i, i + CHUNK));
+
+        const results = await Promise.all(
+          chunks.map(chunk =>
+            supabase
+              .from('pos_products')
+              .select('id, sku, name, category_path, sale_price, brand, description, warranty, is_parent, parent_id')
+              .in('id', chunk)
+          )
+        );
+        const fetched = results.flatMap(r => (r.data ?? []) as SimpleProduct[]);
+        fetched.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+        setAllProducts(fetched);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    fetchAll();
   }, []);
 
   useEffect(() => {
@@ -66,6 +108,20 @@ const ProductContentTab: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Lọc theo kênh của platform đang chọn
+  // Bao gồm cả con của sản phẩm cha được link kênh (giống OnlineCatalogPage)
+  const channel = PLATFORM_CHANNEL[platformId] ?? 'all';
+  const products = (() => {
+    if (channel === 'all') return allProducts;
+    const ids = channel === 'shopee' ? shopeeIds : websiteIds;
+    const parentIds = new Set(
+      allProducts.filter(p => ids.has(p.id) && p.is_parent).map(p => p.id)
+    );
+    return allProducts.filter(
+      p => ids.has(p.id) || (p.parent_id != null && parentIds.has(p.parent_id))
+    );
+  })();
+
   const filteredProducts = productSearch.trim()
     ? products.filter(
         p =>
@@ -75,7 +131,7 @@ const ProductContentTab: React.FC = () => {
     : products;
 
   const buildInput = (): ProductContentInput | null => {
-    const name = selectedProduct?.name || productSearch.trim();
+    const name = selectedProduct?.name?.trim() || productSearch.trim() || selectedProduct?.sku;
     if (!name) return null;
 
     const colors = manualColors
@@ -85,8 +141,8 @@ const ProductContentTab: React.FC = () => {
     return {
       name,
       sku: selectedProduct?.sku ?? 'N/A',
-      category: selectedProduct?.categoryPath ?? 'Giày dép',
-      price: selectedProduct?.salePrice ?? 0,
+      category: selectedProduct?.category_path ?? 'Giày dép',
+      price: selectedProduct?.sale_price ?? 0,
       brandName: selectedProduct?.brand ?? undefined,
       material: manualMaterial || undefined,
       colors: colors?.length ? colors : undefined,
@@ -97,8 +153,19 @@ const ProductContentTab: React.FC = () => {
   };
 
   const handleGenerate = async () => {
+    if (loading) return;
+
+    // Kiểm tra điều kiện bắt buộc trước — hiện thông báo thay vì im lặng
+    if (!hasProduct) {
+      setWarnings([{ type: 'missing_data', message: 'Cần nhập tên sản phẩm hoặc chọn sản phẩm từ danh sách trước khi sinh nội dung.' }]);
+      return;
+    }
+
     const input = buildInput();
-    if (!input) return;
+    if (!input) {
+      setWarnings([{ type: 'missing_data', message: 'Không đủ thông tin sản phẩm để sinh nội dung.' }]);
+      return;
+    }
 
     setLoading(true);
     setOutput('');
@@ -133,11 +200,16 @@ const ProductContentTab: React.FC = () => {
     setOutput('');
     setWarnings([]);
     setParseError(false);
+    // Reset product selection vì mỗi platform có danh sách sản phẩm riêng
+    setSelectedProduct(null);
+    setProductSearch('');
+    setShowDropdown(false);
   };
 
   const charCount = output.length;
   const maxLen = activePlatform?.output.maxLength;
-  const canGenerate = !loading && !!(selectedProduct || productSearch.trim());
+  const hasProduct = !!(selectedProduct || productSearch.trim());
+  const canGenerate = !loading && hasProduct;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -166,48 +238,89 @@ const ProductContentTab: React.FC = () => {
 
       <div className="flex flex-1 min-h-0">
         {/* Left: Input panel */}
-        <div className="w-72 shrink-0 border-r border-slate-100 bg-white overflow-y-auto p-4 space-y-4">
-          {/* Product search */}
-          <div ref={dropdownRef} className="relative">
-            <label className="block text-2xs font-normal text-slate-400 uppercase tracking-widest mb-1">
-              Sản phẩm
-            </label>
-            <input
-              type="text"
-              placeholder="Tìm tên hoặc SKU..."
-              value={productSearch}
-              onChange={e => {
-                setProductSearch(e.target.value);
-                setSelectedProduct(null);
-                setShowDropdown(true);
-              }}
-              onFocus={() => setShowDropdown(true)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all"
-            />
-            {showDropdown && filteredProducts.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full border border-slate-200 rounded-lg max-h-52 overflow-y-auto bg-white shadow-lg">
-                {filteredProducts.slice(0, 25).map(p => (
+        <div className="w-72 shrink-0 border-r border-slate-100 bg-white flex flex-col">
+          {/* Product search — KHÔNG nằm trong overflow container để dropdown không bị clip */}
+          <div className="px-4 pt-4 pb-2 shrink-0">
+            <div ref={dropdownRef} className="relative">
+              <label className="block text-2xs font-normal text-slate-400 uppercase tracking-widest mb-1">
+                Sản phẩm <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Gõ tên hoặc mã SKU để tìm..."
+                  value={productSearch}
+                  onChange={e => {
+                    setProductSearch(e.target.value);
+                    setSelectedProduct(null);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => setShowDropdown(true)}
+                  className="w-full border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-xs outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all"
+                />
+                {productSearch && (
                   <button
-                    key={p.id}
                     onMouseDown={() => {
-                      setSelectedProduct(p);
-                      setProductSearch(p.name);
+                      setProductSearch('');
+                      setSelectedProduct(null);
                       setShowDropdown(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 border-b border-slate-50 last:border-0"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors text-base leading-none"
                   >
-                    <div className="font-normal text-slate-800 truncate">{p.name}</div>
-                    <div className="text-slate-400 text-2xs">{p.sku} · {p.salePrice.toLocaleString('vi-VN')}đ</div>
+                    ×
                   </button>
-                ))}
+                )}
               </div>
-            )}
-            {selectedProduct && (
-              <div className="mt-1 px-2 py-1 bg-indigo-50 rounded-lg text-2xs text-indigo-700">
-                ✓ {selectedProduct.sku} · {selectedProduct.salePrice.toLocaleString('vi-VN')}đ
-              </div>
-            )}
+              {showDropdown && filteredProducts.length > 0 && (
+                <div className="absolute z-50 top-full mt-1 w-full border border-slate-200 rounded-lg max-h-56 overflow-y-auto bg-white shadow-xl">
+                  {productSearch.trim() && (
+                    <div className="px-3 py-1.5 text-2xs text-slate-400 border-b border-slate-50">
+                      {filteredProducts.length > 25
+                        ? `Hiển thị 25 / ${filteredProducts.length} kết quả`
+                        : `${filteredProducts.length} sản phẩm`}
+                    </div>
+                  )}
+                  {filteredProducts.slice(0, 25).map(p => (
+                    <button
+                      key={p.id}
+                      onMouseDown={() => {
+                        setSelectedProduct(p);
+                        setProductSearch(p.name?.trim() || p.sku);
+                        setShowDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors"
+                    >
+                      <div className="font-normal text-slate-800 truncate">{p.name}</div>
+                      <div className="text-slate-400 text-2xs">{p.sku} · {p.sale_price.toLocaleString('vi-VN')}đ</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedProduct && (
+                <div className="mt-1 px-2.5 py-1 bg-indigo-50 rounded-lg text-2xs text-indigo-700 flex items-center gap-1.5">
+                  <span className="text-indigo-400">✓</span>
+                  <span className="flex-1 truncate">{selectedProduct.sku} · {selectedProduct.sale_price.toLocaleString('vi-VN')}đ</span>
+                </div>
+              )}
+              {loadingProducts && (
+                <div className="mt-1 text-2xs text-slate-400">Đang tải sản phẩm...</div>
+              )}
+              {!loadingProducts && !selectedProduct && !productSearch && (
+                <div className="mt-1 text-2xs text-slate-400">
+                  {products.length > 0
+                    ? `${products.length} sản phẩm ${channel === 'shopee' ? 'Shopee' : channel === 'website' ? 'Website' : 'trong kho'}`
+                    : channel === 'shopee'
+                      ? 'Chưa có sản phẩm nào link kênh Shopee'
+                      : channel === 'website'
+                        ? 'Chưa có sản phẩm nào link kênh Website'
+                        : 'Kho trống'}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Phần còn lại cuộn được */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
 
           {/* Manual fields */}
           <div>
@@ -286,6 +399,7 @@ const ProductContentTab: React.FC = () => {
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none resize-none focus:border-indigo-400 transition-all"
             />
           </div>
+          </div>{/* end scroll wrapper */}
         </div>
 
         {/* Right: Output panel */}
@@ -294,7 +408,7 @@ const ProductContentTab: React.FC = () => {
           <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100 shrink-0">
             <button
               onClick={handleGenerate}
-              disabled={!canGenerate}
+              disabled={loading}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-normal disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-all shadow-sm"
             >
               {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -304,7 +418,7 @@ const ProductContentTab: React.FC = () => {
               {output && (
                 <button
                   onClick={handleGenerate}
-                  disabled={!canGenerate}
+                  disabled={loading}
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs hover:bg-slate-200 transition-all"
                 >
                   <RefreshCw size={12} />

@@ -62,7 +62,7 @@ function makeEditForm(entry: ShopEntry): EditForm {
     shop_id: entry.shop_id ?? '',
     is_published: entry.is_published,
     display_order: entry.display_order,
-    product_name: '',
+    product_name: entry.name ?? '',
     other_images: [],
     category: '',
     variantDrafts: [...entry.shopee_product_variants]
