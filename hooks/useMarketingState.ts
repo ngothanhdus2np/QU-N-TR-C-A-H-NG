@@ -2,7 +2,7 @@ import { useState, useMemo, useDeferredValue } from 'react';
 import { ContentPlanItem, ContentStrategy, ProductLine, StrategicAdvice } from '../types';
 import { DEFAULT_STRATEGIES, DEFAULT_FOCUS_PRODUCTS } from '../constants/marketing';
 
-export type MarketingTab = 'calendar' | 'list' | 'settings' | 'facebook';
+export type MarketingTab = 'calendar' | 'list' | 'settings' | 'facebook' | 'product-content';
 
 export function useMarketingState() {
   // Core content states

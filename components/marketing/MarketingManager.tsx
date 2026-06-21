@@ -27,6 +27,7 @@ import {
   Settings,
   Facebook,
   Tag,
+  Wand2,
 } from 'lucide-react';
 import {
   ContentPlanItem,
@@ -45,6 +46,7 @@ import { useSyncStorage, useCalendar } from '../../hooks/useMarketing';
 import { StrategyBadge, FacebookPreview, SkeletonPost } from './MarketingUI';
 import { uploadImage } from '../../services/marketingStorageService';
 import MarketingFacebookTab, { AutoPostConfig, FacebookPage } from './MarketingFacebookTab';
+import ProductContentTab from './ProductContentTab';
 import MarketingSettingsTab from './MarketingSettingsTab';
 import { useMarketingState, MarketingTab } from '../../hooks/useMarketingState';
 import { SingleDatePicker } from '../shared';
@@ -56,7 +58,7 @@ interface MarketingManagerProps {
   onSelectMainTab?: (tab: string) => void;
 }
 
-const MARKETING_TABS: MarketingTab[] = ['calendar', 'list', 'settings', 'facebook'];
+const MARKETING_TABS: MarketingTab[] = ['calendar', 'list', 'settings', 'facebook', 'product-content'];
 type MarketingSidebarItem = MarketingTab | 'promotions';
 
 const MARKETING_TAB_META: Record<
@@ -98,10 +100,17 @@ const MARKETING_TAB_META: Record<
     icon: Facebook,
     group: 'Facebook',
   },
+  'product-content': {
+    label: 'Sinh nội dung',
+    description: 'Dùng AI sinh mô tả sản phẩm cho Shopee, Blog, Web, Facebook',
+    icon: Wand2,
+    group: 'Cửa hàng',
+  },
 };
 
 const MARKETING_SIDEBAR_ITEMS: MarketingSidebarItem[] = [
   'promotions',
+  'product-content',
   'calendar',
   'list',
   'settings',
@@ -638,14 +647,16 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               )}
             </div>
           </div>
-          <button
-            onClick={handleGenerateNext}
-            disabled={loading || generationCount <= 0}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white text-xs font-normal flex items-center gap-2 shadow-md disabled:opacity-50 transition-all"
-          >
-            {loading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-            {generationCount > 0 ? `SÁNG TẠO ${generationCount} BÀI` : 'ĐÃ ĐỦ BÀI THÁNG'}
-          </button>
+          {activeTab !== 'product-content' && (
+            <button
+              onClick={handleGenerateNext}
+              disabled={loading || generationCount <= 0}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white text-xs font-normal flex items-center gap-2 shadow-md disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+              {generationCount > 0 ? `SÁNG TẠO ${generationCount} BÀI` : 'ĐÃ ĐỦ BÀI THÁNG'}
+            </button>
+          )}
         </div>
         </div>
 
@@ -973,6 +984,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               onApplyAdvice={handleApplyAdvice}
             />
           )}
+          {activeTab === 'product-content' && <ProductContentTab />}
         </div>
       )}
       </section>

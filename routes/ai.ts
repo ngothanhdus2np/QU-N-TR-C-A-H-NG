@@ -2,6 +2,7 @@ import { Router, Request, RequestHandler } from 'express';
 import { inflateRawSync } from 'node:zlib';
 import { callClaude, callClaudeWithFile, callClaudeChat } from '../services/agents/claudeClient';
 import { CFO_TOOLS, buildAgentSystem } from '../services/agents/cfoAgent';
+import { CONTENT_PROMPTS, type PlatformPrivateConfig } from '../services/agents/contentPrompts';
 
 // In-memory rate limiter — đủ cho single-instance deployment
 const rateLimitWindows = new Map<string, { count: number; resetAt: number }>();
@@ -638,6 +639,229 @@ export function createAiRouter(requireAuth: RequestHandler): Router {
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[AI /business-analysis]', message);
+      res.status(500).json({ error: AI_SERVICE_ERROR });
+    }
+  });
+
+  // ─── Product Content Engine ────────────────────────────────────────────────
+
+  interface ProductContentInput {
+    name: string;
+    sku: string;
+    category: string;
+    price: number;
+    brandName?: string;
+    material?: string;
+    colors?: string[];
+    sizeRange?: string;
+    origin?: string;
+    warrantyPolicy?: string;
+    description?: string;
+    sellingPoints?: string[];
+  }
+
+  interface ContentWarning {
+    type: 'forbidden_claim' | 'missing_data' | 'format_violation';
+    phrase?: string;
+    message: string;
+  }
+
+  interface AICallParams {
+    system: string;
+    userMessage: string;
+    temperature: number;
+    maxTokens: number;
+  }
+
+  async function callAI(model: string, params: AICallParams): Promise<string> {
+    if (model.startsWith('claude-')) {
+      return callClaude({
+        model: model as 'claude-haiku-4-5' | 'claude-sonnet-4-6',
+        system: params.system,
+        userMessage: params.userMessage,
+        temperature: params.temperature,
+        maxTokens: params.maxTokens,
+      });
+    }
+    // Phase 1.5+: thêm OpenAI, Gemini ở đây
+    throw new Error(`Model chưa hỗ trợ trong Phase 1: ${model}`);
+  }
+
+  function buildProductFacts(p: ProductContentInput): { knownFacts: string[]; missingFacts: string[] } {
+    const knownFacts: string[] = [];
+    const missingFacts: string[] = [];
+    if (p.brandName) knownFacts.push(`Thương hiệu: ${p.brandName}`); else missingFacts.push('Thương hiệu');
+    if (p.material) knownFacts.push(`Chất liệu: ${p.material}`); else missingFacts.push('Chất liệu');
+    if (p.colors?.length) knownFacts.push(`Màu sắc: ${p.colors.join(', ')}`); else missingFacts.push('Màu sắc');
+    if (p.sizeRange) knownFacts.push(`Size: ${p.sizeRange}`); else missingFacts.push('Size range');
+    if (p.origin) knownFacts.push(`Xuất xứ: ${p.origin}`); else missingFacts.push('Xuất xứ');
+    if (p.warrantyPolicy) knownFacts.push(`Bảo hành: ${p.warrantyPolicy}`); else missingFacts.push('Bảo hành');
+    if (p.description) knownFacts.push(`Mô tả thô: ${p.description}`);
+    if (p.sellingPoints?.length) knownFacts.push(`Điểm bán hàng: ${p.sellingPoints.join(', ')}`);
+    return { knownFacts, missingFacts };
+  }
+
+  const OBJECTIVE_CONTEXT: Record<string, string> = {
+    sell_fast: 'Bán nhanh — nhấn vào giá trị, tiện lợi, CTA mạnh',
+    clearance: 'Xả hàng — tạo urgency, nhấn giá ưu đãi, hàng còn ít',
+    new_arrival: 'Ra mắt mẫu mới — nhấn điểm khác biệt, tạo tò mò',
+    seo: 'SEO — từ khóa tự nhiên, heading chuẩn, meta description',
+  };
+
+  function buildUserMessage(
+    p: ProductContentInput,
+    knownFacts: string[],
+    missingFacts: string[],
+    config: PlatformPrivateConfig,
+    objective?: string,
+    extraInstruction?: string
+  ): string {
+    const parts: string[] = [
+      '=== THÔNG TIN SẢN PHẨM ===',
+      `Tên: ${p.name}`,
+      `SKU: ${p.sku}`,
+      `Danh mục: ${p.category}`,
+      `Giá bán: ${p.price.toLocaleString('vi-VN')}đ`,
+    ];
+    if (knownFacts.length > 0) {
+      parts.push('\n=== DỮ LIỆU CÓ SẴN (dùng trực tiếp) ===');
+      knownFacts.forEach(f => parts.push(`• ${f}`));
+    }
+    if (missingFacts.length > 0) {
+      parts.push('\n=== DỮ LIỆU CÒN THIẾU (không được bịa) ===');
+      missingFacts.forEach(f => parts.push(`• ${f}: KHÔNG CÓ THÔNG TIN`));
+    }
+    if (objective && OBJECTIVE_CONTEXT[objective]) {
+      parts.push(`\n=== MỤC TIÊU ===\n${OBJECTIVE_CONTEXT[objective]}`);
+    }
+    const extraRules = objective ? (config.ai.objectiveModifiers[objective]?.additionalRules ?? []) : [];
+    const allRules = [...config.rules, ...extraRules];
+    parts.push('\n=== QUY TẮC VIẾT ===');
+    allRules.forEach(r => parts.push(`• ${r}`));
+    if (extraInstruction?.trim()) {
+      parts.push(`\n=== GHI CHÚ THÊM TỪ NGƯỜI DÙNG ===\n${extraInstruction.trim()}`);
+    }
+    return parts.join('\n');
+  }
+
+  function buildSystemPrompt(config: PlatformPrivateConfig): string {
+    return [
+      config.systemPrompt,
+      `Claim tuyệt đối KHÔNG được viết: ${config.forbiddenClaims.join(', ')}.`,
+    ].join('\n\n');
+  }
+
+  function resolveTemperature(config: PlatformPrivateConfig, objective?: string): number {
+    if (!objective) return config.ai.temperature;
+    const delta = config.ai.objectiveModifiers[objective]?.temperatureDelta ?? 0;
+    return Math.min(1, Math.max(0, config.ai.temperature + delta));
+  }
+
+  function checkForbiddenClaims(text: string, claims: string[]): ContentWarning[] {
+    const lower = text.toLowerCase();
+    return claims
+      .filter(c => lower.includes(c.toLowerCase()))
+      .map(phrase => ({
+        type: 'forbidden_claim' as const,
+        phrase,
+        message: `Phát hiện claim "${phrase}" — kiểm tra lại trước khi đăng.`,
+      }));
+  }
+
+  function extractJSON(raw: string): Record<string, unknown> | null {
+    let s = raw.trim();
+    // Bỏ markdown fence nếu có
+    const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) s = fence[1].trim();
+    try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
+  }
+
+  function validateWebProductJSON(parsed: Record<string, unknown>): string | null {
+    if (typeof parsed.shortDescription !== 'string' || parsed.shortDescription.length < 5)
+      return 'shortDescription thiếu hoặc quá ngắn';
+    if (typeof parsed.longDescription !== 'string' || parsed.longDescription.length < 30)
+      return 'longDescription thiếu hoặc quá ngắn';
+    if (typeof parsed.seoTitle !== 'string' || parsed.seoTitle.length < 5)
+      return 'seoTitle thiếu hoặc quá ngắn';
+    return null;
+  }
+
+  router.post('/api/ai/content/generate', async (req, res) => {
+    if (!checkRateLimit(req, RL_STRICT))
+      return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.' });
+    try {
+      const { productInput, platformId, objective, extraInstruction } = req.body as {
+        productInput?: ProductContentInput;
+        platformId?: string;
+        objective?: string;
+        extraInstruction?: string;
+      };
+
+      if (!platformId) return res.status(400).json({ error: 'platformId là bắt buộc' });
+      const config = CONTENT_PROMPTS[platformId];
+      if (!config) return res.status(400).json({ error: `Nền tảng không hợp lệ: ${platformId}` });
+
+      if (!productInput?.name || !productInput?.category || !productInput?.sku || productInput?.price === undefined) {
+        return res.status(400).json({ error: 'productInput cần có đủ: name, category, price, sku' });
+      }
+
+      const { knownFacts, missingFacts } = buildProductFacts(productInput);
+      const system = buildSystemPrompt(config);
+      const userMessage = buildUserMessage(productInput, knownFacts, missingFacts, config, objective, extraInstruction);
+      const temperature = resolveTemperature(config, objective);
+
+      let rawResult = await callAI(config.ai.preferredModel, {
+        system,
+        userMessage,
+        temperature,
+        maxTokens: config.ai.maxTokens,
+      });
+
+      const warnings = checkForbiddenClaims(rawResult, config.forbiddenClaims);
+      let parseError = false;
+
+      // Validate JSON cho website_product_description
+      if (platformId === 'website_product_description') {
+        const parsed = extractJSON(rawResult);
+        const validationError = parsed ? validateWebProductJSON(parsed) : 'Không parse được JSON';
+
+        if (validationError) {
+          // Retry 1 lần với prompt nhắc lại format
+          const retryMessage = userMessage +
+            '\n\nQUAN TRỌNG: Trả về JSON thuần túy, không có markdown fence, không có text giải thích.' +
+            ' Chỉ object JSON với keys: shortDescription, longDescription, specs, seoTitle.';
+          const retryRaw = await callAI(config.ai.preferredModel, {
+            system,
+            userMessage: retryMessage,
+            temperature: 0.2,
+            maxTokens: config.ai.maxTokens,
+          });
+          const retryParsed = extractJSON(retryRaw);
+          const retryError = retryParsed ? validateWebProductJSON(retryParsed) : 'Không parse được JSON';
+
+          if (retryError || !retryParsed) {
+            rawResult = retryRaw;
+            parseError = true;
+            warnings.push({ type: 'format_violation', message: `JSON parse thất bại sau retry: ${retryError}. Đây là raw output — copy và chỉnh tay.` });
+          } else {
+            rawResult = JSON.stringify(retryParsed, null, 2);
+          }
+        } else if (parsed) {
+          rawResult = JSON.stringify(parsed, null, 2);
+        }
+      }
+
+      res.json({
+        result: rawResult,
+        platform: platformId.split('_')[0],
+        task: platformId,
+        model: config.ai.preferredModel,
+        warnings,
+        ...(parseError && { parseError: true }),
+      });
+
+    } catch (err: unknown) {
+      console.error('[AI /content/generate]', getErrorMessage(err));
       res.status(500).json({ error: AI_SERVICE_ERROR });
     }
   });
