@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package, ShoppingBag } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { GoodsPagination } from '../pos/GoodsPagination';
+import { GoodsProductDetailPanel } from '../pos/GoodsProductDetailPanel';
+import type { POSProduct } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,7 @@ interface RawProduct {
   variant_count: number | null;
   status: string;
   images?: string[] | null;
+  sale_price?: number | null;
 }
 
 type RootRow =
@@ -35,7 +38,7 @@ type RootRow =
   | { kind: 'single'; product: RawProduct };
 
 const PRODUCT_COLUMNS =
-  'id, sku, name, category_path, import_price, stock, location, brand, parent_id, is_parent, variant_count, status, images';
+  'id, sku, name, category_path, import_price, sale_price, stock, location, brand, parent_id, is_parent, variant_count, status, images';
 
 const leafCategory = (path?: string | null) => (path ?? '').split('>').pop()?.trim() || '—';
 
@@ -89,6 +92,12 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
+
+  // Grid popup state
+  const [popupParentId, setPopupParentId] = useState<string | null>(null);
+  const [popupVariantId, setPopupVariantId] = useState<string | null>(null);
+  const [popupFullProduct, setPopupFullProduct] = useState<POSProduct | null>(null);
+  const [popupFullLoading, setPopupFullLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -277,7 +286,9 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
     (s, r) => s + (r.kind === 'group' ? r.children.length : 1), 0
   );
 
-  const detailProduct = detailId ? rawVariants.find(p => p.id === detailId) ?? null : null;
+  const variantById = useMemo(() => new Map(rawVariants.map(p => [p.id, p])), [rawVariants]);
+
+  const detailProduct = detailId ? variantById.get(detailId) ?? null : null;
   const detailPlatforms = detailId ? platformMap[detailId] ?? [] : [];
 
   const toggleExpand = (parentId: string) => {
@@ -292,6 +303,65 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
     setDetailId(prev => (prev === id ? null : id));
     setDetailTab('info');
   };
+
+  useEffect(() => {
+    if (!popupVariantId) { setPopupFullProduct(null); return; }
+    setPopupFullLoading(true);
+    supabase
+      .from('pos_products')
+      .select('id,sku,name,category_id,category_path,import_price,sale_price,stock,min_stock,max_stock,unit,base_unit_code,conversion_value,units,attributes,attributes_text,brand,barcode,description,note_template,components,warranty,weight,weight_unit,location,related_sku,images,status,parent_id,is_parent,variant_attributes,variant_count,allow_points,customer_orders,direct_sale,product_type,expected_out_of_stock')
+      .eq('id', popupVariantId)
+      .single()
+      .then(({ data: r, error }) => {
+        if (!error && r) {
+          setPopupFullProduct({
+            id: r.id, sku: r.sku, name: r.name,
+            categoryId: r.category_id ?? '',
+            categoryPath: r.category_path ?? undefined,
+            importPrice: r.import_price ?? 0,
+            salePrice: r.sale_price ?? 0,
+            stock: r.stock ?? 0,
+            minStock: r.min_stock ?? 0,
+            maxStock: r.max_stock ?? undefined,
+            unit: r.unit ?? 'Cái',
+            baseUnitCode: r.base_unit_code ?? undefined,
+            conversionValue: r.conversion_value ?? undefined,
+            units: r.units ?? undefined,
+            attributes: r.attributes ?? undefined,
+            attributesText: r.attributes_text ?? undefined,
+            brand: r.brand ?? undefined,
+            barcode: r.barcode ?? undefined,
+            description: r.description ?? undefined,
+            noteTemplate: r.note_template ?? undefined,
+            components: r.components ?? undefined,
+            warranty: r.warranty ?? undefined,
+            weight: r.weight ?? undefined,
+            weightUnit: r.weight_unit ?? undefined,
+            location: r.location ?? undefined,
+            relatedSku: r.related_sku ?? undefined,
+            images: r.images ?? undefined,
+            status: (r.status as 'Active' | 'Inactive') ?? 'Active',
+            parentId: r.parent_id ?? undefined,
+            isParent: r.is_parent ?? false,
+            variantAttributes: r.variant_attributes ?? undefined,
+            variantCount: r.variant_count ?? undefined,
+            allowPoints: r.allow_points ?? undefined,
+            customerOrders: r.customer_orders ?? undefined,
+            directSale: r.direct_sale ?? undefined,
+            productType: r.product_type ?? undefined,
+            expectedOutOfStock: r.expected_out_of_stock ?? undefined,
+          });
+        }
+        setPopupFullLoading(false);
+      });
+  }, [popupVariantId]);
+
+  const openGridPopup = (variantId: string, parentId: string | null = null) => {
+    setPopupVariantId(variantId);
+    setPopupParentId(parentId);
+    setDetailTab('info');
+  };
+  const closeGridPopup = () => { setPopupVariantId(null); setPopupParentId(null); };
 
   const hasActiveFilters =
     filterCategories.length > 0 ||
@@ -455,8 +525,8 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                 </p>
               </div>
             ) : (
-              <div className="p-4 space-y-4">
-                {/* Lưới phẳng — giống GoodsGridView: mỗi row (cha hoặc đơn lẻ) là một card */}
+              <div className="p-4">
+                {/* Lưới phẳng — click card → mở popup */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
                   {pageRows.map(row => {
                     if (row.kind === 'single') {
@@ -474,13 +544,12 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                           importPrice={p.import_price}
                           platforms={platforms}
                           variantLabel={null}
-                          isSelected={detailId === p.id}
-                          onClick={() => openDetail(p.id)}
+                          isSelected={popupVariantId === p.id && !popupParentId}
+                          onClick={() => openGridPopup(p.id)}
                         />
                       );
                     }
 
-                    /* group → hiển thị card cha với badge "X biến thề", giống GoodsGridCard isParent */
                     const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
                     const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
                     const thumb = row.parent.images?.[0] ?? row.children.find(c => c.images?.[0])?.images?.[0];
@@ -497,65 +566,12 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                         importPrice={row.children[0]?.import_price ?? 0}
                         platforms={groupPlatforms}
                         variantLabel={`${variantCount} biến thể`}
-                        isSelected={expandedIds.has(row.parentId)}
-                        onClick={() => toggleExpand(row.parentId)}
+                        isSelected={popupParentId === row.parentId}
+                        onClick={() => openGridPopup(row.children[0]?.id ?? row.parentId, row.parentId)}
                       />
                     );
                   })}
                 </div>
-
-                {/* Khi bấm vào card nhóm → hiển thị lưới biến thề bên dưới */}
-                {pageRows.filter(r => r.kind === 'group' && expandedIds.has(r.parentId)).map(row => {
-                  if (row.kind !== 'group') return null;
-                  return (
-                    <div key={`expand-${row.parentId}`} className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-indigo-700 px-1">
-                        {row.parent.name || row.parent.sku} — {row.children.length} biến thể
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
-                        {row.children.map(v => {
-                          const vPlatforms = platformMap[v.id] ?? [];
-                          const vStockColor = v.stock <= 0 ? 'text-rose-500 bg-rose-50' : v.stock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
-                          return (
-                            <CatalogGridCard
-                              key={v.id}
-                              sku={v.sku}
-                              name={v.name}
-                              thumb={v.images?.[0]}
-                              stock={v.stock}
-                              stockColor={vStockColor}
-                              importPrice={v.import_price}
-                              platforms={vPlatforms}
-                              variantLabel={null}
-                              isSelected={detailId === v.id}
-                              onClick={() => openDetail(v.id)}
-                            />
-                          );
-                        })}
-                      </div>
-                      {detailId && row.children.some(v => v.id === detailId) && detailProduct && (
-                        <DetailPanel
-                          product={detailProduct}
-                          platforms={detailPlatforms}
-                          activeTab={detailTab}
-                          onTabChange={setDetailTab}
-                          onClose={() => setDetailId(null)}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* DetailPanel cho sản phẩm đơn lẻ được chọn */}
-                {detailId && detailProduct && pageRows.some(r => r.kind === 'single' && r.product.id === detailId) && (
-                  <DetailPanel
-                    product={detailProduct}
-                    platforms={detailPlatforms}
-                    activeTab={detailTab}
-                    onTabChange={setDetailTab}
-                    onClose={() => setDetailId(null)}
-                  />
-                )}
               </div>
             )
           ) : (
@@ -755,13 +771,118 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
           onItemsPerPageChange={n => { setItemsPerPage(n); setCurrentPage(1); }}
         />
       </div>
+
+      {/* ── Grid popup modal ── */}
+      {popupVariantId && (() => {
+        const popupProduct = variantById.get(popupVariantId);
+        if (!popupProduct) return null;
+        const popupPlatforms = platformMap[popupVariantId] ?? [];
+        const popupParentRow = popupParentId
+          ? rootRows.find((r): r is Extract<RootRow, { kind: 'group' }> => r.kind === 'group' && r.parentId === popupParentId)
+          : undefined;
+        const popupChildren = popupParentRow?.children ?? null;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={closeGridPopup}
+          >
+            <div
+              className="relative w-full max-w-5xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {popupParentRow ? popupParentRow.parent.name || popupParentRow.parent.sku : popupProduct.name}
+                  </p>
+                  {popupChildren && (
+                    <p className="text-xs text-slate-400 mt-0.5">{popupChildren.length} biến thể</p>
+                  )}
+                </div>
+                <button onClick={closeGridPopup} className="rounded-lg p-1.5 hover:bg-slate-100 text-slate-400 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Hàng biến thề — mini card style */}
+              {popupChildren && popupChildren.length > 0 && (
+                <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {popupChildren.map(v => {
+                      const isActive = popupVariantId === v.id;
+                      const stock = v.stock ?? 0;
+                      const stockColor = stock <= 0 ? 'text-red-500' : stock <= 5 ? 'text-amber-500' : 'text-emerald-600';
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => { setPopupVariantId(v.id); setDetailTab('info'); }}
+                          className={`flex items-center gap-2 shrink-0 rounded-xl border px-2.5 py-2 transition-colors ${
+                            isActive
+                              ? 'border-indigo-300 bg-indigo-50 shadow-sm'
+                              : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40'
+                          }`}
+                        >
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center shrink-0">
+                            {v.images?.[0] ? (
+                              <img src={v.images[0]} alt={v.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <ShoppingBag className="w-4 h-4 text-slate-300" strokeWidth={1} />
+                            )}
+                          </div>
+                          <div className="text-left min-w-0">
+                            <p className={`text-2xs font-normal truncate max-w-[120px] ${isActive ? 'text-indigo-700' : 'text-slate-700'}`}>
+                              {v.name}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[9px] font-normal text-indigo-500">
+                                {(v.sale_price ?? v.import_price ?? 0).toLocaleString('vi-VN')}đ
+                              </span>
+                              <span className={`text-[9px] font-normal ${stockColor}`}>
+                                · Tồn: {stock}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Chi tiết sản phẩm */}
+              <div className="flex-1 min-h-0 flex flex-col">
+                {popupFullLoading ? (
+                  <div className="flex items-center justify-center py-20 text-sm text-slate-400">Đang tải...</div>
+                ) : popupFullProduct ? (
+                  <GoodsProductDetailPanel
+                    product={popupFullProduct}
+                    transactions={[]}
+                    orders={[]}
+                    activeTab={detailTab}
+                    onTabChange={setDetailTab}
+                    onDelete={() => {}}
+                    onEdit={() => {}}
+                    onClose={closeGridPopup}
+                    deleteConfirmText="Vào trang Hàng hóa để xóa sản phẩm"
+                    noBorder
+                    fillHeight
+                    showCopyPrintActions={false}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ─── Grid card cho catalog ────────────────────────────────────────────────────
 
-function CatalogGridCard({
+const CatalogGridCard = memo(function CatalogGridCard({
   sku, name, thumb, stock, stockColor, importPrice, platforms, variantLabel, isSelected, onClick,
 }: {
   sku: string;
@@ -815,19 +936,20 @@ function CatalogGridCard({
       </div>
     </button>
   );
-}
+});
 
 // ─── Bảng chi tiết — clone chrome từ GoodsProductDetailPanel.tsx ───────────────
 
-function DetailPanel({ product, platforms, activeTab, onTabChange, onClose }: {
+function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bordered = true }: {
   product: RawProduct;
   platforms: Platform[];
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
   onClose: () => void;
+  bordered?: boolean;
 }) {
   return (
-    <div className="bg-white border-2 border-indigo-400 rounded-lg shadow-2xl mx-4 my-2">
+    <div className={bordered ? 'bg-white border-2 border-indigo-400 rounded-lg shadow-2xl mx-4 my-2' : 'bg-white'}>
       <div className="border-b border-slate-200 bg-white">
         <div className="flex items-center gap-1 px-6">
           {DETAIL_TABS.map(tab => (

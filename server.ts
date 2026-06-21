@@ -38,6 +38,7 @@ import { readFile, mkdir, writeFile, unlink } from 'fs/promises';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
 import { createChannelLinksRouter } from './routes/channelLinks';
+import { createChannelManagementRouter } from './routes/channelManagement';
 import { createDataRouter } from './routes/data';
 import { createFacebookRouter } from './routes/facebook';
 import { createImportRouter } from './routes/import';
@@ -552,6 +553,7 @@ async function startServer() {
     app.use(createAuthRouter(supabase));
     app.use(createAiRouter(requireAuth));
     app.use(createChannelLinksRouter(supabase, requireAuth));
+    app.use(createChannelManagementRouter(supabase, requireAuth));
     app.use(createDataRouter(supabase, requireAuth));
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));

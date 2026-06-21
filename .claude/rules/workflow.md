@@ -37,6 +37,21 @@ Mọi tác vụ đều đi qua 4 bước, không ngoại lệ:
 | Sửa `businessLogic.ts` | Chạy `npm test` — 43 tests phải pass |
 | Thêm bảng / cột Supabase | Viết SQL vào `supabase_setup.sql` |
 | Thay đổi tài chính / lương | Gọi `auditLog()` vào bảng `audit_logs` |
+| **Mọi thay đổi UI / code frontend** | Restart dev server (xem bên dưới) |
+
+### Restart dev server sau mỗi thay đổi frontend
+
+Bắt buộc thực hiện theo đúng thứ tự này sau khi implement xong:
+
+```
+1. preview_stop  → dừng server cũ (serverId từ lần start trước)
+2. preview_start → khởi động server mới với code mới nhất
+3. preview_logs  → kiểm tra không có lỗi build/runtime
+```
+
+**Lý do**: HMR của Vite đôi khi không push file mới đến browser — restart đảm bảo 100% code mới được load.
+
+Sau khi restart, báo user: **"Server đã restart — bạn hard refresh (`Cmd+Shift+R`) để load code mới."**
 
 ---
 

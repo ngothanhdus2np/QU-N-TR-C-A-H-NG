@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Database,
   Globe,
+  Link2,
   Package,
   Settings,
   ShoppingBag,
@@ -37,6 +38,7 @@ const mainItems = [
   { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
   { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
   { id: 'website-phuc-sang', label: 'Website PHÚC SANG', icon: Globe },
+  { id: 'channel-connections', label: 'Liên kết kênh bán', icon: Link2 },
 ];
 
 export default function OnlineSidebarNav({
