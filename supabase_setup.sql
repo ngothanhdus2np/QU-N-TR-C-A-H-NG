@@ -1143,6 +1143,12 @@ ON CONFLICT (slug) DO NOTHING;
 ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES shopee_shops(id);
 CREATE INDEX IF NOT EXISTS idx_shopee_products_shop ON shopee_products(shop_id);
 
+-- Cột bổ sung cho sync chi tiết sản phẩm từ bot
+ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS category_name text;
+ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS brand_name text;
+ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS weight integer;
+ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS gallery text[];
+
 -- ============================================================
 -- PostgreSQL function: create_store_order
 -- Atomic: lock rows → check stock → create pos_order → save address → deduct stock

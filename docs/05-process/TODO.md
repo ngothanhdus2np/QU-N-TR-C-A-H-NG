@@ -18,9 +18,20 @@
 
 ---
 
-### [ ] Lấy description/weight/brand từ Shopee (detail API)
+### [x] Lấy description/weight/brand từ Shopee (detail API) *(xong 2026-06-22)*
 
-> API `/api/v2/product/get_item_detail` trả về 404. `description`, `weight`, `brand_name`, `category_id` hiện null trong DB. Cần tìm đúng endpoint detail API mới của Shopee Seller Center (v3?) — có thể intercept network request khi mở trang edit sản phẩm.
+> Bot navigate đến `/portal/product/{item_id}`, intercept `/api/v3/product/get_product_info`. Đã lấy được: gallery (3–9 ảnh), mô tả tiếng Việt, weight, categoryId, categoryName cho 63/63 SP (shop1: 29, shop2: 34).
+> **Cần chạy thủ công trên Supabase dashboard**: `ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS category_name text;` (code đã comment out, chờ cột tồn tại thì bỏ comment).
+
+### [x] Import dữ liệu KiotViet vào CFO Brain *(xong 2026-06-22)*
+
+> 251 KH, 13,799 SP, 12,654 dòng nhập hàng, 67,530 đơn hàng (40 file hoá đơn). Fix 2 route import để hỗ trợ format export chuẩn của KiotViet.
+
+---
+
+### [ ] Cập nhật file Excel với gallery images + mô tả
+
+> Dữ liệu gallery + mô tả đã có trong DB. Cần xuất lại file Excel PHUC-SANG-shopee-bot-data.xlsx với ảnh gallery đầy đủ (cover + 3–9 ảnh phụ) và mô tả sản phẩm cho từng SP.
 
 ---
 

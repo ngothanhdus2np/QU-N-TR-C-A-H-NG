@@ -3,6 +3,20 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-22 — Import toàn bộ dữ liệu KiotViet vào CFO Brain
+
+- Fix route `/api/import/kiotviet-customers`: thêm format "Danh sách khách hàng" (col0="Loại khách") với mapping col[2]=Mã KH, col[3]=Tên, col[4]=SĐT, col[5]=Địa chỉ, col[8]=Điểm, col[15]=Tổng bán trừ trả. Import thành công **251 khách hàng**.
+- Fix route `/api/import/kiotviet-revenue`: thêm format "Chi tiết hóa đơn" (col6="Thời gian") — format export đầy đủ 65 cột từ KiotViet. Detect qua `col6Header === 'Thời gian'`, dùng `excelDateToLocalIsoDateTime(row[6])` để parse datetime, gom đơn theo Mã hóa đơn (col1). Import thành công **40/40 file**, **67,530 đơn hàng**, **1,187 ngày doanh thu**.
+- Import sản phẩm: **13,799 SP** thành công (600 trùng SKU với Shopee — bình thường). Import chi tiết nhập hàng: **12,654 dòng**, **67 NCC**, **1,068 phiếu nhập**.
+- Files: `routes/import.ts`
+
+### 2026-06-22 — Bot sync gallery + mô tả sản phẩm Shopee (63/63 SP)
+
+- Viết lại `fetchItemDetailViaPage` trong `productSync.js`: navigate thẳng đến `/portal/product/{item_id}` thay vì đi qua product list. Fix timeout bằng `waitUntil: 'load'` + `waitForTimeout(5000)`.
+- Fix lỗi `category_name` column không tồn tại: comment out field trong updateData, thêm ALTER TABLE vào `supabase_setup.sql`.
+- Batch sync thành công toàn bộ 63 SP (shop1: 29/29, shop2: 34/34): ảnh gallery (3–9 URL/SP), mô tả đầy đủ tiếng Việt, weight, categoryId, categoryName lưu vào `shopee_products`.
+- Files: `/Users/apple/shopee-monitor/bots/productSync.js`, `supabase_setup.sql`
+
 ### 2026-06-22 — Bot lấy thông tin sản phẩm Shopee + lưu vào DB
 
 - Sửa lỗi NOT NULL constraint trên `shopee_product_variants.pos_product_id`: chạy `ALTER TABLE ... DROP NOT NULL` qua API pg/query. Bot code cũ bỏ sót field khi không match SKU — sửa để luôn ghi `pos_product_id: null` thay vì bỏ qua.

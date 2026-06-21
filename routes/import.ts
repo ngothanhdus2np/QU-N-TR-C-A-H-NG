@@ -731,9 +731,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       // "Theo lợi nhuận": col6 = "Mã giao dịch" — transaction-level với đầy đủ thông tin
       const isTheoThoiGian = col6Header === 'Giá trị trả';
       const isTheoLoiNhuan = col6Header === 'Mã giao dịch';
-      if (!isTheoThoiGian && !isTheoLoiNhuan) {
+      const isChiTietHoaDon = col6Header === 'Thời gian';
+      if (!isTheoThoiGian && !isTheoLoiNhuan && !isChiTietHoaDon) {
         return res.status(400).json({
-          error: `File không đúng định dạng. Cột 7 hiện là "${col6Header}". Cần dùng file "Báo cáo bán hàng theo thời gian" hoặc "theo lợi nhuận" từ KiotViet.`,
+          error: `File không đúng định dạng. Cột 7 hiện là "${col6Header}". Cần dùng file "Báo cáo bán hàng theo thời gian", "theo lợi nhuận", hoặc file "Chi tiết hóa đơn" từ KiotViet.`,
         });
       }
 
@@ -779,6 +780,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         finalAmount: number;
         isReturn: boolean;
         items: Map<string, ImportedOrderItem>;
+        paymentMethod?: string;
+        customerName?: string;
+        staffId?: string;
+        channel?: string;
       };
       const orderMap = new Map<string, ImportedOrderData>();
 
@@ -821,6 +826,99 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             cogs: 0,
             profit: net,
           });
+        }
+      } else if (isChiTietHoaDon) {
+        // ── Format "Chi tiết hóa đơn" KiotViet ──
+        // col1=Mã HĐ, col6=Thời gian (ISO), col12=Mã KH, col13=Tên KH, col21=Người bán,
+        // col22=Kênh bán, col38=Tổng tiền hàng, col39=GG HĐ, col41=Khách cần trả,
+        // col43=Tiền mặt, col44=Thẻ, col45=Ví, col46=CK, col50=Trạng thái,
+        // col52=Mã hàng, col53=Tên hàng, col57=SL, col58=Đơn giá, col61=Giá bán, col62=Thành tiền
+        for (const row of rows.slice(1)) {
+          const orderCode = String(row[1] || '').trim();
+          if (!orderCode) continue;
+
+          const status = String(row[50] || '').trim();
+          if (status === 'Đã huỷ' || status === 'Huỷ') continue;
+
+          const dateTime = excelDateToLocalIsoDateTime(row[6]);
+          if (!dateTime) continue;
+          const date = dateTime.slice(0, 10);
+
+          const isReturnOrder = /^TH/i.test(orderCode) || String(row[11] || '').trim() !== '';
+          const totalGross = Number(row[38] || 0);
+          const discount = Number(row[39] || 0);
+          const finalAmount = Number(row[41] || 0);
+
+          if (!seenOrders.has(orderCode)) {
+            seenOrders.add(orderCode);
+            const prev: DayAgg = dateMap.get(date) ?? {
+              totalGross: 0, discount: 0, returnsGross: 0, netRev: 0, cogs: 0, profit: 0,
+            };
+            dateMap.set(date, {
+              totalGross: isReturnOrder ? prev.totalGross : prev.totalGross + totalGross,
+              discount: prev.discount + discount,
+              returnsGross: isReturnOrder ? prev.returnsGross + Math.abs(totalGross) : prev.returnsGross,
+              netRev: prev.netRev + finalAmount,
+              cogs: prev.cogs,
+              profit: prev.profit + finalAmount,
+            });
+
+            const cash = Number(row[43] || 0);
+            const card = Number(row[44] || 0);
+            const transfer = Number(row[46] || 0);
+            const wallet = Number(row[45] || 0);
+            const paymentMethod = card > 0 ? 'Card' : transfer > 0 ? 'Transfer' : wallet > 0 ? 'Wallet' : 'Cash';
+            const staffName = String(row[21] || '').trim();
+            const channelRaw = String(row[22] || '').trim();
+            const channel = channelRaw.includes('online') || channelRaw.includes('Online') ? 'online' : 'direct';
+            const customerName = String(row[13] || '').trim();
+
+            orderMap.set(orderCode, {
+              date: dateTime,
+              totalAmount: totalGross,
+              discount,
+              finalAmount,
+              isReturn: isReturnOrder,
+              items: new Map(),
+              paymentMethod,
+              customerName: customerName && customerName !== 'Khách lẻ' ? customerName : undefined,
+              staffId: staffName || undefined,
+              channel,
+            });
+          }
+
+          const customerCode = String(row[12] || '').trim();
+          const customerName = String(row[13] || '').trim();
+          if (customerCode && /^KH/i.test(customerCode) && customerName) {
+            const cid = customerIdFromKiotVietCode(customerCode);
+            if (!customerMap.has(cid)) customerMap.set(cid, { name: customerName });
+          }
+
+          const sku = String(row[52] || '').trim();
+          const itemName = String(row[53] || '').trim();
+          const rawQty = Number(row[57] || 0);
+          const itemQty = Math.abs(rawQty);
+          const itemPrice = Number(row[61] || row[58] || 0);
+          const itemTotal = Math.abs(Number(row[62] || 0));
+
+          if (sku && itemName && itemQty > 0) {
+            const ord = orderMap.get(orderCode)!;
+            const existingItem = ord.items.get(sku);
+            if (existingItem) {
+              existingItem.quantity += itemQty;
+              existingItem.total += itemTotal;
+            } else {
+              ord.items.set(sku, {
+                productId: productIdFromSku(sku),
+                sku,
+                name: itemName,
+                quantity: itemQty,
+                price: itemPrice,
+                discount: Math.abs(Number(row[60] || 0)),
+                total: itemTotal,
+              });
+            }
+          }
         }
       } else {
         // ── Format "Báo cáo bán hàng theo lợi nhuận" ──
@@ -1064,11 +1162,11 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           final_amount: newData.finalAmount,
           items: Array.from(mergedItems.values()),
           // COALESCE: chỉ điền field còn null, không ghi đè data đã có
-          customer_name: existing?.customer_name ?? null,
-          payment_method: existing?.payment_method ?? 'Cash',
-          staff_id: existing?.staff_id ?? '',
+          customer_name: existing?.customer_name ?? newData.customerName ?? null,
+          payment_method: existing?.payment_method ?? newData.paymentMethod ?? 'Cash',
+          staff_id: existing?.staff_id ?? newData.staffId ?? '',
           status: 'completed',
-          channel: 'direct',
+          channel: newData.channel ?? 'direct',
           points_earned: 0,
           is_return: newData.isReturn,
         };
@@ -1183,9 +1281,53 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         return res.json({ success: true, upserted, message: `Đã import ${upserted} khách hàng. Tải lại trang để thấy dữ liệu.` });
       }
 
+      // ── Format "Danh sách khách hàng" KiotViet ──
+      // col0=Loại khách, col1=Chi nhánh tạo, col2=Mã khách hàng, col3=Tên,
+      // col4=SĐT, col5=Địa chỉ, col6=Nhóm, col8=Điểm, col14=Tổng bán, col15=Tổng bán trừ trả
+      if (col0Header === 'Loại khách') {
+        const toUpsert = rows.slice(1)
+          .filter(row => {
+            const code = String(row[2] || '').trim();
+            return code && /^KH/i.test(code);
+          })
+          .map(row => {
+            const code = String(row[2] || '').trim();
+            const name = String(row[3] || '').trim();
+            const phone = String(row[4] || '').trim();
+            const address = String(row[5] || '').trim();
+            const points = Number(row[8] || 0);
+            const net = Number(row[15] || row[14] || 0);
+            const lastVisit = excelDateToIsoDate(row[12]) || null;
+            return {
+              id: customerIdFromKiotVietCode(code),
+              name: name || code,
+              phone: phone || null,
+              address: address || null,
+              points: Math.round(points),
+              total_spent: Math.round(net),
+              last_visit: lastVisit,
+              tier: tierFromNetSpent(net),
+            };
+          });
+
+        if (toUpsert.length === 0)
+          return res.status(400).json({ error: 'Không có khách hàng hợp lệ trong file.' });
+
+        const batchSize = 500;
+        let upserted = 0;
+        for (let i = 0; i < toUpsert.length; i += batchSize) {
+          const { error } = await supabase
+            .from('pos_customers')
+            .upsert(toUpsert.slice(i, i + batchSize), { onConflict: 'id' });
+          if (error) throw new Error(error.message);
+          upserted += toUpsert.slice(i, i + batchSize).length;
+        }
+        return res.json({ success: true, upserted, message: `Đã import ${upserted} khách hàng từ danh sách KiotViet.` });
+      }
+
       if (col0Header !== 'Mã KH' || col11Header !== 'Mã giao dịch') {
         return res.status(400).json({
-          error: `File không đúng định dạng. Cần file "Báo cáo lợi nhuận theo khách hàng" (cột 1 = "Mã khách hàng") hoặc file giao dịch KiotViet (cột 1 = "Mã KH"). Hiện là "${col0Header}".`,
+          error: `File không đúng định dạng. Cần file "Báo cáo lợi nhuận theo khách hàng" (cột 1 = "Mã khách hàng"), "Danh sách khách hàng" (cột 1 = "Loại khách"), hoặc file giao dịch KiotViet (cột 1 = "Mã KH"). Hiện là "${col0Header}".`,
         });
       }
 
