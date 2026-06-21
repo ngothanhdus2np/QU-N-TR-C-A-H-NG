@@ -37,6 +37,7 @@ import {
   CalendarCheck,
   Globe,
   Store,
+  Settings,
 } from 'lucide-react';
 
 export const SIDEBAR_SECTIONS = [
@@ -82,18 +83,6 @@ export const SIDEBAR_SECTIONS = [
     ],
   },
   {
-    title: 'Online',
-    hidden: true,
-    items: [
-      { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Package },
-      { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
-      { id: 'delivery-partners', label: 'Đối tác giao hàng', icon: Bike },
-      { id: 'shipping-orders', label: 'Vận đơn', icon: FileText },
-      { id: 'website-products', label: 'Website · Sản phẩm', icon: Globe },
-      { id: 'website-orders', label: 'Website · Đơn hàng', icon: Store },
-    ],
-  },
-  {
     title: 'Khách hàng',
     items: [{ id: 'customers', label: 'Khách Hàng', icon: Users }],
   },
@@ -127,6 +116,16 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Sổ quỹ',
     items: [{ id: 'cash-ledger', label: 'Sổ quỹ', icon: Landmark }],
+  },
+  {
+    title: 'Bán online',
+    items: [
+      { id: 'online-orders', label: 'Đơn hàng Online', icon: ShoppingBag },
+      { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
+      { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
+      { id: 'website-products', label: 'Website · Sản phẩm', icon: Globe },
+      { id: 'website-operations', label: 'Website · Vận hành', icon: Settings },
+    ],
   },
   {
     title: 'Phân tích',

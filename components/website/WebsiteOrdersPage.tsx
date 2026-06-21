@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShoppingBag, RefreshCw, Search, ChevronDown, ChevronUp, Phone, MapPin, Package } from 'lucide-react';
-import { supabase } from '../../services/supabase';
+import { ShoppingBag, RefreshCw, Search, ChevronDown, ChevronUp, Phone, MapPin, Package, Truck } from 'lucide-react';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 import { useToast } from '../ui/Toast';
 
 interface OrderAddress {
@@ -20,6 +20,25 @@ interface OrderItem {
   subtotal: number;
 }
 
+interface Shipment {
+  id: string;
+  provider: string | null;
+  tracking_code: string | null;
+  shipping_fee: number | null;
+  cod_amount: number | null;
+  status: string | null;
+  shipped_at: string | null;
+  created_at: string;
+}
+
+interface ShipmentDraft {
+  provider: string;
+  trackingCode: string;
+  shippingFee: string;
+  codAmount: string;
+  status: string;
+}
+
 interface WebsiteOrder {
   id: string;
   order_code: string;
@@ -32,12 +51,15 @@ interface WebsiteOrder {
   total_amount: number;
   created_at: string;
   store_order_addresses: OrderAddress[];
+  shipments: Shipment[];
   items: OrderItem[];
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: 'Chờ xác nhận', color: 'bg-yellow-100 text-yellow-700' },
   confirmed: { label: 'Đã xác nhận', color: 'bg-blue-100 text-blue-700' },
+  packing: { label: 'Đang đóng gói', color: 'bg-indigo-100 text-indigo-700' },
+  ready_to_ship: { label: 'Sẵn sàng giao', color: 'bg-cyan-100 text-cyan-700' },
   shipping: { label: 'Đang giao', color: 'bg-purple-100 text-purple-700' },
   completed: { label: 'Hoàn thành', color: 'bg-green-100 text-green-700' },
   cancelled: { label: 'Đã hủy', color: 'bg-red-100 text-red-700' },
@@ -47,7 +69,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const STATUS_ORDER: Record<string, string[]> = {
   pending: ['confirmed', 'cancelled'],
-  confirmed: ['shipping', 'cancelled'],
+  confirmed: ['packing', 'cancelled'],
+  packing: ['ready_to_ship', 'cancelled'],
+  ready_to_ship: ['shipping', 'cancelled'],
   // Đã giao ĐVVC — không huỷ trực tiếp nữa, chỉ có thể yêu cầu hoàn hàng (chưa cộng tồn, chờ hàng về)
   shipping: ['completed', 'return_requested'],
   completed: ['return_requested'],
@@ -74,6 +98,16 @@ function formatVND(n: number) {
   return n.toLocaleString('vi-VN') + 'đ';
 }
 
+function shipmentDraft(shipment?: Shipment): ShipmentDraft {
+  return {
+    provider: shipment?.provider || 'SPX',
+    trackingCode: shipment?.tracking_code || '',
+    shippingFee: String(shipment?.shipping_fee ?? 0),
+    codAmount: String(shipment?.cod_amount ?? 0),
+    status: shipment?.status || 'ready_to_ship',
+  };
+}
+
 interface Props {
   navigationSlot?: React.ReactNode;
 }
@@ -86,55 +120,85 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
   const [statusFilter, setStatusFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [shipmentDrafts, setShipmentDrafts] = useState<Record<string, ShipmentDraft>>({});
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from('pos_orders')
-      .select(`
-        id, order_code, customer_name, customer_phone, customer_email,
-        payment_method, status, note, total_amount, created_at, items,
-        store_order_addresses (address_line, ward, district, province)
-      `)
-      .eq('channel', 'website')
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    if (statusFilter) query = query.eq('status', statusFilter);
-
-    const { data, error } = await query;
-
-    if (error) {
+    try {
+      const result = await adminStoreRequest<{ data: WebsiteOrder[] }>('/api/admin/store/orders');
+      setOrders((result.data ?? []).filter(order => !statusFilter || order.status === statusFilter));
+    } catch {
       showToast('Lỗi tải đơn hàng website', 'error');
-    } else {
-      setOrders((data as WebsiteOrder[]) ?? []);
     }
     setLoading(false);
   }, [showToast, statusFilter]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
+  const getLatestShipment = (order: WebsiteOrder) =>
+    [...(order.shipments ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
+  const getDraft = (order: WebsiteOrder) => shipmentDrafts[order.id] ?? shipmentDraft(getLatestShipment(order));
+
+  const updateShipmentDraft = (order: WebsiteOrder, patch: Partial<ShipmentDraft>) => {
+    setShipmentDrafts(prev => ({
+      ...prev,
+      [order.id]: { ...(prev[order.id] ?? shipmentDraft(getLatestShipment(order))), ...patch },
+    }));
+  };
+
+  const validateShipmentDraft = (draft: ShipmentDraft, requireTrackingCode: boolean) => {
+    if (!draft.provider.trim()) return 'Thiếu đơn vị vận chuyển';
+    if (requireTrackingCode && !draft.trackingCode.trim()) return 'Cần nhập mã vận đơn trước khi chuyển sang Đang giao';
+    const shippingFee = Number(draft.shippingFee || 0);
+    const codAmount = Number(draft.codAmount || 0);
+    if (!Number.isFinite(shippingFee) || shippingFee < 0) return 'Phí vận chuyển không hợp lệ';
+    if (!Number.isFinite(codAmount) || codAmount < 0) return 'Tiền COD không hợp lệ';
+    return null;
+  };
+
+  const toShipmentPayload = (draft: ShipmentDraft) => ({
+    provider: draft.provider.trim() || 'SPX',
+    tracking_code: draft.trackingCode.trim() || null,
+    shipping_fee: Number(draft.shippingFee || 0),
+    cod_amount: Number(draft.codAmount || 0),
+    status: draft.status.trim() || 'ready_to_ship',
+  });
+
+  const saveShipment = async (order: WebsiteOrder) => {
+    const draft = getDraft(order);
+    const validationError = validateShipmentDraft(draft, order.status === 'shipping');
+    if (validationError) return showToast(validationError, 'error');
+
+    setUpdatingId(order.id);
+    try {
+      await adminStoreRequest(`/api/admin/store/orders/${order.id}/shipment`, { method: 'PUT', body: JSON.stringify(toShipmentPayload(draft)) });
+      showToast('Đã lưu vận đơn SPX', 'success');
+      await loadOrders();
+    } catch (error) { showToast(`Lỗi lưu vận đơn: ${error instanceof Error ? error.message : String(error)}`, 'error'); }
+    setUpdatingId(null);
+  };
+
   const updateStatus = async (order: WebsiteOrder, newStatus: string) => {
+    const draft = getDraft(order);
+    if (newStatus === 'shipping') {
+      const validationError = validateShipmentDraft(draft, true);
+      if (validationError) return showToast(validationError, 'error');
+    }
     setUpdatingId(order.id);
     // RPC atomic: đổi status + tự cộng lại tồn kho nếu chuyển sang cancelled/returned
-    const { data, error } = await supabase.rpc('update_website_order_status', {
-      p_order_id: order.id,
-      p_new_status: newStatus,
-    });
-
-    if (error || data?.error) {
-      showToast(`Lỗi cập nhật trạng thái: ${data?.error ?? error?.message}`, 'error');
-    } else {
+    try {
+      const data = await adminStoreRequest<{ restocked?: boolean }>(`/api/admin/store/orders/${order.id}/status`, {
+        method: 'POST', body: JSON.stringify({ status: newStatus, shipment: newStatus === 'shipping' ? toShipmentPayload({ ...draft, status: 'shipping' }) : null }),
+      });
       showToast(
         data?.restocked
           ? `Đã chuyển sang "${STATUS_LABELS[newStatus]?.label}" — đã cộng lại tồn kho`
           : `Đã chuyển sang "${STATUS_LABELS[newStatus]?.label}"`,
         'success'
       );
-      setOrders(prev =>
-        prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o)
-      );
-    }
+      await loadOrders();
+    } catch (error) { showToast(`Lỗi cập nhật trạng thái: ${error instanceof Error ? error.message : String(error)}`, 'error'); }
     setUpdatingId(null);
   };
 
@@ -218,6 +282,8 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
             const statusInfo = STATUS_LABELS[order.status] ?? { label: order.status, color: 'bg-slate-100 text-slate-600' };
             const nextStatuses = STATUS_ORDER[order.status] ?? [];
             const addr = order.store_order_addresses?.[0];
+            const latestShipment = getLatestShipment(order);
+            const draft = getDraft(order);
 
             return (
               <div key={order.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -240,6 +306,14 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                         <Phone size={12} />
                         {order.customer_phone}
                       </span>
+                      {latestShipment && (
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <Truck size={12} />
+                          {latestShipment.provider || 'SPX'}
+                          {latestShipment.tracking_code ? ` · ${latestShipment.tracking_code}` : ''}
+                          {latestShipment.status ? ` · ${latestShipment.status}` : ''}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -302,6 +376,77 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                         </div>
                       </div>
                     )}
+
+                    {/* SPX shipment */}
+                    <div className="border border-cyan-100 rounded-lg bg-cyan-50/40 p-4">
+                      <p className="text-xs font-semibold text-cyan-800 mb-3 flex items-center gap-1.5">
+                        <Truck size={14} /> Vận đơn
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <label className="text-xs text-slate-500">
+                          Đơn vị giao
+                          <input
+                            value={draft.provider}
+                            onChange={e => updateShipmentDraft(order, { provider: e.target.value })}
+                            placeholder="SPX"
+                            className="mt-1 w-full px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-500">
+                          Mã vận đơn{nextStatuses.includes('shipping') ? <span className="text-red-500"> *</span> : ''}
+                          <input
+                            value={draft.trackingCode}
+                            onChange={e => updateShipmentDraft(order, { trackingCode: e.target.value })}
+                            placeholder="Mã SPX"
+                            className="mt-1 w-full px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-500">
+                          Phí giao hàng
+                          <input
+                            type="number"
+                            min="0"
+                            value={draft.shippingFee}
+                            onChange={e => updateShipmentDraft(order, { shippingFee: e.target.value })}
+                            className="mt-1 w-full px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-500">
+                          Tiền COD
+                          <input
+                            type="number"
+                            min="0"
+                            value={draft.codAmount}
+                            onChange={e => updateShipmentDraft(order, { codAmount: e.target.value })}
+                            className="mt-1 w-full px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-500">
+                          Trạng thái vận đơn
+                          <select
+                            value={draft.status}
+                            onChange={e => updateShipmentDraft(order, { status: e.target.value })}
+                            className="mt-1 w-full px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+                          >
+                            <option value="ready_to_ship">Sẵn sàng giao</option>
+                            <option value="shipping">Đang giao</option>
+                            <option value="delivered">Đã giao</option>
+                            <option value="returned">Hoàn về</option>
+                            <option value="cancelled">Đã hủy</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-cyan-700">Mã vận đơn là bắt buộc trước khi chuyển đơn sang “Đang giao”.</p>
+                        <button
+                          onClick={() => saveShipment(order)}
+                          disabled={updatingId === order.id}
+                          className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-cyan-200 text-cyan-700 bg-white hover:bg-cyan-100 disabled:opacity-50"
+                        >
+                          {updatingId === order.id ? 'Đang lưu...' : 'Lưu vận đơn'}
+                        </button>
+                      </div>
+                    </div>
 
                     {/* Status actions */}
                     {nextStatuses.length > 0 && (

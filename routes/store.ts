@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
+import rateLimit from 'express-rate-limit';
 
 // Các trường pos_products được phép đọc — KHÔNG BAO GIỜ thêm import_price vào đây
 const SAFE_POS_FIELDS = 'id, stock, sale_price, status' as const;
@@ -65,8 +66,116 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function sanitizeText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const sanitized = value
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+  return sanitized || null;
+}
+
+function normalizeEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  return email.length <= 254 && EMAIL_RE.test(email) ? email : null;
+}
+
+const publicFormRateLimit = (max: number, message: string) => rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: message }),
+});
+
 export function createStoreRouter(supabase: SupabaseClient) {
   const router = Router();
+  const contactLimiter = publicFormRateLimit(5, 'Bạn đã gửi quá nhiều yêu cầu liên hệ. Vui lòng thử lại sau 15 phút.');
+  const newsletterLimiter = publicFormRateLimit(3, 'Bạn đã đăng ký quá nhiều lần. Vui lòng thử lại sau 15 phút.');
+
+  /** Public Website-only presentation/settings data. */
+  router.get('/api/store/settings', async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('store_settings')
+        .select('value')
+        .eq('key', 'website')
+        .maybeSingle();
+      if (error) throw error;
+      return res.json({ data: data?.value ?? {} });
+    } catch (err) {
+      console.error('[Store] GET /api/store/settings error:', err);
+      return res.status(500).json({ error: 'Lỗi tải cấu hình website' });
+    }
+  });
+
+  /**
+   * POST /api/store/contacts
+   * Form liên hệ website. Chỉ server (service role) được ghi Supabase.
+   */
+  router.post('/api/store/contacts', contactLimiter, async (req: Request, res: Response) => {
+    const { name: rawName, phone: rawPhone, email: rawEmail, topic: rawTopic, message: rawMessage } = req.body ?? {};
+    const name = sanitizeText(rawName, 100);
+    const phone = normalizePhone(String(rawPhone ?? ''));
+    const topic = sanitizeText(rawTopic, 200);
+    const message = sanitizeText(rawMessage, 2_000);
+    const email = rawEmail === undefined || rawEmail === null || rawEmail === '' ? null : normalizeEmail(rawEmail);
+
+    if (!name) return res.status(400).json({ error: 'Thiếu tên liên hệ' });
+    if (!phone) return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+    if (!email && rawEmail !== undefined && rawEmail !== null && rawEmail !== '') {
+      return res.status(400).json({ error: 'Email không hợp lệ' });
+    }
+    if (!topic) return res.status(400).json({ error: 'Thiếu chủ đề liên hệ' });
+    if (!message) return res.status(400).json({ error: 'Thiếu nội dung liên hệ' });
+
+    try {
+      const { error } = await supabase.from('store_contacts').insert({
+        name,
+        phone,
+        email,
+        topic,
+        message,
+        status: 'new',
+      });
+      if (error) throw error;
+      return res.status(201).json({ ok: true });
+    } catch (err) {
+      console.error('[Store] POST /api/store/contacts error:', err);
+      return res.status(500).json({ error: 'Không thể gửi liên hệ, vui lòng thử lại' });
+    }
+  });
+
+  /**
+   * POST /api/store/newsletter
+   * Upsert theo email để khách đăng ký nhiều lần vẫn chỉ có một subscriber.
+   */
+  router.post('/api/store/newsletter', newsletterLimiter, async (req: Request, res: Response) => {
+    const email = normalizeEmail(req.body?.email);
+    if (!email) return res.status(400).json({ error: 'Email không hợp lệ' });
+
+    try {
+      const { error } = await supabase.from('newsletter_subscribers').upsert(
+        {
+          email,
+          source: 'website',
+          status: 'active',
+          subscribed_at: new Date().toISOString(),
+          unsubscribed_at: null,
+        },
+        { onConflict: 'email' }
+      );
+      if (error) throw error;
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('[Store] POST /api/store/newsletter error:', err);
+      return res.status(500).json({ error: 'Không thể đăng ký nhận tin, vui lòng thử lại' });
+    }
+  });
 
   /**
    * GET /api/store/products
@@ -413,7 +522,7 @@ export function createStoreRouter(supabase: SupabaseClient) {
       try {
         const { data: ship } = await supabase
           .from('shipments')
-          .select('tracking_code, provider, status, shipped_at, delivered_at')
+          .select('tracking_code, provider, shipping_fee, cod_amount, status, shipped_at, delivered_at, updated_at')
           .eq('order_id', order.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -449,9 +558,12 @@ export function createStoreRouter(supabase: SupabaseClient) {
             ? {
                 tracking_code: shipment['tracking_code'],
                 provider: shipment['provider'],
+                shipping_fee: shipment['shipping_fee'] ?? 0,
+                cod_amount: shipment['cod_amount'] ?? 0,
                 status: shipment['status'],
                 shipped_at: shipment['shipped_at'],
                 delivered_at: shipment['delivered_at'],
+                updated_at: shipment['updated_at'],
               }
             : null,
         },

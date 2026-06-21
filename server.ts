@@ -34,7 +34,7 @@ import react from '@vitejs/plugin-react';
 
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
-import { readFile } from 'fs/promises';
+import { readFile, mkdir, writeFile, unlink } from 'fs/promises';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
 import { createChannelLinksRouter } from './routes/channelLinks';
@@ -43,6 +43,7 @@ import { createFacebookRouter } from './routes/facebook';
 import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
 import { createStoreRouter } from './routes/store';
+import { createAdminStoreRouter } from './routes/adminStore';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
 import { createInventoryOutSyncRouter, runInventoryOutSync } from './routes/inventoryOutSync';
@@ -201,25 +202,47 @@ app.post('/api/upload-product-image/:productId',
     }
 
     const contentType = (req.headers['content-type'] || 'image/jpeg').split(';')[0].trim();
-    const dataUrl = `data:${contentType};base64,${req.body.toString('base64')}`;
+    const ext = contentType === 'image/png' ? 'png' : 'jpg';
 
+    // Lấy SKU và danh sách ảnh hiện tại trong một query
     const { data: product, error: fetchError } = await supabase
       .from('pos_products')
-      .select('images')
+      .select('sku, images')
       .eq('id', productId)
       .single();
 
     if (fetchError) return res.status(500).json({ error: fetchError.message });
 
+    // Dùng SKU làm thư mục + tên file; fallback về productId nếu không có SKU
+    const rawSku = (product?.sku as string | undefined) ?? '';
+    const folderName = rawSku
+      ? rawSku.replace(/[^a-zA-Z0-9À-ỹ_-]/g, '-').replace(/-+/g, '-')
+      : String(productId);
     const currentImages: string[] = Array.isArray(product?.images) ? product.images : [];
+    const stt = currentImages.filter(u => u.startsWith(`/product-images/${folderName}/`)).length + 1;
+    const filename = rawSku
+      ? `${folderName}-${stt}.${ext}`
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const productDir = path.join(os.homedir(), 'cfobrain-assets', 'products', folderName);
+
+    let imageUrl: string;
+    try {
+      await mkdir(productDir, { recursive: true });
+      await writeFile(path.join(productDir, filename), req.body);
+      imageUrl = `/product-images/${folderName}/${filename}`;
+    } catch {
+      // MacBook dev hoặc đĩa lỗi → fallback base64
+      imageUrl = `data:${contentType};base64,${req.body.toString('base64')}`;
+    }
+
     const { error: updateError } = await supabase
       .from('pos_products')
-      .update({ images: [...currentImages, dataUrl] })
+      .update({ images: [...currentImages, imageUrl] })
       .eq('id', productId);
 
     if (updateError) return res.status(500).json({ error: updateError.message });
 
-    res.json({ url: dataUrl });
+    res.json({ url: imageUrl });
   }
 );
 
@@ -271,13 +294,14 @@ app.get('/api/product-info/barcode/:barcode', async (req: Request, res: Response
   res.json({ ...data, price: (data as Record<string, unknown>).sale_price });
 });
 
-// Xóa ảnh hàng hóa — nhận mảng images đã lọc, ghi đè vào DB
+// Xóa ảnh hàng hóa — nhận { images: string[], deleted?: string[] }
+// images: mảng URL còn lại (ghi đè DB); deleted: URL bị xóa (để xóa file trên đĩa)
 app.delete('/api/upload-product-image/:productId',
   express.json(),
   async (req: Request, res: Response) => {
     const { productId } = req.params;
     if (!productId) return res.status(400).json({ error: 'Thiếu productId' });
-    const { images } = req.body;
+    const { images, deleted } = req.body as { images: string[]; deleted?: string[] };
     if (!Array.isArray(images)) return res.status(400).json({ error: 'images phải là mảng' });
 
     const { error } = await supabase
@@ -286,6 +310,17 @@ app.delete('/api/upload-product-image/:productId',
       .eq('id', productId);
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Xóa file vật lý trên iMac nếu URL là đường dẫn local (không phải base64)
+    if (Array.isArray(deleted)) {
+      for (const url of deleted) {
+        if (url.startsWith('/product-images/')) {
+          const filePath = path.join(os.homedir(), 'cfobrain-assets', 'products', url.replace('/product-images/', ''));
+          unlink(filePath).catch(() => {}); // bỏ qua lỗi nếu file không tồn tại
+        }
+      }
+    }
+
     res.json({ ok: true });
   }
 );
@@ -383,7 +418,7 @@ async function startServer() {
           // [FIX] callback(null, false) thay vì callback(Error) — tránh stack trace rác trong log
           callback(null, false);
         },
-        methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
         credentials: true,
       })
@@ -521,6 +556,7 @@ async function startServer() {
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
     app.use(createStoreRouter(supabase));
+    app.use(createAdminStoreRouter(supabase, requireAuth));
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
     app.use(createShopeeSyncRouter(requireAuth));
     app.use(createInventoryOutSyncRouter(supabase, requireAuth));
@@ -555,6 +591,11 @@ async function startServer() {
     // Dev (MacBook): folder không tồn tại → falls through → Vite serve từ public/help/images/
     // Prod (iMac): ~/cfobrain-assets/help/images/ chứa ảnh thực
     app.use('/help/images', express.static(path.join(os.homedir(), 'cfobrain-assets', 'help', 'images')));
+
+    // Serve product images from iMac persistent storage
+    // Prod (iMac): ~/cfobrain-assets/products/{productId}/{filename}.jpg
+    // Dev (MacBook): folder không tồn tại → fallback về base64 trong upload handler
+    app.use('/product-images', express.static(path.join(os.homedir(), 'cfobrain-assets', 'products')));
 
     if (!IS_PROD) {
       try {

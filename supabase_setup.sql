@@ -749,6 +749,39 @@ ALTER FUNCTION delete_inventory_transaction_with_stock(UUID) SET search_path = p
 -- Reload PostgREST schema cache so newly created/replaced RPCs are callable via Supabase REST.
 NOTIFY pgrst, 'reload schema';
 
+-- ============================================================
+-- WEBSITE PUBLIC FORMS (migration 015)
+-- Public browser writes go through /api/store/contacts and /api/store/newsletter.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS store_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT,
+  topic TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'in_progress', 'resolved')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_contacts_status_created_at
+  ON store_contacts(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'unsubscribed')),
+  source TEXT NOT NULL DEFAULT 'website',
+  subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  unsubscribed_at TIMESTAMPTZ
+);
+
+ALTER TABLE store_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE newsletter_subscribers ENABLE ROW LEVEL SECURITY;
+
+-- Không tạo policy anon/authenticated: browser không được ghi trực tiếp.
+NOTIFY pgrst, 'reload schema';
+
 -- User-defined categories (independent of products, allows pre-defining structure)
 CREATE TABLE IF NOT EXISTS categories (
   path TEXT PRIMARY KEY,
@@ -1687,6 +1720,36 @@ $$;
 
 NOTIFY pgrst, 'reload schema';
 
+-- WEBSITE ADMIN MODULE (migration 018)
+CREATE TABLE IF NOT EXISTS store_settings (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL DEFAULT '{}'::JSONB,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS store_media_assets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  path TEXT NOT NULL UNIQUE,
+  public_url TEXT NOT NULL,
+  alt_text TEXT NOT NULL DEFAULT '',
+  created_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO store_settings (key, value) VALUES
+  ('website', jsonb_build_object('shipping_policy', jsonb_build_object('threshold', 800000, 'fee_below_threshold', 30000), 'hotline', '', 'address', '', 'social_links', jsonb_build_object(), 'bank_accounts', jsonb_build_array(), 'footer', jsonb_build_object()))
+ON CONFLICT (key) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('store-media', 'store-media', TRUE, 10485760, ARRAY['image/webp', 'image/jpeg', 'image/png', 'image/avif'])
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
+ALTER TABLE store_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_media_assets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE newsletter_subscribers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_preorder_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shipments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "store_products_authenticated" ON store_products;
+DROP POLICY IF EXISTS "store_product_variants_authenticated" ON store_product_variants;
+NOTIFY pgrst, 'reload schema';
+
 -- ============================================================
 -- Migration 015: Auto-import 13 sản phẩm dép kiểu nữ từ website
 -- Danh mục: Dép kiểu nữ | Size: 35–40 | Giá = 0 (điền sau)
@@ -1808,3 +1871,129 @@ BEGIN
     RAISE NOTICE 'Đã tạo: % + 6 biến thể + store entry', v_prod->>'sku';
   END LOOP;
 END $$;
+
+-- Migration 016: Gán nhóm hàng DÉP KIỂU NAM cho 258 sản phẩm trong catalog
+-- Các sản phẩm đã có category_path (vd: 'Dép kiểu nữ') sẽ không bị ảnh hưởng.
+DO $$
+DECLARE
+  v_group_name TEXT;
+  v_updated    INT;
+BEGIN
+  SELECT name INTO v_group_name
+  FROM product_groups
+  WHERE UPPER(name) LIKE '%KIỂU NAM%'
+  LIMIT 1;
+
+  IF v_group_name IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy nhóm KIỂU NAM. Các nhóm hiện có: %',
+      (SELECT string_agg(name, ' | ') FROM product_groups);
+  END IF;
+
+  UPDATE pos_products
+  SET category_id   = v_group_name,
+      category_path = v_group_name
+  WHERE id IN (
+    SELECT DISTINCT pos_product_id
+    FROM store_product_variants
+    WHERE is_published = true
+  )
+  AND (category_path IS NULL OR category_path = '');
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  RAISE NOTICE 'Migration 016: Đã cập nhật % sản phẩm → nhóm "%"', v_updated, v_group_name;
+END $$;
+
+-- ============================================================
+-- WEBSITE FULFILMENT + SPX SHIPMENTS (migration 017)
+-- ============================================================
+ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shipping_fee NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE shipments ADD COLUMN IF NOT EXISTS cod_amount NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE shipments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE OR REPLACE FUNCTION upsert_website_shipment(
+  p_order_id UUID, p_provider TEXT DEFAULT 'SPX', p_tracking_code TEXT DEFAULT NULL,
+  p_shipping_fee NUMERIC DEFAULT 0, p_cod_amount NUMERIC DEFAULT 0, p_status TEXT DEFAULT 'ready_to_ship'
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_order_status TEXT;
+  v_shipment_id UUID;
+  v_provider TEXT := COALESCE(NULLIF(BTRIM(p_provider), ''), 'SPX');
+  v_tracking_code TEXT := NULLIF(BTRIM(p_tracking_code), '');
+  v_status TEXT := COALESCE(NULLIF(BTRIM(p_status), ''), 'ready_to_ship');
+BEGIN
+  SELECT status INTO v_order_status FROM pos_orders
+  WHERE id = p_order_id AND channel = 'website' FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error', 'Đơn hàng website không tồn tại'); END IF;
+  IF LENGTH(v_provider) > 100 OR LENGTH(COALESCE(v_tracking_code, '')) > 150 OR LENGTH(v_status) > 100 THEN
+    RETURN jsonb_build_object('error', 'Thông tin vận đơn không hợp lệ');
+  END IF;
+  IF p_shipping_fee < 0 OR p_cod_amount < 0 THEN
+    RETURN jsonb_build_object('error', 'Phí giao hàng và tiền COD phải lớn hơn hoặc bằng 0');
+  END IF;
+  IF (v_order_status = 'shipping' OR v_status = 'shipping') AND v_tracking_code IS NULL THEN
+    RETURN jsonb_build_object('error', 'Cần có mã vận đơn trước khi chuyển sang đang giao');
+  END IF;
+
+  SELECT id INTO v_shipment_id FROM shipments WHERE order_id = p_order_id
+  ORDER BY created_at DESC LIMIT 1 FOR UPDATE;
+  IF v_shipment_id IS NULL THEN
+    INSERT INTO shipments (order_id, provider, tracking_code, shipping_fee, cod_amount, status, shipped_at, created_at, updated_at)
+    VALUES (p_order_id, v_provider, v_tracking_code, p_shipping_fee, p_cod_amount, v_status,
+      CASE WHEN v_status = 'shipping' THEN NOW() ELSE NULL END, NOW(), NOW())
+    RETURNING id INTO v_shipment_id;
+  ELSE
+    UPDATE shipments SET provider = v_provider, tracking_code = v_tracking_code,
+      shipping_fee = p_shipping_fee, cod_amount = p_cod_amount, status = v_status,
+      shipped_at = CASE WHEN v_status = 'shipping' THEN COALESCE(shipped_at, NOW()) ELSE shipped_at END,
+      updated_at = NOW()
+    WHERE id = v_shipment_id;
+  END IF;
+  RETURN jsonb_build_object('ok', TRUE, 'shipment_id', v_shipment_id);
+END;
+$$;
+
+DROP FUNCTION IF EXISTS update_website_order_status(UUID, TEXT);
+CREATE OR REPLACE FUNCTION update_website_order_status(
+  p_order_id UUID, p_new_status TEXT, p_shipment JSONB DEFAULT NULL
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_current_status TEXT; v_items JSONB; v_shipment_result JSONB;
+BEGIN
+  SELECT status, items INTO v_current_status, v_items FROM pos_orders
+  WHERE id = p_order_id AND channel = 'website' FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error', 'Đơn hàng website không tồn tại'); END IF;
+  IF p_new_status IS NULL OR p_new_status NOT IN ('pending', 'confirmed', 'packing', 'ready_to_ship', 'shipping', 'completed', 'cancelled', 'return_requested', 'returned') THEN
+    RETURN jsonb_build_object('error', 'Trạng thái đơn hàng không hợp lệ');
+  END IF;
+  IF v_current_status = p_new_status THEN RETURN jsonb_build_object('ok', TRUE, 'idempotent', TRUE, 'restocked', FALSE); END IF;
+  IF NOT (
+    (v_current_status = 'pending' AND p_new_status IN ('confirmed', 'cancelled')) OR
+    (v_current_status = 'confirmed' AND p_new_status IN ('packing', 'cancelled')) OR
+    (v_current_status = 'packing' AND p_new_status IN ('ready_to_ship', 'cancelled')) OR
+    (v_current_status = 'ready_to_ship' AND p_new_status IN ('shipping', 'cancelled')) OR
+    (v_current_status = 'shipping' AND p_new_status IN ('completed', 'return_requested')) OR
+    (v_current_status = 'completed' AND p_new_status = 'return_requested') OR
+    (v_current_status = 'return_requested' AND p_new_status = 'returned')
+  ) THEN RETURN jsonb_build_object('error', format('Không thể chuyển trạng thái từ "%s" sang "%s"', v_current_status, p_new_status)); END IF;
+  IF p_new_status = 'shipping' THEN
+    IF p_shipment IS NULL OR jsonb_typeof(p_shipment) <> 'object' OR NULLIF(BTRIM(p_shipment->>'tracking_code'), '') IS NULL THEN
+      RETURN jsonb_build_object('error', 'Cần có mã vận đơn trước khi chuyển sang đang giao');
+    END IF;
+    SELECT upsert_website_shipment(p_order_id, COALESCE(p_shipment->>'provider', 'SPX'), p_shipment->>'tracking_code',
+      COALESCE((p_shipment->>'shipping_fee')::NUMERIC, 0), COALESCE((p_shipment->>'cod_amount')::NUMERIC, 0), 'shipping')
+    INTO v_shipment_result;
+    IF v_shipment_result ? 'error' THEN RETURN v_shipment_result; END IF;
+  END IF;
+  UPDATE pos_orders SET status = p_new_status, updated_at = NOW() WHERE id = p_order_id;
+  IF p_new_status IN ('cancelled', 'returned') THEN
+    WITH restocks AS (
+      SELECT (item->>'productId')::UUID AS product_id,
+        SUM(COALESCE(NULLIF(item->>'quantity', '')::INTEGER, 0))::INTEGER AS quantity
+      FROM jsonb_array_elements(COALESCE(v_items, '[]'::JSONB)) AS item
+      GROUP BY (item->>'productId')::UUID
+    ) UPDATE pos_products AS p SET stock = p.stock + restocks.quantity FROM restocks WHERE p.id = restocks.product_id;
+  END IF;
+  RETURN jsonb_build_object('ok', TRUE, 'idempotent', FALSE, 'restocked', p_new_status IN ('cancelled', 'returned'));
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';

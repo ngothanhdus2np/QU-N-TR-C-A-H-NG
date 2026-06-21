@@ -27,6 +27,7 @@ interface RawProduct {
   is_parent: boolean;
   variant_count: number | null;
   status: string;
+  images?: string[] | null;
 }
 
 type RootRow =
@@ -34,7 +35,7 @@ type RootRow =
   | { kind: 'single'; product: RawProduct };
 
 const PRODUCT_COLUMNS =
-  'id, sku, name, category_path, import_price, stock, location, brand, parent_id, is_parent, variant_count, status';
+  'id, sku, name, category_path, import_price, stock, location, brand, parent_id, is_parent, variant_count, status, images';
 
 const leafCategory = (path?: string | null) => (path ?? '').split('>').pop()?.trim() || '—';
 
@@ -115,14 +116,17 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
         return;
       }
 
-      // Fetch các pos_products được link (có thể là cha hoặc con)
-      const { data: linkedData, error: linkedErr } = await supabase
-        .from('pos_products')
-        .select(PRODUCT_COLUMNS)
-        .in('id', linkedIds);
-      if (linkedErr) throw linkedErr;
-
-      const linkedProducts = (linkedData ?? []) as RawProduct[];
+      // Fetch các pos_products được link — chunk 30 IDs/request để tránh 414 URI Too Long
+      const CHUNK = 30;
+      const linkedChunks: string[][] = [];
+      for (let i = 0; i < linkedIds.length; i += CHUNK) linkedChunks.push(linkedIds.slice(i, i + CHUNK));
+      const linkedResults = await Promise.all(
+        linkedChunks.map(chunk =>
+          supabase.from('pos_products').select(PRODUCT_COLUMNS).in('id', chunk)
+        )
+      );
+      for (const r of linkedResults) if (r.error) throw r.error;
+      const linkedProducts = linkedResults.flatMap(r => (r.data ?? []) as RawProduct[]);
 
       // Tách: sản phẩm cha được link trực tiếp → cần fetch con của chúng
       const directParents = linkedProducts.filter(p => p.is_parent);
@@ -199,7 +203,12 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
       setRawParents(Array.from(parentSet.values()));
       setPlatformMap(enrichedPlatformMap);
     } catch (err: unknown) {
-      setLoadError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error
+        ? err.message
+        : (err as Record<string, unknown>)?.message
+          ? String((err as Record<string, unknown>).message)
+          : JSON.stringify(err);
+      setLoadError(msg);
     } finally {
       setLoading(false);
     }
@@ -428,178 +437,312 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
           )}
         </div>
 
-        {/* Bảng — clone GoodsProductTableHeader */}
+        {/* Nội dung chính — bảng hoặc lưới tùy viewMode */}
         <div className="flex-1 min-h-0 overflow-auto overscroll-contain no-scrollbar">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-3 w-10">
-                  <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                </th>
-                <th className="px-2 py-3 w-8"></th>
-                <th className="px-2 py-3 w-20"></th>
-                <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
-                  Mã hàng
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">
-                  Nhóm hàng
-                </th>
-                <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
-                  Giá vốn
-                </th>
-                <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
-                  Tồn kho
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[80px]">
-                  Vị trí
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[100px]">
-                  Thương hiệu
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
-                  Nền tảng
-                </th>
-                <th className="px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-20 text-center text-sm text-slate-400">Đang tải...</td>
-                </tr>
-              ) : loadError ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-20 text-center text-sm text-rose-500">Lỗi tải dữ liệu: {loadError}</td>
-                </tr>
-              ) : pageRows.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-20 text-center text-sm text-slate-400">
-                    <Package className="h-10 w-10 mx-auto mb-3 opacity-10" />
-                    {rawVariants.length === 0
-                      ? 'Chưa có sản phẩm nào được liên kết bán online — vào trang Sản phẩm Shopee / Sản phẩm Website để liên kết SKU.'
-                      : 'Không có sản phẩm phù hợp với bộ lọc.'}
-                  </td>
-                </tr>
-              ) : (
-                pageRows.map(row => {
-                  if (row.kind === 'single') {
-                    const p = row.product;
-                    const platforms = platformMap[p.id] ?? [];
+          {viewMode === 'grid' ? (
+            /* ── Chế độ lưới ── */
+            loading ? (
+              <div className="flex items-center justify-center py-20 text-sm text-slate-400">Đang tải...</div>
+            ) : loadError ? (
+              <div className="px-6 py-20 text-center text-sm text-rose-500">Lỗi tải dữ liệu: {loadError}</div>
+            ) : pageRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <Package className="h-10 w-10 mb-3 opacity-10" />
+                <p className="text-sm">
+                  {rawVariants.length === 0
+                    ? 'Chưa có sản phẩm nào được liên kết bán online.'
+                    : 'Không có sản phẩm phù hợp với bộ lọc.'}
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                {/* Lưới phẳng — giống GoodsGridView: mỗi row (cha hoặc đơn lẻ) là một card */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+                  {pageRows.map(row => {
+                    if (row.kind === 'single') {
+                      const p = row.product;
+                      const platforms = platformMap[p.id] ?? [];
+                      const stockColor = p.stock <= 0 ? 'text-rose-500 bg-rose-50' : p.stock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
+                      return (
+                        <CatalogGridCard
+                          key={p.id}
+                          sku={p.sku}
+                          name={p.name}
+                          thumb={p.images?.[0]}
+                          stock={p.stock}
+                          stockColor={stockColor}
+                          importPrice={p.import_price}
+                          platforms={platforms}
+                          variantLabel={null}
+                          isSelected={detailId === p.id}
+                          onClick={() => openDetail(p.id)}
+                        />
+                      );
+                    }
+
+                    /* group → hiển thị card cha với badge "X biến thề", giống GoodsGridCard isParent */
+                    const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
+                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
+                    const thumb = row.parent.images?.[0] ?? row.children.find(c => c.images?.[0])?.images?.[0];
+                    const stockColor = totalStock <= 0 ? 'text-rose-500 bg-rose-50' : totalStock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
+                    const variantCount = row.parent.variant_count ?? row.children.length;
                     return (
-                      <tr
-                        key={p.id}
-                        onClick={() => openDetail(p.id)}
-                        className={`cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50 ${detailId === p.id ? 'bg-indigo-50' : ''}`}
-                      >
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                        </td>
-                        <td className="px-2 py-2.5"></td>
-                        <td className="px-2 py-2.5">
-                          <div className="h-10 w-10 rounded-lg border border-dashed border-slate-200 bg-slate-50" />
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">{p.sku}</td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.category_path)}</td>
-                        <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{p.import_price.toLocaleString('vi-VN')}đ</td>
-                        <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'text-rose-500' : p.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{p.stock}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-500">{p.location || '—'}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-600">{p.brand || '—'}</td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex flex-wrap gap-1">
-                            {platforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5"></td>
-                      </tr>
-                    );
-                  }
-
-                  const isExpanded = expandedIds.has(row.parentId);
-                  const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
-                  const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
-
-                  return (
-                    <React.Fragment key={row.parentId}>
-                      <tr
+                      <CatalogGridCard
+                        key={row.parentId}
+                        sku={row.parent.sku}
+                        name={row.parent.name}
+                        thumb={thumb}
+                        stock={totalStock}
+                        stockColor={stockColor}
+                        importPrice={row.children[0]?.import_price ?? 0}
+                        platforms={groupPlatforms}
+                        variantLabel={`${variantCount} biến thể`}
+                        isSelected={expandedIds.has(row.parentId)}
                         onClick={() => toggleExpand(row.parentId)}
-                        className={`cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50 ${isExpanded ? 'border-t-2 border-indigo-200 bg-indigo-50/60' : ''}`}
-                      >
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                        </td>
-                        <td className="px-2 py-2.5">
-                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <div className="h-10 w-10 rounded-lg border border-dashed border-slate-200 bg-slate-50" />
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <span>{row.parent.sku}</span>
-                            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-normal text-indigo-700">({row.parent.variant_count ?? row.children.length})</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">
-                          {leafCategory(row.parent.category_path ?? row.children[0]?.category_path)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-xs text-slate-400">—</td>
-                        <td className="px-4 py-2.5 text-right text-xs text-slate-700 font-semibold tabular-nums">{totalStock}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400">—</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-600">{row.parent.brand || row.children[0]?.brand || '—'}</td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex flex-wrap gap-1">
-                            {groupPlatforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5"></td>
-                      </tr>
-                      {isExpanded && row.children.map(v => (
-                        <React.Fragment key={v.id}>
-                          <tr
-                            onClick={() => openDetail(v.id)}
-                            className={`cursor-pointer border-b border-slate-50 bg-indigo-50/40 transition-colors hover:bg-indigo-50 ${detailId === v.id ? 'bg-indigo-50' : ''}`}
-                          >
-                            <td className="px-4 py-2.5 border-l-2 border-indigo-200" onClick={e => e.stopPropagation()}>
-                              <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                            </td>
-                            <td className="px-2 py-2.5"></td>
-                            <td className="px-2 py-2.5 pl-6">
-                              <div className="h-9 w-9 rounded-lg border border-dashed border-slate-200 bg-white" />
-                            </td>
-                            <td className="px-4 py-2.5 pl-6 text-xs font-medium text-slate-700 whitespace-nowrap">{v.sku}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.category_path)}</td>
-                            <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{v.import_price.toLocaleString('vi-VN')}đ</td>
-                            <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${v.stock <= 0 ? 'text-rose-500' : v.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{v.stock}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">{v.location || '—'}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-600">{v.brand || '—'}</td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex flex-wrap gap-1">
-                                {(platformMap[v.id] ?? []).map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 border-r-2 border-indigo-200"></td>
-                          </tr>
-                          {detailId === v.id && detailProduct && (
-                            <tr>
-                              <td colSpan={11} className="p-0">
-                                <DetailPanel
-                                  product={detailProduct}
-                                  platforms={detailPlatforms}
-                                  activeTab={detailTab}
-                                  onTabChange={setDetailTab}
-                                  onClose={() => setDetailId(null)}
-                                />
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </React.Fragment>
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Khi bấm vào card nhóm → hiển thị lưới biến thề bên dưới */}
+                {pageRows.filter(r => r.kind === 'group' && expandedIds.has(r.parentId)).map(row => {
+                  if (row.kind !== 'group') return null;
+                  return (
+                    <div key={`expand-${row.parentId}`} className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-indigo-700 px-1">
+                        {row.parent.name || row.parent.sku} — {row.children.length} biến thể
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+                        {row.children.map(v => {
+                          const vPlatforms = platformMap[v.id] ?? [];
+                          const vStockColor = v.stock <= 0 ? 'text-rose-500 bg-rose-50' : v.stock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
+                          return (
+                            <CatalogGridCard
+                              key={v.id}
+                              sku={v.sku}
+                              name={v.name}
+                              thumb={v.images?.[0]}
+                              stock={v.stock}
+                              stockColor={vStockColor}
+                              importPrice={v.import_price}
+                              platforms={vPlatforms}
+                              variantLabel={null}
+                              isSelected={detailId === v.id}
+                              onClick={() => openDetail(v.id)}
+                            />
+                          );
+                        })}
+                      </div>
+                      {detailId && row.children.some(v => v.id === detailId) && detailProduct && (
+                        <DetailPanel
+                          product={detailProduct}
+                          platforms={detailPlatforms}
+                          activeTab={detailTab}
+                          onTabChange={setDetailTab}
+                          onClose={() => setDetailId(null)}
+                        />
+                      )}
+                    </div>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+
+                {/* DetailPanel cho sản phẩm đơn lẻ được chọn */}
+                {detailId && detailProduct && pageRows.some(r => r.kind === 'single' && r.product.id === detailId) && (
+                  <DetailPanel
+                    product={detailProduct}
+                    platforms={detailPlatforms}
+                    activeTab={detailTab}
+                    onTabChange={setDetailTab}
+                    onClose={() => setDetailId(null)}
+                  />
+                )}
+              </div>
+            )
+          ) : (
+            /* ── Chế độ bảng (giữ nguyên) ── */
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                  </th>
+                  <th className="px-2 py-3 w-8"></th>
+                  <th className="px-2 py-3 w-20"></th>
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                    Mã hàng
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">
+                    Nhóm hàng
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                    Giá vốn
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                    Tồn kho
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[80px]">
+                    Vị trí
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap w-[100px]">
+                    Thương hiệu
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                    Nền tảng
+                  </th>
+                  <th className="px-4 py-3 w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-20 text-center text-sm text-slate-400">Đang tải...</td>
+                  </tr>
+                ) : loadError ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-20 text-center text-sm text-rose-500">Lỗi tải dữ liệu: {loadError}</td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-20 text-center text-sm text-slate-400">
+                      <Package className="h-10 w-10 mx-auto mb-3 opacity-10" />
+                      {rawVariants.length === 0
+                        ? 'Chưa có sản phẩm nào được liên kết bán online — vào trang Sản phẩm Shopee / Sản phẩm Website để liên kết SKU.'
+                        : 'Không có sản phẩm phù hợp với bộ lọc.'}
+                    </td>
+                  </tr>
+                ) : (
+                  pageRows.map(row => {
+                    if (row.kind === 'single') {
+                      const p = row.product;
+                      const platforms = platformMap[p.id] ?? [];
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => openDetail(p.id)}
+                          className={`cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50 ${detailId === p.id ? 'bg-indigo-50' : ''}`}
+                        >
+                          <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-2 py-2.5"></td>
+                          <td className="px-2 py-2.5">
+                            <div className="h-10 w-10 rounded-lg border border-dashed border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
+                              {p.images?.[0]
+                                ? <img src={p.images[0]} alt={p.name} className="h-full w-full object-cover" />
+                                : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">{p.sku}</td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.category_path)}</td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{p.import_price.toLocaleString('vi-VN')}đ</td>
+                          <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'text-rose-500' : p.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{p.stock}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{p.location || '—'}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-600">{p.brand || '—'}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex flex-wrap gap-1">
+                              {platforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5"></td>
+                        </tr>
+                      );
+                    }
+
+                    const isExpanded = expandedIds.has(row.parentId);
+                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
+                    const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
+
+                    return (
+                      <React.Fragment key={row.parentId}>
+                        <tr
+                          onClick={() => toggleExpand(row.parentId)}
+                          className={`cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50 ${isExpanded ? 'border-t-2 border-indigo-200 bg-indigo-50/60' : ''}`}
+                        >
+                          <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-2 py-2.5">
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <div className="h-10 w-10 rounded-lg border border-dashed border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
+                              {row.parent.images?.[0]
+                                ? <img src={row.parent.images[0]} alt={row.parent.name} className="h-full w-full object-cover" />
+                                : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span>{row.parent.sku}</span>
+                              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-normal text-indigo-700">({row.parent.variant_count ?? row.children.length})</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">
+                            {leafCategory(row.parent.category_path ?? row.children[0]?.category_path)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-400">—</td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-700 font-semibold tabular-nums">{totalStock}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">—</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-600">{row.parent.brand || row.children[0]?.brand || '—'}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex flex-wrap gap-1">
+                              {groupPlatforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5"></td>
+                        </tr>
+                        {isExpanded && row.children.map(v => (
+                          <React.Fragment key={v.id}>
+                            <tr
+                              onClick={() => openDetail(v.id)}
+                              className={`cursor-pointer border-b border-slate-50 bg-indigo-50/40 transition-colors hover:bg-indigo-50 ${detailId === v.id ? 'bg-indigo-50' : ''}`}
+                            >
+                              <td className="px-4 py-2.5 border-l-2 border-indigo-200" onClick={e => e.stopPropagation()}>
+                                <input type="checkbox" disabled className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                              </td>
+                              <td className="px-2 py-2.5"></td>
+                              <td className="px-2 py-2.5 pl-6">
+                                <div className="h-9 w-9 rounded-lg border border-dashed border-slate-200 bg-white overflow-hidden flex items-center justify-center">
+                                  {v.images?.[0]
+                                    ? <img src={v.images[0]} alt={v.name} className="h-full w-full object-cover" />
+                                    : null}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 pl-6 text-xs font-medium text-slate-700 whitespace-nowrap">{v.sku}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.category_path)}</td>
+                              <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{v.import_price.toLocaleString('vi-VN')}đ</td>
+                              <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${v.stock <= 0 ? 'text-rose-500' : v.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{v.stock}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500">{v.location || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-600">{v.brand || '—'}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex flex-wrap gap-1">
+                                  {(platformMap[v.id] ?? []).map(pf => <PlatformBadge key={pf} platform={pf} />)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 border-r-2 border-indigo-200"></td>
+                            </tr>
+                            {detailId === v.id && detailProduct && (
+                              <tr>
+                                <td colSpan={11} className="p-0">
+                                  <DetailPanel
+                                    product={detailProduct}
+                                    platforms={detailPlatforms}
+                                    activeTab={detailTab}
+                                    onTabChange={setDetailTab}
+                                    onClose={() => setDetailId(null)}
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <GoodsPagination
@@ -613,6 +756,64 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
         />
       </div>
     </div>
+  );
+}
+
+// ─── Grid card cho catalog ────────────────────────────────────────────────────
+
+function CatalogGridCard({
+  sku, name, thumb, stock, stockColor, importPrice, platforms, variantLabel, isSelected, onClick,
+}: {
+  sku: string;
+  name: string;
+  thumb?: string | null;
+  stock: number;
+  stockColor: string;
+  importPrice: number;
+  platforms: Platform[];
+  variantLabel: string | null;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full bg-white rounded-2xl border transition-all active:scale-[0.98] overflow-hidden group flex flex-col text-left ${
+        isSelected
+          ? 'border-indigo-300 shadow-md shadow-indigo-100'
+          : 'border-slate-100 hover:border-indigo-200 hover:shadow-md shadow-sm'
+      }`}
+    >
+      <div className="bg-slate-100/60 relative w-full aspect-square flex-shrink-0 flex items-center justify-center overflow-hidden">
+        {thumb ? (
+          <img src={thumb} alt={name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <ImageIcon className="h-10 w-10 text-slate-300" strokeWidth={1} />
+        )}
+        <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-white/90 text-indigo-600 text-2xs font-normal rounded-full shadow-sm border border-indigo-100">
+          {importPrice.toLocaleString('vi-VN')}đ
+        </div>
+        {variantLabel && (
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-indigo-600 text-white text-[9px] font-normal rounded-full shadow-sm">
+            {variantLabel}
+          </div>
+        )}
+      </div>
+      <div className="px-2.5 py-2 flex flex-col gap-1 flex-1">
+        <p className="text-xs font-normal text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors text-center">
+          {name || sku}
+        </p>
+        <div className="flex items-center justify-between mt-auto pt-1 gap-1 flex-wrap">
+          <span className="text-[9px] text-slate-400 truncate">{sku}</span>
+          <span className={`text-[9px] font-normal px-1.5 py-0.5 rounded-full ${stockColor}`}>{stock}</span>
+        </div>
+        {platforms.length > 0 && (
+          <div className="flex flex-wrap gap-0.5 mt-0.5">
+            {platforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
+          </div>
+        )}
+      </div>
+    </button>
   );
 }
 

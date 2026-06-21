@@ -57,8 +57,10 @@ import { apiService } from '../services/apiService';
 
 const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
 const OnlineCatalogPage = React.lazy(() => import('./website/OnlineCatalogPage'));
+const OnlineOrdersPage = React.lazy(() => import('./online/OnlineOrdersPage'));
 const WebsiteProductsPage = React.lazy(() => import('./website/WebsiteProductsPage'));
 const WebsiteOrdersPage = React.lazy(() => import('./website/WebsiteOrdersPage'));
+const WebsiteOperationsPage = React.lazy(() => import('./website/WebsiteOperationsPage'));
 const ShopeeProductsPage = React.lazy(() => import('./website/ShopeeProductsPage'));
 
 interface MainContentProps {
@@ -616,6 +618,12 @@ const MainContent: React.FC<MainContentProps> = ({
         );
       case 'order-repairs':
         return <OrderRepairs />;
+      case 'online-orders':
+        return (
+          <React.Suspense fallback={<TableSkeleton />}>
+            <OnlineOrdersPage navigationSlot={renderOnlineNav()} />
+          </React.Suspense>
+        );
       case 'delivery-partners':
         return <DeliveryPartners navigationSlot={renderOnlineNav()} />;
       case 'shipping-orders':
@@ -773,6 +781,12 @@ const MainContent: React.FC<MainContentProps> = ({
             <WebsiteOrdersPage navigationSlot={renderOnlineNav()} />
           </React.Suspense>
         );
+      case 'website-operations':
+        return (
+          <React.Suspense fallback={<TableSkeleton />}>
+            <WebsiteOperationsPage navigationSlot={renderOnlineNav()} />
+          </React.Suspense>
+        );
       default:
         return null;
     }
@@ -784,12 +798,14 @@ const MainContent: React.FC<MainContentProps> = ({
   const isStaffActive = activeTab === 'staff' || activeTab === 'staff-ledger';
   const isPayrollActive = activeTab === 'payroll' || activeTab.startsWith('payroll-');
   const isOnlineActive =
+    activeTab === 'online-orders' ||
     activeTab === 'shopee-revenue' ||
     activeTab === 'delivery-partners' ||
     activeTab === 'shipping-orders' ||
     activeTab === 'online-catalog' ||
     activeTab === 'website-products' ||
-    activeTab === 'website-orders';
+    activeTab === 'website-orders' ||
+    activeTab === 'website-operations';
 
   return (
     <div

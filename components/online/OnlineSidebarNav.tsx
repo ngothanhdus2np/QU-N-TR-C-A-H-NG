@@ -2,10 +2,8 @@ import React from 'react';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Bike,
   ClipboardList,
   Database,
-  FileText,
   Globe,
   Package,
   Settings,
@@ -31,14 +29,13 @@ const shopeeItems: { id: RevenueSubTab; label: string; icon: React.ElementType; 
 
 const websiteItems = [
   { id: 'website-products', label: 'Sản phẩm', icon: Package, desc: 'Quản lý sản phẩm trên website' },
-  { id: 'website-orders', label: 'Đơn hàng', icon: ShoppingBag, desc: 'Đơn hàng từ website' },
+  { id: 'website-operations', label: 'Form & Vận hành', icon: Settings, desc: 'Preorder, liên hệ, newsletter' },
 ];
 
 const mainItems = [
+  { id: 'online-orders', label: 'Đơn hàng Online', icon: ShoppingBag },
   { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
   { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
-  { id: 'delivery-partners', label: 'Đối tác giao hàng', icon: Bike },
-  { id: 'shipping-orders', label: 'Vận đơn', icon: FileText },
   { id: 'website-phuc-sang', label: 'Website PHÚC SANG', icon: Globe },
 ];
 
@@ -48,7 +45,7 @@ export default function OnlineSidebarNav({
   onSelectMainTab,
   onSelectShopeeSubTab,
 }: Props) {
-  const isWebsiteTab = activeTab === 'website-products' || activeTab === 'website-orders';
+  const isWebsiteTab = activeTab === 'website-products' || activeTab === 'website-operations';
   const activeMainItem =
     isWebsiteTab
       ? mainItems.find(i => i.id === 'website-phuc-sang')!

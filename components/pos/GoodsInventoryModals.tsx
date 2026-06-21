@@ -127,7 +127,29 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
   brands,
   applyToVariants,
   onApplyToVariantsChange,
-}) => (
+}) => {
+  const [showValidationErrors, setShowValidationErrors] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!showCreateModal) setShowValidationErrors(false);
+  }, [showCreateModal]);
+
+  const isFormValid = () =>
+    !!(formData.name?.trim() && (formData.categoryPath || formData.categoryId));
+
+  const handleSaveCreateModal = () => {
+    if (!isFormValid()) { setShowValidationErrors(true); return; }
+    setShowValidationErrors(false);
+    onSaveCreateModal();
+  };
+
+  const handleSaveAndCreateMore = () => {
+    if (!isFormValid()) { setShowValidationErrors(true); return; }
+    setShowValidationErrors(false);
+    onSaveAndCreateMore();
+  };
+
+  return (
   <>
     <GoodsProductForm
       isOpen={showProductModal}
@@ -156,8 +178,8 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
       activeTab={createModalTab}
       setActiveTab={setCreateModalTab}
       onClose={onCloseCreateModal}
-      onSaveAndCreateMore={onSaveAndCreateMore}
-      onSave={onSaveCreateModal}
+      onSaveAndCreateMore={handleSaveAndCreateMore}
+      onSave={handleSaveCreateModal}
     >
       {createModalTab === 'info' && (
         <GoodsCreateProductInfoTab
@@ -176,6 +198,7 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
           brands={brands}
           applyToVariants={applyToVariants}
           onApplyToVariantsChange={onApplyToVariantsChange}
+          showValidationErrors={showValidationErrors}
         />
       )}
 
@@ -240,4 +263,5 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
       onSave={onSaveMoreVariants}
     />
   </>
-);
+  );
+};

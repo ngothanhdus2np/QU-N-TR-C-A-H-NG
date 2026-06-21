@@ -711,7 +711,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     await fetch(`/api/upload-product-image/${product.id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: newList }),
+      body: JSON.stringify({ images: newList, deleted: [imgUrl] }),
     });
   };
 
@@ -817,6 +817,14 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
               <div className="w-1/3 shrink-0 flex flex-col gap-2">
                 <div className="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200 group">
                   <img src={mainImg} alt={product.name} className="w-full h-full object-cover" />
+                  {/* Nút X xóa ảnh đang xem */}
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDeleteSessionImage(mainImg); }}
+                    className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-full p-1 shadow transition-all opacity-0 group-hover:opacity-100"
+                    title="Xóa ảnh này"
+                  >
+                    <X className="h-3.5 w-3.5 text-slate-500 hover:text-rose-500" />
+                  </button>
                   {canSlide && (
                     <>
                       <button
@@ -841,17 +849,26 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                   {thumbs.map((img, i) => {
                     const realIdx = thumbStart + i;
                     return (
-                      <button
-                        key={realIdx}
-                        onClick={() => setActiveImageIdx(realIdx)}
-                        className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
-                          safeIdx === realIdx
-                            ? 'border-indigo-500'
-                            : 'border-slate-200 hover:border-slate-400'
-                        }`}
-                      >
-                        <img src={img} alt={`Ảnh ${realIdx + 1}`} className="w-full h-full object-cover" />
-                      </button>
+                      <div key={realIdx} className="relative group/thumb aspect-square">
+                        <button
+                          onClick={() => setActiveImageIdx(realIdx)}
+                          className={`w-full h-full rounded-lg overflow-hidden border-2 transition-colors ${
+                            safeIdx === realIdx
+                              ? 'border-indigo-500'
+                              : 'border-slate-200 hover:border-slate-400'
+                          }`}
+                        >
+                          <img src={img} alt={`Ảnh ${realIdx + 1}`} className="w-full h-full object-cover" />
+                        </button>
+                        {/* Nút X trên thumbnail */}
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteSessionImage(img); }}
+                          className="absolute top-0.5 right-0.5 bg-white/90 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-full p-0.5 shadow-sm transition-all opacity-0 group-hover/thumb:opacity-100"
+                          title="Xóa ảnh này"
+                        >
+                          <X className="h-3 w-3 text-slate-500 hover:text-rose-500" />
+                        </button>
+                      </div>
                     );
                   })}
                   {thumbs.length < 3 && Array.from({ length: 3 - thumbs.length }).map((_, i) => (

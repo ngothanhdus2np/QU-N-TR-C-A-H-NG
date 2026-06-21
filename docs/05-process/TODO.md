@@ -1286,7 +1286,10 @@ rclone ls mega:cfobrain-backup/daily/
 - [x] ~~**Giai đoạn 4: Nhập 43 sản phẩm vào store_products**~~ — **30/43 sản phẩm đã có** trong store_products (is_published=true). Đã xác nhận production: 30 slug chuẩn và toàn bộ 180 biến thể đã có `color_name` + `size`. 13 sản phẩm còn thiếu (DBDN01-07, DDDN01-03, DXNN01-03) chưa tồn tại trong pos_products — cần nhập tay trước. *(2026-06-20, xác nhận lại 2026-06-20)*
   - ⏳ **Việc còn lại:** (1) Nhập 13 SKU vào pos_products; (2) Dùng tab "Kênh bán" để bật Website=ON
   - Riêng kênh Shopee: hạ tầng đã sẵn sàng, chỉ cần bấm lại "Nhập từ Dữ liệu nguồn cũ" trong trang Sản phẩm Shopee (đã fix bug duplicate-key + bảng đã tồn tại) là chạy được hết — chưa xác nhận đã bấm
-- [ ] **Giai đoạn 5: UI admin "Quản lý Website"** — trang trong app để: thêm/sửa store_products, liên kết variants, quản lý collections, xem đơn website
+- [x] **Giai đoạn 5: UI admin "Quản lý Website"** — trang trong app để: thêm/sửa store_products, liên kết variants, quản lý collections, xem đơn website ✅ *(2026-06-21)*
+  - Codex đã build: `WebsiteProductsPage`, `WebsiteOrdersPage`, `WebsiteOperationsPage`, `routes/adminStore.ts`, `services/adminStoreApi.ts`
+  - Fix màn hình trắng (thiếu import `Settings` icon) + fix lỗi tải sản phẩm (auth + CORS + spread requireRole)
+  - Migrations: 017 (order fulfillment/shipments), 018 (store admin module) — **chưa chạy production**
 - [x] ~~**OnlineCatalogPage.tsx viết lại giống layout Hàng hoá + nối fetch thật**~~ — sidebar/toolbar/table clone GoodsFilterSidebar+GoodsToolbar+GoodsProductTableHeader, cột Mã hàng/Nhóm hàng (leaf)/Giá vốn/Tồn kho/Vị trí/Thương hiệu/Nền tảng, cha-con expand giống GoodsProductRow, bảng chi tiết 5 tab clone GoodsProductDetailPanel, fetch thật từ store_product_variants+shopee_product_variants (mỗi bảng try/catch riêng để không sập trang nếu 1 bảng lỗi) ✅ *(2026-06-16)*
   - **Vẫn đang rỗng** vì chưa có sản phẩm nào thực sự liên kết — hạ tầng đã sẵn sàng (xem Giai đoạn 3), chỉ còn thiếu Giai đoạn 4
   - Đã dọn 30 sản phẩm cha rỗng (`variant_count=0`) tạo ra bởi lần "Nhập từ Dữ liệu nguồn cũ" bị lỗi trước đó trong `pos_products`

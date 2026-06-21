@@ -31,6 +31,7 @@ interface GoodsCreateProductInfoTabProps {
   brands?: string[];
   applyToVariants?: boolean;
   onApplyToVariantsChange?: (checked: boolean) => void;
+  showValidationErrors?: boolean;
 }
 
 export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps> = ({
@@ -49,7 +50,11 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   brands = [],
   applyToVariants,
   onApplyToVariantsChange,
+  showValidationErrors = false,
 }) => {
+  const nameError = showValidationErrors && !formData.name?.trim();
+  const groupError = showValidationErrors && !formData.categoryPath && !formData.categoryId;
+
   const [showPriceSetup, setShowPriceSetup] = React.useState(false);
   const [barcodeManualMode, setBarcodeManualMode] = React.useState(getGoodsBarcodeManualMode);
   const [showBrandDropdown, setShowBrandDropdown] = React.useState(false);
@@ -291,22 +296,23 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
         <div>
           <label className="text-sm font-normal text-slate-700 mb-2 block">Tên hàng <span className="text-rose-500">*</span></label>
           <input
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-indigo-500 ${nameError ? 'border-rose-400' : 'border-slate-300'}`}
             value={formData.name}
             onChange={e => setFormData({ ...formData, name: e.target.value })}
             placeholder="Bắt buộc"
           />
+          {nameError && <p className="mt-1 text-xs text-rose-500">Vui lòng nhập tên hàng</p>}
         </div>
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <label className="text-sm font-normal text-slate-700 mb-2 block">*Nhóm hàng</label>
+        <label className="text-sm font-normal text-slate-700 mb-2 block">Nhóm hàng <span className="text-rose-500">*</span></label>
         <div className="flex gap-2">
           <div ref={groupContainerRef} className="flex-1 relative">
             <input
-              className="w-full px-3 py-2 pr-8 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+              className={`w-full px-3 py-2 pr-8 border rounded-lg text-sm focus:outline-none focus:border-indigo-500 ${groupError ? 'border-rose-400' : 'border-slate-300'}`}
               value={showGroupDropdown ? groupSearchText : selectedGroupLeaf}
               onChange={e => setGroupSearchText(e.target.value)}
               onFocus={openGroupDropdown}
@@ -358,6 +364,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
             Tạo mới
           </button>
         </div>
+        {groupError && <p className="mt-1 text-xs text-rose-500">Vui lòng chọn nhóm hàng</p>}
       </div>
       <div>
         <label className="text-sm font-normal text-slate-700 mb-2 block">Thương hiệu</label>

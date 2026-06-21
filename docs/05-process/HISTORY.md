@@ -3,6 +3,19 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-21 — Sửa màn hình trắng + lỗi tải sản phẩm website
+
+- Fix màn hình trắng toàn app: icon `Settings` dùng trong `constants/navigation.ts` (route website-operations) nhưng thiếu import từ `lucide-react` → thêm vào import list.
+- Fix trang sản phẩm website báo "lỗi tải sản phẩm": `services/adminStoreApi.ts` throw ngay khi không có Supabase session (app dùng auth nội bộ, không dùng Supabase auth) → sửa thành bỏ throw, gửi request không có auth header.
+- Fix backend `routes/adminStore.ts`: `requireRole` không dùng dev bypass → chain `requireAuth` (có localhost bypass) + nếu không có JWT gán role `admin` cho dev mode.
+- Cập nhật tất cả 18 route registrations trong `adminStore.ts` dùng `...requireRole(...)` (spread array) thay vì `requireRole(...)`.
+- Thêm `PATCH` và `DELETE` vào CORS methods trong `server.ts` (trước đó thiếu → PATCH request bị reject từ browser).
+- Sửa 7 lỗi TypeScript `string | string[]`: `req.params.id` đổi thành `String(req.params.id)` trong các lời gọi `writeAudit` và `saveVariants` (do `ParamsDictionary` trong @types/express-serve-static-core type giá trị là `string | string[]`).
+- `npx tsc --noEmit` → 0 lỗi.
+- Restart server để pick up code mới (server cũ khởi động trước khi code được sửa → routes không được đăng ký).
+- Xác nhận: trang sản phẩm website hiển thị đầy đủ danh sách sản phẩm sau restart.
+- Files: `constants/navigation.ts`, `services/adminStoreApi.ts`, `routes/adminStore.ts`, `server.ts`
+
 ### 2026-06-20 — Help Center: Viết bài + Chụp screenshot dạng step-by-step
 
 - Tạo script `scripts/capture-help-screenshots.cjs` với Playwright: chụp 45 ảnh cho 4 bài viết (pos-intro, pos-create-order, goods-search, goods-adjust).

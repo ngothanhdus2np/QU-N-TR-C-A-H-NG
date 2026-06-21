@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, X, Check, RefreshCw, Globe, ExternalLink,
-  Eye, EyeOff, ChevronRight, Save, Loader2, Package, ImageIcon,
+  Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, Save, Loader2, Package, ImageIcon,
   Tag, Link2, FileText, SearchIcon,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 import { useToast } from '../ui/Toast';
 
 interface Props {
@@ -157,6 +158,26 @@ const TAB_ITEMS: { id: DetailTab; label: string; icon: React.ElementType }[] = [
   { id: 'variants', label: 'SKU liên kết', icon: Link2 },
   { id: 'seo', label: 'SEO', icon: SearchIcon },
 ];
+
+function MediaUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [altText, setAltText] = useState('');
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file);
+      });
+      const result = await adminStoreRequest<{ url: string }>('/api/admin/store/media', {
+        method: 'POST', body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64, altText }),
+      });
+      onUploaded(result.url); setAltText('');
+    } catch (error) { alert(error instanceof Error ? error.message : 'Không thể upload ảnh'); }
+    finally { setUploading(false); }
+  };
+  return <div className="mt-2 flex flex-wrap items-center gap-2"><input value={altText} onChange={e => setAltText(e.target.value)} placeholder="Alt text ảnh" className="w-40 rounded border border-slate-200 px-2 py-1.5 text-xs"/><label className="cursor-pointer rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"><input type="file" accept="image/webp,image/jpeg,image/png,image/avif" className="hidden" disabled={uploading} onChange={e => upload(e.target.files?.[0])}/>{uploading ? 'Đang upload…' : 'Upload store-media'}</label></div>;
+}
 
 // ─── SKU search hook ──────────────────────────────────────────────────────────
 function useSkuSearch() {
@@ -373,49 +394,9 @@ function DetailPanel({
     if (!form.slug.trim()) { showToast('Nhập slug URL', 'error'); setTab('info'); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('store_products').update({
-        name: form.name,
-        slug: form.slug,
-        short_description: form.short_description || null,
-        description: form.description || null,
-        material: form.material || null,
-        sole_material: form.sole_material || null,
-        origin: form.origin || null,
-        care_instructions: form.care_instructions || null,
-        size_guide: form.size_guide || null,
-        cover_image_url: form.cover_image_url || null,
-        gallery: form.gallery.length > 0 ? form.gallery : [],
-        video_url: form.video_url || null,
-        seo_title: form.seo_title || null,
-        seo_description: form.seo_description || null,
-        og_image_url: form.og_image_url || null,
-        is_featured: form.is_featured,
-        is_new: form.is_new,
-        is_best_seller: form.is_best_seller,
-        is_published: form.is_published,
-        display_order: form.display_order,
-        updated_at: new Date().toISOString(),
-      }).eq('id', product.id);
-      if (error) throw error;
-
-      await supabase.from('store_product_variants').delete().eq('store_product_id', product.id);
-      if (form.variantDrafts.length > 0) {
-        const { error: varErr } = await supabase.from('store_product_variants').insert(
-          form.variantDrafts.map((v, i) => ({
-            store_product_id: product.id,
-            pos_product_id: v.pos_product_id,
-            sku: v.sku,
-            size: v.size || null,
-            color_name: v.color_name || null,
-            color_hex: v.color_hex || null,
-            compare_at_price: v.compare_at_price ? Number(v.compare_at_price) : null,
-            website_price_override: v.website_price_override ? Number(v.website_price_override) : null,
-            is_published: true,
-            display_order: i,
-          }))
-        );
-        if (varErr) throw varErr;
-      }
+      await adminStoreRequest(`/api/admin/store/products/${product.id}`, {
+        method: 'PATCH', body: JSON.stringify({ ...form, variants: form.variantDrafts }),
+      });
 
       showToast('Đã cập nhật sản phẩm', 'success');
       setDirty(false);
@@ -574,6 +555,7 @@ function DetailPanel({
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
+              <MediaUpload onUploaded={url => setF({ cover_image_url: url })} />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -597,6 +579,18 @@ function DetailPanel({
                       <img src={url} alt="" className="h-8 w-8 object-cover rounded border border-slate-200 shrink-0"
                         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     )}
+                    <button
+                      disabled={i === 0}
+                      onClick={() => { const g = [...form.gallery]; [g[i - 1], g[i]] = [g[i], g[i - 1]]; setF({ gallery: g }); }}
+                      className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                      aria-label="Đưa ảnh lên"
+                    ><ChevronUp size={14} /></button>
+                    <button
+                      disabled={i === form.gallery.length - 1}
+                      onClick={() => { const g = [...form.gallery]; [g[i + 1], g[i]] = [g[i], g[i + 1]]; setF({ gallery: g }); }}
+                      className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                      aria-label="Đưa ảnh xuống"
+                    ><ChevronDown size={14} /></button>
                     <button onClick={() => setF({ gallery: form.gallery.filter((_, j) => j !== i) })}
                       className="text-slate-300 hover:text-red-500 transition-colors p-0.5 shrink-0">
                       <X size={14} />
@@ -609,6 +603,7 @@ function DetailPanel({
                 >
                   <Plus size={12} /> Thêm ảnh
                 </button>
+                <MediaUpload onUploaded={url => setF({ gallery: [...form.gallery, url] })} />
               </div>
             </div>
             <div>
@@ -806,33 +801,9 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     if (form.variantDrafts.length === 0) { showToast('Thêm ít nhất 1 SKU liên kết', 'error'); setTab('variants'); return; }
     setSaving(true);
     try {
-      const { data, error } = await supabase.from('store_products').insert({
-        name: form.name,
-        slug: form.slug,
-        short_description: form.short_description || null,
-        cover_image_url: form.cover_image_url || null,
-        is_featured: form.is_featured,
-        is_new: form.is_new,
-        is_best_seller: form.is_best_seller,
-        is_published: form.is_published,
-        display_order: form.display_order,
-      }).select('id').single();
-      if (error) throw error;
-      const productId = data.id;
-
-      const { error: varErr } = await supabase.from('store_product_variants').insert(
-        form.variantDrafts.map((v, i) => ({
-          store_product_id: productId,
-          pos_product_id: v.pos_product_id,
-          sku: v.sku,
-          size: v.size || null,
-          color_name: v.color_name || null,
-          website_price_override: v.website_price_override ? Number(v.website_price_override) : null,
-          is_published: true,
-          display_order: i,
-        }))
-      );
-      if (varErr) throw varErr;
+      await adminStoreRequest('/api/admin/store/products', {
+        method: 'POST', body: JSON.stringify({ ...form, variants: form.variantDrafts }),
+      });
 
       showToast('Đã tạo sản phẩm website', 'success');
       onSaved();
@@ -1004,26 +975,11 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('store_products')
-      .select(`
-        id, name, slug, short_description, description,
-        material, sole_material, origin, care_instructions, size_guide,
-        cover_image_url, gallery, video_url,
-        seo_title, seo_description, og_image_url,
-        is_featured, is_new, is_best_seller, is_published, display_order,
-        store_product_variants (
-          id, sku, size, color_name, color_hex, compare_at_price,
-          pos_product_id, is_published, display_order, website_price_override
-        )
-      `)
-      .is('deleted_at', null)
-      .order('display_order', { ascending: true });
-
-    if (error) {
+    try {
+      const result = await adminStoreRequest<{ data: StoreProduct[] }>('/api/admin/store/products');
+      setProducts(result.data ?? []);
+    } catch {
       showToast('Lỗi tải danh sách sản phẩm', 'error');
-    } else {
-      setProducts((data as StoreProduct[]) ?? []);
     }
     setLoading(false);
   }, [showToast]);
@@ -1031,15 +987,14 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const togglePublish = async (product: StoreProduct) => {
-    const { error } = await supabase
-      .from('store_products')
-      .update({ is_published: !product.is_published, updated_at: new Date().toISOString() })
-      .eq('id', product.id);
-    if (error) {
-      showToast('Lỗi cập nhật trạng thái', 'error');
-    } else {
+    try {
+      await adminStoreRequest(`/api/admin/store/products/${product.id}/publish`, {
+        method: 'POST', body: JSON.stringify({ is_published: !product.is_published }),
+      });
       showToast(product.is_published ? 'Đã ẩn khỏi website' : 'Đã xuất bản lên website', 'success');
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, is_published: !p.is_published } : p));
+    } catch {
+      showToast('Lỗi cập nhật trạng thái', 'error');
     }
   };
 

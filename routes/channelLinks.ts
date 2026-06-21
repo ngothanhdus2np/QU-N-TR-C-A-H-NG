@@ -280,6 +280,25 @@ export function createChannelLinksRouter(
         return;
       }
 
+      // Website publishing is content management, not a generic catalog toggle.
+      // Enforce this on the server so hiding the frontend control is never the
+      // only protection. Legacy owner/manager accounts retain admin access.
+      if (channel === 'website') {
+        const authHeader = req.headers.authorization;
+        const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+        if (!jwt) {
+          res.status(401).json({ ok: false, error: 'Cần đăng nhập để quản lý Website' });
+          return;
+        }
+        const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+        const role = String(user?.user_metadata?.role ?? '').toLowerCase();
+        const canManageWebsite = ['admin', 'owner', 'manager', 'content_manager'].includes(role);
+        if (authError || !canManageWebsite) {
+          res.status(403).json({ ok: false, error: 'Chỉ admin hoặc content_manager được thay đổi xuất bản Website' });
+          return;
+        }
+      }
+
       if (channel === 'website') {
         if (action === 'unlink') {
           if (childIds && childIds.length > 0) {
