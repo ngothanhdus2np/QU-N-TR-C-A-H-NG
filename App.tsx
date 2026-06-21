@@ -78,6 +78,7 @@ const App: React.FC = () => {
     updateData,
     updateSurgical,
     mergeRemoteUpdate,
+    loadInventoryOut,
     pushBatch,
     syncErrors,
     lastSyncTime,
@@ -289,6 +290,7 @@ const App: React.FC = () => {
             updateData={updateData}
             updateSurgical={updateSurgical}
             pushBatch={pushBatch}
+            loadInventoryOut={loadInventoryOut}
             offlinePendingCount={offlinePendingCount}
             offlineOrderPendingCount={offlineOrderPendingCount}
             isDraining={isDraining}

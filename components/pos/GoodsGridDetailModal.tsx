@@ -6,6 +6,7 @@ import { DetailTab, GoodsProductDetailPanel } from './GoodsProductDetailPanel';
 interface GoodsGridDetailModalProps {
   product: POSProduct;
   siblings?: POSProduct[];
+  parentName?: string;
   transactions: InventoryTransaction[];
   orders: POSOrder[];
   onClose: () => void;
@@ -22,6 +23,7 @@ interface GoodsGridDetailModalProps {
 export const GoodsGridDetailModal: React.FC<GoodsGridDetailModalProps> = ({
   product,
   siblings,
+  parentName,
   transactions,
   orders,
   onClose,
@@ -60,8 +62,8 @@ export const GoodsGridDetailModal: React.FC<GoodsGridDetailModalProps> = ({
 
         {hasSiblings && (
           <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-            <p className="text-[9px] font-normal text-slate-400 uppercase tracking-wide mb-2.5">
-              Biến thể ({siblings.length})
+            <p className="text-sm font-semibold text-slate-800 mb-2.5">
+              {parentName ?? product.name}
             </p>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               {siblings.map(sibling => {

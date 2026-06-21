@@ -8,6 +8,27 @@ import {
 } from '../../types';
 import { cleanVNNumber, parseVNDate, normalizeHeader, generateId } from '../../src/lib';
 
+// Chuẩn hóa tên đơn vị vận chuyển từ tên đầy đủ Shopee sang tên viết tắt
+const SHIPPING_UNIT_MAP: [string, string][] = [
+  ['giao hang nhanh', 'GHN'],
+  ['giao hàng nhanh', 'GHN'],
+  ['giao hang tiet kiem', 'GHTK'],
+  ['giao hàng tiết kiệm', 'GHTK'],
+  ['spx', 'SPX'],
+  ['j&t', 'J&T'],
+  ['ninja van', 'NJV'],
+  ['ninjavan', 'NJV'],
+];
+
+function normalizeShippingUnit(raw: string): string {
+  if (!raw) return '';
+  const lower = raw.toLowerCase().trim();
+  for (const [key, val] of SHIPPING_UNIT_MAP) {
+    if (lower.includes(key)) return val;
+  }
+  return raw;
+}
+
 interface UseShopeeInventoryOutProps {
   shopeeInventoryOut: ShopeeInventoryOutRecord[];
   shopeeSourceData: ShopeeSourceItem[];
@@ -179,12 +200,14 @@ export function useShopeeInventoryOut({
 
             const productName = String(obj.tensanpham || obj.productname || '');
             const address = String(obj.diachinhanhang || obj.address || '');
-            const shippingUnit = String(obj.donvivanchuyen || obj.shippingcarrier || '');
+            const shippingUnit = normalizeShippingUnit(String(obj.donvivanchuyen || obj.shippingcarrier || ''));
             const platformStatus = String(obj.trangthaidonhang || '').toLowerCase();
 
             let status: ShopeeInventoryOutRecord['status'] = 'OK';
             if (platformStatus.includes('huy')) status = 'CANCEL';
-            else if (platformStatus.includes('tra hang') || platformStatus.includes('hoan tien'))
+            else if (platformStatus.includes('hoan thanh') && (platformStatus.includes('tra') || platformStatus.includes('hoan')))
+              status = 'RETURNED'; // "Hoàn hàng thành công" / "Trả hàng hoàn thành"
+            else if (platformStatus.includes('tra hang') || platformStatus.includes('hoan tien') || platformStatus.includes('dang hoan'))
               status = 'RETURN';
             else if (platformStatus.includes('hoan thanh')) status = 'OK';
             else if (platformStatus.includes('dang giao') || platformStatus.includes('van chuyen'))

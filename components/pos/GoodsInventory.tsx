@@ -1264,6 +1264,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       <GoodsGridDetailModal
         product={gridDetailProduct}
         siblings={gridDetailSiblings.length > 1 ? gridDetailSiblings : undefined}
+        parentName={gridDetailProduct.parentId ? products.find(p => p.id === gridDetailProduct.parentId)?.name : undefined}
         transactions={transactions}
         orders={orders}
         onClose={() => { setGridDetailProduct(null); setGridDetailSiblings([]); }}

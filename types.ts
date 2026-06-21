@@ -1178,7 +1178,7 @@ export interface ShopeeInventoryOutRecord {
   shippingUnit?: string;
   trackingNumber?: string;
   shipDate?: string;
-  status: 'OK' | 'RETURN' | 'CANCEL' | 'LOST' | 'SHIPPING' | 'PENDING';
+  status: 'OK' | 'RETURN' | 'RETURNED' | 'CANCEL' | 'LOST' | 'SHIPPING' | 'PENDING';
   profitStatus?: string; // e.g., "LÃI 2", "LỖ 1"
   dailyOrderIndex?: number;
 }

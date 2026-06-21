@@ -43,7 +43,29 @@ interface BotOrder {
   shipping_carrier: string;
   order_date: string;
   paid_to_seller_at: string | null;
+  return_completed_at: string | null;
   shopIdx: number;
+}
+
+// Chuẩn hóa tên ĐVVC từ Shopee sang tên viết tắt
+const SHIPPING_UNIT_MAP: [string, string][] = [
+  ['giao hang nhanh', 'GHN'],
+  ['giao hàng nhanh', 'GHN'],
+  ['giao hang tiet kiem', 'GHTK'],
+  ['giao hàng tiết kiệm', 'GHTK'],
+  ['spx', 'SPX'],
+  ['j&t', 'J&T'],
+  ['ninja van', 'NJV'],
+  ['ninjavan', 'NJV'],
+];
+
+function normalizeShippingUnit(raw: string): string {
+  if (!raw) return 'SPX';
+  const lower = raw.toLowerCase().trim();
+  for (const [key, val] of SHIPPING_UNIT_MAP) {
+    if (lower.includes(key)) return val;
+  }
+  return raw;
 }
 
 // Chuẩn hóa ngày từ nhiều format: "23:15:39 17/6/2026", "16/06/2026", "2026-06-17"
@@ -79,7 +101,9 @@ async function fetchAllBotOrders(port: number, shopIdx: number): Promise<BotOrde
 }
 
 function mapToRow(o: BotOrder) {
-  const mappedStatus = STATUS_MAP[o.status] ?? 'PENDING';
+  const baseStatus = STATUS_MAP[o.status] ?? 'PENDING';
+  // Hoàn đã xong → RETURNED (số lượng sẽ = 0, không tính tồn kho)
+  const mappedStatus = baseStatus === 'RETURN' && o.return_completed_at ? 'RETURNED' : baseStatus;
   const date         = parseOrderDate(o.order_date);
   const platform     = SHOP_BOTS[o.shopIdx]?.platform ?? 'Shopee 1';
   const variation    = o.variation ? o.variation.replace(',', '-') : '';
@@ -108,7 +132,7 @@ function mapToRow(o: BotOrder) {
     ads_tax:             0,
     net_profit:          0,
     address:             o.province ?? '',
-    shipping_unit:       o.shipping_carrier ?? 'SPX',
+    shipping_unit:       normalizeShippingUnit(o.shipping_carrier ?? ''),
     platform,
     profit_status:       'CHƯA TÍNH',
   };

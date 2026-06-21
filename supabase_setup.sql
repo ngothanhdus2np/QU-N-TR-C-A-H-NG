@@ -1111,8 +1111,22 @@ CREATE TABLE IF NOT EXISTS shopee_shops (
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
   display_order INTEGER DEFAULT 0,
+  port INTEGER,
+  shop_url TEXT,
+  profile_dir TEXT,
+  bot_status TEXT DEFAULT 'stopped',
+  last_sync_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE shopee_shops ADD COLUMN IF NOT EXISTS port         INTEGER;
+ALTER TABLE shopee_shops ADD COLUMN IF NOT EXISTS shop_url     TEXT;
+ALTER TABLE shopee_shops ADD COLUMN IF NOT EXISTS profile_dir  TEXT;
+ALTER TABLE shopee_shops ADD COLUMN IF NOT EXISTS bot_status   TEXT DEFAULT 'stopped';
+ALTER TABLE shopee_shops ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ;
+
+UPDATE shopee_shops SET port = 3001, profile_dir = 'shopee-profile-shop1' WHERE slug = 'phuc-sang-store'  AND port IS NULL;
+UPDATE shopee_shops SET port = 3002, profile_dir = 'shopee-profile-shop2' WHERE slug = 'giaydepphucsang' AND port IS NULL;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='shopee_shops' AND policyname='shopee_shops_authenticated') THEN

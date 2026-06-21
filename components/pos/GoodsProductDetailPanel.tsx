@@ -32,6 +32,7 @@ interface GoodsProductDetailPanelProps {
   onClose: () => void;
   deleteConfirmText: string;
   noBorder?: boolean;
+  fillHeight?: boolean;
   showSupplierActions?: boolean;
   showCopyPrintActions?: boolean;
   onAddUnit?: () => void;
@@ -380,10 +381,14 @@ const StockCardTable: React.FC<{
   product: POSProduct;
   transactions?: InventoryTransaction[];
   orders?: POSOrder[];
+  noFrame?: boolean;
+  hideExportButton?: boolean;
 }> = ({
   product,
   transactions,
   orders,
+  noFrame = false,
+  hideExportButton = false,
 }) => {
   const [selectedDocumentRow, setSelectedDocumentRow] = React.useState<StockCardRow | null>(null);
   const rows = React.useMemo(
@@ -441,8 +446,8 @@ const StockCardTable: React.FC<{
   }
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+    <div className={noFrame ? 'flex flex-col h-full bg-white' : 'bg-white rounded-lg border border-slate-200 overflow-hidden'}>
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 shrink-0">
         <div>
           <h3 className="text-sm font-bold text-slate-900">Thẻ kho</h3>
           <p className="text-xs text-slate-400 mt-1">
@@ -455,7 +460,7 @@ const StockCardTable: React.FC<{
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className={noFrame ? 'flex-1 min-h-0 overflow-x-auto' : 'overflow-x-auto'}>
         <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-slate-50 text-xs font-normal text-slate-500">
             <tr>
@@ -528,17 +533,19 @@ const StockCardTable: React.FC<{
         </table>
       </div>
 
-      <div className="border-t border-slate-100 bg-white px-4 py-4">
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={rows.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <FileText className="h-4 w-4" />
-          Xuất file
-        </button>
-      </div>
+      {!hideExportButton && (
+        <div className="border-t border-slate-100 bg-white px-4 py-4 shrink-0">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={rows.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileText className="h-4 w-4" />
+            Xuất file
+          </button>
+        </div>
+      )}
 
       {selectedDocumentRow && (
         <DocumentDetailModal
@@ -630,6 +637,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   onClose: _onClose,
   deleteConfirmText,
   noBorder = false,
+  fillHeight = false,
   showSupplierActions = false,
   showCopyPrintActions = false,
   onAddUnit,
@@ -645,6 +653,29 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   const [localIp, setLocalIp] = React.useState<string | null>(null);
   const [activeImageIdx, setActiveImageIdx] = React.useState(0);
   const [imagesBeforeQR, setImagesBeforeQR] = React.useState<string[]>([]);
+
+  const ledgerRows = React.useMemo(
+    () => fillHeight ? buildStockCardRows(product, transactions, orders) : [],
+    [fillHeight, product, transactions, orders]
+  );
+
+  const handleLedgerExport = () => {
+    if (!ledgerRows.length) return;
+    const headers = ['Chứng từ', 'Thời gian', 'Loại giao dịch', 'Đối tác', 'Giá GD', 'Giá vốn', 'Số lượng', 'Tồn cuối'];
+    const csvRows = ledgerRows.map(row =>
+      [row.documentCode, row.date, row.transactionLabel, row.partner,
+       row.transactionPrice ?? '', row.costPrice ?? '', row.quantityChange, row.endingStock, row.note]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `the-kho-${product.sku || product.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   React.useEffect(() => {
     setLiveImages(product.images ?? []);
@@ -789,8 +820,11 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
 
   return (
     <>
-    <div className={`bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`}>
-      <div className="border-b border-slate-200 bg-white">
+    <div className={fillHeight
+      ? 'flex flex-col h-full bg-white'
+      : `bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`
+    }>
+      <div className="border-b border-slate-200 bg-white shrink-0">
         <div className="flex items-center gap-1 px-6">
           {DETAIL_TABS.map(tab => (
             <button
@@ -808,7 +842,11 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         </div>
       </div>
 
-      <div className="bg-slate-50 p-6">
+      <div className={
+        fillHeight
+          ? (activeTab === 'warranty' ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 min-h-0 overflow-auto bg-slate-50 p-6')
+          : 'bg-slate-50 p-6'
+      }>
         {activeTab === 'info' && (
           <div className={hasImages ? 'flex gap-6 items-start' : 'space-y-6'}>
 
@@ -999,7 +1037,13 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         )}
 
         {activeTab === 'warranty' && (
-          <StockCardTable product={product} transactions={transactions} orders={orders} />
+          <StockCardTable
+            product={product}
+            transactions={transactions}
+            orders={orders}
+            noFrame={fillHeight}
+            hideExportButton={fillHeight}
+          />
         )}
 
         {activeTab === 'units' && (
@@ -1021,6 +1065,17 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
               <Trash2 className="h-4 w-4" />
               Xóa
             </button>
+            {fillHeight && activeTab === 'warranty' && (
+              <button
+                type="button"
+                onClick={handleLedgerExport}
+                disabled={ledgerRows.length === 0}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileText className="h-4 w-4" />
+                Xuất file
+              </button>
+            )}
             {showCopyPrintActions && (
               <button
                 onClick={e => {

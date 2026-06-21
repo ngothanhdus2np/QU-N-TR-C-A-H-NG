@@ -847,6 +847,44 @@ export function useAppData() {
     dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
   }, []);
 
+  // Reload shopeeInventoryOut từ Supabase vào local state (không write lại Supabase)
+  const loadInventoryOut = useCallback(async () => {
+    try {
+      const { data: rawRows } = await apiService.fetchShopeeInventoryOut();
+      if (!rawRows?.length) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped = rawRows.map((r: any) => ({
+        id: r.id as string,
+        date: (r.date ?? '') as string,
+        status: (r.status ?? 'OK') as AppData['shopeeInventoryOut'][number]['status'],
+        orderId: (r.order_id ?? r.orderId ?? '') as string,
+        sku: (r.sku ?? '') as string,
+        quantity: Number(r.quantity ?? 0),
+        salePrice: Number(r.sale_price ?? r.salePrice ?? 0),
+        platformFee: Number(r.platform_fee ?? r.platformFee ?? 0),
+        paymentFee: Number(r.payment_fee ?? r.paymentFee ?? 0),
+        freeshipExtra: Number(r.freeship_extra ?? r.freeshipExtra ?? 0),
+        affiliateFee: Number(r.affiliate_fee ?? r.affiliateFee ?? 0),
+        handlingFee: Number(r.handling_fee ?? r.handlingFee ?? 0),
+        pishipFee: Number(r.piship_fee ?? r.pishipFee ?? 0),
+        vatTax: Number(r.vat_tax ?? r.vatTax ?? 0),
+        adsCost: Number(r.ads_cost ?? r.adsCost ?? 0),
+        adsTax: Number(r.ads_tax ?? r.adsTax ?? 0),
+        personalIncomeTax: Number(r.personal_income_tax ?? r.personalIncomeTax ?? 0),
+        netProfit: Number(r.net_profit ?? r.netProfit ?? 0),
+        customerPaid: Number(r.customer_paid ?? r.customerPaid ?? r.sale_price ?? r.salePrice ?? 0),
+        address: (r.address ?? '') as string,
+        shippingUnit: (r.shipping_unit ?? r.shippingUnit ?? '') as string,
+        platform: (r.platform ?? 'Shopee 2') as string,
+        productName: (r.product_name ?? r.productName ?? '') as string,
+        trackingNumber: (r.tracking_number ?? r.trackingNumber ?? r.order_id ?? r.orderId ?? '') as string,
+        shipDate: (r.ship_date ?? r.shipDate ?? r.date ?? '') as string,
+        profitStatus: (r.profit_status ?? r.profitStatus ?? '') as string,
+      }));
+      dispatch({ type: 'SET_DATA', payload: { shopeeInventoryOut: mapped } });
+    } catch { /* silent — không block UI */ }
+  }, []);
+
   const updateSurgical = useCallback(
     async (updates: AppDataSurgicalUpdate[]) => {
       // Đánh dấu để useRealtimeSync bỏ qua echo từ Supabase Realtime
@@ -1131,6 +1169,7 @@ export function useAppData() {
     updateData,
     updateSurgical,
     mergeRemoteUpdate,
+    loadInventoryOut,
     pushBatch,
     syncErrors,
     lastSyncTime,
