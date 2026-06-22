@@ -222,20 +222,22 @@ const BarcodePrintModal: React.FC<{
           body { font-family: Inter, Arial, sans-serif; }
           .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
           .label {
+            box-sizing: border-box;
             width: ${t.widthMm}mm;
             height: ${t.heightMm}mm;
-            padding: 1mm;
+            padding: 1.4mm 1.8mm 1mm;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
+            text-align: center;
             overflow: hidden;
             ${showBorder ? 'border: 0.5px solid #000;' : ''}
             page-break-inside: avoid;
           }
-          .name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.15; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
-          .barcode { width: 92%; height: auto; max-height: ${t.heightMm * 0.35}mm; margin-top: auto; }
-          .code { margin-top: 1mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .name { width: 100%; font-size: 8px; line-height: 1.15; font-weight: 700; text-transform: uppercase; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+          .barcode { width: ${Math.max(18, t.widthMm - 4)}mm; height: ${Math.max(7, t.heightMm * 0.35)}mm; margin-top: auto; display: block; }
+          .code { width: 100%; margin-top: 1mm; font-family: "Courier New", monospace; font-size: 8px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
         </style>
       </head>
