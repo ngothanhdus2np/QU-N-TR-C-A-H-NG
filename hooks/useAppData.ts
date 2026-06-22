@@ -522,6 +522,7 @@ export function useAppData() {
 
       if (results.brandProfile) {
         const mappedBrand = dataMapper.mapBrandProfile(results.brandProfile);
+        brandFromServerRef.current = true;
         dispatch({ type: 'SET_BRAND_PROFILE', payload: mappedBrand });
         localStorage.setItem('cfo_brain_brand_profile', JSON.stringify(mappedBrand));
         await appDataCache.saveBrandProfile(mappedBrand);
@@ -529,8 +530,10 @@ export function useAppData() {
         const localBrand = localStorage.getItem('cfo_brain_brand_profile');
         const cachedBrand = await appDataCache.getBrandProfile();
         if (cachedBrand) {
+          brandFromServerRef.current = true;
           dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
         } else if (localBrand) {
+          brandFromServerRef.current = true;
           dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
         }
       }
@@ -734,10 +737,14 @@ export function useAppData() {
       }
 
       if (cachedBrand) {
+        brandFromServerRef.current = true;
         dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
       } else {
         const localBrand = localStorage.getItem('cfo_brain_brand_profile');
-        if (localBrand) dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
+        if (localBrand) {
+          brandFromServerRef.current = true;
+          dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
+        }
       }
 
       fetchData();
@@ -750,12 +757,15 @@ export function useAppData() {
     };
   }, [fetchData]);
 
-  // Bỏ qua lần render đầu tiên (brandProfile = DEFAULT_BRAND) để tránh race condition:
-  // fetchData chậm hơn 2s → timer nổ → DEFAULT_BRAND đè lên Supabase → dữ liệu mất.
   const brandSaveReadyRef = useRef(false);
+  const brandFromServerRef = useRef(false);
   useEffect(() => {
     if (!brandSaveReadyRef.current) {
       brandSaveReadyRef.current = true;
+      return;
+    }
+    if (brandFromServerRef.current) {
+      brandFromServerRef.current = false;
       return;
     }
     const timer = setTimeout(async () => {

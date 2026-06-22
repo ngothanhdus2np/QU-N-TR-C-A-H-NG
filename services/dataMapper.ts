@@ -84,16 +84,16 @@ const parseVariantAttrText = (text?: string): Record<string, string> => {
 export const dataMapper = {
   mapBrandProfile(bp: DbRow): BrandProfile {
     return {
-      name: (bp.name as string) || DEFAULT_BRAND.name,
-      story: (bp.story as string) || DEFAULT_BRAND.story,
-      voice: (bp.voice as string) || DEFAULT_BRAND.voice,
-      targetAudience: (bp.target_audience as string) || DEFAULT_BRAND.targetAudience,
-      competitiveAdvantage: (bp.competitive_advantage as string) || DEFAULT_BRAND.competitiveAdvantage,
-      logo: (bp.logo as string) || DEFAULT_BRAND.logo,
-      inventory: (bp.inventory as ProductLine[]) || DEFAULT_BRAND.inventory,
-      phone: (bp.phone as string) || DEFAULT_BRAND.phone,
-      address: (bp.address as string) || DEFAULT_BRAND.address,
-      hashtags: (bp.hashtags as string) || DEFAULT_BRAND.hashtags,
+      name: (bp.name as string) ?? DEFAULT_BRAND.name,
+      story: (bp.story as string) ?? DEFAULT_BRAND.story,
+      voice: (bp.voice as string) ?? DEFAULT_BRAND.voice,
+      targetAudience: (bp.target_audience as string) ?? DEFAULT_BRAND.targetAudience,
+      competitiveAdvantage: (bp.competitive_advantage as string) ?? DEFAULT_BRAND.competitiveAdvantage,
+      logo: (bp.logo as string) ?? DEFAULT_BRAND.logo,
+      inventory: (bp.inventory as ProductLine[]) ?? DEFAULT_BRAND.inventory,
+      phone: (bp.phone as string) ?? DEFAULT_BRAND.phone,
+      address: (bp.address as string) ?? DEFAULT_BRAND.address,
+      hashtags: (bp.hashtags as string) ?? DEFAULT_BRAND.hashtags,
     };
   },
 
