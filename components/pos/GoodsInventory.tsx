@@ -138,7 +138,7 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
     .join('');
 
   win.document.write(`<html><head><meta charset="utf-8" /><title>In tem mã hàng</title><style>
-@page { size: ${totalWidthMm}mm ${Math.ceil(labels.length / columns) * heightMm}mm; margin: 0; }
+@page { size: ${totalWidthMm}mm ${heightMm}mm; margin: 0; }
 body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
 .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
 .label {
@@ -217,7 +217,7 @@ const BarcodePrintModal: React.FC<{
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          @page { size: ${totalWidthMm}mm ${Math.ceil(qty / t.columns) * t.heightMm}mm; margin: 0; }
+          @page { size: ${totalWidthMm}mm ${t.heightMm}mm; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Inter, Arial, sans-serif; }
           .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
