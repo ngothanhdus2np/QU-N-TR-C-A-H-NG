@@ -67,7 +67,7 @@ export function ListPageTable<T>({
   return (
     <table className="min-w-full border-collapse text-sm">
       <thead
-        className={`bg-indigo-50/60 border-b border-indigo-100 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}
+        className={`bg-indigo-50 border-b border-indigo-100 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}
       >
         <tr>
           {columns.map(col => (
