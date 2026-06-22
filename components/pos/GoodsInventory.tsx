@@ -149,15 +149,15 @@ body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
   ${showBorder ? 'border: 0.5px solid #000;' : ''}
   page-break-inside: avoid;
 }
-.name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
-.barcode { width: 92%; height: auto; max-height: ${heightMm * 0.40}mm; }
-.code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
-.price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+.name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.15; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.barcode { width: 92%; height: auto; max-height: ${heightMm * 0.35}mm; margin-top: auto; }
+.code { margin-top: 1mm; font-size: 8px; font-weight: 700; line-height: 1; }
+.price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
 </style></head><body><main class="sheet">${labelHtml}</main></body></html>`);
   win.document.close();
   win.onload = () => {
@@ -198,10 +198,10 @@ const BarcodePrintModal: React.FC<{
       align-items: center; justify-content: flex-start; text-align: center;
       overflow: hidden; ${showBorder ? 'border: 0.2mm solid #cbd5e1;' : ''}
     }
-    .bp-name { width: 100%; font-size: 6.5px; line-height: 1.05; font-weight: 700; text-transform: uppercase; overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    .bp-barcode { width: ${Math.max(18, t.widthMm - 4)}mm; height: ${Math.max(7, t.heightMm * 0.38)}mm; margin-top: 0.8mm; display: block; fill: #020617; }
-    .bp-code { width: 100%; margin-top: 0.4mm; font-family: "Courier New", monospace; font-size: 6.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .bp-price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
+    .bp-name { width: 100%; font-size: 8px; line-height: 1.15; font-weight: 700; text-transform: uppercase; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .bp-barcode { width: ${Math.max(18, t.widthMm - 4)}mm; height: ${Math.max(7, t.heightMm * 0.35)}mm; margin-top: auto; display: block; fill: #020617; }
+    .bp-code { width: 100%; margin-top: 1mm; font-family: "Courier New", monospace; font-size: 8px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bp-price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
   `;
   const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const singleLabelHtml = `<div class="bp-label">${showName ? `<div class="bp-name">${escHtml(displayName)}</div>` : ''}${barcodeSvg.replace('class="barcode"', 'class="bp-barcode"')}${showCode ? `<div class="bp-code">${escHtml(displayCode)}</div>` : ''}${showPrice ? `<div class="bp-price">${product.salePrice.toLocaleString('vi-VN')}đ</div>` : ''}</div>`;
@@ -228,15 +228,15 @@ const BarcodePrintModal: React.FC<{
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             overflow: hidden;
             ${showBorder ? 'border: 0.5px solid #000;' : ''}
             page-break-inside: avoid;
           }
-          .name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
-          .barcode { width: 92%; height: auto; max-height: ${t.heightMm * 0.40}mm; }
-          .code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
-          .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.15; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+          .barcode { width: 92%; height: auto; max-height: ${t.heightMm * 0.35}mm; margin-top: auto; }
+          .code { margin-top: 1mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
         </style>
       </head>
       <body><div class="sheet">${allLabelsHtml}</div></body>

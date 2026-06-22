@@ -168,15 +168,15 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             overflow: hidden;
             ${template.showBorder ? 'border: 0.5px solid #000;' : ''}
             page-break-inside: avoid;
           }
-          .name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
-          .barcode { width: 92%; height: auto; max-height: ${template.heightMm * 0.40}mm; }
-          .code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
-          .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.15; min-height: 4.5mm; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+          .barcode { width: 92%; height: auto; max-height: ${template.heightMm * 0.35}mm; margin-top: auto; }
+          .code { margin-top: 1mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
         </style>
       </head>
       <body><div class="sheet">${labelHtml}</div></body>
