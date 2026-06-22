@@ -2046,6 +2046,132 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     }
   });
 
+  // ── Import danh sách NCC từ KiotViet + điều chỉnh công nợ ──
+  router.post('/api/import/kiotviet-suppliers', requireAuth, async (req, res) => {
+    try {
+      const { rows } = req.body as { rows: unknown[][] };
+      if (!rows?.length) return res.status(400).json({ error: 'Không có dữ liệu' });
+
+      const col0 = String(rows[0]?.[0] || '').trim();
+      if (col0 !== 'Mã nhà cung cấp') {
+        return res.status(400).json({ error: `File không đúng định dạng NHÀ CUNG CẤP. Cột 1 = '${col0}'` });
+      }
+
+      const BATCH = 500;
+      const kiotVietDebts = new Map<string, { supplierId: string; supplierName: string; debt: number }>();
+
+      const suppliersToUpsert = rows.slice(1)
+        .filter(row => {
+          const code = String(row[0] || '').trim();
+          return code && /^NCC/i.test(code);
+        })
+        .map(row => {
+          const code = String(row[0] || '').trim();
+          const name = String(row[1] || '').trim() || code;
+          const suppId = supplierIdFromKiotVietCode(code);
+          const debt = Number(row[8] || 0);
+
+          kiotVietDebts.set(suppId, { supplierId: suppId, supplierName: name, debt: Math.round(debt) });
+
+          return {
+            id: suppId,
+            name,
+            code,
+            email: String(row[2] || '').trim() || null,
+            phone: String(row[3] || '').trim() || null,
+            address: String(row[4] || '').trim() || null,
+            tax_code: String(row[9] || '').trim() || null,
+            notes: String(row[11] || '').trim() || null,
+            supplier_group: String(row[12] || '').trim() || 'KiotViet',
+            status: row[13] === 0 ? 'inactive' : 'active',
+            company_name: String(row[15] || '').trim() || null,
+          };
+        });
+
+      const skippedCols = await upsertWithSchemaFallback(
+        supabase, 'suppliers', suppliersToUpsert, BATCH, OPTIONAL_SUPPLIER_COLUMNS
+      );
+
+      // Lấy toàn bộ supplier_debts hiện tại để so sánh
+      let allDebts: { supplier_id: string; type: string; amount: number }[] = [];
+      let offset = 0;
+      while (true) {
+        const { data } = await supabase
+          .from('supplier_debts')
+          .select('supplier_id,type,amount')
+          .range(offset, offset + 999);
+        if (!data || data.length === 0) break;
+        allDebts = allDebts.concat(data);
+        if (data.length < 1000) break;
+        offset += 1000;
+      }
+
+      const dbDebtBySupplier = new Map<string, number>();
+      for (const d of allDebts) {
+        const prev = dbDebtBySupplier.get(d.supplier_id) || 0;
+        dbDebtBySupplier.set(d.supplier_id, prev + (d.type === 'purchase' ? d.amount : -d.amount));
+      }
+
+      // Tạo adjustment records cho NCC có chênh lệch
+      const adjustments: {
+        id: string; supplier_id: string; supplier_name: string;
+        date: string; type: string; amount: number; description: string;
+      }[] = [];
+      const today = new Date().toISOString().slice(0, 10);
+
+      for (const [suppId, kv] of kiotVietDebts) {
+        const dbDebt = dbDebtBySupplier.get(suppId) || 0;
+        const diff = dbDebt - kv.debt;
+        if (Math.abs(diff) < 1) continue;
+
+        if (diff > 0) {
+          // DB nợ nhiều hơn KiotViet → thêm payment adjustment
+          adjustments.push({
+            id: stableUuidFromKey(`kiotviet-supplier-debt:adj:${suppId}`),
+            supplier_id: suppId,
+            supplier_name: kv.supplierName,
+            date: today,
+            type: 'payment',
+            amount: Math.round(diff),
+            description: `Điều chỉnh công nợ theo file NHÀ CUNG CẤP KiotViet (giảm ${Math.round(diff).toLocaleString()}đ)`,
+          });
+        } else {
+          // DB nợ ít hơn KiotViet → thêm purchase adjustment
+          adjustments.push({
+            id: stableUuidFromKey(`kiotviet-supplier-debt:adj:${suppId}`),
+            supplier_id: suppId,
+            supplier_name: kv.supplierName,
+            date: today,
+            type: 'purchase',
+            amount: Math.round(Math.abs(diff)),
+            description: `Điều chỉnh công nợ theo file NHÀ CUNG CẤP KiotViet (tăng ${Math.round(Math.abs(diff)).toLocaleString()}đ)`,
+          });
+        }
+      }
+
+      if (adjustments.length > 0) {
+        await upsertWithSchemaFallback(
+          supabase, 'supplier_debts', adjustments, BATCH, OPTIONAL_SUPPLIER_DEBT_COLUMNS
+        );
+      }
+
+      res.json({
+        success: true,
+        suppliers: suppliersToUpsert.length,
+        adjustments: adjustments.length,
+        adjustmentDetails: adjustments.map(a => ({
+          name: a.supplier_name,
+          type: a.type,
+          amount: a.amount,
+        })),
+        skippedCols,
+      });
+    } catch (error: unknown) {
+      console.error('[Import /kiotviet-suppliers]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
   // Xóa toàn bộ hàng hóa + giao dịch kho (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-products', requireAuth, async (_req, res) => {
     try {
