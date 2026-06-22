@@ -125,46 +125,32 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
   const labelHtml = labels
     .map(product => {
       const code = product.barcode || product.sku || product.id;
-      return `
-        <section class="label">
-          ${showName ? `<div class="name">${escapeLabelText(product.name)}</div>` : ''}
-          ${buildCode128SvgForLabel(code)}
-          ${showCode ? `<div class="code">${escapeLabelText(code)}</div>` : ''}
-          ${showPrice ? `<div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))} VNĐ</div>` : ''}
-        </section>`;
+      return `<section class="label">${showName ? `<div class="name">${escapeLabelText(product.name)}</div>` : ''}${buildCode128SvgForLabel(code)}${showCode ? `<div class="code">${escapeLabelText(code)}</div>` : ''}${showPrice ? `<div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))} VNĐ</div>` : ''}</section>`;
     })
     .join('');
 
-  win.document.write(`<!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>In tem mã hàng</title>
-        <style>
-          @page { size: ${totalWidthMm}mm auto; margin: 0; }
-          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
-          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
-          .label {
-            box-sizing: border-box;
-            width: ${widthMm}mm;
-            height: ${heightMm}mm;
-            padding: 1mm;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            ${showBorder ? 'border: 0.5px solid #000;' : ''}
-            page-break-inside: avoid;
-          }
-          .name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
-          .barcode { width: 92%; height: auto; max-height: ${heightMm * 0.40}mm; }
-          .code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
-          .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
-        </style>
-      </head>
-      <body><main class="sheet">${labelHtml}</main></body>
-    </html>`);
+  win.document.write(`<html><head><meta charset="utf-8" /><title>In tem mã hàng</title><style>
+@page { size: ${totalWidthMm}mm auto; margin: 0; }
+body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+.sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; }
+.label {
+  box-sizing: border-box;
+  width: ${widthMm}mm;
+  height: ${heightMm}mm;
+  padding: 1mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  ${showBorder ? 'border: 0.5px solid #000;' : ''}
+  page-break-inside: avoid;
+}
+.name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
+.barcode { width: 92%; height: auto; max-height: ${heightMm * 0.40}mm; }
+.code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+.price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+</style></head><body><main class="sheet">${labelHtml}</main></body></html>`);
   win.document.close();
   win.onload = () => {
     win.print();
