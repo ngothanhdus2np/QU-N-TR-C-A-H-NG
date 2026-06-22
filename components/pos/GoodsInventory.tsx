@@ -204,7 +204,7 @@ const BarcodePrintModal: React.FC<{
     .bp-price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
   `;
   const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const singleLabelHtml = `<section class="bp-label">${showName ? `<div class="bp-name">${escHtml(displayName)}</div>` : ''}${barcodeSvg.replace('class="barcode"', 'class="bp-barcode"')}${showCode ? `<div class="bp-code">${escHtml(displayCode)}</div>` : ''}${showPrice ? `<div class="bp-price">${product.salePrice.toLocaleString('vi-VN')}đ</div>` : ''}</section>`;
+  const singleLabelHtml = `<div class="bp-label">${showName ? `<div class="bp-name">${escHtml(displayName)}</div>` : ''}${barcodeSvg.replace('class="barcode"', 'class="bp-barcode"')}${showCode ? `<div class="bp-code">${escHtml(displayCode)}</div>` : ''}${showPrice ? `<div class="bp-price">${product.salePrice.toLocaleString('vi-VN')}đ</div>` : ''}</div>`;
   const previewHtml = Array(previewCount).fill(singleLabelHtml).join('');
 
   const handlePrint = () => {
@@ -217,11 +217,11 @@ const BarcodePrintModal: React.FC<{
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          @page { size: ${totalWidthMm}mm auto; margin: 0; }
-          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+          @page { margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Inter, Arial, sans-serif; }
           .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
           .label {
-            box-sizing: border-box;
             width: ${t.widthMm}mm;
             height: ${t.heightMm}mm;
             padding: 1mm;
@@ -239,7 +239,7 @@ const BarcodePrintModal: React.FC<{
           .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
         </style>
       </head>
-      <body><main class="sheet">${allLabelsHtml}</main></body>
+      <body><div class="sheet">${allLabelsHtml}</div></body>
     </html>`);
     win.document.close();
     win.onload = () => { win.print(); setTimeout(() => win.close(), 500); };

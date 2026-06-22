@@ -148,13 +148,7 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
   const labelHtml = labels
     .map(product => {
       const code = product.sku || product.barcode || product.id;
-      return `
-        <section class="label">
-          ${template.showName ? `<div class="name">${escapeLabelText(buildLabelProductName(product))}</div>` : ''}
-          ${buildCode128Svg(code)}
-          ${template.showCode ? `<div class="code">${escapeLabelText(normalizeCode128Text(code) || code)}</div>` : ''}
-          ${template.showPrice ? `<div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))}đ</div>` : ''}
-        </section>`;
+      return `<div class="label">${template.showName ? `<div class="name">${escapeLabelText(buildLabelProductName(product))}</div>` : ''}${buildCode128Svg(code)}${template.showCode ? `<div class="code">${escapeLabelText(normalizeCode128Text(code) || code)}</div>` : ''}${template.showPrice ? `<div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))}đ</div>` : ''}</div>`;
     })
     .join('');
 
@@ -163,11 +157,11 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          @page { size: ${totalWidthMm}mm auto; margin: 0; }
-          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+          @page { margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Inter, Arial, sans-serif; }
           .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
           .label {
-            box-sizing: border-box;
             width: ${template.widthMm}mm;
             height: ${template.heightMm}mm;
             padding: 1mm;
@@ -185,7 +179,7 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
           .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
         </style>
       </head>
-      <body><main class="sheet">${labelHtml}</main></body>
+      <body><div class="sheet">${labelHtml}</div></body>
     </html>`);
   win.document.close();
   win.onload = () => {
