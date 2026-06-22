@@ -69,6 +69,7 @@ export interface POSOrderItem {
   price: number;
   discount: number;
   total: number;
+  importPrice?: number;
   salespersonId?: string;
   salespersonName?: string;
   lineType?: 'sale' | 'return' | 'exchange';

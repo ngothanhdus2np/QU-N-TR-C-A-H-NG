@@ -273,12 +273,13 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
       if (order.isReturn) {
         row.returnsValue += Math.abs(Number(order.totalAmount) || 0);
         order.items.forEach(item => {
-          const unitCost =
+          const itemCost = Number(item.importPrice);
+          const unitCost = itemCost > 0 ? itemCost : (
             productCostById.get(item.productId) ??
             productCostById.get(item.sku) ??
             costByProduct.get(item.productId) ??
             costByProduct.get(item.sku) ??
-            0;
+            0);
           row.cogs -= unitCost * (Number(item.quantity) || 0);
         });
       } else {
@@ -291,12 +292,13 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
         row.discount += disc;
         row.netRevenue += totalAmt - disc; // chuẩn KiotViet: không trừ điểm tích lũy
         order.items.forEach(item => {
-          const unitCost =
+          const itemCost = Number(item.importPrice);
+          const unitCost = itemCost > 0 ? itemCost : (
             productCostById.get(item.productId) ??
             productCostById.get(item.sku) ??
             costByProduct.get(item.productId) ??
             costByProduct.get(item.sku) ??
-            0;
+            0);
           row.cogs += unitCost * (Number(item.quantity) || 0);
         });
       }

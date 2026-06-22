@@ -356,10 +356,16 @@ export const getSalesProfitRowsByDate = (
       profit: 0,
     };
     const cogs = order.items.reduce((sum, item) => {
-      const fallback = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
-      const unitCost = costHistory
-        ? getHistoricalCost(costHistory, item.productId, order.date, fallback)
-        : fallback;
+      const itemCost = Number(item.importPrice);
+      let unitCost: number;
+      if (itemCost > 0) {
+        unitCost = itemCost;
+      } else {
+        const fallback = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
+        unitCost = costHistory
+          ? getHistoricalCost(costHistory, item.productId, order.date, fallback)
+          : fallback;
+      }
       return sum + unitCost * (Number(item.quantity) || 0);
     }, 0);
 
