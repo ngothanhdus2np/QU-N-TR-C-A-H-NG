@@ -10,8 +10,9 @@ import {
   Printer,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import type { BrandProfile } from '../../../types';
+import type { BrandProfile, POSOrder } from '../../../types';
 import { useToast } from '../../ui/Toast';
+import { openPrintInvoice } from '../../pos/printInvoiceFromTemplate';
 
 // Constants
 const PRINT_TEMPLATE_TYPES = [
@@ -47,6 +48,7 @@ const SAMPLE_BARCODE_LABEL_PRODUCT = {
   price: '185,000',
 };
 
+const INVOICE_TEMPLATE_STORAGE_KEY = 'invoice_print_template';
 const BARCODE_LABEL_TEMPLATE_STORAGE_KEY = 'barcode_label_template_settings';
 
 const CODE_128_PATTERNS = [
@@ -303,6 +305,23 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
   const [barcodeLabelShowPrice, setBarcodeLabelShowPrice] = useState(true);
   const [barcodeLabelShowCode, setBarcodeLabelShowCode] = useState(true);
   const [barcodeLabelShowBorder, setBarcodeLabelShowBorder] = useState(false);
+
+  // Load invoice template from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(INVOICE_TEMPLATE_STORAGE_KEY);
+      if (saved) setInvoiceTemplateBody(saved);
+    } catch {}
+  }, []);
+
+  // Save invoice template to localStorage
+  useEffect(() => {
+    if (invoiceTemplateBody) {
+      try {
+        localStorage.setItem(INVOICE_TEMPLATE_STORAGE_KEY, invoiceTemplateBody);
+      } catch {}
+    }
+  }, [invoiceTemplateBody]);
 
   // Load barcode label settings from localStorage
   useEffect(() => {
@@ -836,11 +855,42 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
       return;
     }
 
+    if (activePrintTemplateType === 'invoice') {
+      const sampleOrder: POSOrder = {
+        id: 'preview-invoice',
+        orderCode: 'HD003362',
+        date: '2026-05-08T19:47:00',
+        customerName: 'Anh Hòa Q.1',
+        items: [
+          { productId: 'p1', sku: 'S0068-37-XANH', name: 'Sandal bé trai 0068 - 37 - XANH', quantity: 1, price: 250000, discount: 0, total: 250000 },
+          { productId: 'p2', sku: 'D1205-38-KEM', name: 'Dép nữ quai ngang 1205 - 38 - KEM', quantity: 1, price: 300000, discount: 35000, total: 265000 },
+          { productId: 'p3', sku: 'G2301-36-DEN', name: 'Giày búp bê nữ 2301 - 36 - ĐEN', quantity: 1, price: 220000, discount: 0, total: 220000 },
+        ],
+        totalAmount: 735000,
+        discount: 35000,
+        finalAmount: 700000,
+        paymentMethod: 'Cash',
+        cashReceived: 700000,
+        staffId: 'staff-1',
+        staffName: 'Thu ngân POS',
+        pointsEarned: 0,
+      };
+      const ok = openPrintInvoice({
+        order: sampleOrder,
+        storeName: brandProfile.name || 'GIÀY DÉP PHÚC SANG',
+        storeAddress: brandProfile.address || 'Số nhà 14 đường NC2 - Mỹ Phước 2 - Bến Cát, Bình Dương',
+        storePhone: brandProfile.phone || '033.571.3423 - 096.886.7411',
+        customerPhone: '0901 234 567',
+        customerAddress: 'Số 10, Phổ Quang, Tân Bình, TP.HCM',
+        staffName: 'Thu ngân POS',
+      });
+      if (!ok) {
+        showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thử.', 'warning');
+      }
+      return;
+    }
+
     const printConfig = {
-      invoice: {
-        title: 'In thử mẫu hóa đơn',
-        lines: renderedInvoicePreviewLines,
-      },
       exchange: {
         title: 'In thử phiếu đổi hàng',
         lines: renderedExchangePreviewLines,
@@ -849,7 +899,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
         title: 'In thử bảng lương',
         lines: renderedPayrollPreviewLines,
       },
-    }[activePrintTemplateType];
+    }[activePrintTemplateType as 'exchange' | 'payroll'];
 
     if (!printConfig) {
       showToast('Mẫu in này chưa hỗ trợ in thử.', 'warning');
