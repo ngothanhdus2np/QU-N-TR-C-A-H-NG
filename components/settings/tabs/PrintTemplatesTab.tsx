@@ -44,7 +44,7 @@ const SAMPLE_INVOICE_ITEMS = [
 
 const SAMPLE_BARCODE_LABEL_PRODUCT = {
   name: 'Sandal bé trai 0068 - 37 - XANH',
-  sku: 'SP000068-37X',
+  sku: 'SP012295',
   price: '185,000',
 };
 
@@ -182,7 +182,7 @@ const buildCode128Svg = (rawCode: string) => {
       Array.from(pattern).forEach((widthChar, index) => {
         const width = Number(widthChar);
         if (index % 2 === 0) {
-          patternBars += `<rect x="${x}" y="0" width="${width}" height="40" />`;
+          patternBars += `<rect x="${x}" y="0" width="${width}" height="50" />`;
         }
         x += width;
       });
@@ -190,7 +190,7 @@ const buildCode128Svg = (rawCode: string) => {
     })
     .join('');
 
-  return `<svg class="barcode" viewBox="0 0 ${x} 40" preserveAspectRatio="none">${bars}</svg>`;
+  return `<svg class="barcode" viewBox="0 0 ${x} 50" preserveAspectRatio="none">${bars}</svg>`;
 };
 
 const replaceInvoiceTemplateTokens = (line: string, tokens: Record<string, string>) =>
@@ -673,10 +673,10 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
       ${barcodeLabelShowBorder ? 'border: 0.5px solid #000;' : ''}
       page-break-inside: avoid;
     }
-    .name { font-size: 6px; font-weight: 600; text-align: center; line-height: 1.1; margin-bottom: 0.5mm; max-height: 8mm; overflow: hidden; }
-    .barcode { width: 90%; height: auto; max-height: ${barcodeLabelHeightMm * 0.4}mm; }
-    .code { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
-    .price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
+    .name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.2; margin-bottom: 0.5mm; max-height: 10mm; overflow: hidden; }
+    .barcode { width: 92%; height: auto; max-height: ${barcodeLabelHeightMm * 0.45}mm; }
+    .code { margin-top: 0.3mm; font-size: 9px; font-weight: 700; line-height: 1; }
+    .price { margin-top: 0.3mm; font-size: 9px; font-weight: 700; line-height: 1; }
   `,
     [barcodeLabelWidthMm, barcodeLabelHeightMm, barcodeLabelShowBorder, barcodeLabelTotalWidthMm]
   );
@@ -687,7 +687,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
       ${barcodeLabelShowName ? `<div class="name">${escapeHtml(product.name)}</div>` : ''}
       ${buildCode128Svg(product.sku)}
       ${barcodeLabelShowCode ? `<div class="code">${escapeHtml(product.sku)}</div>` : ''}
-      ${barcodeLabelShowPrice ? `<div class="price">${escapeHtml(product.price)}đ</div>` : ''}
+      ${barcodeLabelShowPrice ? `<div class="price">${escapeHtml(product.price)} VNĐ</div>` : ''}
     </section>
   `,
     [barcodeLabelShowName, barcodeLabelShowCode, barcodeLabelShowPrice]
