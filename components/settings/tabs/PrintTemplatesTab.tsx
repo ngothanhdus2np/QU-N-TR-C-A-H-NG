@@ -1657,7 +1657,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
               </div>
 
               <div className="flex h-[650px] items-center justify-center overflow-auto rounded-lg border border-blue-100 bg-blue-50 p-5">
-                <style>{barcodeLabelPrintCss.replace(/@page[\s\S]*?}\s*$/, '')}</style>
+                <style>{barcodeLabelPrintCss.replace(/@page\s*\{[^}]*\}/, '')}</style>
                 <div className="inline-block rounded-lg bg-white p-4 shadow-sm">
                   <main
                     className="sheet"
