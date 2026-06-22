@@ -163,9 +163,9 @@ const InfoTab: React.FC<{
   onAnalyze,
   onEdit,
 }) => (
-  <div className="p-6 space-y-5">
+  <div className="p-3 space-y-3">
     {/* Profile header */}
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-3">
       <div className="flex gap-5">
         {/* Avatar */}
         <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
@@ -213,8 +213,8 @@ const InfoTab: React.FC<{
     </div>
 
     {/* Fields */}
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
-      <div className="grid grid-cols-3 gap-x-10">
+    <div className="bg-white rounded-xl border border-slate-200 p-3">
+      <div className="grid grid-cols-3 gap-x-6">
         <FieldRow label="Điện thoại" value={customer.phone} />
         <FieldRow label="Sinh nhật" value={customer.birthday ? fmtDate(customer.birthday) : null} />
         <FieldRow
@@ -283,7 +283,7 @@ const InvoiceInfoTab: React.FC<{ customer: POSCustomer }> = ({ customer }) => {
   return (
     <div className="p-5 space-y-4">
       {/* Loại khách hàng */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3">
         <span className="text-sm text-slate-600 shrink-0">Loại khách hàng</span>
         {(['individual', 'organization'] as const).map(t => (
           <label key={t} className="flex items-center gap-2 cursor-pointer">
@@ -514,7 +514,7 @@ const OrdersTab: React.FC<{ orders: POSOrder[] }> = ({ orders }) => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3">
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
@@ -566,7 +566,7 @@ const DebtTab: React.FC<{ records: CustomerDebtRecord[]; currentDebt: number }> 
   records,
   currentDebt,
 }) => (
-  <div className="p-6 space-y-4">
+  <div className="p-3 space-y-3">
     {/* Summary */}
     <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
       <span className="text-sm text-slate-600">Nợ hiện tại</span>

@@ -822,10 +822,10 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     <>
     <div className={fillHeight
       ? 'flex flex-col h-full bg-white'
-      : `bg-white rounded-lg shadow-2xl mx-4 my-3 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`
+      : `bg-white rounded-lg shadow-lg mx-2 my-1 animate-in slide-in-from-top-4 duration-300${noBorder ? '' : ' border-2 border-indigo-400'}`
     }>
       <div className="border-b border-slate-200 bg-white shrink-0">
-        <div className="flex items-center gap-1 px-6">
+        <div className="flex items-center gap-1 px-3">
           {DETAIL_TABS.map(tab => (
             <button
               key={tab.id}
@@ -844,15 +844,15 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
 
       <div className={
         fillHeight
-          ? (activeTab === 'warranty' ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 min-h-0 overflow-auto bg-slate-50 p-6')
-          : 'bg-slate-50 p-6'
+          ? (activeTab === 'warranty' ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 min-h-0 overflow-auto bg-slate-50 p-3')
+          : 'bg-slate-50 p-3'
       }>
         {activeTab === 'info' && (
-          <div className={hasImages ? 'flex gap-6 items-start' : 'space-y-6'}>
+          <div className={hasImages ? 'flex gap-3 items-start' : 'space-y-2'}>
 
             {/* Cột ảnh — chỉ hiện khi có ảnh */}
             {hasImages && (
-              <div className="w-1/3 shrink-0 flex flex-col gap-2">
+              <div className="w-1/5 shrink-0 flex flex-col gap-1.5">
                 <div className="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200 group">
                   <img src={mainImg} alt={product.name} className="w-full h-full object-cover" />
                   {/* Nút X xóa ảnh đang xem */}
@@ -883,7 +883,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                     </>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5">
                   {thumbs.map((img, i) => {
                     const realIdx = thumbStart + i;
                     return (
@@ -924,13 +924,13 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
             )}
 
             {/* Cột thông tin */}
-            <div className="flex-1 space-y-6">
-              <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <div className="flex-1 space-y-2">
+              <div className="bg-white rounded-lg border border-slate-200 p-3">
                 {hasImages ? (
                   <div>{productText}</div>
                 ) : (
-                  <div className="flex gap-6">
-                    <div className="w-40 self-stretch shrink-0 flex flex-col gap-2">
+                  <div className="flex gap-3">
+                    <div className="w-40 self-stretch shrink-0 flex flex-col gap-1.5">
                       <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200 overflow-hidden min-h-[120px]">
                         <ImageIcon className="h-16 w-16 text-slate-300" />
                       </div>
@@ -947,38 +947,38 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                 )}
               </div>
 
-              <div className="bg-white rounded-lg border border-slate-200 p-6">
-                <div className="grid grid-cols-4 gap-6">
+              <div className="bg-white rounded-lg border border-slate-200 p-3">
+                <div className="grid grid-cols-4 gap-3">
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Mã hàng</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Mã hàng</label>
                     <div className="text-sm font-normal text-slate-900">{product.sku}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Tồn kho</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Tồn kho</label>
                     <div className="text-sm font-normal text-slate-900">{product.stock}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Định mức tồn</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Định mức tồn</label>
                     <div className="text-sm font-normal text-slate-900">{product.minStock ?? 0} - {product.maxStock ?? 999999999}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Giá vốn</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Giá vốn</label>
                     <div className="text-sm font-normal text-slate-900">{(Number(product.importPrice) || 0).toLocaleString()}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Giá bán</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Giá bán</label>
                     <div className="text-sm font-normal text-slate-900">{(Number(product.salePrice) || 0).toLocaleString()}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Thương hiệu</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Thương hiệu</label>
                     <div className="text-sm text-slate-600">{product.brand || 'Chưa có'}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Vị trí</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Vị trí</label>
                     <div className="text-sm text-slate-600">{product.location || 'Chưa có'}</div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-normal mb-2 block">Trọng lượng</label>
+                    <label className="text-xs text-slate-500 font-normal mb-1 block">Trọng lượng</label>
                     <div className="text-sm text-slate-600">
                       {product.weight ? `${product.weight} ${product.weightUnit || 'g'}` : 'Chưa có'}
                     </div>
@@ -986,8 +986,8 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-slate-200 p-6">
-                <h3 className="text-sm font-bold text-slate-700 mb-3">Nhà cung cấp</h3>
+              <div className="bg-white rounded-lg border border-slate-200 p-3">
+                <h3 className="text-sm font-bold text-slate-700 mb-2">Nhà cung cấp</h3>
                 {getSupplierNames(product, transactions).length === 0 ? (
                   <span className="text-sm text-slate-400">Chưa có</span>
                 ) : (
@@ -1028,8 +1028,8 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         )}
 
         {activeTab === 'desc' && (
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <label className="text-sm font-normal text-slate-700 mb-3 block">Mô tả chi tiết</label>
+          <div className="bg-white rounded-lg border border-slate-200 p-3">
+            <label className="text-sm font-normal text-slate-700 mb-2 block">Mô tả chi tiết</label>
             <div className="text-sm text-slate-600 whitespace-pre-wrap">
               {product.description || 'Chưa có mô tả'}
             </div>

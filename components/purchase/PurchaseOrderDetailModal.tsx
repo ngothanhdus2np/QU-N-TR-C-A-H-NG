@@ -31,8 +31,8 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+      <div className="relative bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-lg overflow-hidden flex flex-col">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-2xs font-normal text-indigo-500 uppercase tracking-widest">
               {isPurchaseReturn ? 'Phiếu trả hàng nhập' : 'Phiếu nhập hàng'}
@@ -63,7 +63,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="p-3 overflow-y-auto space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
               <p className="text-[9px] font-normal uppercase text-slate-400">Trạng thái</p>

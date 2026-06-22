@@ -52,7 +52,7 @@ export const GoodsGridDetailModal: React.FC<GoodsGridDetailModalProps> = ({
         className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-5xl max-h-[95vh] bg-white rounded-2xl shadow-2xl shadow-slate-300/60 overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-5xl max-h-[95vh] bg-white rounded-2xl shadow-lg shadow-slate-300/60 overflow-hidden flex flex-col">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 p-1.5 bg-white hover:bg-slate-100 rounded-lg transition-colors shadow-sm border border-slate-100"

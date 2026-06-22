@@ -169,13 +169,13 @@ const SourceDetailPage: React.FC<Props> = ({
       )}
 
       {/* Content */}
-      <div className="bg-slate-50 p-6">
+      <div className="bg-slate-50 p-3">
         {activeTab === 'info' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Khung thông tin sản phẩm */}
-            <div className="rounded-lg border border-slate-200 bg-white p-6">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
               {/* Ảnh + tên */}
-              <div className="flex gap-5 mb-6">
+              <div className="flex gap-3 mb-3">
                 <label className="relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 hover:border-indigo-300 transition-colors">
                   {uploadingImg ? (
                     <span className="text-xs text-slate-400">Đang tải...</span>
@@ -274,8 +274,8 @@ const SourceDetailPage: React.FC<Props> = ({
             </div>
 
             {/* Khung mô tả */}
-            <div className="rounded-lg border border-slate-200 bg-white p-6">
-              <p className="text-sm font-semibold text-slate-700 mb-3">Mô tả</p>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-700 mb-2">Mô tả</p>
               {editing ? (
                 <textarea
                   value={draft.description ?? ''}
@@ -342,8 +342,8 @@ const SourceDetailPage: React.FC<Props> = ({
             + outRecords.filter(r => r.status === 'RETURN').reduce((s, r) => s + r.quantity, 0);
           const totalOut = outRecords.filter(r => r.status !== 'RETURN').reduce((s, r) => s + r.quantity, 0);
           return (
-            <div className="rounded-lg border border-slate-200 bg-white p-6">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">Tồn kho — {item.sku}</h3>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Tồn kho — {item.sku}</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                   <p className="text-xs text-slate-500 mb-1">Tổng nhập</p>
@@ -367,8 +367,8 @@ const SourceDetailPage: React.FC<Props> = ({
         {activeTab === 'channels' && (() => {
           const shopList = (item.shops ?? []).filter(s => s.name || s.link);
           return (
-            <div className="rounded-lg border border-slate-200 bg-white p-6">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">Kênh bán</h3>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Kênh bán</h3>
               {shopList.length > 0 ? (
                 <div className="space-y-3">
                   {shopList.map((shop, idx) => (
