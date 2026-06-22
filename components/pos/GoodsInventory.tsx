@@ -111,9 +111,6 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
   const labels = selectedProducts.flatMap(product =>
     Array.from({ length: labelsPerProduct }, () => product)
   );
-  const win = window.open('', '_blank');
-  if (!win) return false;
-
   let widthMm = 35, heightMm = 22, columns = 2, showName = true, showCode = true, showPrice = true, showBorder = false;
   try {
     const raw = localStorage.getItem('barcode_label_template_settings');
@@ -137,7 +134,18 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
     })
     .join('');
 
-  win.document.write(`<html><head><meta charset="utf-8" /><title>In tem mã hàng</title><style>
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!doc || !iframe.contentWindow) {
+    document.body.removeChild(iframe);
+    return false;
+  }
+
+  doc.open();
+  doc.write(`<html><head><meta charset="utf-8" /><title>In tem mã hàng</title><style>
 @page { size: ${totalWidthMm}mm ${heightMm}mm; margin: 0; }
 body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
 .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
@@ -159,10 +167,12 @@ body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
 .code { margin-top: 1mm; font-size: 8px; font-weight: 700; line-height: 1; }
 .price { margin-top: 0.3mm; font-size: 9px; font-weight: 900; line-height: 1; }
 </style></head><body><main class="sheet">${labelHtml}</main></body></html>`);
-  win.document.close();
-  win.onload = () => {
-    win.print();
-    setTimeout(() => win.close(), 500);
+  doc.close();
+
+  iframe.onload = () => {
+    iframe.contentWindow!.focus();
+    iframe.contentWindow!.print();
+    setTimeout(() => document.body.removeChild(iframe), 2000);
   };
   return true;
 };
@@ -208,11 +218,22 @@ const BarcodePrintModal: React.FC<{
   const previewHtml = Array(previewCount).fill(singleLabelHtml).join('');
 
   const handlePrint = () => {
-    const win = window.open('', '_blank', 'width=420,height=320');
-    if (!win) { onPrintError('Trình duyệt đã chặn cửa sổ in.'); return; }
     const totalWidthMm = t.widthMm * t.columns;
     const allLabelsHtml = Array(qty).fill(singleLabelHtml.replace(/bp-/g, '')).join('');
-    win.document.write(`<html>
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc || !iframe.contentWindow) {
+      onPrintError('Không thể tạo khung in.');
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    doc.open();
+    doc.write(`<html>
       <head>
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
@@ -243,9 +264,15 @@ const BarcodePrintModal: React.FC<{
       </head>
       <body><div class="sheet">${allLabelsHtml}</div></body>
     </html>`);
-    win.document.close();
-    win.onload = () => { win.print(); setTimeout(() => win.close(), 500); };
+    doc.close();
+
     onClose();
+
+    iframe.onload = () => {
+      iframe.contentWindow!.focus();
+      iframe.contentWindow!.print();
+      setTimeout(() => document.body.removeChild(iframe), 2000);
+    };
   };
 
   return (
@@ -711,7 +738,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
 
   const handlePrintLabel = useCallback((product: POSProduct) => {
     setBarcodePrintModal({ isOpen: true, product });
-    setBarcodePrintQty(6);
+    setBarcodePrintQty(Math.max(1, product.stock || 1));
   }, []);
 
   const handleAddSameType = useCallback(

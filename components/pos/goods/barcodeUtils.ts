@@ -142,8 +142,6 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
   const labels = selectedProducts.flatMap(product =>
     Array.from({ length: labelsPerProduct }, () => product)
   );
-  const win = window.open('', '_blank', 'width=420,height=320');
-  if (!win) return false;
 
   const labelHtml = labels
     .map(product => {
@@ -152,7 +150,18 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
     })
     .join('');
 
-  win.document.write(`<html>
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!doc || !iframe.contentWindow) {
+    document.body.removeChild(iframe);
+    return false;
+  }
+
+  doc.open();
+  doc.write(`<html>
       <head>
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
@@ -181,10 +190,12 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
       </head>
       <body><div class="sheet">${labelHtml}</div></body>
     </html>`);
-  win.document.close();
-  win.onload = () => {
-    win.print();
-    setTimeout(() => win.close(), 500);
+  doc.close();
+
+  iframe.onload = () => {
+    iframe.contentWindow!.focus();
+    iframe.contentWindow!.print();
+    setTimeout(() => document.body.removeChild(iframe), 2000);
   };
   return true;
 };
