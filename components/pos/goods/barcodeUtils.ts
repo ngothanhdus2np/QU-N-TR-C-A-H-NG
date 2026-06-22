@@ -157,7 +157,7 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          @page { margin: 0; }
+          @page { size: ${totalWidthMm}mm ${Math.ceil(labels.length / template.columns) * template.heightMm}mm; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Inter, Arial, sans-serif; }
           .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }

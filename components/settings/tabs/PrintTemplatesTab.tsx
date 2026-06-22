@@ -658,7 +658,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
   // Barcode label CSS and HTML
   const barcodeLabelPrintCss = useMemo(
     () => `
-    @page { size: ${barcodeLabelTotalWidthMm}mm auto; margin: 0; }
+    @page { size: ${barcodeLabelTotalWidthMm}mm ${Math.ceil(barcodeLabelDefaultQty / barcodeLabelColumns) * barcodeLabelHeightMm}mm; margin: 0; }
     body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
     .sheet { display: flex; flex-wrap: wrap; width: ${barcodeLabelTotalWidthMm}mm; font-size: 0; }
     .label {
