@@ -246,22 +246,22 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
     const isFooter = /Cảm ơn/i.test(text);
 
     if (storeHeaderIndex === 0) {
-      return `<div style="height:24px;text-align:center;font-weight:bold;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:center;font-weight:bold;">${escapeHtml(trimmed)}</div>`;
     }
     if (storeHeaderIndex > 0) {
-      return `<div style="height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
     }
 
     if (isTitleLine) {
-      return `<div style="height:24px;text-align:center;font-size:16px;font-weight:bold;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:center;font-size:16px;font-weight:bold;">${escapeHtml(trimmed)}</div>`;
     }
 
     if (isCenteredMeta) {
-      return `<div style="height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
     }
 
     if (isTableHeader) {
-      return `<div style="display:grid;height:24px;grid-template-columns:1fr 80px 110px;border-top:1px solid #0f172a;border-bottom:1px solid #0f172a;align-items:center;">
+      return `<div style="display:grid;min-height:24px;grid-template-columns:1fr 80px 110px;border-top:1px solid #0f172a;border-bottom:1px solid #0f172a;align-items:center;">
         <span>Đơn giá</span>
         <span style="text-align:center;">SL</span>
         <span style="text-align:right;">T.Tiền</span>
@@ -272,7 +272,7 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
       const isReturn = itemData?.lineType === 'return';
       const isExchangeItem = itemData?.lineType === 'exchange';
       const color = isReturn ? 'color:#dc2626;' : isExchangeItem ? 'color:#2563eb;' : '';
-      return `<div style="height:24px;overflow:hidden;${color}">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;${color}">${escapeHtml(trimmed)}</div>`;
     }
 
     if (hasItemValueToken && itemData) {
@@ -282,7 +282,7 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
       const originalPriceHtml = itemData.discount > 0
         ? `<span style="margin-left:8px;color:#64748b;text-decoration:line-through;">${itemData.price.toLocaleString()}</span>`
         : '';
-      return `<div style="display:grid;height:24px;grid-template-columns:1fr 80px 110px;align-items:center;">
+      return `<div style="display:grid;min-height:24px;grid-template-columns:1fr 80px 110px;align-items:center;">
         <span>${escapeHtml(discountedPrice)}${originalPriceHtml}</span>
         <span style="text-align:center;">${itemData.quantity}</span>
         <span style="text-align:right;">${itemData.total.toLocaleString()}</span>
@@ -291,7 +291,7 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
 
     const totalMatch = trimmed.match(/^(.+?:)\s*(.+)$/);
     if (isTotalLine && totalMatch) {
-      return `<div style="display:grid;height:24px;grid-template-columns:1fr 220px 120px;align-items:center;">
+      return `<div style="display:grid;min-height:24px;grid-template-columns:1fr 220px 120px;align-items:center;">
         <span></span>
         <span>${escapeHtml(totalMatch[1])}</span>
         <span style="text-align:right;">${escapeHtml(totalMatch[2])}</span>
@@ -299,14 +299,14 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
     }
 
     if (isTotalInWords) {
-      return `<div style="height:24px;text-align:right;font-style:italic;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:right;font-style:italic;">${escapeHtml(trimmed)}</div>`;
     }
 
     if (isFooter) {
-      return `<div style="height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
+      return `<div style="min-height:24px;text-align:center;">${escapeHtml(trimmed)}</div>`;
     }
 
-    return `<div style="height:24px;">${escapeHtml(trimmed)}</div>`;
+    return `<div style="min-height:24px;">${escapeHtml(trimmed)}</div>`;
   });
 
   return `<html>
