@@ -660,7 +660,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
     () => `
     @page { size: ${barcodeLabelTotalWidthMm}mm auto; margin: 0; }
     body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
-    .sheet { display: flex; flex-wrap: wrap; width: ${barcodeLabelTotalWidthMm}mm; }
+    .sheet { display: flex; flex-wrap: wrap; width: ${barcodeLabelTotalWidthMm}mm; font-size: 0; }
     .label {
       box-sizing: border-box;
       width: ${barcodeLabelWidthMm}mm;

@@ -143,7 +143,7 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
         <style>
           @page { size: ${totalWidthMm}mm auto; margin: 0; }
           body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
-          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; }
+          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
           .label {
             box-sizing: border-box;
             width: ${widthMm}mm;
