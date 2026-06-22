@@ -142,7 +142,7 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
   const labels = selectedProducts.flatMap(product =>
     Array.from({ length: labelsPerProduct }, () => product)
   );
-  const win = window.open('', '_blank');
+  const win = window.open('', '_blank', 'width=420,height=320');
   if (!win) return false;
 
   const labelHtml = labels
@@ -158,68 +158,31 @@ export const printProductLabels = (selectedProducts: POSProduct[], labelsPerProd
     })
     .join('');
 
-  win.document.write(`<!DOCTYPE html>
-    <html>
+  win.document.write(`<html>
       <head>
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          * { box-sizing: border-box; }
-          html, body { margin: 0; padding: 0; }
-          body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; letter-spacing: 0; }
-          .sheet {
-            display: grid;
-            grid-template-columns: repeat(${template.columns}, ${template.widthMm}mm);
-            grid-auto-rows: ${template.heightMm}mm;
-            gap: 0;
-            align-items: start;
-            justify-content: start;
-          }
+          @page { size: ${totalWidthMm}mm auto; margin: 0; }
+          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
           .label {
+            box-sizing: border-box;
             width: ${template.widthMm}mm;
             height: ${template.heightMm}mm;
-            padding: 1.4mm 1.8mm 1mm;
+            padding: 1mm;
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
             align-items: center;
-            text-align: center;
+            justify-content: center;
             overflow: hidden;
-            break-inside: avoid;
+            ${template.showBorder ? 'border: 0.5px solid #000;' : ''}
             page-break-inside: avoid;
-            ${template.showBorder ? 'border: 0.2mm solid #cbd5e1;' : ''}
           }
-          .name {
-            width: 100%;
-            font-size: 6.5px;
-            line-height: 1.05;
-            font-weight: 700;
-            text-transform: uppercase;
-            white-space: normal;
-            overflow-wrap: anywhere;
-            word-break: break-word;
-            overflow: hidden;
-          }
-          .barcode {
-            width: ${Math.max(18, template.widthMm - 4)}mm;
-            height: ${Math.max(7, template.heightMm * 0.38)}mm;
-            margin-top: 0.8mm;
-            display: block;
-            fill: #020617;
-          }
-          .code {
-            width: 100%;
-            margin-top: 0.4mm;
-            font-family: "Courier New", monospace;
-            font-size: 6.5px;
-            font-weight: 700;
-            letter-spacing: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-          .price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
-          @page { size: ${totalWidthMm}mm auto; margin: 0; }
+          .name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
+          .barcode { width: 92%; height: auto; max-height: ${template.heightMm * 0.40}mm; }
+          .code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
         </style>
       </head>
       <body><main class="sheet">${labelHtml}</main></body>

@@ -35,6 +35,14 @@ import { GroupTreePicker } from './GroupTreePicker';
 import { GoodsGridView } from './GoodsGridView';
 import { GoodsGridVariantPopup } from './GoodsGridVariantPopup';
 import { GoodsGridDetailModal } from './GoodsGridDetailModal';
+import {
+  getBarcodeLabelTemplateSettings,
+  buildCode128Svg,
+  buildLabelProductName,
+  normalizeCode128Text,
+  printProductLabels as printProductLabelsFromTemplate,
+} from './goods/barcodeUtils';
+import DOMPurify from 'dompurify';
 
 interface GoodsInventoryProps {
   products: POSProduct[];
@@ -132,7 +140,7 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
   win.document.write(`<html><head><meta charset="utf-8" /><title>In tem mã hàng</title><style>
 @page { size: ${totalWidthMm}mm auto; margin: 0; }
 body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
-.sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; }
+.sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
 .label {
   box-sizing: border-box;
   width: ${widthMm}mm;
@@ -157,6 +165,163 @@ body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
     setTimeout(() => win.close(), 500);
   };
   return true;
+};
+
+const BarcodePrintModal: React.FC<{
+  isOpen: boolean;
+  product: POSProduct | null;
+  qty: number;
+  showName: boolean;
+  showPrice: boolean;
+  showCode: boolean;
+  showBorder: boolean;
+  onQtyChange: (v: number) => void;
+  onShowNameChange: (v: boolean) => void;
+  onShowPriceChange: (v: boolean) => void;
+  onShowCodeChange: (v: boolean) => void;
+  onShowBorderChange: (v: boolean) => void;
+  onClose: () => void;
+  onPrintError: (msg: string) => void;
+}> = ({ isOpen, product, qty, showName, showPrice, showCode, showBorder, onQtyChange, onShowNameChange, onShowPriceChange, onShowCodeChange, onShowBorderChange, onClose, onPrintError }) => {
+  if (!isOpen || !product) return null;
+  const t = getBarcodeLabelTemplateSettings();
+  const code = product.sku || product.barcode || product.id;
+  const displayName = buildLabelProductName(product);
+  const displayCode = normalizeCode128Text(code) || code;
+  const barcodeSvg = buildCode128Svg(code);
+  const previewCount = Math.min(qty, 20);
+  const previewCss = `
+    .bp-sheet { display: flex; flex-wrap: wrap; width: ${t.widthMm * t.columns}mm; font-size: 0; }
+    .bp-label {
+      box-sizing: border-box; width: ${t.widthMm}mm; height: ${t.heightMm}mm;
+      padding: 1.4mm 1.8mm 1mm; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start; text-align: center;
+      overflow: hidden; ${showBorder ? 'border: 0.2mm solid #cbd5e1;' : ''}
+    }
+    .bp-name { width: 100%; font-size: 6.5px; line-height: 1.05; font-weight: 700; text-transform: uppercase; overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .bp-barcode { width: ${Math.max(18, t.widthMm - 4)}mm; height: ${Math.max(7, t.heightMm * 0.38)}mm; margin-top: 0.8mm; display: block; fill: #020617; }
+    .bp-code { width: 100%; margin-top: 0.4mm; font-family: "Courier New", monospace; font-size: 6.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bp-price { margin-top: 0.2mm; font-size: 7px; font-weight: 700; line-height: 1; }
+  `;
+  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const singleLabelHtml = `<section class="bp-label">${showName ? `<div class="bp-name">${escHtml(displayName)}</div>` : ''}${barcodeSvg.replace('class="barcode"', 'class="bp-barcode"')}${showCode ? `<div class="bp-code">${escHtml(displayCode)}</div>` : ''}${showPrice ? `<div class="bp-price">${product.salePrice.toLocaleString('vi-VN')}đ</div>` : ''}</section>`;
+  const previewHtml = Array(previewCount).fill(singleLabelHtml).join('');
+
+  const handlePrint = () => {
+    const win = window.open('', '_blank', 'width=420,height=320');
+    if (!win) { onPrintError('Trình duyệt đã chặn cửa sổ in.'); return; }
+    const totalWidthMm = t.widthMm * t.columns;
+    const allLabelsHtml = Array(qty).fill(singleLabelHtml.replace(/bp-/g, '')).join('');
+    win.document.write(`<html>
+      <head>
+        <meta charset="utf-8" />
+        <title>In tem mã hàng</title>
+        <style>
+          @page { size: ${totalWidthMm}mm auto; margin: 0; }
+          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; font-size: 0; }
+          .label {
+            box-sizing: border-box;
+            width: ${t.widthMm}mm;
+            height: ${t.heightMm}mm;
+            padding: 1mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            ${showBorder ? 'border: 0.5px solid #000;' : ''}
+            page-break-inside: avoid;
+          }
+          .name { font-size: 7px; font-weight: 700; text-align: center; line-height: 1.15; margin-bottom: 0.3mm; max-height: 7mm; overflow: hidden; }
+          .barcode { width: 92%; height: auto; max-height: ${t.heightMm * 0.40}mm; }
+          .code { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+          .price { margin-top: 0.3mm; font-size: 8px; font-weight: 700; line-height: 1; }
+        </style>
+      </head>
+      <body><main class="sheet">${allLabelsHtml}</main></body>
+    </html>`);
+    win.document.close();
+    win.onload = () => { win.print(); setTimeout(() => win.close(), 500); };
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.25 7.034V3.375" /></svg>
+            <h2 className="text-base font-semibold text-slate-900">In tem mã vạch</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="flex flex-1 min-h-0">
+          <div className="w-[200px] shrink-0 border-r border-slate-200 p-4 flex flex-col gap-3.5 overflow-y-auto">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5">Số lượng in</label>
+              <input
+                type="number" min={1} max={500} value={qty}
+                onChange={e => { const v = Math.max(1, Math.min(500, Math.floor(Number(e.target.value) || 1))); onQtyChange(v); }}
+                className="w-full h-9 rounded-lg border border-slate-200 px-3 text-center text-sm font-semibold focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 outline-none"
+              />
+            </div>
+            <div className="border-t border-slate-100" />
+            <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={showName} onChange={e => onShowNameChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              Tên sản phẩm
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={showPrice} onChange={e => onShowPriceChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              Giá bán
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={showCode} onChange={e => onShowCodeChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              Mã hàng
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={showBorder} onChange={e => onShowBorderChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              Đường viền tem
+            </label>
+            <div className="border-t border-slate-100" />
+            <div className="bg-slate-50 rounded-lg p-2.5">
+              <div className="text-[11px] text-slate-400 mb-0.5">Mẫu tem hiện tại</div>
+              <div className="text-xs font-semibold text-slate-700">{t.widthMm}×{t.heightMm}mm · {t.columns} cột</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Thay đổi tại Cài đặt → Mẫu in</div>
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col p-4 gap-3 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">Xem trước ({previewCount}{qty > 20 ? ` / ${qty}` : ''} tem)</span>
+            </div>
+            <div className="flex-1 bg-slate-50 rounded-lg border border-slate-100 flex items-start justify-center p-4 overflow-auto min-h-[280px]">
+              <style>{previewCss}</style>
+              <div className="inline-block bg-white rounded p-2 shadow-sm">
+                <main
+                  className="bp-sheet"
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(previewHtml, {
+                      ADD_TAGS: ['svg', 'rect', 'path', 'section'],
+                      ADD_ATTR: ['viewBox', 'xmlns', 'preserveAspectRatio', 'fill', 'stroke', 'width', 'height', 'd', 'x', 'y', 'aria-label'],
+                    }),
+                  }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={handlePrint}
+              className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.25 7.034V3.375" /></svg>
+              In {qty} tem
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const GoodsInventory: React.FC<GoodsInventoryProps> = ({
@@ -195,6 +360,24 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
 
   // AUDIT-011: Cảnh báo khi hoàn thành nhập hàng mà chưa chọn NCC
   const [showNoSupplierConfirm, setShowNoSupplierConfirm] = useState(false);
+
+  // Barcode label print modal
+  const [barcodePrintModal, setBarcodePrintModal] = useState<{ isOpen: boolean; product: POSProduct | null }>({ isOpen: false, product: null });
+  const [barcodePrintQty, setBarcodePrintQty] = useState(6);
+  const [barcodePrintShowName, setBarcodePrintShowName] = useState(true);
+  const [barcodePrintShowPrice, setBarcodePrintShowPrice] = useState(true);
+  const [barcodePrintShowCode, setBarcodePrintShowCode] = useState(true);
+  const [barcodePrintShowBorder, setBarcodePrintShowBorder] = useState(false);
+
+  useEffect(() => {
+    if (barcodePrintModal.isOpen) {
+      const t = getBarcodeLabelTemplateSettings();
+      setBarcodePrintShowName(t.showName);
+      setBarcodePrintShowPrice(t.showPrice);
+      setBarcodePrintShowCode(t.showCode);
+      setBarcodePrintShowBorder(t.showBorder);
+    }
+  }, [barcodePrintModal.isOpen]);
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -525,7 +708,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   );
 
   const handlePrintLabel = useCallback((product: POSProduct) => {
-    printProductLabels([product], 1);
+    setBarcodePrintModal({ isOpen: true, product });
+    setBarcodePrintQty(6);
   }, []);
 
   const handleAddSameType = useCallback(
@@ -1314,6 +1498,24 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         onAddAttribute={handleAddAttributeInView}
       />
     )}
+    {/* Modal in tem mã vạch */}
+    <BarcodePrintModal
+      isOpen={barcodePrintModal.isOpen}
+      product={barcodePrintModal.product}
+      qty={barcodePrintQty}
+      showName={barcodePrintShowName}
+      showPrice={barcodePrintShowPrice}
+      showCode={barcodePrintShowCode}
+      showBorder={barcodePrintShowBorder}
+      onQtyChange={setBarcodePrintQty}
+      onShowNameChange={setBarcodePrintShowName}
+      onShowPriceChange={setBarcodePrintShowPrice}
+      onShowCodeChange={setBarcodePrintShowCode}
+      onShowBorderChange={setBarcodePrintShowBorder}
+      onClose={() => setBarcodePrintModal({ isOpen: false, product: null })}
+      onPrintError={msg => showToast(msg, 'error')}
+    />
+
     {/* AUDIT-011: Modal cảnh báo khi chưa chọn NCC */}
     {showNoSupplierConfirm && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
