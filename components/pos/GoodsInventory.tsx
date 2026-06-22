@@ -64,6 +64,41 @@ const escapeLabelText = (value: string | number | undefined) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const CODE_128_PATTERNS = [
+  '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+  '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+  '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+  '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+  '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+  '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+  '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+  '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+  '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+  '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+  '114131','311141','411131','211412','211214','211232','2331112',
+];
+
+const buildCode128SvgForLabel = (rawCode: string) => {
+  const code = rawCode.trim().replace(/[^\x20-\x7E]/g, '').slice(0, 32) || 'UNKNOWN';
+  const values = [104, ...Array.from(code).map(c => c.charCodeAt(0) - 32)];
+  const checksum = values.reduce((sum, v, i) => sum + v * (i === 0 ? 1 : i), 0) % 103;
+  const sequence = [...values, checksum, 106];
+  let x = 0;
+  const bars = sequence
+    .map(v => CODE_128_PATTERNS[v])
+    .map(pattern => {
+      let patternBars = '';
+      Array.from(pattern).forEach((wc, idx) => {
+        const w = Number(wc);
+        if (idx % 2 === 0) patternBars += `<rect x="${x}" y="0" width="${w}" height="50" />`;
+        x += w;
+      });
+      return patternBars;
+    })
+    .join('');
+  return `<svg class="barcode" viewBox="0 0 ${x} 50" preserveAspectRatio="none">${bars}</svg>`;
+};
+
 const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: number) => {
   const labels = selectedProducts.flatMap(product =>
     Array.from({ length: labelsPerProduct }, () => product)
@@ -71,14 +106,31 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
   const win = window.open('', '_blank');
   if (!win) return false;
 
+  let widthMm = 35, heightMm = 22, columns = 2, showName = true, showCode = true, showPrice = true, showBorder = false;
+  try {
+    const raw = localStorage.getItem('barcode_label_template_settings');
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (typeof s.widthMm === 'number') widthMm = s.widthMm;
+      if (typeof s.heightMm === 'number') heightMm = s.heightMm;
+      if (typeof s.columns === 'number') columns = s.columns;
+      if (typeof s.showName === 'boolean') showName = s.showName;
+      if (typeof s.showCode === 'boolean') showCode = s.showCode;
+      if (typeof s.showPrice === 'boolean') showPrice = s.showPrice;
+      if (typeof s.showBorder === 'boolean') showBorder = s.showBorder;
+    }
+  } catch {}
+  const totalWidthMm = widthMm * columns;
+
   const labelHtml = labels
     .map(product => {
       const code = product.barcode || product.sku || product.id;
       return `
         <section class="label">
-          <div class="name">${escapeLabelText(product.name)}</div>
-          <div class="code">${escapeLabelText(code)}</div>
-          <div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))}đ</div>
+          ${showName ? `<div class="name">${escapeLabelText(product.name)}</div>` : ''}
+          ${buildCode128SvgForLabel(code)}
+          ${showCode ? `<div class="code">${escapeLabelText(code)}</div>` : ''}
+          ${showPrice ? `<div class="price">${escapeLabelText(product.salePrice.toLocaleString('vi-VN'))} VNĐ</div>` : ''}
         </section>`;
     })
     .join('');
@@ -89,45 +141,25 @@ const printProductLabels = (selectedProducts: POSProduct[], labelsPerProduct: nu
         <meta charset="utf-8" />
         <title>In tem mã hàng</title>
         <style>
-          * { box-sizing: border-box; }
-          body { margin: 0; padding: 10mm; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; letter-spacing: 0; }
-          .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+          @page { size: ${totalWidthMm}mm auto; margin: 0; }
+          body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; }
+          .sheet { display: flex; flex-wrap: wrap; width: ${totalWidthMm}mm; }
           .label {
-            height: 30mm;
-            border: 1px solid #cbd5e1;
-            border-radius: 3mm;
-            padding: 3mm;
+            box-sizing: border-box;
+            width: ${widthMm}mm;
+            height: ${heightMm}mm;
+            padding: 1mm;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            text-align: center;
-            break-inside: avoid;
+            justify-content: center;
+            ${showBorder ? 'border: 0.5px solid #000;' : ''}
+            page-break-inside: avoid;
           }
-          .name {
-            width: 100%;
-            font-size: 9px;
-            line-height: 1.2;
-            font-weight: 700;
-            text-transform: uppercase;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .code {
-            width: 100%;
-            margin-top: 3mm;
-            padding: 2mm 1mm;
-            border: 1px solid #0f172a;
-            font-family: "Courier New", monospace;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .price { margin-top: 2mm; font-size: 11px; font-weight: 700; }
-          @page { size: A4; margin: 8mm; }
+          .name { font-size: 8px; font-weight: 700; text-align: center; line-height: 1.2; margin-bottom: 0.5mm; max-height: 10mm; overflow: hidden; }
+          .barcode { width: 92%; height: auto; max-height: ${heightMm * 0.45}mm; }
+          .code { margin-top: 0.3mm; font-size: 9px; font-weight: 700; line-height: 1; }
+          .price { margin-top: 0.3mm; font-size: 9px; font-weight: 700; line-height: 1; }
         </style>
       </head>
       <body><main class="sheet">${labelHtml}</main></body>
