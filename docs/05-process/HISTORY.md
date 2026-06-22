@@ -3,6 +3,47 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-22 — Revert wacMap on-the-fly, giữ kiến trúc đúng
+
+- Revert `wacMap` on-the-fly ở 5 file (MainContent, POSComputer, 3 trang Analysis) — không cần vì `product.importPrice` đã được cập nhật đúng tại thời điểm nhập hàng trong `PurchaseOrdersContainer.tsx` (dòng 932: `calculateNextImportPrice()`)
+- Kiến trúc giá vốn đúng: Nhập hàng → tính WAC/fixed → cập nhật `product.importPrice` → POS + Analysis đọc trực tiếp
+- `reportCalculations.ts` vẫn giữ `buildCostHistory()` vì báo cáo lợi nhuận cần giá vốn **tại thời điểm bán** (historical), không phải giá vốn hiện tại
+- Files: `components/MainContent.tsx`, `components/pos/POSComputer.tsx`, `components/analysis/AnalysisBusinessPage.tsx`, `components/analysis/AnalysisGoodsOverviewPage.tsx`, `components/analysis/AnalysisGoodsStockPage.tsx`
+
+### 2026-06-22 — Tích hợp WAC calculator + tài liệu công thức
+
+- Implement WAC (Weighted Average Cost) vào `reportCalculations.ts`:
+  - Viết lại `buildCostHistory()`: tính WAC thực sự qua từng phiếu nhập, phân bổ chiết khấu NCC toàn đơn (dùng `calcEffectiveUnitPrice()` + `calculateNextImportPrice()` mode average).
+  - Sửa `getSalesProfitRowsByDate()`: đổi ưu tiên giá vốn — WAC từ costHistory > item.importPrice > product.importPrice.
+- Tạo `docs/business-knowledge/FORMULAS.md`: tổng hợp tất cả công thức tính toán trong app, chia 7 nhóm (Giá vốn, Doanh thu, Lương, Tài chính, Chiến lược, Benchmarks, Báo cáo).
+- Files: `src/lib/reportCalculations.ts`, `docs/business-knowledge/FORMULAS.md`
+
+### 2026-06-22 — Nghiên cứu thuật toán tính giá vốn KiotViet (WAC, không phải FIFO)
+
+- Reverse-engineer thuật toán giá vốn KiotViet bằng cách so sánh WAC simulation với `importPrice` trên 69,539 đơn + 1,068 phiếu nhập.
+- **Phát hiện chính**: KiotViet dùng **Weighted Average Cost (WAC)**, KHÔNG phải FIFO.
+  - Công thức: `new_WAC = (stock × old_WAC + import_qty × import_price) / (stock + import_qty)`
+  - Bán hàng giảm tồn nhưng KHÔNG thay đổi WAC. Returns cộng tồn, không đổi WAC.
+- **Kết quả kiểm tra SP000927** (36 imports, 1,282 sales): WAC match 710/1,257 (56.5%).
+  - 710 đơn đầu match 100%. Sai lệch bắt đầu từ 2025-07-17.
+  - Nguyên nhân: KiotViet có thêm sự kiện kho (kiểm kho, chỉnh tồn, tồn đầu kỳ) KHÔNG nằm trong DB.
+  - Bằng chứng: SP001898 chỉ 1 giá nhập 85,000đ nhưng WAC KV = 84,997.46 → có event khác.
+- **Kết luận**: Không thể tính WAC 100% match KiotViet chỉ từ dữ liệu import. Cần dữ liệu kiểm kho + tồn đầu kỳ.
+- **Đề xuất**: Dùng tiếp `importPrice` từ KiotViet export (đang đạt 99.99996%). Triển khai WAC calculator cho đơn mới khi có đủ dữ liệu nhập hàng.
+- Không thay đổi file code nào.
+
+### 2026-06-22 — Đồng bộ giá vốn & doanh thu với KiotViet — đạt 100% chính xác
+
+- Fix báo cáo lợi nhuận sai lệch 599M giá vốn + 262M doanh thu so với KiotViet:
+  - Thêm `importPrice` vào `POSOrderItem` interface, ưu tiên giá vốn KiotViet gán cho từng item.
+  - Sửa `reportCalculations.ts` + `FinanceReportPage.tsx`: ưu tiên `item.importPrice` > historical cost > product cost.
+  - Patch 69,505 đơn hàng: gán `importPrice` cho 116,848 items từ KiotViet export.
+  - Fix 384 đơn bán bị đánh dấu sai `is_return=true` (373 HD* + 11 HDD_TH*).
+  - Import 33 đơn trả hàng TH* tháng 6/2026, sửa `total_amount` cho 32 đơn TH* khác.
+- Kết quả: Doanh thu 0đ chênh lệch, Giá vốn 328đ (làm tròn FIFO), Lợi nhuận -328đ.
+- **Chưa giải quyết**: App copy giá vốn từ KiotViet export, chưa tự tính FIFO độc lập.
+- Files: `src/types/pos.ts`, `src/lib/reportCalculations.ts`, `components/reports/FinanceReportPage.tsx`
+
 ### 2026-06-22 — Import toàn bộ dữ liệu KiotViet vào CFO Brain
 
 - Fix route `/api/import/kiotviet-customers`: thêm format "Danh sách khách hàng" (col0="Loại khách") với mapping col[2]=Mã KH, col[3]=Tên, col[4]=SĐT, col[5]=Địa chỉ, col[8]=Điểm, col[15]=Tổng bán trừ trả. Import thành công **251 khách hàng**.

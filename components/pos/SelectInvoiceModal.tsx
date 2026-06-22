@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Printer, Undo2, X } from 'lucide-react';
 import { POSCustomer, POSOrder } from '../../types';
 import { FilterDateRange } from '../shared';
+import { openPrintInvoice } from './printInvoiceFromTemplate';
 
 interface SelectInvoiceModalProps {
   orders: POSOrder[];
@@ -12,77 +13,7 @@ interface SelectInvoiceModalProps {
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
 function printOrder(order: POSOrder) {
-  const html = `
-    <html>
-      <head>
-        <title>In Hóa Đơn - ${order.orderCode}</title>
-        <style>
-          @page { size: 80mm auto; margin: 0; }
-          body { margin: 0; padding: 0; background: white; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #000; line-height: 1.4; font-size: 12px; letter-spacing: 0; }
-          .receipt { width: 80mm; padding: 5mm; box-sizing: border-box; }
-          .center { text-align: center; }
-          .dashed { border-bottom: 2px dashed #000; margin: 10px 0; }
-          .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-          .bold { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          th { border-bottom: 1px solid #000; text-align: left; padding: 4px 0; font-size: 10px; color: #666; }
-          td { padding: 6px 0; vertical-align: top; }
-          .grand { font-size: 16px; font-weight: 900; margin-top: 8px; border-top: 1px solid #000; padding-top: 8px; }
-        </style>
-      </head>
-      <body>
-        <div class="receipt">
-          <div class="center">
-            <h1 style="font-size:18px;margin:0;font-weight:900;">CFO BRAIN PROFESSIONAL</h1>
-            <p style="font-size:10px;margin:4px 0;">123 Đường Công Nghệ, Quận 1, TP. HCM</p>
-            <p style="font-size:10px;margin:0;">Hotline: 1900 1234</p>
-          </div>
-          <div class="dashed"></div>
-          <div style="font-size:11px;">
-            <div class="row"><span>Số HD:</span><span class="bold">${order.orderCode}</span></div>
-            <div class="row"><span>Ngày:</span><span>${new Date(order.date).toLocaleString('vi-VN')}</span></div>
-            <div class="row"><span>Khách:</span><span class="bold">${order.customerName || 'KHÁCH VÃNG LAI'}</span></div>
-            <div class="row"><span>Thu ngân:</span><span>${order.staffId}</span></div>
-          </div>
-          <table>
-            <thead><tr>
-              <th>MẶT HÀNG</th>
-              <th style="text-align:center;width:40px;">SL</th>
-              <th style="text-align:right;width:80px;">T.TIỀN</th>
-            </tr></thead>
-            <tbody>
-              ${order.items
-                .map(
-                  i => `<tr>
-                <td><div class="bold">${i.name}</div><div style="font-size:10px;color:#666;">${i.price.toLocaleString()}đ</div></td>
-                <td style="text-align:center;">${i.quantity}</td>
-                <td style="text-align:right;" class="bold">${i.total.toLocaleString()}đ</td>
-              </tr>`
-                )
-                .join('')}
-            </tbody>
-          </table>
-          <div class="dashed"></div>
-          <div>
-            <div class="row"><span>Tiền hàng:</span><span class="bold">${order.totalAmount.toLocaleString()}đ</span></div>
-            ${order.discount > 0 ? `<div class="row"><span>Chiết khấu:</span><span class="bold">-${order.discount.toLocaleString()}đ</span></div>` : ''}
-            <div class="row grand"><span>TỔNG CỘNG:</span><span class="bold">${order.finalAmount.toLocaleString()}đ</span></div>
-            <div class="row" style="margin-top:10px;"><span>Thanh toán:</span><span class="bold">${order.paymentMethod}</span></div>
-          </div>
-          <div class="center" style="margin-top:16px;">
-            <p style="font-size:10px;font-weight:bold;margin:0;">NHẬN TRỌN NIỀM TIN - TRAO TRỌN CHẤT LƯỢNG</p>
-            <p style="font-size:9px;margin:4px 0;">Cảm ơn quý khách và hẹn gặp lại!</p>
-            <div style="font-size:8px;color:#999;margin-top:8px;">In lại lúc: ${new Date().toLocaleString('vi-VN')}</div>
-          </div>
-        </div>
-        <script>window.onload=function(){window.print();setTimeout(()=>window.close(),100);}</script>
-      </body>
-    </html>`;
-  const w = window.open('', '_blank', 'width=450,height=600');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-  }
+  openPrintInvoice({ order });
 }
 
 const ReturnInput = ({

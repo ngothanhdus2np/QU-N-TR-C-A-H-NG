@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';
-
 interface Props {
   data: AppData;
 }

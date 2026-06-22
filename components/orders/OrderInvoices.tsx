@@ -23,6 +23,7 @@ import {
 import { AppData, AppDataSurgicalUpdate, Employee } from '../../types';
 import { apiService } from '../../services/apiService';
 import { FilterSection, FilterDateRange, FilterCheckboxGroup } from '../shared';
+import { openPrintInvoice } from '../pos/printInvoiceFromTemplate';
 
 interface OrderInvoicesProps {
   orders: AppData['posOrders'];
@@ -31,6 +32,8 @@ interface OrderInvoicesProps {
   revenue: AppData['revenue'];
   employees?: Employee[];
   storeName: string;
+  storeAddress?: string;
+  storePhone?: string;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 }
 
@@ -62,7 +65,7 @@ function formatOrderDateTime(value: string) {
   });
 }
 
-export default function OrderInvoices({ orders, customers, products, revenue, storeName, employees = [], onUpdateSurgical }: OrderInvoicesProps) {
+export default function OrderInvoices({ orders, customers, products, revenue, storeName, storeAddress, storePhone, employees = [], onUpdateSurgical }: OrderInvoicesProps) {
   const getStaffName = (staffId?: string) => {
     if (!staffId) return undefined;
     return employees.find(e => e.id === staffId)?.name;
@@ -841,14 +844,16 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
   const handlePrintInvoice = (orderId: string) => {
     const order = pageOrders.find(o => o.id === orderId);
     if (!order) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
     const customer = customers.find(c => c.id === order.customerId);
-    printWindow.document.write(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Hóa đơn ${order.orderCode}</title><style>body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;letter-spacing:0;padding:20px;max-width:800px;margin:0 auto}.header{text-align:center;margin-bottom:30px;border-bottom:2px solid #333;padding-bottom:20px}.header h1{margin:0;font-size:24px}.info{display:flex;justify-content:space-between;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}th{background:#f5f5f5}.text-right{text-align:right}.totals{margin-top:20px;text-align:right}.final{font-size:18px;font-weight:bold;color:#4f46e5}.footer{margin-top:40px;text-align:center;color:#666;font-size:12px}.actions{text-align:center;margin-top:20px}.actions button{padding:10px 20px;background:#4f46e5;color:white;border:none;border-radius:6px;cursor:pointer}@media print{.actions{display:none}}</style></head><body><div class="header"><h1>${storeName || 'Cửa hàng'}</h1><p>HÓA ĐƠN BÁN HÀNG</p><p>Số: ${order.orderCode}</p></div><div class="info"><div><h3>Khách hàng</h3><p>${order.customerName || 'Khách lẻ'}</p>${customer?.phone ? `<p>${customer.phone}</p>` : ''}</div><div><h3>Thông tin</h3><p>Thời gian: ${formatOrderDateTime(order.date)}</p><p>Thanh toán: ${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</p></div></div><table><thead><tr><th>STT</th><th>Sản phẩm</th><th class="text-right">SL</th><th class="text-right">Đơn giá</th><th class="text-right">Thành tiền</th></tr></thead><tbody>${order.items.map((item, i) => `<tr><td>${i + 1}</td><td>${item.name}</td><td class="text-right">${item.quantity}</td><td class="text-right">${item.price.toLocaleString('vi-VN')}đ</td><td class="text-right">${(item.quantity * item.price).toLocaleString('vi-VN')}đ</td></tr>`).join('')}</tbody></table><div class="totals"><div>Tổng tiền hàng: <strong>${order.totalAmount.toLocaleString('vi-VN')}đ</strong></div>${order.discount ? `<div>Giảm giá: <strong>-${order.discount.toLocaleString('vi-VN')}đ</strong></div>` : ''}<div class="final">Tổng thanh toán: ${order.finalAmount.toLocaleString('vi-VN')}đ</div></div><div class="footer"><p>Cảm ơn quý khách!</p><p>In lúc: ${new Date().toLocaleString('vi-VN')}</p></div><div class="actions"><button id="print-invoice-button" type="button">In hóa đơn</button></div><script>function printInvoice(){window.focus();setTimeout(function(){window.print();},50);}document.addEventListener('DOMContentLoaded',function(){var button=document.getElementById('print-invoice-button');if(button)button.addEventListener('click',printInvoice);});</script></body></html>`
-    );
-    printWindow.document.close();
-    printWindow.focus();
+    openPrintInvoice({
+      order,
+      storeName: storeName || undefined,
+      storeAddress,
+      storePhone,
+      customerPhone: customer?.phone,
+      customerAddress: customer?.address,
+      staffName: getStaffName(order.staffId),
+    });
   };
 
   return (

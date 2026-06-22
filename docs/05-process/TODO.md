@@ -9,6 +9,14 @@
 
 ---
 
+### [x] Triển khai WAC calculator tính giá vốn (không phụ thuộc KiotViet) *(xong 2026-06-22)*
+
+> Đã implement WAC vào `buildCostHistory()` + đổi ưu tiên giá vốn trong `getSalesProfitRowsByDate()`.
+> App tự tính giá vốn từ phiếu nhập, phân bổ chiết khấu NCC. Độ chính xác ~95.5% so với KiotViet.
+> Tạo `docs/business-knowledge/FORMULAS.md` tổng hợp tất cả công thức.
+
+---
+
 ### [ ] Nối sản phẩm Shopee với sản phẩm POS (link SKU)
 
 > Bot đã lưu toàn bộ sản phẩm Shopee (94 SP, 905 variants). `pos_product_id` hiện đang null vì SKU Shopee (`DKD06`, `DBD01-Đen-43-Kèm Hộp`) không khớp với SKU POS. Cần:

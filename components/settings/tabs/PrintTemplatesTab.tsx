@@ -683,14 +683,8 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
   );
 
   const renderBarcodeLabelHtml = useCallback(
-    (product: { name: string; sku: string; price: string }) => `
-    <section class="label">
-      ${barcodeLabelShowName ? `<div class="name">${escapeHtml(product.name)}</div>` : ''}
-      ${buildCode128Svg(product.sku)}
-      ${barcodeLabelShowCode ? `<div class="code">${escapeHtml(product.sku)}</div>` : ''}
-      ${barcodeLabelShowPrice ? `<div class="price">${escapeHtml(product.price)} VNĐ</div>` : ''}
-    </section>
-  `,
+    (product: { name: string; sku: string; price: string }) =>
+      `<section class="label">${barcodeLabelShowName ? `<div class="name">${escapeHtml(product.name)}</div>` : ''}${buildCode128Svg(product.sku)}${barcodeLabelShowCode ? `<div class="code">${escapeHtml(product.sku)}</div>` : ''}${barcodeLabelShowPrice ? `<div class="price">${escapeHtml(product.price)} VNĐ</div>` : ''}</section>`,
     [barcodeLabelShowName, barcodeLabelShowCode, barcodeLabelShowPrice]
   );
 

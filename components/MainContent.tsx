@@ -584,6 +584,8 @@ const MainContent: React.FC<MainContentProps> = ({
             revenue={data.revenue || []}
             employees={data.employees || []}
             storeName={brandProfile.name}
+            storeAddress={brandProfile.address}
+            storePhone={brandProfile.phone}
             onUpdateSurgical={updateSurgical}
           />
         );

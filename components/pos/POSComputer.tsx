@@ -14,6 +14,7 @@ import POSQuickCustomerModal, { QuickCustomerForm } from './POSQuickCustomerModa
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCurrentStaffId } from '../shared/staff';
 import { signOut } from '../../services/auth';
+import { openPrintInvoice } from './printInvoiceFromTemplate';
 import {
   AppDataSurgicalUpdate,
   POSProduct,
@@ -1060,157 +1061,20 @@ const POSComputer: React.FC<POSComputerProps> = ({
     );
   };
 
-  const escapeHtml = (str: string) =>
-    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
   const handlePrint = () => {
     if (!lastOrder) return;
-
-    const printHtml = `
-      <html>
-        <head>
-          <title>In Hóa Đơn - ${lastOrder.orderCode}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            body { 
-              margin: 0; 
-              padding: 0; 
-              background: white; 
-              font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; 
-              color: #000; 
-              line-height: 1.4; 
-              font-size: 12px; 
-            }
-            .receipt { 
-              width: 80mm; 
-              padding: 5mm; 
-              box-sizing: border-box; 
-            }
-            .center { text-align: center; }
-            .dashed-border { border-bottom: 2px dashed #000; margin: 10px 0; }
-            .flex-between { display: flex; justify-content: space-between; }
-            .bold { font-weight: bold; }
-            .uppercase { text-transform: uppercase; }
-            .mt-4 { margin-top: 16px; }
-            .mb-2 { margin-bottom: 8px; }
-            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-            th { border-bottom: 1px solid #000; text-align: left; padding: 4px 0; font-size: 10px; color: #666; }
-            td { padding: 6px 0; vertical-align: top; }
-            .totals { margin-top: 10px; }
-            .total-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-            .grand-total { 
-              font-size: 16px; 
-              font-weight: 900; 
-              margin-top: 8px; 
-              border-top: 1px solid #000; 
-              padding-top: 8px; 
-            }
-          </style>
-        </head>
-        <body>
-          <div class="receipt">
-            <div class="center">
-              <h1 style="font-size: 18px; margin: 0; font-weight: 900;">${escapeHtml(brandProfile?.name || 'CỬA HÀNG')}</h1>
-              <p style="font-size: 10px; margin: 4px 0;">${escapeHtml(brandProfile?.address || '')}</p>
-              <p style="font-size: 10px; margin: 0;">${brandProfile?.phone ? `Hotline: ${escapeHtml(brandProfile.phone)}` : ''}</p>
-            </div>
-            
-            <div class="dashed-border"></div>
-            
-            <div style="font-size: 11px;">
-              <div class="flex-between"><span>Số HD:</span><span class="bold">${escapeHtml(lastOrder.orderCode)}</span></div>
-              <div class="flex-between"><span>Ngày:</span><span>${new Date(lastOrder.date).toLocaleString('vi-VN')}</span></div>
-              <div class="flex-between"><span>Khách:</span><span class="bold">${escapeHtml(lastOrder.customerName || 'KHÁCH VÃNG LAI')}</span></div>
-              <div class="flex-between"><span>Thu ngân:</span><span>${escapeHtml(employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName)}</span></div>
-            </div>
-            
-            <table>
-              <thead>
-                <tr>
-                  <th style="text-align: left;">MẶT HÀNG</th>
-                  <th style="text-align: center; width: 40px;">SL</th>
-                  <th style="text-align: right; width: 80px;">T.TIỀN</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${lastOrder.items
-                  .map(
-                    item => {
-                      const isReturnLine = item.lineType === 'return';
-                      const isExchangeLine = item.lineType === 'exchange';
-                      const linePrefix = isReturnLine ? '[TRẢ] ' : isExchangeLine ? '[ĐỔI] ' : '';
-                      const lineColor = isReturnLine ? 'color:#dc2626;' : isExchangeLine ? 'color:#2563eb;' : '';
-                      return `
-                  <tr>
-                    <td>
-                      <div class="bold uppercase" style="${lineColor}">${linePrefix}${escapeHtml(item.name)}</div>
-                      <div style="font-size: 10px; color: #666;">${item.price.toLocaleString()}đ</div>
-                    </td>
-                    <td style="text-align: center; ${lineColor}">${item.quantity}</td>
-                    <td style="text-align: right; ${lineColor}" class="bold">${item.total.toLocaleString()}đ</td>
-                  </tr>
-                `;
-                    }
-                  )
-                  .join('')}
-              </tbody>
-            </table>
-
-            <div class="dashed-border"></div>
-
-            <div class="totals">
-              ${lastOrder.isReturn ? (() => {
-                const exchangeTotal = lastOrder.items
-                  .filter(item => item.lineType === 'exchange')
-                  .reduce((sum, item) => sum + item.total, 0);
-                const customerPays = exchangeTotal > 0
-                  ? Math.max(0, exchangeTotal - lastOrder.finalAmount)
-                  : 0;
-                const actualRefund = lastOrder.refundAmount ?? Math.max(0, lastOrder.finalAmount - exchangeTotal);
-                return `
-              <div class="total-row"><span>Tiền hàng trả:</span><span class="bold">${lastOrder.totalAmount.toLocaleString()}đ</span></div>
-              ${lastOrder.discount > 0 ? `<div class="total-row"><span>Giảm giá:</span><span class="bold">-${lastOrder.discount.toLocaleString()}đ</span></div>` : ''}
-              ${(lastOrder.returnFee ?? 0) > 0 ? `<div class="total-row"><span>Phí trả hàng:</span><span class="bold">-${lastOrder.returnFee!.toLocaleString()}đ</span></div>` : ''}
-              ${(lastOrder.returnOtherRefund ?? 0) > 0 ? `<div class="total-row"><span>Hoàn trả thu khác:</span><span class="bold" style="color:#16a34a;">+${lastOrder.returnOtherRefund!.toLocaleString()}đ</span></div>` : ''}
-              ${exchangeTotal > 0 ? `<div class="total-row"><span>Tiền hàng đổi:</span><span class="bold">-${exchangeTotal.toLocaleString()}đ</span></div>` : ''}
-              ${customerPays > 0
-                ? `<div class="total-row grand-total"><span>KHÁCH THANH TOÁN:</span><span class="bold" style="color:#dc2626;">${customerPays.toLocaleString()}đ</span></div>`
-                : `<div class="total-row grand-total"><span>HOÀN TRẢ KHÁCH:</span><span class="bold" style="color:#dc2626;">${actualRefund.toLocaleString()}đ</span></div>`
-              }`;
-              })() : `
-              <div class="total-row"><span>Tiền hàng:</span><span class="bold">${lastOrder.totalAmount.toLocaleString()}đ</span></div>
-              ${lastOrder.discount > 0 ? `<div class="total-row"><span>Chiết khấu:</span><span class="bold">-${lastOrder.discount.toLocaleString()}đ</span></div>` : ''}
-              <div class="total-row grand-total"><span>TỔNG CỘNG:</span><span class="bold">${Math.abs(lastOrder.finalAmount).toLocaleString()}đ</span></div>
-              ${lastOrder.cashReceived === 0
-                ? '<div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold" style="color:#dc2626">GHI NỢ</span></div>'
-                : `<div class="total-row" style="margin-top: 10px;"><span>Thanh toán:</span><span class="bold uppercase">${lastOrder.paymentMethod}</span></div><div class="total-row"><span>Khách đưa:</span><span class="bold">${(lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)).toLocaleString()}đ</span></div>${(lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)) > Math.abs(lastOrder.finalAmount) ? '<div class="total-row"><span>Tiền thừa:</span><span class="bold">' + ((lastOrder.cashReceived || Math.abs(lastOrder.finalAmount)) - Math.abs(lastOrder.finalAmount)).toLocaleString() + 'đ</div>' : ''}`
-              }
-              `}
-            </div>
-            
-            <div class="center mt-4">
-              <p style="font-size: 10px; font-weight: bold; margin: 0;">NHẬN TRỌN NIỀM TIN - TRAO TRỌN CHẤT LƯỢNG</p>
-              <p style="font-size: 9px; margin: 4px 0;">Cảm ơn quý khách và hẹn gặp lại!</p>
-              <div style="margin-top: 10px; font-size: 8px; color: #999;">In lúc: ${new Date().toLocaleString('vi-VN')}</div>
-            </div>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.close();
-              }, 100);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWindow = window.open('', '_blank', 'width=450,height=600');
-    if (printWindow) {
-      printWindow.document.write(printHtml);
-      printWindow.document.close();
-    } else {
+    const staffName = employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName;
+    const customer = customers.find(c => c.id === lastOrder.customerId);
+    const ok = openPrintInvoice({
+      order: lastOrder,
+      storeName: brandProfile?.name,
+      storeAddress: brandProfile?.address,
+      storePhone: brandProfile?.phone,
+      customerPhone: customer?.phone,
+      customerAddress: customer?.address,
+      staffName,
+    });
+    if (!ok) {
       showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in hóa đơn.', 'warning');
     }
   };

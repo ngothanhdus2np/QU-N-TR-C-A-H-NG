@@ -4,6 +4,7 @@ import { FileText, Search, Printer, BarChart2, X, ShoppingBag, FileDown } from '
 import { POSOrder } from '../../types';
 import EndOfDayReport from './EndOfDayReport';
 import { exportToExcel } from '../../services/exportService';
+import { openPrintInvoice } from './printInvoiceFromTemplate';
 
 interface OrderHistoryProps {
   orders: POSOrder[];
@@ -42,53 +43,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders, storeName }) => {
   const getOrderItems = (order: POSOrder) => (Array.isArray(order.items) ? order.items : []);
 
   const handlePrint = (order: POSOrder) => {
-    const printSection = document.getElementById('print-section');
-    if (!printSection) return;
-
-    printSection.innerHTML = `
-      <div style="font-family: monospace; width: 80mm; padding: 5mm; background: white;">
-        <center>
-          <h2 style="margin-bottom: 2mm;">CFO BRAIN STORE</h2>
-          <p style="font-size: 10px;">Đ/C: 123 Đường Tài Chính, TP. HCM</p>
-          <p style="font-size: 10px;">SĐT: 0333.xxx.xxx</p>
-          <hr/>
-          <h3 style="margin: 3mm 0;">HÓA ĐƠN BÁN LẺ</h3>
-          <p style="font-size: 10px;">Mã đơn: ${order.orderCode}</p>
-          <p style="font-size: 10px;">Ngày: ${new Date(order.date).toLocaleString('vi-VN')}</p>
-        </center>
-        <table style="width: 100%; font-size: 10px; border-collapse: collapse; margin-top: 3mm;">
-          <tr style="border-bottom: 1px dashed #000;">
-            <th align="left">SP</th>
-            <th align="center">SL</th>
-            <th align="right">Giá</th>
-          </tr>
-          ${getOrderItems(order).map(item => `
-            <tr>
-              <td>${item.name}</td>
-              <td align="center">${item.quantity}</td>
-              <td align="right">${Number(item.total ?? (item.price * item.quantity || 0)).toLocaleString('vi-VN')}</td>
-            </tr>
-          `).join('')}
-        </table>
-        <hr style="border-top: 1px dashed #000;"/>
-        <div style="font-size: 10px;">
-          <div style="display: flex; justify-content: space-between;">
-            <span>Tạm tính:</span> <span>${formatMoney(order.totalAmount)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between;">
-            <span>Giảm giá:</span> <span>-${formatMoney(order.discount)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-top: 2mm;">
-            <span>TỔNG CỘNG:</span> <span>${formatMoney(order.finalAmount)}</span>
-          </div>
-        </div>
-        <hr/>
-        <center>
-          <p style="font-size: 10px; margin-top: 5mm;">Cảm ơn Quý khách!<br/>Hẹn gặp lại!</p>
-        </center>
-      </div>
-    `;
-    window.print();
+    openPrintInvoice({ order, storeName });
   };
 
   return (

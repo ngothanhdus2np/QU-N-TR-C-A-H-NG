@@ -1,32 +1,61 @@
 import type { Employee, InventoryTransaction, POSCustomer, POSOrder, POSProduct, Supplier } from '../../types';
+import { calcEffectiveUnitPrice, calculateNextImportPrice } from './businessLogic.inventory';
 
-// Xây dựng map giá vốn lịch sử: productId → [{date, price}] đã sort tăng dần theo date.
-// Nguồn dữ liệu: item.nextImportPrice từ InventoryTransaction (type='Import').
-// Bảng product_cost_history trên Supabase hiện chưa được dùng — nếu cần audit
-// trail cấp DB thì có thể ghi vào đó khi hoàn tất phiếu nhập và query từ đây.
-function buildCostHistory(
+// Tính giá vốn bình quân gia quyền (WAC) cho từng sản phẩm qua từng lần nhập hàng.
+// Phân bổ chiết khấu NCC toàn đơn theo tỷ lệ giá trị từng dòng (giống KiotViet).
+export function buildCostHistory(
   transactions: InventoryTransaction[]
 ): Map<string, Array<{ date: string; price: number }>> {
-  const map = new Map<string, Array<{ date: string; price: number }>>();
-  transactions
+  const imports = transactions
     .filter(t => t.type === 'Import')
-    .forEach(t => {
-      t.items.forEach(item => {
-        const price = Number(item.nextImportPrice);
-        if (!price || price <= 0) return;
-        const list = map.get(item.productId) ?? [];
-        list.push({ date: t.date, price });
-        map.set(item.productId, list);
-      });
-    });
-  map.forEach((list, key) => {
-    map.set(key, list.sort((a, b) => a.date.localeCompare(b.date)));
-  });
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const wacState = new Map<string, { wac: number }>();
+  const map = new Map<string, Array<{ date: string; price: number }>>();
+
+  for (const txn of imports) {
+    const itemsNetTotal = txn.items.reduce((sum, item) => {
+      return sum + (Number(item.quantity) || 0) * (Number(item.price) || 0) - (Number(item.discount) || 0);
+    }, 0);
+    const billDiscountAmount = Math.max(0, itemsNetTotal - (Number(txn.totalAmount) || itemsNetTotal));
+
+    for (const item of txn.items) {
+      const qty = Number(item.quantity) || 0;
+      const price = Number(item.price) || 0;
+      if (qty <= 0 || price <= 0) continue;
+
+      const effectivePrice = calcEffectiveUnitPrice(
+        { quantity: qty, price, discount: Number(item.discount) || 0 },
+        billDiscountAmount,
+        itemsNetTotal
+      );
+
+      let state = wacState.get(item.productId);
+      if (!state) {
+        state = { wac: effectivePrice };
+        wacState.set(item.productId, state);
+      }
+
+      const currentStock = Number(item.previousStock) || 0;
+      const newWac = calculateNextImportPrice(
+        { stock: currentStock, importPrice: state.wac },
+        qty,
+        effectivePrice,
+        'average'
+      );
+      state.wac = newWac;
+
+      const list = map.get(item.productId) ?? [];
+      list.push({ date: txn.date, price: newWac });
+      map.set(item.productId, list);
+    }
+  }
+
   return map;
 }
 
 // Lấy giá vốn tại thời điểm gần nhất trước hoặc bằng saleDate
-function getHistoricalCost(
+export function getHistoricalCost(
   costHistory: Map<string, Array<{ date: string; price: number }>>,
   productId: string,
   saleDate: string,
@@ -40,6 +69,20 @@ function getHistoricalCost(
     else break;
   }
   return last ?? fallback;
+}
+
+export function buildCurrentWACMap(
+  transactions: InventoryTransaction[],
+  products: POSProduct[]
+): Map<string, number> {
+  const history = buildCostHistory(transactions);
+  const result = new Map<string, number>();
+  const farFuture = '9999-12-31';
+  for (const product of products) {
+    const wac = getHistoricalCost(history, product.id, farFuture, 0);
+    result.set(product.id, wac > 0 ? wac : Number(product.importPrice) || 0);
+  }
+  return result;
 }
 
 export interface DateRange {
@@ -356,15 +399,19 @@ export const getSalesProfitRowsByDate = (
       profit: 0,
     };
     const cogs = order.items.reduce((sum, item) => {
-      const itemCost = Number(item.importPrice);
+      const productFallback = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
       let unitCost: number;
-      if (itemCost > 0) {
-        unitCost = itemCost;
+      if (costHistory) {
+        const wac = getHistoricalCost(costHistory, item.productId, order.date, 0);
+        if (wac > 0) {
+          unitCost = wac;
+        } else {
+          const itemCost = Number(item.importPrice);
+          unitCost = itemCost > 0 ? itemCost : productFallback;
+        }
       } else {
-        const fallback = productCostByKey.get(item.productId) ?? productCostByKey.get(item.sku) ?? 0;
-        unitCost = costHistory
-          ? getHistoricalCost(costHistory, item.productId, order.date, fallback)
-          : fallback;
+        const itemCost = Number(item.importPrice);
+        unitCost = itemCost > 0 ? itemCost : productFallback;
       }
       return sum + unitCost * (Number(item.quantity) || 0);
     }, 0);
