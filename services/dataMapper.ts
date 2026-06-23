@@ -65,9 +65,9 @@ interface DataMapperResults {
 const getConfigValue = (configs: ConfigRow[] | undefined, key: string) =>
   configs?.find(config => config.key === key)?.value;
 
-const extractKiotVietSupplierCode = (notes?: unknown) => {
+const extractLegacySupplierCode = (notes?: unknown) => {
   if (typeof notes !== 'string') return undefined;
-  return notes.match(/Mã NCC KiotViet:\s*(NCC\d+)/i)?.[1];
+  return notes.match(/Mã NCC(?:\s+\w+)?:\s*(NCC\d+)/i)?.[1];
 };
 
 // Parse "SIZE:43|MÀU:ĐỎ" hoặc "MÀU:NÂU" thành { SIZE: "43", MÀU: "ĐỎ" }
@@ -544,6 +544,7 @@ export const dataMapper = {
             location: p.location,
             relatedSku: p.related_sku || p.relatedSku || null,
             createdAt: p.created_at || p.createdAt || null,
+            discountPercent: Number(p.discount_percent || p.discountPercent || 0),
             customerOrders: Number(p.customer_orders || p.customerOrders || 0),
             directSale: p.direct_sale ?? p.directSale ?? true,
             productType: p.product_type || p.productType || 'Hàng hóa',
@@ -647,7 +648,7 @@ export const dataMapper = {
         (results.suppliers || []).map(s => ({
           id: s.id,
           name: s.name,
-          code: s.code || extractKiotVietSupplierCode(s.notes),
+          code: s.code || extractLegacySupplierCode(s.notes),
           phone: s.phone,
           email: s.email,
           address: s.address,

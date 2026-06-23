@@ -138,10 +138,11 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
       );
       const currentDebt = supplierDebts
         .filter(debt => debtBelongsToSupplier(debt, supplier))
-        .reduce(
-          (sum, debt) => sum + (debt.type === 'purchase' ? debt.amount : -debt.amount),
-          0
-        );
+        .reduce((sum, debt) => {
+          if (debt.type === 'purchase') return sum + debt.amount;
+          if (debt.type === 'adjustment') return sum + debt.amount; // can be negative
+          return sum - debt.amount; // payment, discount
+        }, 0);
       const categorySet = new Set<string>();
       importTxns.forEach(t => {
         t.items.forEach(item => {
@@ -377,6 +378,74 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
     } catch (err) {
       console.error('[SupplierContainer] Toggle status failed', err);
       showToast('Cập nhật trạng thái thất bại. Vui lòng thử lại.', 'error');
+    }
+  };
+
+  const handleRecordPayment = async (payment: { amount: number; date: string; description: string; method?: string }) => {
+    if (!viewingSupplier || !onUpdateSurgical) return;
+    try {
+      const record = {
+        id: generateId(),
+        supplierId: viewingSupplier.id,
+        supplierName: viewingSupplier.name,
+        date: payment.date,
+        type: 'payment' as const,
+        amount: Math.round(payment.amount),
+        description: payment.description,
+      };
+      await onUpdateSurgical([{ key: 'supplierDebts', item: record }]);
+      showToast(`Đã ghi nhận thanh toán ${record.amount.toLocaleString()}đ cho ${viewingSupplier.name}`, 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Record payment failed', err);
+      showToast('Ghi nhận thanh toán thất bại. Vui lòng thử lại.', 'error');
+      throw err;
+    }
+  };
+
+  const handleRecordAdjustment = async (data: { targetDebt: number; currentDebt: number; date: string; description: string }) => {
+    if (!viewingSupplier || !onUpdateSurgical) return;
+    try {
+      const diff = data.targetDebt - data.currentDebt;
+      if (Math.abs(diff) < 1) {
+        showToast('Số nợ không thay đổi', 'info');
+        return;
+      }
+      const record = {
+        id: generateId(),
+        supplierId: viewingSupplier.id,
+        supplierName: viewingSupplier.name,
+        date: data.date,
+        type: 'adjustment' as const,
+        amount: Math.round(diff),
+        description: data.description,
+      };
+      await onUpdateSurgical([{ key: 'supplierDebts', item: record }]);
+      showToast('Đã điều chỉnh công nợ NCC', 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Record adjustment failed', err);
+      showToast('Điều chỉnh thất bại. Vui lòng thử lại.', 'error');
+      throw err;
+    }
+  };
+
+  const handleRecordDiscount = async (data: { amount: number; date: string; description: string }) => {
+    if (!viewingSupplier || !onUpdateSurgical) return;
+    try {
+      const record = {
+        id: generateId(),
+        supplierId: viewingSupplier.id,
+        supplierName: viewingSupplier.name,
+        date: data.date,
+        type: 'discount' as const,
+        amount: Math.round(data.amount),
+        description: data.description,
+      };
+      await onUpdateSurgical([{ key: 'supplierDebts', item: record }]);
+      showToast(`Đã ghi nhận chiết khấu ${data.amount.toLocaleString()}đ từ ${viewingSupplier.name}`, 'success');
+    } catch (err) {
+      console.error('[SupplierContainer] Record discount failed', err);
+      showToast('Ghi nhận chiết khấu thất bại. Vui lòng thử lại.', 'error');
+      throw err;
     }
   };
 
@@ -618,6 +687,9 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
                   onDelete={handleDeleteFromDetail}
                   onClose={() => setViewingSupplier(null)}
                   onToggleStatus={handleToggleStatus}
+                  onRecordPayment={onUpdateSurgical ? handleRecordPayment : undefined}
+                  onRecordAdjustment={onUpdateSurgical ? handleRecordAdjustment : undefined}
+                  onRecordDiscount={onUpdateSurgical ? handleRecordDiscount : undefined}
                 />
               ) : null
             }

@@ -23,7 +23,6 @@ import { markLocalWrite } from './useRealtimeSync';
 
 const localTodayStr = new Date().toLocaleDateString('sv-SE');
 type IdentifiableItem = { id: string };
-type PosSeedProduct = IdentifiableItem & { sku?: unknown };
 type SyncableDataKey =
   | 'revenue'
   | 'expenses'
@@ -284,21 +283,6 @@ const canReachLocalServer = async (): Promise<boolean> => {
   }
 };
 
-const loadBundledPosProducts = async (): Promise<PosSeedProduct[]> => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const res = await fetch('/imports/kiotviet-products.json', { cache: 'no-store' });
-    if (!res.ok) return [];
-    const products = await res.json();
-    return Array.isArray(products) ? (products.filter(isIdentifiableItem) as PosSeedProduct[]) : [];
-  } catch {
-    return [];
-  }
-};
-
-const POS_PRODUCTS_SEED_KEY = 'cfo_brain_pos_products_seed_version';
-const POS_PRODUCTS_SEED_VERSION = 'kiotviet_2026-05-06_12739';
 const normalizeActiveTab = (tab: string) => (tab === 'dashboard' ? 'overview' : tab);
 
 const getInitialTab = () => {
@@ -496,28 +480,6 @@ export function useAppData() {
         dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
       } else {
         dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
-      }
-
-      if (localStorage.getItem(POS_PRODUCTS_SEED_KEY) !== POS_PRODUCTS_SEED_VERSION) {
-        const bundledProducts = await loadBundledPosProducts();
-        if (bundledProducts.length > 0) {
-          const existingProducts = Array.isArray(localData?.posProducts)
-            ? localData.posProducts
-            : [];
-          const bySku = new Map<string, AppData['posProducts'][number]>(
-            existingProducts.map(product => [String(product.sku || product.id), product] as const)
-          );
-          bundledProducts.forEach(product => {
-            const key = String(product.sku || product.id);
-            bySku.set(key, {
-              ...(bySku.get(key) || {}),
-              ...product,
-            } as AppData['posProducts'][number]);
-          });
-          localData = { ...(localData || {}), posProducts: Array.from(bySku.values()) };
-          await saveDataSnapshot(localData);
-          localStorage.setItem(POS_PRODUCTS_SEED_KEY, POS_PRODUCTS_SEED_VERSION);
-        }
       }
 
       if (results.brandProfile) {

@@ -77,8 +77,8 @@ function computeNewTier(newTotalSpentVnd: number, currentTier: POSCustomer['tier
 }
 const EMPTY_SPLIT_PAYMENT = { cash: 0, bank: 0, card: 0, momo: 0 } as const;
 const DEFAULT_POS_STAFF = [
-  { id: 'ngo-thanh-du', name: 'Ngô Thành Du', kiotvietId: '3458a3f9-2a12-551f-88b5-3b710078f807' },
-  { id: 'pham-thi-vui', name: 'Phạm Thị Vui', kiotvietId: '50e28d1c-e011-5dac-acf2-7a84c9e1b48a' },
+  { id: 'ngo-thanh-du', name: 'Ngô Thành Du', legacyId: '3458a3f9-2a12-551f-88b5-3b710078f807' },
+  { id: 'pham-thi-vui', name: 'Phạm Thị Vui', legacyId: '50e28d1c-e011-5dac-acf2-7a84c9e1b48a' },
 ];
 const STAFF_STORAGE_KEYS = ['cfo_current_staff_id', 'cfo_staff_id', 'current_staff_id'];
 
@@ -1367,10 +1367,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
             ...DEFAULT_POS_STAFF
               .filter(s => !salespersonOptions.some(o => o.id === s.id))
               .map(s => ({ id: s.id, name: s.name, position: '', joinDate: '' })),
-            // Thêm KiotViet UUID aliases — map UUID KiotViet → cùng tên nhân viên
+            // Map legacy UUID → tên nhân viên cho đơn hàng cũ
             ...DEFAULT_POS_STAFF
-              .filter(s => !!s.kiotvietId)
-              .map(s => ({ id: s.kiotvietId!, name: s.name, position: '', joinDate: '' })),
+              .filter(s => !!s.legacyId)
+              .map(s => ({ id: s.legacyId!, name: s.name, position: '', joinDate: '' })),
           ]}
           onClose={() => setShowEODReport(false)}
         />

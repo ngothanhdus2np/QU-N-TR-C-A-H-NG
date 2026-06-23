@@ -904,12 +904,14 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         }),
       };
       const payableAmount = transaction.totalAmount || 0;
+      const debtSupplierId = supplier?.id || 'ncc-le';
+      const debtSupplierName = supplier?.name || 'NCC lẻ';
       const debtRecord: SupplierDebtRecord | null =
-        supplier && payableAmount > 0
+        payableAmount > 0
           ? {
               id: generateId(),
-              supplierId: supplier.id,
-              supplierName,
+              supplierId: debtSupplierId,
+              supplierName: debtSupplierName,
               date: transaction.date,
               type: 'purchase',
               amount: payableAmount,
@@ -1074,13 +1076,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const changedProducts = updatedProducts.filter(product =>
         returnItems.some(item => item.productId === product.id)
       );
+      const returnDebtSupplierId = supplier?.id || 'ncc-le';
+      const returnDebtSupplierName = supplier?.name || 'NCC lẻ';
       // Ghi nhận phần NCC trả tiền mặt trực tiếp (nếu có)
       const cashPaymentRecord: SupplierDebtRecord | null =
-        supplier && returnSupplierPaidAmount > 0
+        returnSupplierPaidAmount > 0
           ? {
               id: generateId(),
-              supplierId: supplier.id,
-              supplierName,
+              supplierId: returnDebtSupplierId,
+              supplierName: returnDebtSupplierName,
               date: new Date().toISOString(),
               type: 'payment',
               amount: returnSupplierPaidAmount,
@@ -1089,11 +1093,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           : null;
       // Ghi nhận phần bù trừ vào công nợ cũ (nếu có)
       const debtOffsetRecord: SupplierDebtRecord | null =
-        supplier && returnApplySupplierDebt && remainingDebt > 0
+        returnApplySupplierDebt && remainingDebt > 0
           ? {
               id: generateId(),
-              supplierId: supplier.id,
-              supplierName,
+              supplierId: returnDebtSupplierId,
+              supplierName: returnDebtSupplierName,
               date: new Date().toISOString(),
               type: 'payment',
               amount: remainingDebt,

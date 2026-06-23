@@ -43,7 +43,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [importMessage, setImportMessage] = useState('');
 
-  const handleImportKiotViet = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportLegacy = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
@@ -379,14 +379,14 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             {importStatus === 'loading'
               ? <Loader2 className="h-4 w-4 animate-spin" />
               : <Upload className="h-4 w-4" />}
-            Import KiotViet
+            Import Excel
           </button>
           <input
             ref={importFileRef}
             type="file"
             accept=".xlsx,.xls"
             className="hidden"
-            onChange={handleImportKiotViet}
+            onChange={handleImportLegacy}
           />
           <button
             onClick={() => onExportPurchases(sortedOrders)}
@@ -596,6 +596,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       )}
       <ListPageLayout
         sidebarTitle="Nhập hàng"
+        sidebarDescription="Quản lý phiếu nhập và lịch sử mua"
         sidebar={sidebar}
         toolbar={toolbar}
         pagination={pagination}

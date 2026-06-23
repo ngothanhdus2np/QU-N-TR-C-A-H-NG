@@ -508,6 +508,7 @@ export interface POSProduct {
   isParent?: boolean; // true nếu là sản phẩm cha có biến thể
   variantAttributes?: Record<string, string>; // { "Màu sắc": "Đỏ", "Size": "M" }
   variantCount?: number; // Số lượng biến thể (chỉ cho sản phẩm cha)
+  discountPercent?: number;
   // KiotViet extended fields
   customerOrders?: number; // KH đặt — số lượng khách đặt trước
   directSale?: boolean; // Được bán trực tiếp
@@ -1098,7 +1099,7 @@ export interface SupplierDebtRecord {
   supplierId: string;
   supplierName: string;
   date: string;
-  type: 'purchase' | 'payment';
+  type: 'purchase' | 'payment' | 'adjustment' | 'discount';
   amount: number;
   description: string;
 }

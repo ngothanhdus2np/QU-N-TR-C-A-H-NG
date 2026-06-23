@@ -39,15 +39,15 @@ export const useGoodsExcelImport = ({
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-        const isKiotViet =
+        const isLegacyExcelFormat =
           rows[0] &&
           String(rows[0][0] || '').trim() === 'Loại hàng' &&
           String(rows[0][2] || '').trim() === 'Mã hàng';
 
-        if (isKiotViet) {
+        if (isLegacyExcelFormat) {
           setImportStatus({
             status: 'running',
-            message: `Đang import ${rows.length - 1} sản phẩm từ KiotViet...`,
+            message: `Đang import ${rows.length - 1} sản phẩm...`,
           });
           // Đọc theo chunk để tránh stack overflow với file lớn
           const bytes = new Uint8Array(buf);
