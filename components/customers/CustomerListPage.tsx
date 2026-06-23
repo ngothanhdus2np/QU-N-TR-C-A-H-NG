@@ -153,18 +153,20 @@ const CustomerListPage: React.FC<Props> = ({
     return map;
   }, [orders]);
 
-  // Per-customer debt from orders: debt = finalAmount - cashReceived
+  // Per-customer debt from orders: debt = finalAmount - cashReceived, floored at 0 (no negative/credit)
   const debtStats = useMemo(() => {
-    const map = new Map<string, number>();
+    const raw = new Map<string, number>();
     orders.forEach(o => {
       if (!o.customerId) return;
       const finalAmt = Number(o.finalAmount) || 0;
       const cashRecv = Number(o.cashReceived) || 0;
       const orderDebt = o.isReturn ? -(finalAmt - cashRecv) : (finalAmt - cashRecv);
       if (orderDebt !== 0) {
-        map.set(o.customerId, (map.get(o.customerId) || 0) + orderDebt);
+        raw.set(o.customerId, (raw.get(o.customerId) || 0) + orderDebt);
       }
     });
+    const map = new Map<string, number>();
+    raw.forEach((v, k) => { if (v > 0) map.set(k, v); });
     return map;
   }, [orders]);
 

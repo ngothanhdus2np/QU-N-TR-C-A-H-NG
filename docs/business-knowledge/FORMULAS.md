@@ -447,3 +447,138 @@ Truy vết danh mục cha cao nhất (root category), phân loại theo tên/ID:
 | Còn lại | Variable |
 
 Nhân sự luôn được tính là chi phí **cố định** (fixed) trong phân tích hòa vốn.
+
+---
+
+## 8. KHÁCH HÀNG
+
+### 8.1 Mã khách hàng (Customer Code)
+
+> Source: `CustomerListPage.tsx` → `codeMap` useMemo
+
+```
+code = "KH" + padStart(index + 1, 6, '0')
+```
+
+Khách hàng được sắp xếp theo `id` (alphabetical), rồi đánh mã tự tăng: KH000001, KH000002...
+Mã này tạo ở frontend, không lưu trong database.
+
+### 8.2 Doanh thu khách hàng (Order Stats — Tổng bán / Trả hàng)
+
+> Source: `CustomerListPage.tsx` → `orderStats` useMemo
+> Source: `reportCalculations.ts` → `calcOrderRevenue()`
+
+```
+sold = Σ calcOrderRevenue(đơn bán)              cho tất cả đơn bán của khách
+returned = Σ |totalAmount|                       cho tất cả đơn trả hàng của khách
+```
+
+Trong đó `calcOrderRevenue`:
+```
+revenue = totalAmount - discount                 (đơn bán)
+discount = |order.discount|                       (nếu có)
+         = max(0, totalAmount - finalAmount)      (nếu không có discount field)
+```
+
+- `sold` = tổng doanh thu đơn bán (hiển thị cột "Tổng bán")
+- `returned` = tổng giá trị trả hàng (dùng `|totalAmount|`, không dùng finalAmount)
+
+### 8.3 Doanh thu thuần khách hàng (Net Spent)
+
+> Source: `CustomerListPage.tsx` → `totals.net`
+> Source: `CustomerDetailPage.tsx` → `netSpent`
+
+```
+netSpent = sold - returned
+```
+
+Hiển thị cột "Trừ trả hàng" trong trang danh sách.
+
+### 8.4 Doanh thu theo khoảng thời gian (Spent in Range)
+
+> Source: `CustomerListPage.tsx` → `spentInRangeMap` useMemo
+
+```
+spentInRange = Σ calcOrderRevenue(đơn bán trong [spentFrom, spentTo])
+```
+
+Chỉ tính đơn bán (không tính trả hàng), chỉ đơn trong khoảng ngày filter.
+Dùng khi user filter "Tổng bán" kết hợp với "Thời gian".
+
+### 8.5 Ngày giao dịch cuối (Last Transaction)
+
+> Source: `CustomerListPage.tsx` → `lastTransactionMap` useMemo
+
+```
+lastTransaction = max(order.date)    cho tất cả đơn của khách (bán + trả)
+```
+
+So sánh bằng `new Date().getTime()`, lấy đơn có ngày lớn nhất.
+
+### 8.6 Nợ từng đơn hàng (Order Debt)
+
+> Source: `CustomerListPage.tsx` → `debtStats` useMemo
+> Source: `CustomerDetailPage.tsx` → `customerDebt`
+
+```
+orderDebt = finalAmount - cashReceived        (đơn bán thường)
+orderDebt = -(finalAmount - cashReceived)     (đơn trả hàng, is_return = true)
+```
+
+Trong đó:
+- `finalAmount` = giá trị đơn hàng sau chiết khấu (`pos_orders.final_amount`)
+- `cashReceived` = số tiền khách đã trả (`pos_orders.cash_received`, lấy từ cột "Khách đã trả" trong KiotViet)
+- Đơn trả hàng (`is_return = true`, prefix TH): nợ bị trừ (khách trả hàng → giảm nợ)
+
+### 8.7 Nợ hiện tại của khách hàng (Customer Debt)
+
+```
+customerDebt = max(0, Σ orderDebt)    cho tất cả đơn của khách đó
+```
+
+Quy tắc:
+- Nợ tính từ **toàn bộ đơn hàng** (all-time), không giới hạn thời gian
+- Nợ **không được âm** (floor ở 0) — khách trả thừa không tạo credit, khớp logic KiotViet
+- Chỉ tính đơn có `customerId` khớp với `pos_customers.id`
+
+### 8.8 Tổng nợ trang danh sách khách hàng
+
+> Source: `CustomerListPage.tsx` → `totals.debt`
+
+```
+totalDebt = Σ customerDebt    cho tất cả khách trong danh sách đã filter
+```
+
+Vì `debtStats` Map chỉ chứa khách có nợ > 0, khách nợ ≤ 0 tự động = 0.
+
+### 8.9 Tổng doanh thu trang danh sách
+
+> Source: `CustomerListPage.tsx` → `totals.spent`, `totals.net`
+
+```
+totalSpent = Σ (orderStats[customerId].sold)       cho tất cả khách đã filter
+totalNet   = Σ (sold - returned)                   cho tất cả khách đã filter
+```
+
+### 8.10 Xác định đơn trả hàng (isReturn)
+
+> Source: `apiService.ts` → `inferIsReturnOrder()`
+
+```
+isReturn = explicit === true
+         OR orderCode bắt đầu bằng "TH" (regex /^TH/i)
+         OR finalAmount < 0
+```
+
+Ưu tiên giá trị `is_return` từ database, fallback theo mã đơn và giá trị.
+
+### 8.11 Nguồn dữ liệu `cashReceived`
+
+> Source: `apiService.ts` → `mapPosOrderRow()`, `routes/import.ts`
+
+- Cột `cash_received` trong bảng `pos_orders` (Supabase)
+- Import từ KiotViet Excel: cột "Khách đã trả" (thường index 42 trong format "Chi tiết hóa đơn" và "kiotviet-invoices")
+- Tìm cột động bằng `col('Khách đã trả', 42)` — ưu tiên tên cột, fallback index 42
+- Mapping: `cash_received` (DB) → `cashReceived` (frontend) qua `mapPosOrderRow()`
+- Nếu `cash_received` = null trong DB → `cashReceived` = undefined → tính như 0
+- `POS_ORDER_BOOTSTRAP_DAYS = 0` → load toàn bộ đơn hàng (không giới hạn ngày)

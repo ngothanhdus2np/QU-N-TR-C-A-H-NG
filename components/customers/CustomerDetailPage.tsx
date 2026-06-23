@@ -78,12 +78,12 @@ const CustomerDetailPage: React.FC<Props> = ({
 
   const netSpent = orderStats ? orderStats.sold - orderStats.returned : 0;
 
-  const customerDebt = customerOrders.reduce((sum, o) => {
+  const customerDebt = Math.max(0, customerOrders.reduce((sum, o) => {
     const finalAmt = Number(o.finalAmount) || 0;
     const cashRecv = Number(o.cashReceived) || 0;
     const debt = finalAmt - cashRecv;
     return sum + (o.isReturn ? -debt : debt);
-  }, 0);
+  }, 0));
 
   return (
     <div className="bg-white animate-in slide-in-from-top-2 duration-200">

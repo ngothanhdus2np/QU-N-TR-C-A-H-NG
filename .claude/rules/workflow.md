@@ -37,21 +37,37 @@ Mọi tác vụ đều đi qua 4 bước, không ngoại lệ:
 | Sửa `businessLogic.ts` | Chạy `npm test` — 43 tests phải pass |
 | Thêm bảng / cột Supabase | Viết SQL vào `supabase_setup.sql` |
 | Thay đổi tài chính / lương | Gọi `auditLog()` vào bảng `audit_logs` |
-| **Mọi thay đổi UI / code frontend** | Restart dev server (xem bên dưới) |
+| **Mọi thay đổi code (frontend/backend)** | Kill tất cả server + restart (xem bên dưới) |
+| **Thêm/sửa công thức tính toán** | Cập nhật `docs/business-knowledge/FORMULAS.md` (xem bên dưới) |
 
-### Restart dev server sau mỗi thay đổi frontend
+### Restart dev server sau MỌI thay đổi code
 
-Bắt buộc thực hiện theo đúng thứ tự này sau khi implement xong:
+Bắt buộc thực hiện theo đúng thứ tự này sau khi implement xong (frontend, backend, hay bất kỳ file code nào):
 
 ```
-1. preview_stop  → dừng server cũ (serverId từ lần start trước)
-2. preview_start → khởi động server mới với code mới nhất
-3. preview_logs  → kiểm tra không có lỗi build/runtime
+1. preview_list  → lấy danh sách TẤT CẢ server đang chạy
+2. preview_stop  → dừng TỪNG server (lặp cho mỗi serverId)
+3. preview_start → khởi động server mới với code mới nhất
+4. preview_logs  → kiểm tra không có lỗi build/runtime
 ```
 
-**Lý do**: HMR của Vite đôi khi không push file mới đến browser — restart đảm bảo 100% code mới được load.
+**Quan trọng**: Phải dừng **tất cả** server cũ, không chỉ server cuối cùng. Nếu có nhiều server → stop hết rồi mới start lại.
+
+**Lý do**: HMR của Vite đôi khi không push file mới đến browser — restart đảm bảo 100% code mới được load. User cần code mới nhất để test ngay.
 
 Sau khi restart, báo user: **"Server đã restart — bạn hard refresh (`Cmd+Shift+R`) để load code mới."**
+
+### Cập nhật công thức sau khi thêm/sửa logic tính toán
+
+Khi thay đổi bất kỳ công thức nào (doanh thu, lợi nhuận, lương, nợ, tồn kho, KPI...), **bắt buộc** cập nhật `docs/business-knowledge/FORMULAS.md`:
+
+1. Tìm section tương ứng trong file (hoặc tạo section mới nếu chưa có)
+2. Ghi công thức dạng toán học dễ đọc (không paste code)
+3. Ghi rõ **Source** (file + function name)
+4. Ghi các quy tắc đặc biệt / edge case
+5. Ghi nguồn dữ liệu đầu vào (cột nào, bảng nào, import từ đâu)
+
+**Lý do**: File này là tài liệu duy nhất mô tả logic nghiệp vụ. Nếu không cập nhật, agent sau sẽ không biết công thức đúng và có thể implement sai.
 
 ---
 
