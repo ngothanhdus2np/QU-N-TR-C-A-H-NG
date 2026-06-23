@@ -153,6 +153,21 @@ const CustomerListPage: React.FC<Props> = ({
     return map;
   }, [orders]);
 
+  // Per-customer debt from orders: debt = finalAmount - cashReceived
+  const debtStats = useMemo(() => {
+    const map = new Map<string, number>();
+    orders.forEach(o => {
+      if (!o.customerId) return;
+      const finalAmt = Number(o.finalAmount) || 0;
+      const cashRecv = Number(o.cashReceived) || 0;
+      const orderDebt = o.isReturn ? -(finalAmt - cashRecv) : (finalAmt - cashRecv);
+      if (orderDebt !== 0) {
+        map.set(o.customerId, (map.get(o.customerId) || 0) + orderDebt);
+      }
+    });
+    return map;
+  }, [orders]);
+
   const lastTransactionMap = useMemo(() => {
     const map = new Map<string, string>();
     orders.forEach(order => {
@@ -183,7 +198,7 @@ const CustomerListPage: React.FC<Props> = ({
       list = list.filter(
         c =>
           c.name.toLowerCase().includes(q) ||
-          c.phone.includes(q) ||
+          (c.phone || '').includes(q) ||
           (codeMap.get(c.id) || '').toLowerCase().includes(q)
       );
     }
@@ -219,8 +234,8 @@ const CustomerListPage: React.FC<Props> = ({
         return true;
       });
     } else {
-      if (minS != null) list = list.filter(c => c.totalSpent >= minS);
-      if (maxS != null) list = list.filter(c => c.totalSpent <= maxS);
+      if (minS != null) list = list.filter(c => (orderStats.get(c.id)?.sold ?? 0) >= minS);
+      if (maxS != null) list = list.filter(c => (orderStats.get(c.id)?.sold ?? 0) <= maxS);
     }
     if (creatorSearch.trim()) {
       const q = creatorSearch.toLowerCase();
@@ -229,8 +244,8 @@ const CustomerListPage: React.FC<Props> = ({
 
     const minD = parseMoney(minDebt);
     const maxD = parseMoney(maxDebt);
-    if (minD != null) list = list.filter(c => (c.debtAmount ?? 0) >= minD);
-    if (maxD != null) list = list.filter(c => (c.debtAmount ?? 0) <= maxD);
+    if (minD != null) list = list.filter(c => (debtStats.get(c.id) ?? 0) >= minD);
+    if (maxD != null) list = list.filter(c => (debtStats.get(c.id) ?? 0) <= maxD);
 
     const minP = parseMoney(minPoints);
     const maxP = parseMoney(maxPoints);
@@ -252,16 +267,16 @@ const CustomerListPage: React.FC<Props> = ({
         av = a.phone;
         bv = b.phone;
       } else if (sortKey === 'debt') {
-        av = a.debtAmount ?? 0;
-        bv = b.debtAmount ?? 0;
+        av = debtStats.get(a.id) ?? 0;
+        bv = debtStats.get(b.id) ?? 0;
       } else if (sortKey === 'spent') {
-        av = a.totalSpent;
-        bv = b.totalSpent;
+        av = orderStats.get(a.id)?.sold ?? 0;
+        bv = orderStats.get(b.id)?.sold ?? 0;
       } else if (sortKey === 'net') {
         const sa = orderStats.get(a.id);
         const sb = orderStats.get(b.id);
-        av = sa ? sa.sold - sa.returned : a.totalSpent;
-        bv = sb ? sb.sold - sb.returned : b.totalSpent;
+        av = sa ? sa.sold - sa.returned : 0;
+        bv = sb ? sb.sold - sb.returned : 0;
       }
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortDir === 'asc' ? cmp : -cmp;
@@ -301,11 +316,11 @@ const CustomerListPage: React.FC<Props> = ({
   // Summary totals (all filtered, not just current page)
   const totals = useMemo(
     () => ({
-      debt: filtered.reduce((s, c) => s + (c.debtAmount ?? 0), 0),
-      spent: filtered.reduce((s, c) => s + c.totalSpent, 0),
+      debt: filtered.reduce((s, c) => s + (debtStats.get(c.id) ?? 0), 0),
+      spent: filtered.reduce((s, c) => s + (orderStats.get(c.id)?.sold ?? 0), 0),
       net: filtered.reduce((s, c) => {
         const st = orderStats.get(c.id);
-        return s + (st ? st.sold - st.returned : c.totalSpent);
+        return s + (st ? st.sold - st.returned : 0);
       }, 0),
     }),
     [filtered, orderStats]
@@ -518,7 +533,7 @@ const CustomerListPage: React.FC<Props> = ({
       align: 'right',
       sortable: true,
       render: c => {
-        const debt = c.debtAmount ?? 0;
+        const debt = debtStats.get(c.id) ?? 0;
         return (
           <span
             className={`text-sm font-medium tabular-nums ${debt > 0 ? 'text-rose-600' : 'text-slate-400'}`}
@@ -535,7 +550,7 @@ const CustomerListPage: React.FC<Props> = ({
       align: 'right',
       sortable: true,
       render: c => (
-        <span className="text-sm tabular-nums text-slate-700">{fmt(c.totalSpent)}</span>
+        <span className="text-sm tabular-nums text-slate-700">{fmt(orderStats.get(c.id)?.sold ?? 0)}</span>
       ),
     },
     {
@@ -546,7 +561,7 @@ const CustomerListPage: React.FC<Props> = ({
       sortable: true,
       render: c => {
         const st = orderStats.get(c.id);
-        const net = st ? st.sold - st.returned : c.totalSpent;
+        const net = st ? st.sold - st.returned : 0;
         return <span className="text-sm tabular-nums text-slate-700">{fmt(net)}</span>;
       },
     },
@@ -924,7 +939,7 @@ const CustomerListPage: React.FC<Props> = ({
                 onAnalyze={() => {
                   const stats = orderStats.get(detailCustomer.id);
                   window.alert(
-                    `Phân tích ${detailCustomer.name}\nTổng bán: ${fmt(stats?.sold ?? detailCustomer.totalSpent)}\nTrả hàng: ${fmt(stats?.returned ?? 0)}\nNợ hiện tại: ${fmt(detailCustomer.debtAmount ?? 0)}`
+                    `Phân tích ${detailCustomer.name}\nTổng bán: ${fmt(stats?.sold ?? 0)}\nTrả hàng: ${fmt(stats?.returned ?? 0)}\nNợ hiện tại: ${fmt(debtStats.get(detailCustomer.id) ?? 0)}`
                   );
                 }}
                 onToggleStatus={() => handleToggleStatus(detailCustomer)}

@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-23 — Sửa trang khách hàng: dữ liệu từ đơn hàng thực tế + redesign tab lịch sử
+
+- Thay toàn bộ `c.totalSpent` (static Supabase = 0) bằng `orderStats` tính từ đơn hàng thực tế trong CustomerListPage
+- Đổi `POS_ORDER_BOOTSTRAP_DAYS` từ 90 → 0 (load all-time) để có đủ dữ liệu 69,539 đơn thay vì chỉ 5,310
+- Link 3 đơn hàng mồ côi (HD065290, HD065142, HD064705) với customer_id đúng qua Supabase REST API
+- Tổng bán khớp KiotViet: 186.458.000 / Trừ trả hàng: 176.658.000
+- Redesign tab "Lịch sử bán/trả hàng" trong CustomerDetailPage: 5 cột giống KiotViet (Mã hóa đơn, Thời gian, Người bán, Tổng cộng, Trạng thái)
+- Files: `components/customers/CustomerListPage.tsx`, `components/customers/CustomerDetailPage.tsx`, `services/apiService.ts`
+
 ### 2026-06-22 — Revert wacMap on-the-fly, giữ kiến trúc đúng
 
 - Revert `wacMap` on-the-fly ở 5 file (MainContent, POSComputer, 3 trang Analysis) — không cần vì `product.importPrice` đã được cập nhật đúng tại thời điểm nhập hàng trong `PurchaseOrdersContainer.tsx` (dòng 932: `calculateNextImportPrice()`)

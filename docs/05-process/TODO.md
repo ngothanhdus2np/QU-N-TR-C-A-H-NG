@@ -9,6 +9,15 @@
 
 ---
 
+### [x] Sửa trang khách hàng: lấy dữ liệu từ đơn hàng thực tế + redesign tab lịch sử *(xong 2026-06-23)*
+
+> Thay `c.totalSpent` bằng `orderStats` từ đơn hàng thực tế. Load all-time orders (POS_ORDER_BOOTSTRAP_DAYS=0).
+> Link 3 đơn mồ côi. Tổng bán khớp KiotViet: 186.458.000 / 176.658.000.
+> Tab "Lịch sử bán/trả hàng" redesign 5 cột giống KiotViet.
+> **Chưa xử lý**: Nợ hiện tại = 0 (KiotViet: 14.096.000) — cần import/tính dữ liệu nợ riêng.
+
+---
+
 ### [x] Triển khai WAC calculator tính giá vốn (không phụ thuộc KiotViet) *(xong 2026-06-22)*
 
 > Đã implement WAC vào `buildCostHistory()` + đổi ưu tiên giá vốn trong `getSalesProfitRowsByDate()`.

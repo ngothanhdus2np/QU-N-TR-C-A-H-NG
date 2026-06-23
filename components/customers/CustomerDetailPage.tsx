@@ -20,6 +20,14 @@ const fmtDate = (d: string) => {
     return d;
   }
 };
+const fmtDateTime = (d: string) => {
+  try {
+    const dt = new Date(d);
+    return `${dt.toLocaleDateString('vi-VN')} ${dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  } catch {
+    return d;
+  }
+};
 
 interface Props {
   customer: POSCustomer;
@@ -68,7 +76,14 @@ const CustomerDetailPage: React.FC<Props> = ({
     .filter(d => d.customerId === customer.id)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const netSpent = orderStats ? orderStats.sold - orderStats.returned : customer.totalSpent;
+  const netSpent = orderStats ? orderStats.sold - orderStats.returned : 0;
+
+  const customerDebt = customerOrders.reduce((sum, o) => {
+    const finalAmt = Number(o.finalAmount) || 0;
+    const cashRecv = Number(o.cashReceived) || 0;
+    const debt = finalAmt - cashRecv;
+    return sum + (o.isReturn ? -debt : debt);
+  }, 0);
 
   return (
     <div className="bg-white animate-in slide-in-from-top-2 duration-200">
@@ -86,7 +101,7 @@ const CustomerDetailPage: React.FC<Props> = ({
               }`}
             >
               {tab.label}
-              {tab.id === 'debt' && (customer.debtAmount ?? 0) > 0 && (
+              {tab.id === 'debt' && customerDebt > 0 && (
                 <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-bold">
                   !
                 </span>
@@ -116,7 +131,7 @@ const CustomerDetailPage: React.FC<Props> = ({
         {activeTab === 'addresses' && <InvoiceInfoTab customer={customer} />}
         {activeTab === 'orders' && <OrdersTab orders={customerOrders} />}
         {activeTab === 'debt' && (
-          <DebtTab records={debtRecords} currentDebt={customer.debtAmount ?? 0} />
+          <DebtTab records={debtRecords} currentDebt={customerDebt} />
         )}
         {activeTab === 'points' && <PointsTab points={customer.points} />}
       </div>
@@ -519,38 +534,30 @@ const OrdersTab: React.FC<{ orders: POSOrder[] }> = ({ orders }) => {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">Mã đơn</th>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">Ngày</th>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">Loại</th>
-              <th className="px-4 py-3 text-right font-medium text-slate-600">Tổng tiền</th>
-              <th className="px-4 py-3 text-right font-medium text-slate-600">Giảm giá</th>
-              <th className="px-4 py-3 text-right font-medium text-slate-600">Thanh toán</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Mã hóa đơn</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Thời gian</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Người bán</th>
+              <th className="px-4 py-3 text-right font-medium text-slate-600">Tổng cộng</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Trạng thái</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {orders.map(order => (
               <tr key={order.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium text-blue-600">{order.orderCode}</td>
-                <td className="px-4 py-3 text-slate-600">{fmtDate(order.date)}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                      order.isReturn
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-emerald-100 text-emerald-700'
-                    }`}
-                  >
-                    {order.isReturn ? 'Trả hàng' : 'Bán hàng'}
-                  </span>
-                </td>
+                <td className="px-4 py-3 text-slate-600">{fmtDateTime(order.date)}</td>
+                <td className="px-4 py-3 text-slate-600">{order.staffName || '—'}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                  {fmt(order.totalAmount)}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-500">
-                  {order.discount > 0 ? `-${fmt(order.discount)}` : '—'}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-800">
                   {fmt(order.finalAmount)}
+                </td>
+                <td className="px-4 py-3">
+                  {order.isReturn ? (
+                    <span className="text-amber-600 font-medium text-xs">Đã trả hàng</span>
+                  ) : order.status === 'completed' ? (
+                    <span className="text-emerald-600 font-medium text-xs">Hoàn thành</span>
+                  ) : (
+                    <span className="text-slate-500 font-medium text-xs">{order.status || 'Hoàn thành'}</span>
+                  )}
                 </td>
               </tr>
             ))}

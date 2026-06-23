@@ -784,6 +784,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         customerName?: string;
         staffId?: string;
         channel?: string;
+        cashReceived?: number;
       };
       const orderMap = new Map<string, ImportedOrderData>();
 
@@ -863,6 +864,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
               profit: prev.profit + finalAmount,
             });
 
+            const cashReceived = Number(row[42] || 0);
             const cash = Number(row[43] || 0);
             const card = Number(row[44] || 0);
             const transfer = Number(row[46] || 0);
@@ -884,6 +886,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
               customerName: customerName && customerName !== 'Khách lẻ' ? customerName : undefined,
               staffId: staffName || undefined,
               channel,
+              cashReceived,
             });
           }
 
@@ -1502,7 +1505,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
 
       type CustInfo  = { name: string; phone: string; email: string; address: string };
       type OrdItem   = { productId: string; sku: string; name: string; quantity: number; price: number; discount: number; total: number };
-      type OrdData   = { date: string; customerId: string | null; customerName: string; staffId: string; staffName: string; channel: string; notes: string; totalAmount: number; discount: number; finalAmount: number; paymentMethod: 'Cash'|'Bank'|'Momo'|'Other'; isReturn: boolean; items: Map<string, OrdItem> };
+      type OrdData   = { date: string; customerId: string | null; customerName: string; staffId: string; staffName: string; channel: string; notes: string; totalAmount: number; discount: number; finalAmount: number; cashReceived: number; paymentMethod: 'Cash'|'Bank'|'Momo'|'Other'; isReturn: boolean; items: Map<string, OrdItem> };
       type MonthAgg  = { totalGross: number; discount: number; returnsGross: number; netRev: number };
 
       const customerMap  = new Map<string, CustInfo>();
@@ -1553,7 +1556,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             staffId:       String(row[21] || '').trim() ? stableUuidFromKey(`kiotviet-staff:${String(row[21]).trim()}`) : '',
             channel:       String(row[22] || '').trim(),
             notes:         String(row[37] || '').trim(),
-            totalAmount, discount: discountAmt, finalAmount, paymentMethod, isReturn,
+            totalAmount, discount: discountAmt, finalAmount, cashReceived: Math.abs(Number(row[42] || 0)), paymentMethod, isReturn,
             items: new Map(),
           });
         }
@@ -1645,6 +1648,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           is_return:      d.isReturn,
           // KiotViet: đơn trả → refund_amount = finalAmount (tiền shop hoàn cho khách)
           refund_amount:  d.isReturn ? Math.abs(d.finalAmount) : 0,
+          cash_received:  d.cashReceived ?? null,
           points_earned:  0,
           items:          Array.from(d.items.values()).length > 0 ? Array.from(d.items.values()) : (ex?.items ?? []),
         };
@@ -2351,6 +2355,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const iTotal       = col('Tổng tiền hàng', 38);
       const iDiscount    = col('Giảm giá hóa đơn', 39);
       const iFinal       = col('Khách cần trả', 41);
+      const iCashRecv    = col('Khách đã trả', 42);
       const iStatus      = col('Trạng thái', 50);
       const iSku         = col('Mã hàng', 52);
       const iSkuName     = col('Tên hàng', 53);
@@ -2369,6 +2374,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         totalAmount: number;
         discount: number;
         finalAmount: number;
+        cashReceived: number;
         status: string;
         items: Map<string, { sku: string; name: string; quantity: number; price: number; total: number }>;
       };
@@ -2394,6 +2400,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             totalAmount: Math.abs(Number(row[iTotal] || 0)),
             discount: Math.abs(Number(row[iDiscount] || 0)),
             finalAmount: Math.abs(Number(row[iFinal] || 0)),
+            cashReceived: Math.abs(Number(row[iCashRecv] || 0)),
             status: String(row[iStatus] || '').trim(),
             items: new Map(),
           });
@@ -2448,6 +2455,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           discount:        d.discount,
           final_amount:    d.finalAmount,
           refund_amount:   isReturn ? d.finalAmount : 0,
+          cash_received:   d.cashReceived ?? null,
           is_return:       isReturn,
           status,
           items:           Array.from(d.items.values()),

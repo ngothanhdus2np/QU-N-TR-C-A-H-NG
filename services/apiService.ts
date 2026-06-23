@@ -477,7 +477,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_META_LIMIT = 5000;
 const SUPABASE_PAGE_SIZE = 1000;
-export const POS_ORDER_BOOTSTRAP_DAYS = 90;
+export const POS_ORDER_BOOTSTRAP_DAYS = 0;
 const POS_ORDER_BOOTSTRAP_COLUMNS = [
   'id', 'order_code', 'date', 'customer_id', 'customer_name',
   'items', 'total_amount', 'discount', 'final_amount', 'payment_method',
@@ -553,18 +553,21 @@ const fetchAllRows = async (
 };
 
 const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
-  const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split('T')[0];
   const allRows: any[] = [];
   let offset = 0;
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from('pos_orders')
       .select(POS_ORDER_BOOTSTRAP_COLUMNS)
-      .gte('date', fromDate)
       .order('date', { ascending: false })
       .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+    if (days > 0) {
+      const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+      query = query.gte('date', fromDate);
+    }
+    const { data, error } = await query;
     if (error) return { data: allRows, error };
     const page = data || [];
     allRows.push(...page);
