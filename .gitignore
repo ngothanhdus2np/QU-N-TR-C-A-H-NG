@@ -1,3 +1,6 @@
+# CodeGraph index
+.codegraph/
+
 # Logs
 logs
 *.log
