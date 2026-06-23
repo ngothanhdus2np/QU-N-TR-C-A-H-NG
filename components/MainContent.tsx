@@ -2,43 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
-import HelpCenter from './help/HelpCenter';
-import OverviewPage from './overview/OverviewPage';
-import RevenueManager from './RevenueManager';
-import ExpenseManager from './ExpenseManager';
-import PayrollManager from './PayrollManager';
-import StaffManager from './StaffManager';
-import ProductGroupManager from './ProductGroupManager';
-import PromotionManager from './PromotionManager';
-import MarketingManager from './marketing/MarketingManager';
-import BrandManager from './marketing/BrandManager';
-import POSComputer from './pos/POSComputer';
-import GoodsInventory from './pos/GoodsInventory';
-import CustomerListPage from './customers/CustomerListPage';
-import SupplierContainer from './suppliers/SupplierContainer';
-import PurchaseOrdersContainer from './purchase/PurchaseOrdersContainer';
-import AuditContainer from './audit/AuditContainer';
-import PendingOrdersPage from './orders/PendingOrdersPage';
-import OrderInvoices from './orders/OrderInvoices';
-import OrderReturns from './orders/OrderReturns';
-import OrderRepairs from './orders/OrderRepairs';
-import DeliveryPartners from './orders/DeliveryPartners';
-import ShippingOrders from './orders/ShippingOrders';
 import OnlineSidebarNav from './online/OnlineSidebarNav';
-import PurchaseInvoices from './orders/PurchaseInvoices';
-import GoodsInternalUse from './inventory/GoodsInternalUse';
-import GoodsDisposal from './inventory/GoodsDisposal';
-import AnalysisContainer from './analysis/AnalysisContainer';
-import CashLedgerPage from './finance/CashLedgerPage';
-import EndOfDayReportPage from './reports/EndOfDayReportPage';
-import SalesReportPage from './reports/SalesReportPage';
-import OrderReportPage from './reports/OrderReportPage';
-import GoodsReportPage from './reports/GoodsReportPage';
-import CustomerReportPage from './reports/CustomerReportPage';
-import SupplierReportPage from './reports/SupplierReportPage';
-import StaffReportPage from './reports/StaffReportPage';
-import ChannelReportPage from './reports/ChannelReportPage';
-import FinanceReportPage from './reports/FinanceReportPage';
 import TimeFilter from './TimeFilter';
 import {
   AppData,
@@ -55,6 +19,42 @@ import { processPlaceOrder, processReturnOrder } from '../services/posOrderServi
 import { supabaseAdmin as supabase } from '../services/supabase';
 import { apiService } from '../services/apiService';
 
+const HelpCenter = React.lazy(() => import('./help/HelpCenter'));
+const OverviewPage = React.lazy(() => import('./overview/OverviewPage'));
+const RevenueManager = React.lazy(() => import('./RevenueManager'));
+const ExpenseManager = React.lazy(() => import('./ExpenseManager'));
+const PayrollManager = React.lazy(() => import('./PayrollManager'));
+const StaffManager = React.lazy(() => import('./StaffManager'));
+const ProductGroupManager = React.lazy(() => import('./ProductGroupManager'));
+const PromotionManager = React.lazy(() => import('./PromotionManager'));
+const MarketingManager = React.lazy(() => import('./marketing/MarketingManager'));
+const BrandManager = React.lazy(() => import('./marketing/BrandManager'));
+const POSComputer = React.lazy(() => import('./pos/POSComputer'));
+const GoodsInventory = React.lazy(() => import('./pos/GoodsInventory'));
+const CustomerListPage = React.lazy(() => import('./customers/CustomerListPage'));
+const SupplierContainer = React.lazy(() => import('./suppliers/SupplierContainer'));
+const PurchaseOrdersContainer = React.lazy(() => import('./purchase/PurchaseOrdersContainer'));
+const AuditContainer = React.lazy(() => import('./audit/AuditContainer'));
+const PendingOrdersPage = React.lazy(() => import('./orders/PendingOrdersPage'));
+const OrderInvoices = React.lazy(() => import('./orders/OrderInvoices'));
+const OrderReturns = React.lazy(() => import('./orders/OrderReturns'));
+const OrderRepairs = React.lazy(() => import('./orders/OrderRepairs'));
+const DeliveryPartners = React.lazy(() => import('./orders/DeliveryPartners'));
+const ShippingOrders = React.lazy(() => import('./orders/ShippingOrders'));
+const PurchaseInvoices = React.lazy(() => import('./orders/PurchaseInvoices'));
+const GoodsInternalUse = React.lazy(() => import('./inventory/GoodsInternalUse'));
+const GoodsDisposal = React.lazy(() => import('./inventory/GoodsDisposal'));
+const AnalysisContainer = React.lazy(() => import('./analysis/AnalysisContainer'));
+const CashLedgerPage = React.lazy(() => import('./finance/CashLedgerPage'));
+const EndOfDayReportPage = React.lazy(() => import('./reports/EndOfDayReportPage'));
+const SalesReportPage = React.lazy(() => import('./reports/SalesReportPage'));
+const OrderReportPage = React.lazy(() => import('./reports/OrderReportPage'));
+const GoodsReportPage = React.lazy(() => import('./reports/GoodsReportPage'));
+const CustomerReportPage = React.lazy(() => import('./reports/CustomerReportPage'));
+const SupplierReportPage = React.lazy(() => import('./reports/SupplierReportPage'));
+const StaffReportPage = React.lazy(() => import('./reports/StaffReportPage'));
+const ChannelReportPage = React.lazy(() => import('./reports/ChannelReportPage'));
+const FinanceReportPage = React.lazy(() => import('./reports/FinanceReportPage'));
 const KnowledgeManager = React.lazy(() => import('./KnowledgeManager'));
 const OnlineCatalogPage = React.lazy(() => import('./website/OnlineCatalogPage'));
 const OnlineOrdersPage = React.lazy(() => import('./online/OnlineOrdersPage'));
@@ -818,6 +818,7 @@ const MainContent: React.FC<MainContentProps> = ({
           className="flex-1 min-h-0"
         >
           <ErrorBoundary key="pos" moduleName="pos">
+            <React.Suspense fallback={<CardSkeleton />}>
             <POSComputer
               isActive={isPosActive}
               products={data.posProducts || []}
@@ -867,12 +868,14 @@ const MainContent: React.FC<MainContentProps> = ({
               onUpdateSurgical={updateSurgical}
               revenue={data.revenue || []}
             />
+            </React.Suspense>
           </ErrorBoundary>
         </div>
       )}
       {isGoodsActive && (
         <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="goods" moduleName="goods">
+            <React.Suspense fallback={<TableSkeleton />}>
             <GoodsInventory
               products={data.posProducts || []}
               transactions={data.inventoryTransactions || []}
@@ -894,6 +897,7 @@ const MainContent: React.FC<MainContentProps> = ({
                       : undefined
               }
             />
+            </React.Suspense>
           </ErrorBoundary>
         </div>
       )}
@@ -901,6 +905,7 @@ const MainContent: React.FC<MainContentProps> = ({
       {isStaffActive && (
         <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="staff" moduleName="staff">
+            <React.Suspense fallback={<TableSkeleton />}>
             <StaffManager
               list={data.employees}
               policies={data.salaryPolicies}
@@ -914,12 +919,14 @@ const MainContent: React.FC<MainContentProps> = ({
                 activeTab === 'staff-ledger' ? 'ledger' : activeTab === 'staff' ? 'list' : undefined
               }
             />
+            </React.Suspense>
           </ErrorBoundary>
         </div>
       )}
       {isPayrollActive && (
         <div className="h-full min-h-0 pt-10 pb-5 flex flex-col">
           <ErrorBoundary key="payroll" moduleName="payroll">
+            <React.Suspense fallback={<TableSkeleton />}>
             <PayrollManager
               data={data}
               onUpdateData={updateData}
@@ -943,6 +950,7 @@ const MainContent: React.FC<MainContentProps> = ({
               }
               onSelectMainTab={handleSetActiveTab}
             />
+            </React.Suspense>
           </ErrorBoundary>
         </div>
       )}
@@ -962,9 +970,11 @@ const MainContent: React.FC<MainContentProps> = ({
               className="h-full"
             >
               <ErrorBoundary key={activeTab} moduleName={activeTab}>
+                <React.Suspense fallback={<div className="h-full pt-10 pb-5 space-y-8"><CardSkeleton /><TableSkeleton /></div>}>
                 <div className="h-full pt-10 pb-5">
                   {renderContent()}
                 </div>
+                </React.Suspense>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>

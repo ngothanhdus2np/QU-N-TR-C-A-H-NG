@@ -477,8 +477,8 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
 // Giới hạn mặc định cho các bảng time-series nhỏ. Các bảng import lớn dùng fetchAllRows.
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_META_LIMIT = 5000;
-const SUPABASE_PAGE_SIZE = 1000;
-export const POS_ORDER_BOOTSTRAP_DAYS = 0;
+const SUPABASE_PAGE_SIZE = 5000;
+export const POS_ORDER_BOOTSTRAP_DAYS = 60;
 const POS_ORDER_BOOTSTRAP_COLUMNS = [
   'id', 'order_code', 'date', 'customer_id', 'customer_name',
   'items', 'total_amount', 'discount', 'final_amount', 'payment_method',
@@ -548,8 +548,8 @@ const fetchAllRows = async (
     if (error) return { data: allRows, error };
     const page = data || [];
     allRows.push(...page);
-    if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows, error: null };
-    offset += SUPABASE_PAGE_SIZE;
+    if (page.length === 0) return { data: allRows, error: null };
+    offset += page.length;
   }
 };
 
@@ -572,8 +572,8 @@ const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
     if (error) return { data: allRows, error };
     const page = data || [];
     allRows.push(...page);
-    if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows, error: null };
-    offset += SUPABASE_PAGE_SIZE;
+    if (page.length === 0) return { data: allRows, error: null };
+    offset += page.length;
   }
 };
 
@@ -713,8 +713,8 @@ export const apiService = {
       if (error) return { data: allRows.map(mapPosOrderRow), error };
       const page = data || [];
       allRows.push(...page);
-      if (page.length < SUPABASE_PAGE_SIZE) return { data: allRows.map(mapPosOrderRow), error: null };
-      offset += SUPABASE_PAGE_SIZE;
+      if (page.length === 0) return { data: allRows.map(mapPosOrderRow), error: null };
+      offset += page.length;
     }
   },
 

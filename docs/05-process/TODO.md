@@ -337,6 +337,24 @@ interface ParentRow {
 
 - [x] ~~**Hệ thống nợ lương chuyển kỳ (carry-forward debt)**~~ — tích hợp đầy đủ: tính toán, hiển thị, in phiếu, nút tính lại lịch sử ✅ *(2026-05-26)*
 
+### [x] Lazy load routes — React.lazy + Suspense *(xong 2026-06-23)*
+
+> Chuyển 36 component trong `MainContent.tsx` từ eager import sang `React.lazy()` + `Suspense` wrapper.
+> Giảm bundle size initial load, chỉ tải chunk khi user navigate tới route tương ứng.
+
+---
+
+### [ ] Lazy load DATA — Tách `fetchAllData()` thành route-specific loading
+
+> **Kế hoạch chi tiết**: `docs/05-process/LAZY_LOAD_DATA_PLAN.md`
+> Hiện tại 30 bảng Supabase load đồng thời trong 1 `Promise.all` → bottleneck ~8–10s.
+> **Phase 1 (P0)**: Tách thành `fetchCriticalData()` (8 bảng) + `fetchDeferredData()` (22 bảng) → mục tiêu < 3s
+> **Phase 2 (P1)**: Route-based loading — mỗi tab chỉ fetch bảng nó cần
+> **Phase 3 (P2)**: Prefetch on hover + idle prefetch
+> **Phase 4 (P2)**: Incremental sync (chỉ tải delta)
+
+---
+
 > **Note**: Đã hoàn thành tất cả P0 tasks! 🎉
 
 - [x] ~~**Fix trang vận đơn + nút tải lại trigger bot**~~ — session_expired state, fetchOrders khi CONNECTED, POST /api/orders/refresh ✅ *(2026-06-18)*
