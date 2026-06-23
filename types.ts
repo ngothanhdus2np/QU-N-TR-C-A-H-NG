@@ -758,6 +758,7 @@ export interface POSCustomer {
   taxCode?: string;
   companyName?: string;
   facebook?: string;
+  isStarred?: boolean;
 }
 
 export interface CustomerDebtRecord {

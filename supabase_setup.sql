@@ -2017,3 +2017,6 @@ END;
 $$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Add is_starred column to pos_customers for favorite marking
+ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE;

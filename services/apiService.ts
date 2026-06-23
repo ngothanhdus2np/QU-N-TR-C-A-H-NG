@@ -129,6 +129,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       last_visit: item.lastVisit,
       tier: item.tier,
       debt_amount: n(item.debtAmount),
+      ...(item.isStarred !== undefined ? { is_starred: !!item.isStarred } : {}),
     };
   }
   if (key === 'inventoryTransactions') {
@@ -1049,6 +1050,15 @@ export const apiService = {
     const payload = sanitizeItem(key, item);
     await postDataRoute('/api/data/upsert', { key, payload, recordId: item.id });
     return { success: true, id: item.id, key };
+  },
+
+  async toggleCustomerStar(id: string, isStarred: boolean) {
+    await postDataRoute('/api/data/upsert', {
+      key: 'posCustomers',
+      payload: { id, is_starred: isStarred },
+      recordId: id,
+    });
+    return { success: true, id, isStarred };
   },
 
   async upsertMany(key: keyof AppData, items: any[]) {

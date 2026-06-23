@@ -605,6 +605,7 @@ export const dataMapper = {
           debtAmount: Number(c.debt_amount || c.debtAmount || 0),
           lastVisit: c.last_visit || c.lastVisit,
           tier: c.tier || 'Standard',
+          isStarred: !!c.is_starred || !!c.isStarred,
         })),
         localData?.posCustomers || []
       ),

@@ -9,6 +9,9 @@ import {
   Mail,
   MapPin,
   FileText,
+  Star,
+  Download,
+  Users,
 } from 'lucide-react';
 import {
   ListPageLayout,
@@ -25,6 +28,7 @@ import { generateId } from '../../src/lib';
 import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import POSQuickCustomerModal, { type QuickCustomerForm } from '../pos/POSQuickCustomerModal';
 import CustomerDetailPage from './CustomerDetailPage';
+import { apiService } from '../../services/apiService';
 
 interface Props {
   customers: POSCustomer[];
@@ -130,6 +134,7 @@ const CustomerListPage: React.FC<Props> = ({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [detailCustomer, setDetailCustomer] = useState<POSCustomer | null>(null);
   const [formData, setFormData] = useState<Partial<POSCustomer>>(emptyForm());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Stable code map (sorted by id for consistency)
   const codeMap = useMemo(() => {
@@ -494,8 +499,140 @@ const CustomerListPage: React.FC<Props> = ({
     setDetailCustomer(updated);
   };
 
+  const handleToggleStar = async (customer: POSCustomer) => {
+    const newVal = !customer.isStarred;
+    const updated = customers.map(c =>
+      c.id === customer.id ? { ...c, isStarred: newVal } : c
+    );
+    onUpdateCustomers(updated);
+    if (detailCustomer?.id === customer.id) {
+      setDetailCustomer({ ...detailCustomer, isStarred: newVal });
+    }
+    try {
+      await apiService.toggleCustomerStar(customer.id, newVal);
+    } catch (err) {
+      console.error('[CustomerListPage] toggleStar failed', err);
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const allOnPage = paginated.map(c => c.id);
+    const allSelected = allOnPage.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        allOnPage.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        allOnPage.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    onUpdateCustomers(customers.filter(c => !selectedIds.has(c.id)));
+    setSelectedIds(new Set());
+    setDetailCustomer(null);
+    if (onUpdateSurgical) {
+      try {
+        await onUpdateSurgical(ids.map(id => ({ key: 'posCustomers', item: { id }, isDelete: true })));
+      } catch (err) {
+        console.error('[CustomerListPage] bulkDelete failed', err);
+      }
+    }
+  };
+
+  const handleBulkChangeGroup = async (tier: POSCustomer['tier']) => {
+    if (selectedIds.size === 0) return;
+    const updated = customers.map(c =>
+      selectedIds.has(c.id) ? { ...c, tier } : c
+    );
+    onUpdateCustomers(updated);
+    if (onUpdateSurgical) {
+      try {
+        const updates = Array.from(selectedIds).map(id => {
+          const c = updated.find(x => x.id === id)!;
+          return { key: 'posCustomers' as const, item: c };
+        });
+        await onUpdateSurgical(updates);
+      } catch (err) {
+        console.error('[CustomerListPage] bulkChangeGroup failed', err);
+      }
+    }
+    setSelectedIds(new Set());
+  };
+
+  const allOnPageSelected = paginated.length > 0 && paginated.every(c => selectedIds.has(c.id));
+
   // Table columns
   const columns: TableColumn<POSCustomer>[] = [
+    {
+      key: 'checkbox',
+      label: '',
+      width: 'w-[44px]',
+      align: 'center',
+      headerRender: () => (
+        <button
+          onClick={e => { e.stopPropagation(); handleSelectAll(); }}
+          className="flex items-center justify-center w-full"
+        >
+          <input
+            type="checkbox"
+            checked={allOnPageSelected}
+            onChange={() => {}}
+            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          />
+        </button>
+      ),
+      render: c => (
+        <button
+          onClick={e => { e.stopPropagation(); handleToggleSelect(c.id); }}
+          className="flex items-center justify-center w-full"
+        >
+          <input
+            type="checkbox"
+            checked={selectedIds.has(c.id)}
+            onChange={() => {}}
+            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          />
+        </button>
+      ),
+    },
+    {
+      key: 'star',
+      label: '',
+      width: 'w-[44px]',
+      align: 'center',
+      render: c => (
+        <button
+          onClick={e => { e.stopPropagation(); handleToggleStar(c); }}
+          className="flex items-center justify-center w-full"
+        >
+          <Star
+            className={`w-4 h-4 transition-colors ${
+              c.isStarred
+                ? 'fill-amber-400 text-amber-400'
+                : 'text-slate-300 hover:text-amber-300'
+            }`}
+          />
+        </button>
+      ),
+    },
     {
       key: 'code',
       label: 'Mã khách hàng',
@@ -801,32 +938,82 @@ const CustomerListPage: React.FC<Props> = ({
     </div>
   );
 
+  const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
   const toolbar = (
     <div className="flex items-center gap-2 px-4 py-3 bg-white border-b border-slate-100 shrink-0">
-      <div className="relative flex-1 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Theo mã, tên, số điện thoại"
-          value={search}
-          onChange={e => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-300"
-        />
-      </div>
-      <div className="flex-1" />
-      <button
-        onClick={() => {
-          setPosForm(emptyPOSForm());
-          setShowPOSModal(true);
-        }}
-        className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        <Plus className="w-4 h-4" />
-        Khách hàng
-      </button>
+      {selectedIds.size > 0 ? (
+        <>
+          <span className="text-sm font-medium text-indigo-600">
+            Đã chọn {selectedIds.size} khách hàng
+          </span>
+          <div className="flex-1" />
+          <div className="relative">
+            <button
+              onClick={() => setShowGroupMenu(p => !p)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700"
+            >
+              <Users className="w-4 h-4" />
+              Đổi nhóm
+            </button>
+            {showGroupMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
+                {(['Standard', 'Silver', 'Gold', 'Diamond'] as const).map(tier => (
+                  <button
+                    key={tier}
+                    onClick={() => { handleBulkChangeGroup(tier); setShowGroupMenu(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                  >
+                    {tier}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowBulkDeleteConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-rose-200 rounded-lg hover:bg-rose-50 text-rose-600"
+          >
+            <Trash2 className="w-4 h-4" />
+            Xóa
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500"
+          >
+            <X className="w-4 h-4" />
+            Bỏ chọn
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Theo mã, tên, số điện thoại"
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-300"
+            />
+          </div>
+          <div className="flex-1" />
+          <button
+            onClick={() => {
+              setPosForm(emptyPOSForm());
+              setShowPOSModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Khách hàng
+          </button>
+        </>
+      )}
     </div>
   );
 
@@ -1044,6 +1231,35 @@ const CustomerListPage: React.FC<Props> = ({
                 className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
               >
                 {editCustomer ? 'Lưu thay đổi' : 'Thêm khách hàng'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirm */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 text-center">
+            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6 text-rose-600" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-800 mb-1">
+              Xóa {selectedIds.size} khách hàng?
+            </h3>
+            <p className="text-sm text-slate-500 mb-5">Hành động này không thể hoàn tác.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={() => { handleBulkDelete(); setShowBulkDeleteConfirm(false); }}
+                className="flex-1 py-2 bg-rose-600 text-white rounded-xl text-sm font-medium hover:bg-rose-700"
+              >
+                Xóa
               </button>
             </div>
           </div>
