@@ -140,6 +140,7 @@ function mapToRow(o: BotOrder) {
     shipping_unit:       normalizeShippingUnit(o.shipping_carrier ?? ''),
     platform,
     profit_status:       (mappedStatus === 'CANCEL' || mappedStatus === 'FAILED') ? 'HỦY' : 'CHƯA TÍNH',
+    cancel_reason:       o.cancel_reason ?? null,
   };
 }
 

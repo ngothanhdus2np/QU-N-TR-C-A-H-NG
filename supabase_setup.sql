@@ -275,6 +275,45 @@ ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS customer_orders INTEGER DEFAUL
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS direct_sale BOOLEAN DEFAULT true;
 ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'Hàng hóa';
 
+-- Chiết khấu % mặc định cho sản phẩm (2026-06-23)
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+
+-- Bảng giá (price books) — lưu trữ nhiều bảng giá tùy chỉnh (2026-06-23)
+CREATE TABLE IF NOT EXISTS price_books (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  start_date TIMESTAMPTZ,
+  end_date TIMESTAMPTZ,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE price_books ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own price_books" ON price_books
+  FOR ALL USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE TABLE IF NOT EXISTS price_book_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  price_book_id UUID NOT NULL REFERENCES price_books(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL,
+  sale_price NUMERIC NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(price_book_id, product_id)
+);
+
+ALTER TABLE price_book_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own price_book_items" ON price_book_items
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM price_books pb WHERE pb.id = price_book_items.price_book_id AND pb.user_id = auth.uid())
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM price_books pb WHERE pb.id = price_book_items.price_book_id AND pb.user_id = auth.uid())
+  );
+
 -- Knowledge Base original files (2026-05-12)
 -- Chạy block này trước khi upload tài liệu gốc từ KnowledgeManager.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -2020,3 +2059,9 @@ NOTIFY pgrst, 'reload schema';
 
 -- Add is_starred column to pos_customers for favorite marking
 ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE;
+
+-- Add discount_percent column to pos_products (run this before enabling discount_percent in apiService.ts)
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
+
+-- Add cancel_reason column to shopee_inventory_out (để phân biệt FAILED vs CANCEL)
+ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS cancel_reason TEXT;

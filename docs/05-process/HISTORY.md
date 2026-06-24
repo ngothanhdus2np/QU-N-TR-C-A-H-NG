@@ -3,6 +3,42 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-25 — Shopee: Thêm trạng thái FAILED cho đơn giao hàng thất bại
+
+- Thêm cột `cancel_reason TEXT` vào bảng `shopee_inventory_out` (migration SQL trong `supabase_setup.sql`)
+- Thêm logic FAILED detection trong `routes/inventoryOutSync.ts`: đơn hủy có `cancel_reason` chứa "giao hàng thất bại" → map thành FAILED thay vì CANCEL
+- Thêm `cancel_reason` vào `BotOrder` interface và `mapToRow()` để sync lý do hủy từ bot lên Supabase
+- Thêm `FAILED` vào union type `ShopeeInventoryOutRecord.status` trong `src/types/shopee.ts`
+- Sync lại toàn bộ 409 đơn → 3 đơn được chuyển đúng sang FAILED (lý do: "Lý do hủy: Giao hàng thất bại")
+- Files: `routes/inventoryOutSync.ts`, `supabase_setup.sql`, `src/types/shopee.ts`
+
+### 2026-06-24 — POS: Popup cài đặt in + preview hóa đơn + custom dropdown bảo hành
+
+- Thêm `PrintPreviewModal` vào `POSHeaderToolbar.tsx`: click "A. Mẫu in hóa đơn" → mở popup xem trước hóa đơn mẫu với dữ liệu thực (tên cửa hàng, địa chỉ, SĐT từ brandProfile)
+- Đổi dòng "Cho mỗi hàng hóa" từ `<select>` native sang custom dropdown (chevron xoay, overlay click-outside, checkmark option đang chọn)
+- Sửa icon máy in: không active = màu slate-400 bằng với các icon khác (trước đó nhạt hơn)
+- Sửa toggle gạt: ô tròn trượt thật sự bằng CSS transform (trước chỉ đổi màu)
+- Bỏ border/khung quanh nút +/− và ô số bản in (giữ borderless cho gọn)
+- Files: `components/pos/POSHeaderToolbar.tsx`
+
+### 2026-06-24 — POS: Thêm popup cài đặt in khi click icon máy in
+
+- Thêm `POSPrintSettings` interface vào `hooks/usePOSState.ts` với localStorage persistence
+- Thay `isAutoPrintEnabled` boolean đơn giản bằng `printSettings` object (6 trường: autoPrintInvoice, mergeItems, invoiceCopies, autoPrintWarranty, warrantyMode, warrantyCopies)
+- Giữ `isAutoPrintEnabled` / `setIsAutoPrintEnabled` dưới dạng derived value để không phá vỡ keyboard shortcut và checkout logic
+- Sửa `POSHeaderToolbar.tsx`: icon máy in mở popup dropdown (giống style showGridMenu) với toggles, number inputs, select, nút Bỏ qua/Xong
+- Thêm sub-components `PrintToggleRow` và `PrintCopiesInput` vào POSHeaderToolbar
+- Files: `hooks/usePOSState.ts`, `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSComputer.tsx`
+
+### 2026-06-24 — Agent Console: Feature 3 — kết nối Dev Console với File Explorer
+
+- Tạo `FilePicker.tsx`: modal chọn file từ project đã đăng ký, hỗ trợ tìm kiếm và duyệt thư mục đệ quy
+- Cập nhật `Console.tsx`: nút đính kèm file (Paperclip), hiển thị file chip, gửi nội dung file vào context chat
+- Parse code block trong response AI → nút Copy + nút "Áp dụng" trên mỗi block
+- "Áp dụng" mở FilePicker chọn file đích → PUT `/api/console/projects/:id/file` → ghi đè nội dung
+- Toast confirm sau khi áp dụng thành công
+- Files (agent-console): `client/src/components/FilePicker.tsx`, `client/src/pages/Console.tsx`
+
 ### 2026-06-23 — Sửa trang khách hàng: dữ liệu từ đơn hàng thực tế + redesign tab lịch sử
 
 - Thay toàn bộ `c.totalSpent` (static Supabase = 0) bằng `orderStats` tính từ đơn hàng thực tế trong CustomerListPage
