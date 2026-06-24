@@ -13,6 +13,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   OK:       { label: 'Đã giao',      className: 'bg-emerald-700 text-white' },
   RETURN:   { label: 'Hoàn hàng',   className: 'bg-rose-600 text-white' },
   CANCEL:   { label: 'Huỷ',         className: 'bg-rose-600 text-white' },
+  FAILED:   { label: 'Giao thất bại', className: 'bg-orange-600 text-white' },
   LOST:     { label: 'Thất lạc',    className: 'bg-rose-600 text-white' },
   SHIPPING: { label: 'Đang giao',   className: 'bg-amber-500 text-white' },
   PENDING:  { label: 'Chờ xử lý',   className: 'bg-slate-400 text-white' },
@@ -200,6 +201,12 @@ const InventoryOutTab: React.FC<Props> = ({
     i.salePrice - i.platformFee - (i.pishipFee || 0) - i.freeshipExtra
     - i.paymentFee - (i.vatTax || 0) - i.personalIncomeTax - i.affiliateFee;
 
+  // Lợi nhuận = Sàn TT - Giá gốc × SL - QC - Thuế QC - Vận hành
+  const calcNetProfit = (i: ShopeeInventoryOutRecord) => {
+    const importPrice = (shopeeSourceData.find(s => s.sku === i.sku)?.importPrice || 0) * (i.quantity || 1);
+    return calcPlatformNet(i) - importPrice - i.adsCost - i.adsTax - i.handlingFee;
+  };
+
   const tableTotals = useMemo(() => ({
     quantity: filteredData.reduce((s, i) => s + i.quantity, 0),
     salePrice: filteredData.reduce((s, i) => s + i.salePrice, 0),
@@ -267,9 +274,9 @@ const InventoryOutTab: React.FC<Props> = ({
                 i.sku, i.productName, i.quantity, i.salePrice, i.customerPaid,
                 i.platformFee, i.pishipFee || 0, i.freeshipExtra, i.paymentFee,
                 i.vatTax || 0, i.personalIncomeTax, i.affiliateFee, i.adsCost,
-                i.adsTax, i.handlingFee, i.netProfit, i.address, i.shippingUnit,
+                i.adsTax, i.handlingFee, i.netProfit, i.address, i.deliveredAt || '', i.shippingUnit,
               ].join(','));
-              const header = 'Ngày,Trạng thái,Nền tảng,Mã VĐ,SKU,Tên SP,SL,Giá trị,Khách TT,Phí CĐ,PiShip,Phí DV,Phí TT,VAT,TNCN,Affiliate,QC,Thuế QC,Vận hành,Lợi nhuận,Địa chỉ,ĐVVC';
+              const header = 'Ngày,Trạng thái,Nền tảng,Mã VĐ,SKU,Tên SP,SL,Giá trị,Khách TT,Phí CĐ,PiShip,Phí DV,Phí TT,VAT,TNCN,Affiliate,QC,Thuế QC,Vận hành,Lợi nhuận,Địa chỉ,Ngày giao,ĐVVC';
               const csv = [header, ...rows].join('\n');
               const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
               const url = URL.createObjectURL(blob);
@@ -422,7 +429,7 @@ const InventoryOutTab: React.FC<Props> = ({
                 />
               </th>
               <th className="px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Tình Trạng</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Ngày gửi</th>
+              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Ngày đặt</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Số đơn/ngày</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Nền tảng</th>
               <th className="px-3 py-3 border-r border-slate-200 w-56 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Mã Vận Đơn</th>
@@ -444,6 +451,7 @@ const InventoryOutTab: React.FC<Props> = ({
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Vận Hành</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Lợi Nhuận</th>
               <th className="px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Địa chỉ</th>
+              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Ngày giao</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">ĐVVC</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">LÃI/LỖ</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Hành động</th>
@@ -497,27 +505,31 @@ const InventoryOutTab: React.FC<Props> = ({
                 <td className={`p-2 border-b border-r border-slate-200 max-w-[320px]${dt}`}>
                   <p className="truncate text-slate-800 text-xs">{getProductName(item)}</p>
                 </td>
-                <td className={`p-2 border-b border-r border-slate-200 text-center font-normal${dt}`}>{item.quantity}</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-center font-normal${dt}`}>{(item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.quantity}</td>
                 <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${dt}`}>{formatNumber(item.salePrice)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${dt}`}>{formatNumber(item.customerPaid)} đ</td>
+                {/* Từ đây đến Lợi nhuận: đơn huỷ hiển thị 0 */}
+                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.customerPaid)} đ</td>
                 {/* Phí shopee */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.platformFee)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.pishipFee || 0)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.freeshipExtra)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.paymentFee)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.vatTax || 0)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.personalIncomeTax)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.affiliateFee)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.platformFee)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : (item.pishipFee || 0))} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.freeshipExtra)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.paymentFee)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : (item.vatTax || 0))} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.personalIncomeTax)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.affiliateFee)} đ</td>
                 {/* Sàn Thanh Toán */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal text-slate-700 bg-slate-50${dt}`}>{formatNumber(calcPlatformNet(item))} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal text-slate-700 bg-slate-50${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : calcPlatformNet(item))} đ</td>
                 {/* QC + Vận hành */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.adsCost)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.adsTax)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber(item.handlingFee)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.adsCost)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.adsTax)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.handlingFee)} đ</td>
                 {/* Lợi nhuận */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal ${item.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}${dt}`}>{formatNumber(item.netProfit)} đ</td>
+                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal ${item.status !== 'CANCEL' && item.status !== 'FAILED' && calcNetProfit(item) < 0 ? 'text-rose-600' : 'text-emerald-700'}${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : calcNetProfit(item))} đ</td>
                 <td className={`p-2 border-b border-r border-slate-200 text-slate-500 uppercase${dt}`}>
                   {item.address ? item.address.split(',').pop()!.trim() : '-'}
+                </td>
+                <td className={`p-2 border-b border-r border-slate-200 text-center text-xs text-slate-600${dt}`}>
+                  {item.deliveredAt ? item.deliveredAt.split('-').reverse().join('/') : '-'}
                 </td>
                 <td className={`p-2 border-b border-r border-slate-200${dt}`}>
                   <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
@@ -526,8 +538,8 @@ const InventoryOutTab: React.FC<Props> = ({
                   </div>
                 </td>
                 <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className={`flex items-center justify-between px-2 py-1 rounded-md text-2xs font-normal cursor-pointer ${item.netProfit >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'}`}>
-                    <span>{item.profitStatus || (item.netProfit >= 0 ? 'LÃI 2' : 'LỖ 1')}</span>
+                  <div className={`flex items-center justify-between px-2 py-1 rounded-md text-2xs font-normal cursor-pointer ${calcNetProfit(item) >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'}`}>
+                    <span>{item.profitStatus || (calcNetProfit(item) >= 0 ? 'LÃI 2' : 'LỖ 1')}</span>
                     <ArrowDownToLine className="w-3 h-3 rotate-180" />
                   </div>
                 </td>
@@ -641,7 +653,7 @@ const InventoryOutTab: React.FC<Props> = ({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Ngày gửi</label>
+                      <label className="text-[9px] font-normal text-slate-400 uppercase ml-1">Ngày đặt</label>
                       <input type="date" value={inventoryOutForm.date} onChange={e => setInventoryOutForm({...inventoryOutForm, date: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-2xs font-normal focus:outline-none focus:ring-1 focus:ring-rose-500" />
                     </div>
                     <div className="space-y-1">

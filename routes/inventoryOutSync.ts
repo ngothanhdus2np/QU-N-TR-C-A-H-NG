@@ -26,6 +26,7 @@ const STATUS_MAP: Record<string, string> = {
 interface BotOrder {
   order_sn: string;
   status: string;
+  cancel_reason: string | null;
   product_sku: string;
   variation: string;
   product_name: string;
@@ -103,7 +104,11 @@ async function fetchAllBotOrders(port: number, shopIdx: number): Promise<BotOrde
 function mapToRow(o: BotOrder) {
   const baseStatus = STATUS_MAP[o.status] ?? 'PENDING';
   // Hoàn đã xong → RETURNED (số lượng sẽ = 0, không tính tồn kho)
-  const mappedStatus = baseStatus === 'RETURN' && o.return_completed_at ? 'RETURNED' : baseStatus;
+  let mappedStatus = baseStatus === 'RETURN' && o.return_completed_at ? 'RETURNED' : baseStatus;
+  // Đơn huỷ do giao hàng thất bại (khách không nhận) → FAILED, khác với CANCEL (huỷ trước khi giao)
+  if (mappedStatus === 'CANCEL' && o.cancel_reason?.toLowerCase().includes('giao hàng thất bại')) {
+    mappedStatus = 'FAILED';
+  }
   const date         = parseOrderDate(o.order_date);
   const platform     = SHOP_BOTS[o.shopIdx]?.platform ?? 'Shopee 1';
   const variation    = o.variation ? o.variation.replace(',', '-') : '';
@@ -134,7 +139,7 @@ function mapToRow(o: BotOrder) {
     address:             o.province ?? '',
     shipping_unit:       normalizeShippingUnit(o.shipping_carrier ?? ''),
     platform,
-    profit_status:       'CHƯA TÍNH',
+    profit_status:       (mappedStatus === 'CANCEL' || mappedStatus === 'FAILED') ? 'HỦY' : 'CHƯA TÍNH',
   };
 }
 

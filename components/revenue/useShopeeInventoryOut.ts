@@ -198,6 +198,22 @@ export function useShopeeInventoryOut({
             if (!date) date = localTodayStr;
             const shipDate = date;
 
+            const deliveredAt = parseVNDate(
+              obj.ngaygiaohang ||
+              obj.ngaygiaothucte ||
+              obj.ngayhoantat ||
+              obj.ngayhoanthanh ||
+              obj.ngaynhanhang ||
+              obj.ngaynhanduochang ||
+              obj.thoigiangiaohangthanhhcong ||
+              obj.thoigiangiaohangs ||
+              obj.completedate ||
+              obj.completiondate ||
+              obj.deliverydate ||
+              obj.deliveredat ||
+              ''
+            ) || undefined;
+
             const productName = String(obj.tensanpham || obj.productname || '');
             const address = String(obj.diachinhanhang || obj.address || '');
             const shippingUnit = normalizeShippingUnit(String(obj.donvivanchuyen || obj.shippingcarrier || ''));
@@ -274,6 +290,7 @@ export function useShopeeInventoryOut({
               netProfit,
               address,
               shippingUnit,
+              deliveredAt,
               status,
               profitStatus: status === 'CANCEL' ? 'HỦY' : netProfit >= 0 ? 'LÃI 2' : 'LỖ 1',
               dailyOrderIndex: 0,

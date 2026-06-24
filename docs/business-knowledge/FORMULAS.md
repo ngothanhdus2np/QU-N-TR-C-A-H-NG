@@ -582,3 +582,78 @@ isReturn = explicit === true
 - Mapping: `cash_received` (DB) → `cashReceived` (frontend) qua `mapPosOrderRow()`
 - Nếu `cash_received` = null trong DB → `cashReceived` = undefined → tính như 0
 - `POS_ORDER_BOOTSTRAP_DAYS = 0` → load toàn bộ đơn hàng (không giới hạn ngày)
+
+---
+
+## 9. Khách đặt (customerOrders) — Tính tự động từ đơn đặt hàng
+
+> Source: `components/pos/GoodsInventory.tsx` → `pendingOrdersMap` + `enrichProduct()`
+
+### 9.1 Công thức
+
+```
+pendingQuantity(productId) = SUM(item.quantity)
+  WHERE order.status = 'pending'
+  AND item.productId = productId
+
+customerOrders(productId) = MAX(pendingQuantity, importedValue)
+```
+
+- `importedValue`: giá trị `customerOrders` gốc trên sản phẩm (từ KiotViet import hoặc nhập tay)
+- `pendingQuantity`: tổng số lượng sản phẩm trong các đơn đặt hàng đang chờ (`status = 'pending'`)
+- Lấy `MAX` để không bỏ sót: nếu KiotViet có số lớn hơn thì giữ, nếu app có nhiều đơn hơn thì dùng số app
+
+### 9.2 Nguồn dữ liệu
+
+- `posOrders` (bảng `pos_orders`) — filter `status = 'pending'`
+- `posProducts.customerOrders` — giá trị import gốc (fallback)
+
+### 9.3 Nơi hiển thị
+
+- Cột "Khách đặt" trong bảng danh sách hàng hoá (`GoodsProductRow.tsx`)
+- Panel chi tiết sản phẩm → bảng tồn kho chi nhánh (`GoodsProductDetailPanel.tsx`)
+- Tính "Tồn dự kiến" = stock - customerOrders
+
+### 9.4 Quy tắc đặc biệt
+
+- Cơ chế import KiotViet vẫn được giữ nguyên — giá trị import lưu trên field `customerOrders` của sản phẩm
+- Giá trị hiển thị được tính realtime (computed) tại thời điểm render, không ghi đè lên database
+- Khi đơn đặt hàng hoàn thành hoặc huỷ, `pendingQuantity` tự động giảm
+
+---
+
+## 10. SHOPEE — BÁO CÁO XUẤT KHO (InventoryOutTab)
+
+> Source: `components/revenue/InventoryOutTab.tsx`
+
+### 10.1 Sàn Thanh Toán (Platform Net)
+
+```
+Sàn Thanh Toán = Giá trị đơn
+               − Phí cố định (platformFee)
+               − PiShip (pishipFee)
+               − Phí dịch vụ vận chuyển (freeshipExtra)
+               − Phí thanh toán (paymentFee)
+               − VAT (vatTax)
+               − Thuế TNCN (personalIncomeTax)
+               − Affiliate fee (affiliateFee)
+```
+
+Source: `calcPlatformNet()` — không bao gồm chi phí quảng cáo và vận hành.
+
+### 10.2 Lợi Nhuận (Net Profit)
+
+```
+Lợi Nhuận = Sàn Thanh Toán
+           − Giá gốc × Số lượng
+           − Quảng cáo (adsCost)
+           − Thuế QC (adsTax)
+           − Phí vận hành (handlingFee)
+```
+
+Source: `calcNetProfit()` — Giá gốc (`importPrice`) tra theo SKU từ `shopeeSourceData` (không hiển thị thành cột riêng).
+
+Quy tắc đặc biệt:
+- Đơn huỷ (`status === 'CANCEL'`): **tất cả cột từ "Khách Thanh Toán" đến "Lợi Nhuận" đều = 0**, kể cả Số lượng = 0 (để không sai tồn kho)
+- Nếu SKU không tìm thấy trong `shopeeSourceData` → Giá gốc = 0 (không lỗi)
+- Lợi Nhuận âm → hiển thị màu đỏ (`text-rose-600`); dương → màu xanh (`text-emerald-700`)
