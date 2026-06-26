@@ -39,6 +39,7 @@ Mọi tác vụ đều đi qua 4 bước, không ngoại lệ:
 | Thay đổi tài chính / lương | Gọi `auditLog()` vào bảng `audit_logs` |
 | **Mọi thay đổi code (frontend/backend)** | Kill tất cả server + restart (xem bên dưới) |
 | **Thêm/sửa công thức tính toán** | Cập nhật `docs/business-knowledge/FORMULAS.md` (xem bên dưới) |
+| **Thêm/sửa logic nghiệp vụ** | Verify thực tế trên browser (xem bên dưới) |
 
 ### Restart dev server sau MỌI thay đổi code
 
@@ -56,6 +57,35 @@ Bắt buộc thực hiện theo đúng thứ tự này sau khi implement xong (f
 **Lý do**: HMR của Vite đôi khi không push file mới đến browser — restart đảm bảo 100% code mới được load. User cần code mới nhất để test ngay.
 
 Sau khi restart, báo user: **"Server đã restart — bạn hard refresh (`Cmd+Shift+R`) để load code mới."**
+
+### Verify thực tế trên browser sau khi sửa logic nghiệp vụ
+
+Khi thay đổi bất kỳ logic nào (import hàng, tính toán, đọc/ghi dữ liệu, API endpoint...), **bắt buộc** verify workflow thực tế trên browser — không chỉ kiểm tra code pass TypeScript hay unit test.
+
+**Quy trình verify:**
+
+```
+1. preview_snapshot  → xác nhận UI element liên quan đang hiển thị đúng
+2. preview_eval      → kích hoạt action (click nút, submit form...) bằng JS
+3. preview_eval      → kiểm tra state ngay sau action (vd: btn.disabled === true)
+4. preview_network   → xác nhận network request thực tế được gửi đến đúng endpoint
+5. preview_eval      → xác nhận state sau khi hoàn thành (vd: btn.disabled === false)
+6. preview_snapshot  → kiểm tra UI đã cập nhật đúng dữ liệu mới
+```
+
+**Những gì phải xác nhận tùy loại thay đổi:**
+
+| Loại logic | Phải verify |
+|---|---|
+| Import / đồng bộ dữ liệu | Network request gửi đến đúng bảng Supabase, dữ liệu xuất hiện trên UI sau refresh |
+| Nút / action có loading state | Nút disable khi đang chạy, re-enable sau khi xong |
+| CRUD (tạo/sửa/xóa) | Row mới xuất hiện / biến mất trên bảng sau khi action |
+| Tính toán hiển thị | Giá trị trên UI khớp với công thức đã ghi trong FORMULAS.md |
+| API endpoint mới | Response 200 OK, payload đúng cấu trúc |
+
+**Lý do**: Unit test và TypeScript chỉ kiểm tra code đúng cú pháp và logic tĩnh. Verify thực tế phát hiện lỗi kết nối, sai prop drilling, cache không xóa, state không update — những lỗi không xuất hiện trong test nhưng user thấy ngay khi dùng.
+
+---
 
 ### Cập nhật công thức sau khi thêm/sửa logic tính toán
 

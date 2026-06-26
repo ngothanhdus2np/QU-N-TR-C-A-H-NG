@@ -14,6 +14,9 @@ interface GoodsProductsWorkspaceProps {
   filteredProducts: POSProduct[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  searchTags?: string[];
+  onTagRemove?: (tag: string) => void;
+  onSearchKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onOpenCreate: () => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
   importStatus: ImportStatus | null;
@@ -40,6 +43,9 @@ interface GoodsProductsWorkspaceProps {
   setFilterStock: React.Dispatch<React.SetStateAction<FilterStock>>;
   filterSupplier: string[];
   setFilterSupplier: React.Dispatch<React.SetStateAction<string[]>>;
+  filterPlatforms: string[];
+  setFilterPlatforms: (v: string[]) => void;
+  availablePlatforms: { key: string; label: string }[];
   productGroups: ProductGroup[];
   uniqueCategories: string[];
   categoryCounts: Record<string, number>;
@@ -56,11 +62,14 @@ interface GoodsProductsWorkspaceProps {
   onBulkDelete: () => void;
   onBulkStopBusiness: () => void;
   onBulkChangeGroup: () => void;
+  onBulkChannelLink: () => void;
   onGoToWarranty: () => void;
   onResetPage: () => void;
   onCreateGroup: () => void;
   viewMode: 'table' | 'grid';
   onViewModeChange: (mode: 'table' | 'grid') => void;
+  sidebarTitle?: string;
+  sidebarDescription?: string;
 }
 
 export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
@@ -69,6 +78,9 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   filteredProducts,
   searchTerm,
   onSearchChange,
+  searchTags = [],
+  onTagRemove,
+  onSearchKeyDown,
   onOpenCreate,
   fileInputRef,
   importStatus,
@@ -93,6 +105,9 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   setFilterStock,
   filterSupplier,
   setFilterSupplier,
+  filterPlatforms,
+  setFilterPlatforms,
+  availablePlatforms,
   productGroups,
   uniqueCategories,
   categoryCounts,
@@ -109,11 +124,14 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
   onBulkDelete,
   onBulkStopBusiness,
   onBulkChangeGroup,
+  onBulkChannelLink,
   onGoToWarranty,
   onResetPage,
   onCreateGroup,
   viewMode,
   onViewModeChange,
+  sidebarTitle,
+  sidebarDescription,
 }) => (
   <div className="flex flex-1 min-h-0 gap-4">
     <GoodsFilterSidebar
@@ -129,6 +147,9 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
       setFilterAttrs={setFilterAttrs}
       filterSupplier={filterSupplier}
       setFilterSupplier={setFilterSupplier}
+      filterPlatforms={filterPlatforms}
+      setFilterPlatforms={setFilterPlatforms}
+      availablePlatforms={availablePlatforms}
       onCollapse={() => {}}
       onClearAllFilters={() => {
         setFilterCategories([]);
@@ -137,6 +158,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         setFilterLocation('');
         setFilterAttrs([]);
         setFilterSupplier([]);
+        setFilterPlatforms([]);
         onResetPage();
       }}
       onResetPage={onResetPage}
@@ -149,12 +171,17 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
       uniqueSuppliers={uniqueSuppliers}
       lowStockCount={lowStockCount}
       onCreateGroup={onCreateGroup}
+      sidebarTitle={sidebarTitle}
+      sidebarDescription={sidebarDescription}
     />
 
     <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <GoodsToolbar
         searchTerm={searchTerm}
         onSearchChange={onSearchChange}
+        searchTags={searchTags}
+        onTagRemove={onTagRemove}
+        onSearchKeyDown={onSearchKeyDown}
         onOpenCreate={onOpenCreate}
         rightControls={
           <>
@@ -198,6 +225,7 @@ export const GoodsProductsWorkspace: React.FC<GoodsProductsWorkspaceProps> = ({
         onBulkDelete={onBulkDelete}
         onBulkStopBusiness={onBulkStopBusiness}
         onBulkChangeGroup={onBulkChangeGroup}
+        onBulkChannelLink={onBulkChannelLink}
         onGoToWarranty={onGoToWarranty}
         onResetPage={onResetPage}
         viewMode={viewMode}

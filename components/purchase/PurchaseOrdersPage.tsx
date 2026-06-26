@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { Plus, FileDown, Star, Trash2, FileText, Eye, Upload, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
+import { Plus, FileDown, Star, Trash2, FileText, Upload, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { appDataCache } from '../../services/appDataCache';
+import PurchaseOrderInlineDetail from './PurchaseOrderInlineDetail';
 import {
   ListPageLayout,
   ListPageToolbar,
@@ -22,9 +23,11 @@ interface PurchaseOrdersPageProps {
   transactions: InventoryTransaction[];
   suppliers: Supplier[];
   onCreatePurchase: () => void;
-  onViewDetail: (transaction: InventoryTransaction) => void;
   onDeletePurchase: (id: string) => void | Promise<void>;
   onExportPurchases: (transactions: InventoryTransaction[]) => void;
+  onPrintPurchase: (transaction: InventoryTransaction) => void;
+  onOpenOrder?: (transaction: InventoryTransaction) => void;
+  onRefreshData?: () => Promise<void>;
 }
 
 type SortKey = 'date' | 'code' | 'supplier' | 'amount' | 'status';
@@ -34,14 +37,17 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   transactions,
   suppliers,
   onCreatePurchase,
-  onViewDetail,
   onDeletePurchase,
   onExportPurchases,
+  onPrintPurchase,
+  onOpenOrder,
+  onRefreshData,
 }) => {
   const { showToast } = useToast();
   const importFileRef = useRef<HTMLInputElement>(null);
-  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'refreshing' | 'done' | 'error'>('idle');
   const [importMessage, setImportMessage] = useState('');
+  const [isReloading, setIsReloading] = useState(false);
 
   const handleImportLegacy = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -65,19 +71,43 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error || 'Import thất bại');
-      await appDataCache.clearDataKeys(['suppliers', 'supplierDebts', 'inventoryTransactions']);
+
       const skipped = data.skippedByStatus
         ? Object.entries(data.skippedByStatus).map(([s, c]) => `${s}: ${c}`).join(', ')
         : '';
-      setImportStatus('done');
-      setImportMessage(
-        `Đã import ${data.purchases} phiếu, ${data.items} dòng SP, ${data.suppliers} NCC.${skipped ? ` Bỏ qua ${skipped}.` : ''} Tải lại trang để xem dữ liệu mới.`
-      );
+      const summary = `Đã import ${data.purchases} phiếu, ${data.items} dòng SP, ${data.suppliers} NCC.${skipped ? ` Bỏ qua ${skipped}.` : ''}`;
+
+      await appDataCache.clearDataKeys(['suppliers', 'supplierDebts', 'inventoryTransactions', 'posProducts']);
+
+      if (onRefreshData) {
+        setImportStatus('refreshing');
+        setImportMessage(`${summary} Đang tải dữ liệu mới...`);
+        await onRefreshData();
+        setImportStatus('done');
+        setImportMessage(`${summary} Dữ liệu đã được cập nhật.`);
+      } else {
+        setImportStatus('done');
+        setImportMessage(`${summary} Tải lại trang để xem dữ liệu mới.`);
+      }
     } catch (err) {
       setImportStatus('error');
       setImportMessage(err instanceof Error ? err.message : 'Lỗi không xác định');
     }
   };
+
+  const handleReload = useCallback(async () => {
+    if (!onRefreshData || isReloading) return;
+    setIsReloading(true);
+    try {
+      await appDataCache.clearDataKeys(['suppliers', 'supplierDebts', 'inventoryTransactions', 'posProducts']);
+      await onRefreshData();
+      showToast('Dữ liệu đã được cập nhật', 'success');
+    } catch {
+      showToast('Không thể tải lại dữ liệu', 'error');
+    } finally {
+      setIsReloading(false);
+    }
+  }, [onRefreshData, isReloading, showToast]);
 
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,6 +121,9 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   // Selection
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [starredOrders, setStarredOrders] = useState<Set<string>>(new Set());
+
+  // Inline expand
+  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
 
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -204,6 +237,11 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   }, [sortedOrders, currentPage, pageSize]);
 
   const totalPages = Math.ceil(sortedOrders.length / pageSize);
+
+  const viewingOrder = useMemo(
+    () => transactions.find(t => t.id === viewingOrderId) ?? null,
+    [transactions, viewingOrderId]
+  );
 
   // Handlers
   const handleSort = (key: string) => {
@@ -371,9 +409,20 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
             <Plus className="h-4 w-4" />
             Phiếu nhập hàng
           </button>
+          {onRefreshData && (
+            <button
+              onClick={handleReload}
+              disabled={isReloading || importStatus === 'loading' || importStatus === 'refreshing'}
+              title="Tải lại dữ liệu từ cơ sở dữ liệu"
+              className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${isReloading ? 'animate-spin' : ''}`} />
+              Tải lại
+            </button>
+          )}
           <button
             onClick={() => importFileRef.current?.click()}
-            disabled={importStatus === 'loading'}
+            disabled={importStatus === 'loading' || importStatus === 'refreshing' || isReloading}
             className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
             {importStatus === 'loading'
@@ -480,7 +529,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
       width: 'w-36',
       sortable: true,
       render: order => (
-        <span className="text-slate-600 text-xs">
+        <span className="text-slate-600 text-xs whitespace-nowrap">
           {new Date(order.date).toLocaleString('vi-VN', {
             year: 'numeric',
             month: '2-digit',
@@ -535,24 +584,6 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
         />
       ),
     },
-    {
-      key: 'actions',
-      label: '',
-      width: 'w-12',
-      align: 'center',
-      render: order => (
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            onViewDetail(order);
-          }}
-          className="p-2 hover:bg-indigo-50 rounded-lg transition-colors text-indigo-600"
-          title="Xem chi tiết"
-        >
-          <Eye className="h-4 w-4" />
-        </button>
-      ),
-    },
   ];
 
   // Pagination
@@ -575,15 +606,16 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
     <div className="h-full">
       {importStatus !== 'idle' && (
         <div className={`mx-4 mt-3 flex items-start gap-3 rounded-xl border p-3 text-sm ${
-          importStatus === 'loading' ? 'border-indigo-100 bg-indigo-50 text-indigo-700'
+          importStatus === 'loading' || importStatus === 'refreshing' ? 'border-indigo-100 bg-indigo-50 text-indigo-700'
           : importStatus === 'done'  ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
           : 'border-rose-100 bg-rose-50 text-rose-700'
         }`}>
-          {importStatus === 'loading' ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
-          : importStatus === 'done'   ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          {importStatus === 'loading'    ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          : importStatus === 'refreshing' ? <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          : importStatus === 'done'       ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
           <p className="flex-1 font-normal leading-relaxed">{importMessage}</p>
-          {importStatus !== 'loading' && (
+          {importStatus !== 'loading' && importStatus !== 'refreshing' && (
             <button
               type="button"
               onClick={() => setImportStatus('idle')}
@@ -610,7 +642,17 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
           sortKey={sortKey}
           sortDirection={sortDirection}
           onSort={handleSort}
-          onRowClick={order => onViewDetail(order)}
+          onRowClick={order => setViewingOrderId(prev => prev === order.id ? null : order.id)}
+          expandedRowId={viewingOrderId ?? undefined}
+          expandedRowContent={viewingOrder ? (
+            <PurchaseOrderInlineDetail
+              transaction={viewingOrder}
+              onClose={() => setViewingOrderId(null)}
+              onExport={onExportPurchases}
+              onPrint={onPrintPurchase}
+              onOpenOrder={onOpenOrder}
+            />
+          ) : undefined}
           emptyState={
             <div className="flex flex-col items-center justify-center space-y-4 py-20">
               <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center">

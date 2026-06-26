@@ -27,9 +27,12 @@ async function toggleChannelBackend(payload: {
   variantId?: string;
   shopId?: string;
 }): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
   const res = await fetch('/api/channel-links/toggle', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     credentials: 'include',
     body: JSON.stringify(payload),
   });
@@ -55,20 +58,43 @@ function ToggleSwitch({
   color: 'indigo' | 'orange';
   'aria-label': string;
 }) {
-  const activeClass = color === 'indigo' ? 'bg-indigo-600' : 'bg-orange-500';
+  const activeBg = color === 'indigo' ? '#4f46e5' : '#f97316';
   return (
     <button
+      type="button"
       onClick={onChange}
       disabled={disabled}
       aria-label={ariaLabel}
-      className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed ${
-        checked ? activeClass : 'bg-slate-200'
-      }`}
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: 56,
+        height: 28,
+        borderRadius: 9999,
+        backgroundColor: checked ? activeBg : '#cbd5e1',
+        border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        transition: 'background-color 0.2s ease',
+        flexShrink: 0,
+        outline: 'none',
+        padding: 0,
+      }}
     >
       <span
-        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          checked ? 'translate-x-6' : 'translate-x-0'
-        }`}
+        style={{
+          position: 'absolute',
+          top: 4,
+          left: checked ? 'calc(100% - 24px)' : 4,
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.25)',
+          transition: 'left 0.2s ease',
+          pointerEvents: 'none',
+          display: 'block',
+        }}
       />
     </button>
   );

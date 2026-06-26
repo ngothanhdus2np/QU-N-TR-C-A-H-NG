@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { POSProduct, ProductGroup } from '../../types';
+import { apiService, PriceBook } from '../../services/apiService';
 import ProductGroupTreePicker from '../shared/ProductGroupTreePicker';
 
 interface GoodsPriceSetupModalProps {
@@ -28,7 +29,7 @@ interface GoodsPriceSetupModalProps {
   mode?: 'modal' | 'page';
   onClose: () => void;
   onApplyPrice: (price: number) => void;
-  onSavePrices?: (updates: { id: string; salePrice: number }[]) => void;
+  onSavePrices?: (updates: { id: string; salePrice: number; discountPercent?: number }[]) => void;
 }
 
 type StockFilter = 'all' | 'in_stock' | 'out_of_stock';
@@ -77,14 +78,16 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
   // BUG-42: tách 2 state search riêng cho cột mã và tên trong bảng
   const [tableSearchSku, setTableSearchSku] = React.useState('');
   const [tableSearchName, setTableSearchName] = React.useState('');
-  const [priceLists, setPriceLists] = React.useState<string[]>([DEFAULT_PRICE_LIST]);
-  const [selectedPriceList, setSelectedPriceList] = React.useState(DEFAULT_PRICE_LIST);
+  const [priceBooks, setPriceBooks] = React.useState<PriceBook[]>([]);
+  const [selectedPriceBookId, setSelectedPriceBookId] = React.useState<string | null>(null);
+  const [priceBookPrices, setPriceBookPrices] = React.useState<Record<string, number>>({});
   const [categoryFilter, setCategoryFilter] = React.useState('');
   const [stockFilter, setStockFilter] = React.useState<StockFilter>('all');
   const [priceCondition, setPriceCondition] = React.useState('');
   const [comparePrice, setComparePrice] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [draftPrices, setDraftPrices] = React.useState<Record<string, number>>({});
+  const [draftDiscounts, setDraftDiscounts] = React.useState<Record<string, number>>({});
   const [showCreatePriceListModal, setShowCreatePriceListModal] = React.useState(false);
   const [showPriceInfoModal, setShowPriceInfoModal] = React.useState(false);
   const [createPriceListTab, setCreatePriceListTab] = React.useState<PriceListModalTab>('info');
@@ -111,9 +114,25 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
   React.useEffect(() => {
     if (isOpen) {
       setDraftPrices({});
+      setDraftDiscounts({});
       setPage(1);
+      setSelectedPriceBookId(null);
+      setPriceBookPrices({});
+      apiService.fetchPriceBooks().then(setPriceBooks).catch(() => {});
     }
   }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!selectedPriceBookId) {
+      setPriceBookPrices({});
+      return;
+    }
+    apiService.fetchPriceBookItems(selectedPriceBookId).then(items => {
+      const map: Record<string, number> = {};
+      for (const item of items) map[item.productId] = item.salePrice;
+      setPriceBookPrices(map);
+    }).catch(() => {});
+  }, [selectedPriceBookId]);
 
   const currentRow = React.useMemo<POSProduct | null>(() => {
     if (!currentProduct.name && !currentProduct.sku) return null;
@@ -223,21 +242,57 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
     }
   };
 
+  const handleDiscountChange = (product: POSProduct, value: string) => {
+    const raw = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+    const num = Math.min(100, Math.max(0, parseFloat(raw) || 0));
+    setDraftDiscounts(prev => ({ ...prev, [product.id]: num }));
+  };
+
   const draftChangeCount = React.useMemo(
-    () => Object.values(draftPrices).filter(price => price > 0).length,
-    [draftPrices]
+    () =>
+      Object.values(draftPrices).filter(price => price > 0).length +
+      Object.keys(draftDiscounts).length,
+    [draftPrices, draftDiscounts]
   );
   const hasDraftChanges = draftChangeCount > 0;
 
-  const handleSavePagePrices = () => {
-    if (!onSavePrices || !hasDraftChanges) return;
-    // BUG-29: bỏ qua giá 0 — không lưu salePrice = 0
-    const updates = Object.entries(draftPrices)
-      .filter(([, salePrice]) => salePrice > 0)
-      .map(([id, salePrice]) => ({ id, salePrice }));
+  const handleSavePagePrices = async () => {
+    if (!hasDraftChanges) return;
+
+    if (selectedPriceBookId) {
+      const items = Object.entries(draftPrices)
+        .filter(([, price]) => price > 0)
+        .map(([productId, salePrice]) => ({ productId, salePrice }));
+      if (items.length > 0) {
+        try {
+          await apiService.savePriceBookItems(selectedPriceBookId, items);
+          setPriceBookPrices(prev => {
+            const next = { ...prev };
+            for (const item of items) next[item.productId] = item.salePrice;
+            return next;
+          });
+        } catch {
+          // silently fail
+        }
+      }
+      setDraftPrices({});
+      setDraftDiscounts({});
+      return;
+    }
+
+    if (!onSavePrices) return;
+    const allIds = new Set([...Object.keys(draftPrices), ...Object.keys(draftDiscounts)]);
+    const updates = Array.from(allIds)
+      .map(id => ({
+        id,
+        salePrice: draftPrices[id] ?? -1,
+        discountPercent: draftDiscounts[id] ?? -1,
+      }))
+      .filter(u => u.salePrice > 0 || u.discountPercent >= 0);
     if (updates.length === 0) return;
     onSavePrices(updates);
     setDraftPrices({});
+    setDraftDiscounts({});
   };
 
   const openCreatePriceListModal = () => {
@@ -249,16 +304,26 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
     setShowCreatePriceListModal(false);
   };
 
-  const handleSavePriceList = () => {
+  const handleSavePriceList = async () => {
     const trimmedName = newPriceListName.trim();
     if (!trimmedName) return;
 
-    setPriceLists(prev => (prev.includes(trimmedName) ? prev : [...prev, trimmedName]));
-    setSelectedPriceList(trimmedName);
-    setFormulaBase(trimmedName);
-    setNewPriceListName('');
-    setCreatePriceListTab('info');
-    setShowCreatePriceListModal(false);
+    try {
+      const saved = await apiService.savePriceBook({
+        name: trimmedName,
+        startDate: newPriceListFrom,
+        endDate: newPriceListTo,
+        isActive: newPriceListActive,
+      });
+      setPriceBooks(prev => [...prev, saved]);
+      setSelectedPriceBookId(saved.id);
+      setFormulaBase(trimmedName);
+      setNewPriceListName('');
+      setCreatePriceListTab('info');
+      setShowCreatePriceListModal(false);
+    } catch {
+      // silently fail
+    }
   };
 
   const activePrice = currentRow
@@ -300,11 +365,11 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
           }
         >
           {mode === 'page' && (
-            <div className="flex min-h-[58px] flex-col justify-center border-b border-slate-100 px-4">
+            <div className="px-4 py-3 border-b border-slate-100">
               <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-900">
                 Thiết lập giá
               </h2>
-              <p className="text-2xs uppercase tracking-wide text-slate-400">Hàng hóa</p>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">Cấu hình giá bán và chiết khấu</p>
             </div>
           )}
           <div className={`${mode === 'page' ? 'border-b border-slate-100' : 'border-b border-slate-200'} p-4`}>
@@ -318,19 +383,41 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
               </button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {priceLists.map(priceList => (
+              <button
+                onClick={() => setSelectedPriceBookId(null)}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  !selectedPriceBookId
+                    ? 'bg-indigo-600 text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white'
+                }`}
+              >
+                {DEFAULT_PRICE_LIST}
+              </button>
+              {priceBooks.map(pb => (
                 <button
-                  key={priceList}
-                  onClick={() => setSelectedPriceList(priceList)}
+                  key={pb.id}
+                  onClick={() => setSelectedPriceBookId(pb.id)}
                   className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                    selectedPriceList === priceList
+                    selectedPriceBookId === pb.id
                       ? 'bg-indigo-600 text-white'
                       : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white'
                   }`}
                 >
-                  {priceList}
-                  {selectedPriceList === priceList && priceList !== DEFAULT_PRICE_LIST && (
-                    <X className="h-4 w-4 text-white/80" />
+                  {pb.name}
+                  {selectedPriceBookId === pb.id && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await apiService.deletePriceBook(pb.id);
+                          setPriceBooks(prev => prev.filter(p => p.id !== pb.id));
+                          setSelectedPriceBookId(null);
+                        } catch { /* */ }
+                      }}
+                      className="ml-1"
+                    >
+                      <X className="h-4 w-4 text-white/80" />
+                    </button>
                   )}
                 </button>
               ))}
@@ -457,8 +544,9 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                   <th className="w-44 border-b border-indigo-100 px-4 py-3">Mã hàng</th>
                   <th className="border-b border-indigo-100 px-4 py-3">Tên hàng</th>
                   <th className="w-36 border-b border-indigo-100 px-4 py-3 text-right">Giá vốn</th>
+                  <th className="w-28 border-b border-indigo-100 px-4 py-3 text-right">Chiết khấu %</th>
                   <th className="w-44 border-b border-indigo-100 px-4 py-3 text-right">
-                    Bảng giá chung
+                    {selectedPriceBookId ? priceBooks.find(pb => pb.id === selectedPriceBookId)?.name || 'Bảng giá' : 'Bảng giá chung'}
                   </th>
                 </tr>
               </thead>
@@ -488,11 +576,13 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                   </td>
                   <td className="px-4 py-2" />
                   <td className="px-4 py-2" />
+                  <td className="px-4 py-2" />
                 </tr>
 
                 {visibleProducts.map(product => {
                   const isCurrent = product.id === currentRow?.id;
-                  const price = draftPrices[product.id] ?? product.salePrice;
+                  const price = draftPrices[product.id] ?? (selectedPriceBookId ? (priceBookPrices[product.id] ?? 0) : product.salePrice);
+                  const discount = draftDiscounts[product.id] ?? product.discountPercent ?? 0;
                   return (
                     <tr
                       key={product.id}
@@ -504,6 +594,14 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                       <td className="px-4 py-3 text-slate-800">{product.name}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                         {formatMoney(product.importPrice)}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          value={discount || ''}
+                          onChange={event => handleDiscountChange(product, event.target.value)}
+                          placeholder="0"
+                          className="h-9 w-full rounded-lg border border-slate-300 px-3 text-right tabular-nums text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
                       </td>
                       <td className="px-4 py-2 text-right">
                         <input
@@ -742,9 +840,10 @@ export const GoodsPriceSetupModal: React.FC<GoodsPriceSetupModalProps> = ({
                       >
                         <option value="Giá vốn">Giá vốn</option>
                         <option value="Giá nhập cuối">Giá nhập cuối</option>
-                        {priceLists.map(priceList => (
-                          <option key={priceList} value={priceList}>
-                            {priceList}
+                        <option value={DEFAULT_PRICE_LIST}>{DEFAULT_PRICE_LIST}</option>
+                        {priceBooks.map(pb => (
+                          <option key={pb.id} value={pb.name}>
+                            {pb.name}
                           </option>
                         ))}
                       </select>

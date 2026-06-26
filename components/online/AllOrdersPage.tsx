@@ -248,6 +248,13 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
     total:    allOrders.length,
   }), [allOrders, shopeeOrders, websiteOrders]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('online_pending_count', String(stats.pending));
+      window.dispatchEvent(new Event('online_pending_count_changed'));
+    } catch {}
+  }, [stats.pending]);
+
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-hidden bg-slate-50 px-4 pb-5 pt-10 lg:grid-cols-[280px_minmax(0,1fr)]">
       {/* Sidebar */}

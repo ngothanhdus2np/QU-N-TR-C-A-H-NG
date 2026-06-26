@@ -403,16 +403,21 @@ const StaffManager: React.FC<Props> = ({
 
   const staffSidebarPanel = (
     <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-      <div className="px-4 min-h-[52px] border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Nhân sự</h2>
-        {hasActiveStaffFilters && (
-          <button
-            onClick={clearStaffFilters}
-            className="text-2xs text-indigo-600 font-bold hover:underline"
-          >
-            Xóa lọc
-          </button>
-        )}
+      <div className="px-4 py-3 border-b border-slate-100 shrink-0">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Danh sách nhân sự</h2>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Quản lý thông tin và hiệu suất nhân viên</p>
+          </div>
+          {hasActiveStaffFilters && (
+            <button
+              onClick={clearStaffFilters}
+              className="text-2xs text-indigo-600 font-bold hover:underline shrink-0 ml-2"
+            >
+              Xóa lọc
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar overscroll-contain">

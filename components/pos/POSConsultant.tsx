@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronUp, Package, ShoppingBag, ArrowLeft, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, ChevronUp, Package, ShoppingBag, ArrowLeft, ArrowDownWideNarrow, ArrowUpNarrowWide, X, Maximize2, Minimize2 } from 'lucide-react';
 import { POSProduct, ProductGroup } from '../../types';
-import ProductGroupTreePicker from '../shared/ProductGroupTreePicker';
+import { fuzzyMatch } from '../../src/lib/fuzzySearch';
+import { CardSkeleton } from '../shared/ui/Skeleton';
 
 const ProductMemoCard = React.memo(({ product, onAdd }: { product: POSProduct; onAdd: (p: POSProduct) => void }) => (
   <button
@@ -38,6 +39,7 @@ interface POSConsultantProps {
   productGroups: ProductGroup[];
   addToCart: (p: POSProduct) => void;
   searchRef?: React.RefObject<HTMLInputElement>;
+  isDataReady?: boolean;
 }
 
 const splitCategoryPath = (value: string) =>
@@ -47,6 +49,7 @@ const splitCategoryPath = (value: string) =>
     .filter(Boolean);
 
 const normalizeCategoryPath = (value: string) => splitCategoryPath(value).join(' >> ');
+
 
 const productMatchesCategory = (product: POSProduct, categoryPath: string) => {
   if (!categoryPath) return true;
@@ -61,11 +64,17 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
   productGroups,
   addToCart,
   searchRef,
+  isDataReady = true,
 }) => {
   const [consultantSearch, setConsultantSearch] = useState('');
   const [debouncedConsultantSearch, setDebouncedConsultantSearch] = useState('');
   const [consultantCategory, setConsultantCategory] = useState('');
+  const [categoryInput, setCategoryInput] = useState('');
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const categoryInputRef = useRef<HTMLInputElement>(null);
+  const categoryBoxRef = useRef<HTMLDivElement>(null);
   const [consultantSort, setConsultantSort] = useState<'none' | 'price_desc' | 'price_asc'>('none');
+  const [isExpanded, setIsExpanded] = useState(false);
   const [displayLimit, setDisplayLimit] = useState(100);
   const [selectedParent, setSelectedParent] = useState<POSProduct | null>(null);
   const [viewMode, setViewMode] = useState<'parent' | 'variants'>('parent');
@@ -79,6 +88,17 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
   useEffect(() => {
     setDisplayLimit(100);
   }, [debouncedConsultantSearch, consultantCategory]);
+
+  // Click-outside để đóng suggestions
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (categoryBoxRef.current && !categoryBoxRef.current.contains(e.target as Node)) {
+        setShowCategorySuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const categoryGroups = useMemo<ProductGroup[]>(() => {
     if (productGroups.length > 0) return productGroups;
@@ -96,6 +116,20 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
       .map(path => ({ id: path, name: path }));
   }, [productGroups, products]);
 
+  const categorySuggestions = useMemo(() => {
+    const term = categoryInput.toLowerCase().trim();
+    const allPaths = categoryGroups
+      .map(g => g.name || g.id)
+      .sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+    const filtered = term
+      ? allPaths.filter(path => fuzzyMatch(path, term))
+      : allPaths;
+    return filtered.map(path => {
+      const parts = path.split('>>').map(p => p.trim());
+      return { path, depth: parts.length - 1, label: parts[parts.length - 1] };
+    });
+  }, [categoryGroups, categoryInput]);
+
   const productCountByPath = useMemo(() => {
     const counts = new Map<string, number>();
     products.forEach(product => {
@@ -111,15 +145,14 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    const search = debouncedConsultantSearch.toLowerCase();
-    // Chỉ hiển thị sản phẩm cha hoặc sản phẩm độc lập (không có parentId)
+    const search = debouncedConsultantSearch;
     const filtered = products.filter(p =>
       p.status === 'Active' &&
-      !p.parentId && // Loại bỏ sản phẩm con
+      !p.parentId &&
       productMatchesCategory(p, consultantCategory) &&
-      ((p.name?.toLowerCase() || '').includes(search) ||
-        (p.sku?.toLowerCase() || '').includes(search) ||
-        (p.barcode && p.barcode.includes(search)))
+      (fuzzyMatch(p.name || '', search) ||
+        fuzzyMatch(p.sku || '', search) ||
+        (p.barcode && fuzzyMatch(p.barcode, search)))
     );
 
     filtered.sort((a, b) => {
@@ -128,7 +161,10 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
       } else if (consultantSort === 'price_asc') {
         return (a.salePrice || 0) - (b.salePrice || 0);
       }
-      return (a.sku || '').localeCompare(b.sku || '');
+      const numA = Number(((a.sku || '').match(/\d+/) || [0])[0] || 0);
+      const numB = Number(((b.sku || '').match(/\d+/) || [0])[0] || 0);
+      if (numA !== numB) return numB - numA;
+      return (a.name || '').localeCompare(b.name || '', 'vi');
     });
 
     return filtered;
@@ -171,7 +207,7 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
   };
 
   return (
-    <div className={`bg-slate-200/50 transition-all duration-300 ease-in-out ${showConsultant ? 'h-[380px]' : 'h-10'} flex flex-col border-t border-slate-200`}>
+    <div className={`bg-slate-200/50 transition-all duration-300 ease-in-out ${showConsultant ? (isExpanded ? 'h-[760px]' : 'h-[380px]') : 'h-10'} flex flex-col border-t border-slate-200`}>
       <div
         className={`bg-white flex items-center px-8 ${viewMode === 'parent' ? 'cursor-pointer hover:bg-slate-50' : ''} transition-all shrink-0 border-b border-slate-200 gap-8 ${showConsultant ? 'h-14' : 'h-10 justify-center'}`}
         onClick={viewMode === 'parent' ? () => setShowConsultant(!showConsultant) : undefined}
@@ -216,15 +252,75 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <div onClick={e => e.stopPropagation()}>
-                    <ProductGroupTreePicker
-                      groups={categoryGroups}
-                      selectedPaths={consultantCategory ? [consultantCategory] : []}
-                      onSelectionChange={paths => setConsultantCategory(paths[paths.length - 1] || '')}
-                      productCountByPath={productCountByPath}
-                      placeholder="Lọc theo nhóm hàng hóa"
-                      className="w-64"
-                    />
+                  <div
+                    ref={categoryBoxRef}
+                    className="relative w-56"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="relative flex items-center">
+                      <Search className="absolute left-3 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        ref={categoryInputRef}
+                        type="text"
+                        placeholder="Lọc nhóm hàng..."
+                        className="w-full pl-9 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-800 outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                        value={categoryInput}
+                        onChange={e => {
+                          setCategoryInput(e.target.value);
+                          setShowCategorySuggestions(true);
+                        }}
+                        onFocus={() => setShowCategorySuggestions(true)}
+                      />
+                      {(categoryInput || consultantCategory) && (
+                        <button
+                          className="absolute right-2 text-slate-400 hover:text-slate-600"
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            setCategoryInput('');
+                            setConsultantCategory('');
+                            setShowCategorySuggestions(false);
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {showCategorySuggestions && categorySuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 z-50 mt-1 w-72 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {categorySuggestions.map(({ path, depth, label }) => {
+                          const isSelected = consultantCategory === path;
+                          const count = productCountByPath.get(path);
+                          return (
+                            <button
+                              key={path}
+                              type="button"
+                              className={`w-full text-left py-1.5 pr-3 text-xs transition-colors border-b border-slate-50 last:border-0 flex items-center gap-1 ${
+                                isSelected
+                                  ? 'bg-indigo-50 text-indigo-700'
+                                  : depth === 0
+                                  ? 'text-slate-800 font-medium hover:bg-slate-50'
+                                  : 'text-slate-600 hover:bg-slate-50'
+                              }`}
+                              style={{ paddingLeft: `${12 + depth * 14}px` }}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                setConsultantCategory(path);
+                                setCategoryInput(label);
+                                setShowCategorySuggestions(false);
+                              }}
+                            >
+                              {depth > 0 && (
+                                <span className="text-slate-300 shrink-0">└</span>
+                              )}
+                              <span className="truncate">{label}</span>
+                              {count !== undefined && (
+                                <span className="ml-auto shrink-0 text-slate-400">{count}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -254,6 +350,13 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
                 </div>
               </div>
             )}
+            <button
+              onClick={e => { e.stopPropagation(); setIsExpanded(v => !v); }}
+              className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+              title={isExpanded ? 'Thu nhỏ' : 'Mở rộng'}
+            >
+              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
           </>
         ) : (
           <div className="flex items-center gap-2 text-slate-400">
@@ -265,7 +368,16 @@ const POSConsultant: React.FC<POSConsultantProps> = ({
 
       {showConsultant && (
         <div className="flex-1 overflow-y-auto p-3 grid grid-cols-6 auto-rows-[160px] gap-3 overflow-x-hidden animate-in fade-in slide-in-from-bottom-6 duration-500 custom-scrollbar">
-          {viewMode === 'parent' ? (
+          {!isDataReady ? (
+            <>
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </>
+          ) : viewMode === 'parent' ? (
             <>
               {filteredProducts.slice(0, displayLimit).map(p => (
                 <ProductMemoCard key={p.id} product={p} onAdd={handleProductClick} />

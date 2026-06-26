@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -36,6 +36,7 @@ interface Props {
   customerDebtHistory?: CustomerDebtRecord[];
   onUpdateCustomers: (list: POSCustomer[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  isLoading?: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
@@ -101,7 +102,18 @@ const CustomerListPage: React.FC<Props> = ({
   customerDebtHistory = [],
   onUpdateCustomers,
   onUpdateSurgical,
+  isLoading = false,
 }) => {
+  const [allOrders, setAllOrders] = useState<typeof orders>(orders);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+
+  useEffect(() => {
+    apiService.fetchAllOrdersForCustomerStats().then(data => {
+      if (data.length > 0) setAllOrders(data);
+      setOrdersLoading(false);
+    }).catch(() => setOrdersLoading(false));
+  }, []);
+
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState<string>('Tất cả các nhóm');
   const [customerType, setCustomerType] = useState<'all' | 'individual' | 'company'>('all');
@@ -119,6 +131,7 @@ const CustomerListPage: React.FC<Props> = ({
   const [maxSpent, setMaxSpent] = useState('');
   const [minDebt, setMinDebt] = useState('');
   const [maxDebt, setMaxDebt] = useState('');
+  const [debtOnlyFilter, setDebtOnlyFilter] = useState(false);
   const [minPoints, setMinPoints] = useState('');
   const [maxPoints, setMaxPoints] = useState('');
   const [deliveryArea, setDeliveryArea] = useState('');
@@ -148,7 +161,7 @@ const CustomerListPage: React.FC<Props> = ({
   // Per-customer order stats
   const orderStats = useMemo(() => {
     const map = new Map<string, { sold: number; returned: number }>();
-    orders.forEach(o => {
+    allOrders.forEach(o => {
       if (!o.customerId) return;
       const cur = map.get(o.customerId) || { sold: 0, returned: 0 };
       if (o.isReturn) cur.returned += Math.abs(Number(o.totalAmount) || 0);
@@ -156,12 +169,12 @@ const CustomerListPage: React.FC<Props> = ({
       map.set(o.customerId, cur);
     });
     return map;
-  }, [orders]);
+  }, [allOrders]);
 
   // Per-customer debt from orders: debt = finalAmount - cashReceived, floored at 0 (no negative/credit)
   const debtStats = useMemo(() => {
     const raw = new Map<string, number>();
-    orders.forEach(o => {
+    allOrders.forEach(o => {
       if (!o.customerId) return;
       const finalAmt = Number(o.finalAmount) || 0;
       const cashRecv = Number(o.cashReceived) || 0;
@@ -170,14 +183,19 @@ const CustomerListPage: React.FC<Props> = ({
         raw.set(o.customerId, (raw.get(o.customerId) || 0) + orderDebt);
       }
     });
+    customerDebtHistory.forEach(r => {
+      if (!r.customerId) return;
+      const delta = r.type === 'repay' ? -r.amount : r.amount;
+      raw.set(r.customerId, (raw.get(r.customerId) || 0) + delta);
+    });
     const map = new Map<string, number>();
     raw.forEach((v, k) => { if (v > 0) map.set(k, v); });
     return map;
-  }, [orders]);
+  }, [allOrders, customerDebtHistory]);
 
   const lastTransactionMap = useMemo(() => {
     const map = new Map<string, string>();
-    orders.forEach(order => {
+    allOrders.forEach(order => {
       if (!order.customerId) return;
       const prev = map.get(order.customerId);
       if (!prev || new Date(order.date).getTime() > new Date(prev).getTime()) {
@@ -185,17 +203,17 @@ const CustomerListPage: React.FC<Props> = ({
       }
     });
     return map;
-  }, [orders]);
+  }, [allOrders]);
 
   const spentInRangeMap = useMemo(() => {
     const map = new Map<string, number>();
     if (!spentFrom && !spentTo) return map;
-    orders.forEach(order => {
+    allOrders.forEach(order => {
       if (!order.customerId || order.isReturn || !inDateRange(order.date, spentFrom, spentTo)) return;
       map.set(order.customerId, (map.get(order.customerId) || 0) + calcOrderRevenue(order));
     });
     return map;
-  }, [orders, spentFrom, spentTo]);
+  }, [allOrders, spentFrom, spentTo]);
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
@@ -249,6 +267,7 @@ const CustomerListPage: React.FC<Props> = ({
       list = list.filter(c => (c.createdBy || '').toLowerCase().includes(q));
     }
 
+    if (debtOnlyFilter) list = list.filter(c => (debtStats.get(c.id) ?? 0) > 0);
     const minD = parseMoney(minDebt);
     const maxD = parseMoney(maxDebt);
     if (minD != null) list = list.filter(c => (debtStats.get(c.id) ?? 0) >= minD);
@@ -309,6 +328,7 @@ const CustomerListPage: React.FC<Props> = ({
     creatorSearch,
     minSpent,
     maxSpent,
+    debtOnlyFilter,
     minDebt,
     maxDebt,
     minPoints,
@@ -318,6 +338,7 @@ const CustomerListPage: React.FC<Props> = ({
     sortDir,
     codeMap,
     orderStats,
+    debtStats,
   ]);
 
   // Summary totals (all filtered, not just current page)
@@ -330,7 +351,7 @@ const CustomerListPage: React.FC<Props> = ({
         return s + (st ? st.sold - st.returned : 0);
       }, 0),
     }),
-    [filtered, orderStats]
+    [filtered, orderStats, debtStats]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -350,6 +371,7 @@ const CustomerListPage: React.FC<Props> = ({
     !!spentTo ||
     !!minSpent ||
     !!maxSpent ||
+    debtOnlyFilter ||
     !!minDebt ||
     !!maxDebt ||
     !!minPoints ||
@@ -638,7 +660,7 @@ const CustomerListPage: React.FC<Props> = ({
       label: 'Mã khách hàng',
       width: 'w-[160px]',
       render: c => (
-        <span className="text-blue-600 font-medium text-sm">{codeMap.get(c.id) || '—'}</span>
+        <span className="text-blue-600 font-normal text-sm">{codeMap.get(c.id) || '—'}</span>
       ),
     },
     {
@@ -647,7 +669,7 @@ const CustomerListPage: React.FC<Props> = ({
       sortable: true,
       render: c => (
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm text-slate-800">{c.name}</span>
+          <span className="font-normal text-sm text-slate-800">{c.name}</span>
           {c.tier !== 'Standard' && (
             <span
               className={`text-2xs px-1.5 py-0.5 rounded font-medium shrink-0 ${TIER_BADGE[c.tier]}`}
@@ -890,6 +912,15 @@ const CustomerListPage: React.FC<Props> = ({
 
       {/* Nợ hiện tại */}
       <FilterSection title="Nợ hiện tại">
+        <label className="flex items-center gap-2 cursor-pointer mb-2">
+          <input
+            type="checkbox"
+            checked={debtOnlyFilter}
+            onChange={e => { setDebtOnlyFilter(e.target.checked); setPage(1); }}
+            className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+          />
+          <span className="text-xs text-slate-700">Chỉ khách hàng còn nợ</span>
+        </label>
         {rangeInputs(minDebt, setMinDebt, maxDebt, setMaxDebt)}
       </FilterSection>
 
@@ -1023,6 +1054,7 @@ const CustomerListPage: React.FC<Props> = ({
         sidebar={sidebar}
         toolbar={toolbar}
         sidebarTitle="Khách hàng"
+        sidebarDescription="Quản lý thông tin và lịch sử mua hàng"
         hasActiveFilters={hasActiveFilters}
         onClearFilters={() => {
           setGroupFilter('Tất cả các nhóm');
@@ -1039,6 +1071,7 @@ const CustomerListPage: React.FC<Props> = ({
           setSpentTo('');
           setMinSpent('');
           setMaxSpent('');
+          setDebtOnlyFilter(false);
           setMinDebt('');
           setMaxDebt('');
           setMinPoints('');
@@ -1065,7 +1098,18 @@ const CustomerListPage: React.FC<Props> = ({
         {/* Totals summary row */}
         {filtered.length > 0 && (
           <div className="flex items-center gap-6 px-5 py-2 bg-white border-b border-slate-100 text-xs text-slate-500">
-            <span className="flex-1 text-slate-700 font-medium">{filtered.length} khách hàng</span>
+            <span className="flex-1 text-slate-700 font-medium flex items-center gap-2">
+              {filtered.length} khách hàng
+              {ordersLoading && (
+                <span className="text-indigo-500 flex items-center gap-1">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  Đang tải dữ liệu đầy đủ...
+                </span>
+              )}
+            </span>
             <span>
               Nợ:{' '}
               <strong className={totals.debt > 0 ? 'text-rose-600' : 'text-slate-700'}>
@@ -1088,6 +1132,7 @@ const CustomerListPage: React.FC<Props> = ({
           sortKey={sortKey}
           sortDirection={sortDir}
           onSort={handleSort}
+          isLoading={isLoading}
           onRowClick={c => setDetailCustomer(prev => (prev?.id === c.id ? null : c))}
           rowClassName={() => 'group'}
           expandedRowId={detailCustomer?.id}
@@ -1096,7 +1141,7 @@ const CustomerListPage: React.FC<Props> = ({
               <CustomerDetailPage
                 customer={detailCustomer}
                 customerCode={codeMap.get(detailCustomer.id) || '—'}
-                orders={orders}
+                orders={allOrders}
                 customerDebtHistory={customerDebtHistory}
                 orderStats={orderStats.get(detailCustomer.id)}
                 onClose={() => setDetailCustomer(null)}
@@ -1132,6 +1177,21 @@ const CustomerListPage: React.FC<Props> = ({
                   );
                 }}
                 onToggleStatus={() => handleToggleStatus(detailCustomer)}
+                onRecordPayment={async (record) => {
+                  if (onUpdateSurgical) {
+                    await onUpdateSurgical([{ key: 'customerDebtHistory', item: record }]);
+                  }
+                }}
+                onRecordAdjustment={async (record) => {
+                  if (onUpdateSurgical) {
+                    await onUpdateSurgical([{ key: 'customerDebtHistory', item: record }]);
+                  }
+                }}
+                onRecordDiscount={async (record) => {
+                  if (onUpdateSurgical) {
+                    await onUpdateSurgical([{ key: 'customerDebtHistory', item: record }]);
+                  }
+                }}
               />
             ) : null
           }

@@ -77,9 +77,9 @@ export const SIDEBAR_SECTIONS = [
   {
     title: 'Đơn hàng',
     items: [
-      { id: 'orders', label: 'Đặt hàng', icon: ShoppingBag },
       { id: 'order-invoices', label: 'Hóa đơn', icon: ReceiptText },
       { id: 'order-returns', label: 'Trả hàng', icon: RotateCcw },
+      { id: 'orders', label: 'Đặt hàng', icon: ShoppingBag },
       { id: 'order-repairs', label: 'Yêu cầu sửa chữa', icon: Wrench },
     ],
   },

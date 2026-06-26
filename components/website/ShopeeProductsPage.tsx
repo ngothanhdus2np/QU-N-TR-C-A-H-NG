@@ -676,19 +676,25 @@ export default function ShopeeProductsPage() {
                       {/* Chips shop tóm tắt */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {product.shopee_entries.map((entry, idx) => {
-                            const shop = entry.shop_id ? shopMap.get(entry.shop_id) : null;
-                            const colors = shopColor(idx);
-                            return (
-                              <span key={entry.id}
-                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  entry.is_published ? colors.badge : 'bg-slate-100 text-slate-400'
-                                }`}>
-                                <Store size={10} />
-                                {shop?.name ?? '—'}
-                              </span>
-                            );
-                          })}
+                          {product.shopee_entries
+                            .filter(e => e.shop_id)
+                            .map((entry) => {
+                              const shop = shopMap.get(entry.shop_id!);
+                              const shopIdx = shops.findIndex(s => s.id === entry.shop_id);
+                              const colors = shopColor(shopIdx >= 0 ? shopIdx : 0);
+                              return (
+                                <span key={entry.id}
+                                  className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                                    entry.is_published ? colors.badge : 'bg-slate-100 text-slate-400'
+                                  }`}>
+                                  <Store size={10} />
+                                  {shop?.name ?? entry.shop_id}
+                                </span>
+                              );
+                            })}
+                          {product.shopee_entries.every(e => !e.shop_id) && (
+                            <span className="text-xs text-slate-300">Chưa gán shop</span>
+                          )}
                         </div>
                       </td>
 

@@ -1,9 +1,12 @@
 import React from 'react';
-import { Plus, Search, X, FileDown, Printer, PackageIcon, MoreHorizontal, List, LayoutGrid } from 'lucide-react';
+import { Plus, Search, X, FileDown, Printer, PackageIcon, MoreHorizontal, List, LayoutGrid, Link2 } from 'lucide-react';
 
 interface GoodsToolbarProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  searchTags?: string[];
+  onTagRemove?: (tag: string) => void;
+  onSearchKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onOpenCreate: () => void;
   rightControls: React.ReactNode;
   filteredCount: number;
@@ -28,6 +31,7 @@ interface GoodsToolbarProps {
   onBulkDelete: () => void;
   onBulkStopBusiness: () => void;
   onBulkChangeGroup: () => void;
+  onBulkChannelLink: () => void;
   onGoToWarranty: () => void;
   onResetPage: () => void;
   viewMode: 'table' | 'grid';
@@ -37,6 +41,9 @@ interface GoodsToolbarProps {
 export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   searchTerm,
   onSearchChange,
+  searchTags = [],
+  onTagRemove,
+  onSearchKeyDown,
   onOpenCreate,
   rightControls,
   filteredCount,
@@ -59,6 +66,7 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   onBulkDelete,
   onBulkStopBusiness,
   onBulkChangeGroup,
+  onBulkChannelLink,
   onGoToWarranty,
   onResetPage,
   viewMode,
@@ -84,15 +92,30 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
   return (
   <>
     <div className="px-4 min-h-[44px] border-b border-slate-200 flex items-center gap-2 shrink-0">
-      <div className="flex-1 relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Tìm theo tên, mã hàng..."
-          className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm font-normal outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-400"
-          value={searchTerm}
-          onChange={e => onSearchChange(e.target.value)}
-        />
+      <div className="flex-1 relative max-w-xl">
+        <div className="flex flex-wrap items-center gap-1 pl-9 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-md focus-within:border-indigo-400 focus-within:bg-white transition-all min-h-[34px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          {searchTags.map(tag => (
+            <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium shrink-0">
+              {tag}
+              <button
+                type="button"
+                onClick={() => onTagRemove?.(tag)}
+                className="hover:text-indigo-900 transition-colors"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+          <input
+            type="text"
+            placeholder={searchTags.length > 0 ? 'Thêm mã khác...' : 'Tìm theo tên, mã hàng... (Enter để lọc nhiều mã)'}
+            className="flex-1 min-w-[120px] bg-transparent text-sm font-normal outline-none placeholder:text-slate-400"
+            value={searchTerm}
+            onChange={e => onSearchChange(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+          />
+        </div>
       </div>
 
       {selectedCount > 0 ? (
@@ -120,6 +143,12 @@ export const GoodsToolbar: React.FC<GoodsToolbarProps> = ({
             className={`${btnBase} bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm`}
           >
             <PackageIcon className="h-3.5 w-3.5" /> Nhập hàng
+          </button>
+          <button
+            onClick={onBulkChannelLink}
+            className={`${btnBase} bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm`}
+          >
+            <Link2 className="h-3.5 w-3.5" /> Liên kết kênh
           </button>
           <div className="relative" ref={moreMenuRef}>
             <button

@@ -148,7 +148,11 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
     };
   }, [dateRange.end, dateRange.start, page, pageSize, paymentFilter, searchTerm, typeFilter, deliveryTypeFilter, statusFilter]);
 
-  const summary = filterSummary;
+  const summary = useMemo(() => ({
+    totalAmount: pageOrders.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0),
+    discount: pageOrders.reduce((s, o) => s + (Number(o.discount) || 0), 0),
+    finalAmount: pageOrders.reduce((s, o) => s + (Number(o.finalAmount) || 0), 0),
+  }), [pageOrders]);
 
   const totalPages = Math.max(1, Math.ceil(totalOrders / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -861,7 +865,8 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
       {/* ===== LEFT SIDEBAR ===== */}
       <aside className="w-64 shrink-0 h-full min-h-0 rounded-2xl border border-slate-100 bg-white shadow-sm flex flex-col overflow-y-auto overscroll-contain">
         <div className="px-4 py-3 border-b border-slate-100">
-          <span className="text-xs font-semibold text-slate-700">Bộ lọc</span>
+          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Hóa đơn</h2>
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">Quản lý hóa đơn bán hàng</p>
         </div>
 
         {/* Thời gian */}
@@ -1104,9 +1109,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <td className="px-3 py-2" />
                   <td className="px-2 py-2" />
-                  <td className="px-3 py-2 text-xs font-medium text-slate-500">
-                    Tổng trang này
-                  </td>
+                  <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />

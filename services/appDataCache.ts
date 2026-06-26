@@ -111,6 +111,8 @@ class AppDataCacheService {
         localStorage.setItem('cfo_brain_local_data', JSON.stringify(parsed));
       }
     } catch { /* ignore */ }
+    // Bust sync cooldown so next page load forces a fresh cloud fetch
+    localStorage.removeItem('cfo_brain_last_cloud_sync');
   }
 }
 

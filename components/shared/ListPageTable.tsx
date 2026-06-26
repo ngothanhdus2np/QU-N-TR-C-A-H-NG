@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { TableRowSkeleton } from './ui/Skeleton';
 
 export interface TableColumn<T = Record<string, unknown>> {
   key: string;
@@ -25,6 +26,7 @@ interface ListPageTableProps<T> {
   expandedRowId?: string;
   expandedRowContent?: React.ReactNode;
   summaryCells?: Record<string, React.ReactNode>;
+  isLoading?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export function ListPageTable<T>({
   expandedRowId,
   expandedRowContent,
   summaryCells,
+  isLoading = false,
 }: ListPageTableProps<T>) {
   const getValue = (item: T, key: string) => {
     if (item && typeof item === 'object' && key in item) {
@@ -99,7 +102,12 @@ export function ListPageTable<T>({
         </tr>
       </thead>
       <tbody>
-        {summaryCells && (
+        {isLoading && (
+          Array.from({ length: 10 }).map((_, i) => (
+            <TableRowSkeleton key={i} cols={columns.length} />
+          ))
+        )}
+        {!isLoading && summaryCells && (
           <tr className="bg-slate-50 border-b border-slate-200">
             {columns.map(col => (
               <td
@@ -117,7 +125,7 @@ export function ListPageTable<T>({
             ))}
           </tr>
         )}
-        {data.length === 0 ? (
+        {!isLoading && data.length === 0 ? (
           <tr>
             <td colSpan={columns.length} className="py-20 text-center">
               {emptyState || (
@@ -130,7 +138,7 @@ export function ListPageTable<T>({
               )}
             </td>
           </tr>
-        ) : (
+        ) : !isLoading && (
           data.map((item, index) => {
             const rowKey = keyExtractor(item, index);
             const isExpanded = expandedRowId === rowKey;
@@ -152,7 +160,7 @@ export function ListPageTable<T>({
                   {columns.map((col, colIndex) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-[13px] border-r border-slate-50 last:border-r-0 ${
+                      className={`px-4 py-2 border-r border-slate-50 last:border-r-0 ${
                         col.align === 'center'
                           ? 'text-center'
                           : col.align === 'right'

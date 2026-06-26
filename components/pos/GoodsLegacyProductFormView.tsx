@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, Edit2, FileText, Grid3X3,
-  Image as ImageIcon, Info, Package, Plus, Printer, X
+  Image as ImageIcon, Info, Loader2, Package, Plus, Printer, ShoppingBag, X
 } from 'lucide-react';
 import { POSProduct, ProductGroup } from '../../types';
 import ProductGroupTreePicker from '../shared/ProductGroupTreePicker';
@@ -30,6 +30,45 @@ const TABS: { id: ProductFormTab; label: string; icon: React.ComponentType<any> 
   { id: 'channels', label: 'Liên kết kênh bán', icon: Package }
 ];
 
+interface ShopeeShopStatus { id: string; name: string; linked: boolean; }
+
+function useShopeeShopsStatus(productId: string | undefined, isParent: boolean, active: boolean) {
+  const [shops, setShops] = useState<ShopeeShopStatus[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!productId || !active) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/channel-links/shopee-shops-status?productId=${productId}&isParent=${isParent}`, { credentials: 'include' });
+      const json = await res.json();
+      if (json.ok) setShops(json.shops);
+    } finally {
+      setLoading(false);
+    }
+  }, [productId, isParent, active]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = useCallback(async (shopId: string, linked: boolean, product: { id: string; name: string; sku: string; parentId?: string }) => {
+    setToggling(shopId);
+    try {
+      await fetch('/api/channel-links/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ channel: 'shopee', action: linked ? 'unlink' : 'link', product, shopId }),
+      });
+      await load();
+    } finally {
+      setToggling(null);
+    }
+  }, [load]);
+
+  return { shops, loading, toggling, reload: load, toggle };
+}
+
 export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProps> = ({
   formData,
   productGroups,
@@ -42,6 +81,10 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
   onAddConversionUnit,
   allProducts = [],
 }) => {
+  const isParent = !!(editingProduct && !editingProduct.parentId && allProducts.some(p => p.parentId === editingProduct.id));
+  const { shops: shopeeShops, loading: shopeeLoading, toggling: shopeeToggling, toggle: toggleShopee } =
+    useShopeeShopsStatus(editingProduct?.id, isParent, activeFormTab === 'channels');
+
   const relatedProducts = allProducts.filter(
     p => p.categoryId && p.categoryId === formData.categoryId && p.id !== editingProduct?.id
   ).slice(0, 20);
@@ -373,15 +416,54 @@ export const GoodsLegacyProductFormView: React.FC<GoodsLegacyProductFormViewProp
       )}
 
       {activeFormTab === 'channels' && (
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-              <Package className="h-6 w-6 text-slate-400" />
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+              <ShoppingBag className="h-4 w-4 text-orange-500" />
+              <span className="text-sm font-medium text-slate-800">Shopee</span>
             </div>
-            <p className="text-sm font-medium text-slate-600 mb-1">Liên kết kênh bán</p>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto">
-              Kết nối sản phẩm với Shopee, Lazada, TikTok Shop và các kênh bán khác. Tính năng sẽ sớm ra mắt.
-            </p>
+            {shopeeLoading ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs">Đang tải...</span>
+              </div>
+            ) : shopeeShops.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-slate-400">
+                Chưa có shop Shopee nào được kết nối. Vào Cài đặt → Tích hợp để thêm shop.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {shopeeShops.map(shop => {
+                  const isToggling = shopeeToggling === shop.id;
+                  return (
+                    <div key={shop.id} className="flex items-center justify-between px-5 py-3.5">
+                      <div>
+                        <p className="text-sm text-slate-700">{shop.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {shop.linked ? 'Đang bán trên shop này' : 'Chưa đăng bán'}
+                        </p>
+                      </div>
+                      <button
+                        disabled={isToggling || !editingProduct}
+                        onClick={() => editingProduct && toggleShopee(shop.id, shop.linked, {
+                          id: editingProduct.id,
+                          name: editingProduct.name,
+                          sku: editingProduct.sku,
+                          parentId: editingProduct.parentId ?? undefined,
+                        })}
+                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${shop.linked ? 'bg-orange-500' : 'bg-slate-200'}`}
+                      >
+                        {isToggling ? (
+                          <Loader2 className="h-3 w-3 animate-spin mx-auto text-white" />
+                        ) : (
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${shop.linked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

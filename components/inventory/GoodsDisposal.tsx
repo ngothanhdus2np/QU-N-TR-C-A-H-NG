@@ -245,6 +245,7 @@ export default function GoodsDisposal({ products, data, onUpdateSurgical }: Good
           config={{
             transactionType: 'disposal',
             sidebarTitle: 'Trừ hàng lỗi/hư',
+            sidebarDescription: 'Xử lý hàng lỗi, hư hỏng, hết hạn',
             searchPlaceholder: 'Tìm mã phiếu trừ hàng lỗi/hư...',
             createButtonLabel: 'Phiếu trừ hàng lỗi/hư',
             bulkDeleteConfirmLabel: 'phiếu trừ hàng lỗi/hư',

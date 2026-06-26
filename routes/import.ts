@@ -1770,6 +1770,8 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         discount: number;
         costMethod: 'fixed' | 'average';
         nextImportPrice: number;
+        unit?: string;
+        brand?: string;
         note?: string;
       };
 
@@ -1884,6 +1886,8 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             discount: lineDiscount,
             costMethod: 'fixed',
             nextImportPrice: importPrice,
+            unit: unit || undefined,
+            brand: brand || undefined,
             note: noteParts.join(' | ') || undefined,
           });
         }
@@ -1916,6 +1920,20 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         BATCH,
         OPTIONAL_SUPPLIER_COLUMNS
       );
+
+      // Xác định phiếu MỚI (chưa có trong DB) để sau upsert chỉ cộng stock cho chúng
+      const allTransactionIds = Array.from(purchases.keys()).map(code =>
+        stableUuidFromKey(`kiotviet-purchase:${code}`)
+      );
+      const existingIdsInDb = new Set<string>();
+      for (let i = 0; i < allTransactionIds.length; i += BATCH) {
+        const batch = allTransactionIds.slice(i, i + BATCH);
+        const { data: existingRows } = await supabase
+          .from('inventory_transactions')
+          .select('id')
+          .in('id', batch);
+        (existingRows || []).forEach((r: { id: string }) => existingIdsInDb.add(r.id));
+      }
 
       const transactionsToUpsert = Array.from(purchases.values()).map(p => ({
         id: stableUuidFromKey(`kiotviet-purchase:${p.code}`),
@@ -1973,6 +1991,85 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
                 .eq('id', productId)
             )
           );
+        }
+      }
+
+      // Cộng stock cho phiếu MỚI — phiếu cũ (re-import) không cộng để tránh double-count
+      let newProductsCreated = 0;
+      const newPurchases = Array.from(purchases.values()).filter(
+        p => !existingIdsInDb.has(stableUuidFromKey(`kiotviet-purchase:${p.code}`))
+      );
+      if (newPurchases.length > 0) {
+        const stockDeltaByProductId = new Map<string, number>();
+        const itemDataByProductId = new Map<string, { sku: string; name: string; price: number; unit?: string; brand?: string }>();
+        for (const p of newPurchases) {
+          for (const item of p.items.values()) {
+            stockDeltaByProductId.set(
+              item.productId,
+              (stockDeltaByProductId.get(item.productId) || 0) + item.quantity
+            );
+            if (!itemDataByProductId.has(item.productId)) {
+              itemDataByProductId.set(item.productId, {
+                sku: item.sku,
+                name: item.name,
+                price: item.price,
+                unit: item.unit,
+                brand: item.brand,
+              });
+            }
+          }
+        }
+        const productIdsToUpdate = Array.from(stockDeltaByProductId.keys());
+        for (let i = 0; i < productIdsToUpdate.length; i += BATCH) {
+          const batch = productIdsToUpdate.slice(i, i + BATCH);
+          const { data: currentProducts } = await supabase
+            .from('pos_products')
+            .select('id, stock')
+            .in('id', batch);
+          const existingProductIds = new Set((currentProducts || []).map((p: { id: string }) => p.id));
+          // Cộng stock cho sản phẩm đã tồn tại
+          if (currentProducts?.length) {
+            await Promise.all(
+              (currentProducts as { id: string; stock: number }[]).map(prod =>
+                supabase
+                  .from('pos_products')
+                  .update({ stock: Math.max(0, (Number(prod.stock) || 0) + (stockDeltaByProductId.get(prod.id) || 0)) })
+                  .eq('id', prod.id)
+              )
+            );
+          }
+          // Tạo mới sản phẩm chưa có trong danh sách hàng hoá
+          const newProductIds = batch.filter(id => !existingProductIds.has(id));
+          if (newProductIds.length > 0) {
+            const newProducts = newProductIds.map(productId => {
+              const d = itemDataByProductId.get(productId)!;
+              return {
+                id: productId,
+                sku: d.sku,
+                name: d.name,
+                category_id: 'Khác',
+                import_price: d.price,
+                sale_price: 0,
+                stock: stockDeltaByProductId.get(productId) || 0,
+                unit: d.unit || 'Cái',
+                brand: d.brand || null,
+                status: 'Active',
+                is_parent: false,
+                product_type: 'Hàng hóa',
+                direct_sale: true,
+                allow_points: true,
+                weight: 0,
+                customer_orders: 0,
+              };
+            });
+            const { error: newProductsErr } = await supabase.from('pos_products').upsert(newProducts, { onConflict: 'id' });
+            if (newProductsErr) {
+              console.error('[Import] Lỗi tạo sản phẩm mới từ phiếu nhập:', newProductsErr.message);
+            } else {
+              newProductsCreated += newProductIds.length;
+              console.log(`[Import] Đã tạo ${newProductIds.length} sản phẩm mới từ phiếu nhập.`);
+            }
+          }
         }
       }
 
@@ -2043,6 +2140,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         skippedInventoryTransactionColumns,
         skippedSupplierDebtColumns,
         importPriceUpdated: latestPriceByProductId.size,
+        newProductsCreated,
       });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-purchase-details]', getErrorMessage(error));
@@ -2172,6 +2270,72 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       });
     } catch (error: unknown) {
       console.error('[Import /kiotviet-suppliers]', getErrorMessage(error));
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Dry-run: kiểm tra sản phẩm nào có trong phiếu nhập nhưng chưa có trong danh sách hàng hoá
+  // Không ghi gì vào DB — chỉ đọc và báo cáo
+  router.get('/api/sync/missing-products-preview', requireAuth, async (_req, res) => {
+    try {
+      // 1. Lấy tất cả phiếu nhập
+      let allTransactions: { items: { productId: string; sku: string; name: string; price: number; unit?: string; brand?: string }[] }[] = [];
+      let offset = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('inventory_transactions')
+          .select('items')
+          .eq('type', 'Import')
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allTransactions = allTransactions.concat(data as typeof allTransactions);
+        if (data.length < PAGE) break;
+        offset += PAGE;
+      }
+
+      // 2. Gom tất cả productId từ các items
+      const productMap = new Map<string, { sku: string; name: string; price: number; unit?: string; brand?: string }>();
+      for (const tx of allTransactions) {
+        if (!Array.isArray(tx.items)) continue;
+        for (const item of tx.items) {
+          if (item?.productId && !productMap.has(item.productId)) {
+            productMap.set(item.productId, {
+              sku: item.sku,
+              name: item.name,
+              price: item.price,
+              unit: item.unit,
+              brand: item.brand,
+            });
+          }
+        }
+      }
+
+      // 3. Kiểm tra cái nào chưa có trong pos_products
+      const allProductIds = Array.from(productMap.keys());
+      const existingIds = new Set<string>();
+      const BATCH = 500;
+      for (let i = 0; i < allProductIds.length; i += BATCH) {
+        const { data } = await supabase
+          .from('pos_products')
+          .select('id')
+          .in('id', allProductIds.slice(i, i + BATCH));
+        (data || []).forEach((p: { id: string }) => existingIds.add(p.id));
+      }
+
+      const missing = allProductIds
+        .filter(id => !existingIds.has(id))
+        .map(id => ({ productId: id, ...productMap.get(id)! }));
+
+      res.json({
+        totalProductsInPurchases: allProductIds.length,
+        alreadyExists: existingIds.size,
+        wouldCreate: missing.length,
+        preview: missing.slice(0, 50), // chỉ hiện 50 mẫu đầu
+      });
+    } catch (error: unknown) {
+      console.error('[Sync preview]', getErrorMessage(error));
       res.status(500).json({ error: getErrorMessage(error) });
     }
   });

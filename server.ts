@@ -376,7 +376,7 @@ async function startServer() {
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.3:8000", "ws://192.168.1.3:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.3:8000", "ws://192.168.1.3:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://static.cloudflareinsights.com"],
           upgradeInsecureRequests: null,
           fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           objectSrc: ["'self'", "blob:"],
@@ -392,21 +392,23 @@ async function startServer() {
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
     }));
 
-    // Security: Rate limiting
+    // Security: Rate limiting (production only — dev mode has no real limit)
     const apiLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100, // limit each IP to 100 requests per windowMs
+      windowMs: 15 * 60 * 1000,
+      max: IS_PROD ? 300 : 0,
       message: 'Too many requests from this IP, please try again later.',
       standardHeaders: true,
       legacyHeaders: false,
+      skip: () => !IS_PROD,
     });
 
     const authLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 5, // Stricter for auth endpoints
+      windowMs: 15 * 60 * 1000,
+      max: IS_PROD ? 20 : 0,
       message: 'Too many authentication attempts, please try again later.',
       standardHeaders: true,
       legacyHeaders: false,
+      skip: () => !IS_PROD,
     });
 
     app.use('/api/', apiLimiter);

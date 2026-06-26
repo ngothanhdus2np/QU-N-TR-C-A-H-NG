@@ -72,6 +72,7 @@ interface GoodsInventoryModalsProps {
   brands?: string[];
   applyToVariants?: boolean;
   onApplyToVariantsChange?: (checked: boolean) => void;
+  onCreateGroup?: () => void;
 }
 
 export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
@@ -127,6 +128,7 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
   brands,
   applyToVariants,
   onApplyToVariantsChange,
+  onCreateGroup,
 }) => {
   const [showValidationErrors, setShowValidationErrors] = React.useState(false);
 
@@ -199,6 +201,7 @@ export const GoodsInventoryModals: React.FC<GoodsInventoryModalsProps> = ({
           applyToVariants={applyToVariants}
           onApplyToVariantsChange={onApplyToVariantsChange}
           showValidationErrors={showValidationErrors}
+          onCreateGroup={onCreateGroup}
         />
       )}
 

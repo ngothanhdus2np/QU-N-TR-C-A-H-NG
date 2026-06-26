@@ -489,6 +489,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
     <div className="h-full">
       <ListPageLayout
         sidebarTitle="Trả hàng nhập"
+        sidebarDescription="Quản lý phiếu trả hàng cho NCC"
         sidebar={sidebar}
         toolbar={toolbar}
         pagination={

@@ -1,53 +1,35 @@
 import { useMemo } from 'react';
 import { POSProduct } from '../../types';
+import { removeDiacritics, fuzzyMatch } from '../../src/lib/fuzzySearch';
 
-/**
- * Create a search index for fast product lookups
- * Indexes products by first 2-3 characters of name and SKU
- * 
- * Performance: O(1) lookup instead of O(n) linear search
- * Memory: ~10MB for 12K products (acceptable tradeoff)
- */
 export const useProductSearchIndex = (products: POSProduct[]) => {
   const searchIndex = useMemo(() => {
-    const nameIndex = new Map<string, Set<string>>(); // key -> product IDs
+    const nameIndex = new Map<string, Set<string>>();
     const skuIndex = new Map<string, Set<string>>();
     const productMap = new Map<string, POSProduct>();
 
     products.forEach(product => {
       productMap.set(product.id, product);
 
-      // Index by name (first 2 chars, case-insensitive)
       if (product.name) {
-        const nameKey = product.name.substring(0, 2).toLowerCase();
-        if (!nameIndex.has(nameKey)) {
-          nameIndex.set(nameKey, new Set());
-        }
-        nameIndex.get(nameKey)!.add(product.id);
-
-        // Also index by first 3 chars for better precision
+        // Index bằng key đã bỏ dấu để khớp khi user gõ không dấu
+        const normName = removeDiacritics(product.name.toLowerCase());
+        const nameKey2 = normName.substring(0, 2);
+        const nameKey3 = normName.substring(0, 3);
+        if (!nameIndex.has(nameKey2)) nameIndex.set(nameKey2, new Set());
+        nameIndex.get(nameKey2)!.add(product.id);
         if (product.name.length >= 3) {
-          const nameKey3 = product.name.substring(0, 3).toLowerCase();
-          if (!nameIndex.has(nameKey3)) {
-            nameIndex.set(nameKey3, new Set());
-          }
+          if (!nameIndex.has(nameKey3)) nameIndex.set(nameKey3, new Set());
           nameIndex.get(nameKey3)!.add(product.id);
         }
       }
 
-      // Index by SKU (first 2 chars)
       if (product.sku) {
         const skuKey = product.sku.substring(0, 2).toLowerCase();
-        if (!skuIndex.has(skuKey)) {
-          skuIndex.set(skuKey, new Set());
-        }
+        if (!skuIndex.has(skuKey)) skuIndex.set(skuKey, new Set());
         skuIndex.get(skuKey)!.add(product.id);
-
-        // Also index full SKU for exact matches
         const fullSkuKey = product.sku.toLowerCase();
-        if (!skuIndex.has(fullSkuKey)) {
-          skuIndex.set(fullSkuKey, new Set());
-        }
+        if (!skuIndex.has(fullSkuKey)) skuIndex.set(fullSkuKey, new Set());
         skuIndex.get(fullSkuKey)!.add(product.id);
       }
     });
@@ -55,50 +37,37 @@ export const useProductSearchIndex = (products: POSProduct[]) => {
     return { nameIndex, skuIndex, productMap };
   }, [products]);
 
-  /**
-   * Fast search using index
-   * Falls back to full scan if search term is too short
-   */
   const searchProducts = useMemo(() => {
     return (searchTerm: string): POSProduct[] => {
-      if (!searchTerm || searchTerm.length < 2) {
-        return products;
-      }
+      if (!searchTerm || searchTerm.trim().length < 2) return products;
 
-      const lowerSearch = searchTerm.toLowerCase();
+      // Dùng từ đầu tiên (đã bỏ dấu) để tra index
+      const firstWord = removeDiacritics(searchTerm.toLowerCase()).split(/\s+/)[0] || '';
       const candidateIds = new Set<string>();
 
-      // Try index lookup first (fast path)
-      if (searchTerm.length >= 2) {
-        const nameKey2 = lowerSearch.substring(0, 2);
-        const nameKey3 = lowerSearch.substring(0, 3);
-        const skuKey = lowerSearch.substring(0, 2);
-
-        // Collect candidates from indexes
+      if (firstWord.length >= 2) {
+        const nameKey2 = firstWord.substring(0, 2);
+        const nameKey3 = firstWord.substring(0, 3);
+        const skuKey = firstWord.substring(0, 2);
         searchIndex.nameIndex.get(nameKey2)?.forEach(id => candidateIds.add(id));
         searchIndex.nameIndex.get(nameKey3)?.forEach(id => candidateIds.add(id));
         searchIndex.skuIndex.get(skuKey)?.forEach(id => candidateIds.add(id));
-        searchIndex.skuIndex.get(lowerSearch)?.forEach(id => candidateIds.add(id));
+        searchIndex.skuIndex.get(searchTerm.toLowerCase())?.forEach(id => candidateIds.add(id));
       }
 
-      // If no candidates found, fall back to full scan
+      // Không tìm thấy trong index → full scan với fuzzyMatch
       if (candidateIds.size === 0) {
         return products.filter(p =>
-          (p.name?.toLowerCase() || '').includes(lowerSearch) ||
-          (p.sku?.toLowerCase() || '').includes(lowerSearch)
+          fuzzyMatch(p.name || '', searchTerm) || fuzzyMatch(p.sku || '', searchTerm)
         );
       }
 
-      // Filter candidates with actual search term
+      // Lọc candidates bằng fuzzyMatch (hỗ trợ đảo thứ tự từ, không dấu)
       const results: POSProduct[] = [];
       candidateIds.forEach(id => {
         const product = searchIndex.productMap.get(id);
-        if (product) {
-          const matchName = (product.name?.toLowerCase() || '').includes(lowerSearch);
-          const matchSku = (product.sku?.toLowerCase() || '').includes(lowerSearch);
-          if (matchName || matchSku) {
-            results.push(product);
-          }
+        if (product && (fuzzyMatch(product.name || '', searchTerm) || fuzzyMatch(product.sku || '', searchTerm))) {
+          results.push(product);
         }
       });
 

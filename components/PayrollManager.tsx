@@ -833,11 +833,11 @@ const PayrollManager: React.FC<Props> = ({
     <div className="flex h-full min-h-0 gap-4">
       <aside className="w-64 shrink-0 h-full min-h-0 flex flex-col gap-4">
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-4 min-h-[58px] border-b border-slate-100 flex flex-col justify-center">
-            <h2 className="line-clamp-2 text-sm font-medium leading-5 text-slate-700">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
               {activePayrollMeta?.label || 'Lương & Thưởng'}
             </h2>
-            <p className="text-xs text-slate-400">Nhân sự</p>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Quản lý lương thưởng và chấm công</p>
           </div>
           <div className="p-3 space-y-5">
             <div className="space-y-2">

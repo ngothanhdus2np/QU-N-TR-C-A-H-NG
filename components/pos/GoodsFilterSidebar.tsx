@@ -16,6 +16,9 @@ interface GoodsFilterSidebarProps {
   setFilterAttrs: (v: string[]) => void;
   filterSupplier: string[];
   setFilterSupplier: (v: string[]) => void;
+  filterPlatforms: string[];
+  setFilterPlatforms: (v: string[]) => void;
+  availablePlatforms: { key: string; label: string }[];
   onCollapse: () => void;
   onClearAllFilters: () => void;
   onResetPage: () => void;
@@ -28,6 +31,8 @@ interface GoodsFilterSidebarProps {
   uniqueBrands: string[];
   uniqueSuppliers: string[];
   lowStockCount: number;
+  sidebarTitle?: string;
+  sidebarDescription?: string;
 }
 
 export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
@@ -43,6 +48,9 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
   setFilterAttrs,
   filterSupplier,
   setFilterSupplier,
+  filterPlatforms,
+  setFilterPlatforms,
+  availablePlatforms,
   onCollapse: _onCollapse,
   onClearAllFilters,
   onResetPage,
@@ -54,6 +62,8 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
   uniqueBrands,
   uniqueSuppliers,
   lowStockCount,
+  sidebarTitle = 'Hàng hoá',
+  sidebarDescription = 'Quản lý sản phẩm và tồn kho',
 }) => {
   // Attr popup
   const [showAttrPopup, setShowAttrPopup] = useState(false);
@@ -174,7 +184,8 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
     filterStock !== 'all' ||
     filterLocation ||
     filterAttrs.length > 0 ||
-    filterSupplier.length > 0;
+    filterSupplier.length > 0 ||
+    filterPlatforms.length > 0;
 
   const productCountByPath = React.useMemo(() => {
     const countMap = new Map<string, number>();
@@ -500,9 +511,13 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
 
       {/* === Filter Aside === */}
       <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-        <div className="px-4 min-h-[44px] border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="text-xs font-medium text-slate-500 uppercase tracking-wide">Hàng hoá</h2>
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-3 border-b border-slate-100 shrink-0">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">{sidebarTitle}</h2>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">{sidebarDescription}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
             {hasActiveFilters && (
               <button
                 onClick={onClearAllFilters}
@@ -511,6 +526,7 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
                 Xóa lọc
               </button>
             )}
+            </div>
           </div>
         </div>
 
@@ -711,6 +727,47 @@ export const GoodsFilterSidebar: React.FC<GoodsFilterSidebarProps> = ({
               <ChevronRight className="h-3.5 w-3.5 rotate-90 text-slate-400" />
             </div>
           </div>
+
+          {/* 7. Nền tảng */}
+          {availablePlatforms.length > 0 && (
+            <div className="px-3 py-2.5 border-b border-slate-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-500">Nền tảng</span>
+                {filterPlatforms.length > 0 && (
+                  <button
+                    onClick={() => { setFilterPlatforms([]); onResetPage(); }}
+                    className="text-2xs text-indigo-500 hover:text-indigo-700 font-medium"
+                  >
+                    Xoá
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1">
+                {availablePlatforms.map(p => {
+                  const active = filterPlatforms.includes(p.key);
+                  return (
+                    <label key={p.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => {
+                          const next = active
+                            ? filterPlatforms.filter(k => k !== p.key)
+                            : [...filterPlatforms, p.key];
+                          setFilterPlatforms(next);
+                          onResetPage();
+                        }}
+                        className="h-3.5 w-3.5 rounded accent-indigo-600 shrink-0"
+                      />
+                      <span className={`text-[13px] leading-snug ${active ? 'text-indigo-700 font-medium' : 'text-slate-600 font-normal'}`}>
+                        {p.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </>

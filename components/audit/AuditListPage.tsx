@@ -26,6 +26,7 @@ interface AuditListPageProps {
   config?: {
     transactionType?: InventoryTransaction['type'];
     sidebarTitle?: string;
+    sidebarDescription?: string;
     searchPlaceholder?: string;
     createButtonLabel?: string;
     bulkDeleteConfirmLabel?: string;
@@ -56,6 +57,7 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
   const listConfig = {
     transactionType: config?.transactionType || ('Check' as InventoryTransaction['type']),
     sidebarTitle: config?.sidebarTitle || 'Kiểm kho',
+    sidebarDescription: config?.sidebarDescription || 'Kiểm tra và điều chỉnh tồn kho',
     searchPlaceholder: config?.searchPlaceholder || 'Tìm mã phiếu kiểm kho...',
     createButtonLabel: config?.createButtonLabel || 'Phiếu kiểm kho',
     bulkDeleteConfirmLabel: config?.bulkDeleteConfirmLabel || 'phiếu kiểm kho',
@@ -558,6 +560,7 @@ const AuditListPage: React.FC<AuditListPageProps> = ({
     <>
       <ListPageLayout
         sidebarTitle={listConfig.sidebarTitle}
+        sidebarDescription={listConfig.sidebarDescription}
         sidebar={sidebar}
         toolbar={toolbar}
         pagination={pagination}

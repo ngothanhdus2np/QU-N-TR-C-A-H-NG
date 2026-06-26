@@ -802,7 +802,8 @@ export default function OrderReturns({
       sidebar={sidebar}
       toolbar={toolbar}
       pagination={filteredReturns.length > 0 ? pagination : undefined}
-      sidebarTitle="Bộ lọc"
+      sidebarTitle="Trả hàng"
+      sidebarDescription="Quản lý đơn trả và hoàn tiền"
       hasActiveFilters={hasActiveFilters}
       onClearFilters={handleClearFilters}
     >

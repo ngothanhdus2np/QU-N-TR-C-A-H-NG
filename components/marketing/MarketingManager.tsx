@@ -373,7 +373,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
         if (data.schedule) setSchedule(data.schedule);
         if (data.strategies) setStrategies(data.strategies);
         if (data.focus_products) setFocusProducts(data.focus_products);
-        if (data.brand_profile) onUpdateBrand(data.brand_profile);
+        // brand_profile is managed by the main app (brand_profile table), not app_state
         if (data.selected_page_id) setSelectedPageId(data.selected_page_id);
       }
     });
@@ -387,7 +387,6 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
           strategies,
           focus_products: focusProducts,
           drafts,
-          brand_profile: brandProfile,
           selected_page_id: selectedPageId,
         });
       }, 2000);
@@ -398,7 +397,6 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
     strategies,
     focusProducts,
     drafts,
-    brandProfile,
     selectedPageId,
     isCloudSyncEnabled,
   ]);

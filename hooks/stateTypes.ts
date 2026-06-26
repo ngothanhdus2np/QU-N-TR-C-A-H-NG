@@ -33,4 +33,5 @@ export interface AppState {
   diagEndDate: string;
   syncErrors: string[] | null;
   lastSyncTime: string | null;
+  isDataReady: boolean;
 }

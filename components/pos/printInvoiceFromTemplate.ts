@@ -329,14 +329,115 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
   </html>`;
 }
 
-export function openPrintInvoice(opts: PrintInvoiceOptions): boolean {
+function openOneWindow(html: string): boolean {
+  const w = window.open('', '_blank', 'width=450,height=600');
+  if (!w) return false;
+  w.document.write(html);
+  w.document.close();
+  return true;
+}
+
+export function openPrintInvoice(opts: PrintInvoiceOptions, copies = 1): boolean {
   const html = printInvoiceFromTemplate(opts);
   if (!html) return false;
 
-  const printWindow = window.open('', '_blank', 'width=450,height=600');
-  if (!printWindow) return false;
+  // Mở bản đầu ngay, các bản sau delay 350ms để browser không block popup
+  let opened = openOneWindow(html);
+  for (let i = 1; i < copies; i++) {
+    setTimeout(() => openOneWindow(html), i * 350);
+  }
+  return opened;
+}
 
-  printWindow.document.write(html);
-  printWindow.document.close();
-  return true;
+interface PrintWarrantyOptions {
+  order: POSOrder;
+  storeName?: string;
+  storeAddress?: string;
+  storePhone?: string;
+  mode: 'per_item' | 'per_order';
+  warrantyByProductId?: Record<string, string>; // productId → warranty period string
+}
+
+function buildWarrantyHtml(opts: PrintWarrantyOptions, items: POSOrder['items']): string {
+  const { order, storeName, storeAddress, storePhone } = opts;
+  const orderDate = new Date(order.date);
+  const dateStr = `${orderDate.getDate().toString().padStart(2,'0')}/${(orderDate.getMonth()+1).toString().padStart(2,'0')}/${orderDate.getFullYear()}`;
+
+  const itemRows = items.map(item => {
+    const warranty = opts.warrantyByProductId?.[item.productId] || '—';
+    return `<tr>
+      <td style="padding:4px 6px;border-bottom:1px solid #e2e8f0">${escapeHtml(item.name)}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center">${item.quantity}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center">${escapeHtml(warranty)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<html>
+    <head>
+      <title>Phiếu Bảo Hành - ${escapeHtml(order.orderCode)}</title>
+      <style>
+        @page { size: 80mm auto; margin: 0; }
+        body { margin: 0; padding: 5mm; font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.6; color: #0f172a; }
+        h2 { margin: 4px 0; font-size: 15px; text-align: center; }
+        .center { text-align: center; }
+        .muted { color: #64748b; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #f8fafc; padding: 4px 6px; text-align: left; font-size: 12px; color: #475569; border-bottom: 2px solid #cbd5e1; }
+        th:nth-child(2), th:nth-child(3) { text-align: center; }
+        .footer { margin-top: 10px; text-align: center; font-size: 11px; color: #94a3b8; }
+      </style>
+    </head>
+    <body>
+      <div class="center" style="margin-bottom:6px">
+        <strong style="font-size:15px">${escapeHtml(storeName || 'CỬA HÀNG')}</strong><br>
+        ${storeAddress ? `<span class="muted">${escapeHtml(storeAddress)}</span><br>` : ''}
+        ${storePhone ? `<span class="muted">ĐT: ${escapeHtml(storePhone)}</span><br>` : ''}
+      </div>
+      <h2>PHIẾU BẢO HÀNH</h2>
+      <hr style="border:none;border-top:1px dashed #cbd5e1;margin:6px 0">
+      <div>Mã HĐ: <strong>${escapeHtml(order.orderCode)}</strong></div>
+      <div>Ngày: ${dateStr}</div>
+      ${order.customerName ? `<div>Khách: ${escapeHtml(order.customerName)}</div>` : ''}
+      <table>
+        <thead>
+          <tr>
+            <th>Hàng hóa</th>
+            <th>SL</th>
+            <th>Bảo hành</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <div class="footer">Vui lòng giữ phiếu này để được bảo hành</div>
+      <script>window.onload = function() { window.print(); setTimeout(function(){ window.close(); }, 100); };</script>
+    </body>
+  </html>`;
+}
+
+export function openPrintWarranty(opts: PrintWarrantyOptions, copies = 1): boolean {
+  const saleItems = opts.order.items.filter(i => i.lineType !== 'return');
+  if (saleItems.length === 0) return false;
+
+  if (opts.mode === 'per_item') {
+    // Mỗi sản phẩm 1 phiếu riêng, nhân với số bản
+    let anyOpened = false;
+    let delay = 0;
+    for (const item of saleItems) {
+      const html = buildWarrantyHtml(opts, [item]);
+      for (let c = 0; c < copies; c++) {
+        setTimeout(() => openOneWindow(html), delay);
+        delay += 350;
+      }
+      anyOpened = true;
+    }
+    return anyOpened;
+  } else {
+    // per_order: 1 phiếu tổng hợp tất cả hàng hóa, nhân với số bản
+    const html = buildWarrantyHtml(opts, saleItems);
+    openOneWindow(html);
+    for (let i = 1; i < copies; i++) {
+      setTimeout(() => openOneWindow(html), i * 350);
+    }
+    return true;
+  }
 }

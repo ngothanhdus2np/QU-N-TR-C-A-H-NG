@@ -14,6 +14,7 @@ type OpenConfirm = (config: {
 interface UseGoodsSelectionArgs {
   products: POSProduct[];
   filteredProducts: POSProduct[];
+  currentProducts: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   openConfirm: OpenConfirm;
@@ -23,6 +24,7 @@ interface UseGoodsSelectionArgs {
 export const useGoodsSelection = ({
   products,
   filteredProducts,
+  currentProducts,
   onUpdateProducts,
   onUpdateSurgical,
   openConfirm,
@@ -48,23 +50,43 @@ export const useGoodsSelection = ({
 
   const selectedIdSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
-  // BUG-46: sync selectedIds khi filter thay đổi
+  // BUG-46: sync selectedIds khi filter thay đổi — giữ lại child IDs nếu parent còn trong filter
   React.useEffect(() => {
-    const filteredIds = new Set(filteredProducts.map(p => p.id));
-    setSelectedIds(prev => prev.filter(id => filteredIds.has(id)));
-  }, [filteredProducts]);
+    const filteredRootIds = new Set(filteredProducts.map(p => p.id));
+    const filteredChildIds = new Set(
+      products.filter(p => p.parentId && filteredRootIds.has(p.parentId)).map(p => p.id)
+    );
+    setSelectedIds(prev => prev.filter(id => filteredRootIds.has(id) || filteredChildIds.has(id)));
+  }, [filteredProducts, products]);
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredProducts.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredProducts.map(product => product.id));
-    }
+    const currentRootIds = new Set(currentProducts.map(p => p.id));
+    const childIds = products
+      .filter(p => p.parentId && currentRootIds.has(p.parentId))
+      .map(p => p.id);
+    const allIds = [...currentProducts.map(p => p.id), ...childIds];
+    // Bỏ chọn nếu đã chọn hết root trang hiện tại, ngược lại chọn tất cả (cha + con) trang này
+    const allRootsSelected = currentProducts.every(p => selectedIds.includes(p.id));
+    setSelectedIds(allRootsSelected ? [] : allIds);
   };
 
   const toggleSelectOne = React.useCallback((id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  }, []);
+    const childIds = products.filter(p => p.parentId === id).map(p => p.id);
+    if (childIds.length > 0) {
+      // Sản phẩm cha: toggle cả cha lẫn các con
+      setSelectedIds(prev => {
+        const isSelected = prev.includes(id);
+        if (isSelected) {
+          return prev.filter(item => item !== id && !childIds.includes(item));
+        } else {
+          const toAdd = [id, ...childIds].filter(item => !prev.includes(item));
+          return [...prev, ...toAdd];
+        }
+      });
+    } else {
+      setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    }
+  }, [products]);
 
   const toggleFavorite = (id: string) => {
     const next = favoriteIds.includes(id)

@@ -32,6 +32,7 @@ interface GoodsCreateProductInfoTabProps {
   applyToVariants?: boolean;
   onApplyToVariantsChange?: (checked: boolean) => void;
   showValidationErrors?: boolean;
+  onCreateGroup?: () => void;
 }
 
 export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps> = ({
@@ -51,6 +52,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   applyToVariants,
   onApplyToVariantsChange,
   showValidationErrors = false,
+  onCreateGroup,
 }) => {
   const nameError = showValidationErrors && !formData.name?.trim();
   const groupError = showValidationErrors && !formData.categoryPath && !formData.categoryId;
@@ -60,6 +62,9 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   const [showBrandDropdown, setShowBrandDropdown] = React.useState(false);
   const [brandDropdownPos, setBrandDropdownPos] = React.useState({ top: 0, left: 0, width: 0 });
   const brandContainerRef = React.useRef<HTMLDivElement>(null);
+  const [showCreateBrandModal, setShowCreateBrandModal] = React.useState(false);
+  const [newBrandName, setNewBrandName] = React.useState('');
+  const createBrandInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!showBrandDropdown) return;
@@ -250,6 +255,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
   }, [barcodeManualMode, editingProduct, setFormData]);
 
   return (
+    <>
     <div className="space-y-4">
       <GoodsPriceSetupModal
         isOpen={showPriceSetup}
@@ -360,7 +366,11 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
               </div>
             )}
           </div>
-          <button className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors">
+          <button
+            type="button"
+            onClick={onCreateGroup}
+            className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors"
+          >
             Tạo mới
           </button>
         </div>
@@ -411,7 +421,11 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
               </div>
             )}
           </div>
-          <button className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors">
+          <button
+            type="button"
+            onClick={() => { setNewBrandName(''); setShowCreateBrandModal(true); setTimeout(() => createBrandInputRef.current?.focus(), 50); }}
+            className="px-3 py-2 text-sm text-indigo-600 font-normal hover:bg-indigo-50 rounded-lg transition-colors"
+          >
             Tạo mới
           </button>
         </div>
@@ -899,5 +913,60 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
       </label>
     )}
     </div>
+
+    {showCreateBrandModal && (
+      <div className="fixed inset-0 z-toast flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-[420px]">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <h2 className="text-base font-semibold text-slate-900">Tạo thương hiệu mới</h2>
+            <button
+              type="button"
+              onClick={() => setShowCreateBrandModal(false)}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <span className="text-xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="px-6 py-5">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Tên thương hiệu</label>
+            <input
+              ref={createBrandInputRef}
+              type="text"
+              value={newBrandName}
+              onChange={e => setNewBrandName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && newBrandName.trim()) {
+                  setFormData({ ...formData, brand: newBrandName.trim() });
+                  setShowCreateBrandModal(false);
+                }
+              }}
+              placeholder="Nhập tên thương hiệu"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-colors"
+            />
+          </div>
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowCreateBrandModal(false)}
+              className="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Bỏ qua
+            </button>
+            <button
+              type="button"
+              disabled={!newBrandName.trim()}
+              onClick={() => {
+                setFormData({ ...formData, brand: newBrandName.trim() });
+                setShowCreateBrandModal(false);
+              }}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md shadow-indigo-200"
+            >
+              Lưu
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };

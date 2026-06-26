@@ -9,7 +9,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_DATA':
       return {
         ...state,
-        data: { ...state.data, ...action.payload }
+        data: { ...state.data, ...action.payload },
+        isDataReady: true,
       };
     case 'UPDATE_ITEM': {
       const { key, item } = action.payload;

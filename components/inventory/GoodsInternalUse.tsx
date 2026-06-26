@@ -427,7 +427,8 @@ export default function GoodsInternalUse({ products, data, onUpdateSurgical }: G
 
   return (
     <ListPageLayout
-      sidebarTitle="Bộ lọc"
+      sidebarTitle="Xuất dùng nội bộ"
+      sidebarDescription="Quản lý phiếu xuất dùng nội bộ"
       sidebar={sidebar}
       toolbar={toolbar}
       hasActiveFilters={hasActiveFilters}

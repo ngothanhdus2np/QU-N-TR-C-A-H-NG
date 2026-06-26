@@ -7,6 +7,20 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "agent-console-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/index.js"],
+      "port": 4820,
+      "cwd": "/Users/apple/agent-console"
+    },
+    {
+      "name": "agent-console-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "cwd": "/Users/apple/agent-console/client"
     }
   ]
 }

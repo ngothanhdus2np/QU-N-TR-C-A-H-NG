@@ -272,7 +272,8 @@ export default function OrderRepairs() {
       sidebar={sidebar}
       toolbar={toolbar}
       pagination={pagination}
-      sidebarTitle="Bộ lọc"
+      sidebarTitle="Yêu cầu sửa chữa"
+      sidebarDescription="Theo dõi yêu cầu bảo hành, sửa chữa"
       hasActiveFilters={hasActiveFilters}
       onClearFilters={handleClearFilters}
     >

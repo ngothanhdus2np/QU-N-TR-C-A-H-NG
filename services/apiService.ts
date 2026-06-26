@@ -75,6 +75,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       weight_unit: item.weightUnit,
       location: item.location,
       related_sku: item.relatedSku || null,
+      // discount_percent: n(item.discountPercent || 0), // TODO: enable after running SQL migration in supabase_setup.sql
       customer_orders: n(item.customerOrders || 0),
       direct_sale: item.directSale !== false,
       product_type: item.productType || 'Hàng hóa',
@@ -511,6 +512,7 @@ const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'location',
   'related_sku',
   'created_at',
+  // 'discount_percent', // TODO: enable after running SQL migration in supabase_setup.sql
   'customer_orders',
   'direct_sale',
   'product_type',
@@ -697,6 +699,34 @@ const buildPosOrdersSummaryQuery = (
   return applyPosOrderFilters(query, filters, ignoredColumns);
 };
 
+// Slim columns — chỉ cần cho customer stats, skip `items` (JSON nặng) và các cột không dùng
+const CUSTOMER_STAT_COLUMNS = [
+  'id', 'order_code', 'date', 'customer_id',
+  'total_amount', 'final_amount', 'discount',
+  'cash_received', 'is_return',
+].join(',');
+
+const mapCustomerStatRow = (o: any): POSOrder => ({
+  id: o.id,
+  orderCode: o.order_code || '',
+  date: o.date,
+  customerId: o.customer_id || undefined,
+  customerName: undefined,
+  items: [],
+  totalAmount: Number(o.total_amount || 0),
+  discount: Number(o.discount || 0),
+  finalAmount: Number(o.final_amount || 0),
+  paymentMethod: 'Cash',
+  staffId: '',
+  pointsEarned: 0,
+  isReturn: inferIsReturnOrder(
+    o.order_code || '',
+    Number(o.final_amount || 0),
+    o.is_return ?? undefined
+  ),
+  cashReceived: o.cash_received != null ? Number(o.cash_received) : undefined,
+});
+
 export const apiService = {
   // Fetch orders theo khoảng ngày — dùng cho báo cáo nằm ngoài bootstrap window
   async fetchPosOrdersByDateRange(startDate: string, endDate: string): Promise<{ data: POSOrder[]; error: any }> {
@@ -714,6 +744,24 @@ export const apiService = {
       const page = data || [];
       allRows.push(...page);
       if (page.length === 0) return { data: allRows.map(mapPosOrderRow), error: null };
+      offset += page.length;
+    }
+  },
+
+  // Fetch toàn bộ orders cho customer stats — slim columns (skip `items` JSON nặng), sequential pagination
+  async fetchAllOrdersForCustomerStats(): Promise<POSOrder[]> {
+    const allRows: any[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('pos_orders')
+        .select(CUSTOMER_STAT_COLUMNS)
+        .order('id', { ascending: true })
+        .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+      if (error) return allRows.map(mapCustomerStatRow);
+      const page = data || [];
+      allRows.push(...page);
+      if (page.length === 0) return allRows.map(mapCustomerStatRow);
       offset += page.length;
     }
   },
@@ -1092,4 +1140,99 @@ export const apiService = {
     await postDataRoute('/api/data/config', { key, value });
     return { success: true, key, value };
   },
+
+  async fetchPriceBooks(): Promise<PriceBook[]> {
+    const { data, error } = await supabase
+      .from('price_books')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((pb: any) => ({
+      id: pb.id,
+      name: pb.name,
+      startDate: pb.start_date,
+      endDate: pb.end_date,
+      isActive: pb.is_active,
+      createdAt: pb.created_at,
+    }));
+  },
+
+  async savePriceBook(pb: { id?: string; name: string; startDate?: string; endDate?: string; isActive?: boolean }): Promise<PriceBook> {
+    const payload: any = {
+      name: pb.name,
+      start_date: pb.startDate || null,
+      end_date: pb.endDate || null,
+      is_active: pb.isActive !== false,
+    };
+    if (pb.id) {
+      payload.updated_at = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('price_books')
+        .update(payload)
+        .eq('id', pb.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { id: data.id, name: data.name, startDate: data.start_date, endDate: data.end_date, isActive: data.is_active, createdAt: data.created_at };
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    payload.user_id = user?.id;
+    const { data, error } = await supabase
+      .from('price_books')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw error;
+    return { id: data.id, name: data.name, startDate: data.start_date, endDate: data.end_date, isActive: data.is_active, createdAt: data.created_at };
+  },
+
+  async deletePriceBook(id: string) {
+    const { error } = await supabase.from('price_books').delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  async fetchPriceBookItems(priceBookId: string): Promise<PriceBookItem[]> {
+    const { data, error } = await supabase
+      .from('price_book_items')
+      .select('*')
+      .eq('price_book_id', priceBookId);
+    if (error) throw error;
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      priceBookId: item.price_book_id,
+      productId: item.product_id,
+      salePrice: Number(item.sale_price || 0),
+    }));
+  },
+
+  async savePriceBookItems(priceBookId: string, items: { productId: string; salePrice: number }[]) {
+    const payload = items.map(item => ({
+      price_book_id: priceBookId,
+      product_id: item.productId,
+      sale_price: item.salePrice,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase
+      .from('price_book_items')
+      .upsert(payload, { onConflict: 'price_book_id,product_id' });
+    if (error) throw error;
+    return { success: true };
+  },
 };
+
+export interface PriceBook {
+  id: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface PriceBookItem {
+  id: string;
+  priceBookId: string;
+  productId: string;
+  salePrice: number;
+}

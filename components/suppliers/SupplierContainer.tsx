@@ -17,6 +17,7 @@ interface SupplierContainerProps {
     idToRemove?: string
   ) => Promise<void>;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  isLoading?: boolean;
 }
 
 /**
@@ -27,6 +28,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
   data,
   onUpdateData,
   onUpdateSurgical,
+  isLoading = false,
 }) => {
   const { showToast } = useToast();
   const [showSupplierForm, setShowSupplierForm] = useState(false);
@@ -675,6 +677,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
             onImportFile={handleImportFile}
             onExportSuppliers={handleExportSuppliers}
             onToggleFavorite={handleToggleFavorite}
+            isLoading={isLoading}
             expandedRowContent={
               viewingSupplier ? (
                 <SupplierDetailView

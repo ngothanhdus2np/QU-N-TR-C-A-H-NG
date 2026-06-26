@@ -67,6 +67,7 @@ import {
   normalizePOSPaymentSettings,
 } from '../../constants/defaultData';
 import { uploadImage } from '../../services/marketingStorageService';
+import { apiService } from '../../services/apiService';
 import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../src/lib';
 import { useToast } from '../ui/Toast';
 import type {
@@ -601,6 +602,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     return { ...DEFAULT_TIER_SETTINGS };
   });
   const [tierSaveStatus, setTierSaveStatus] = useState<'idle' | 'saved'>('idle');
+  const [brandSaveStatus, setBrandSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const [kbShortcuts, setKbShortcuts] = useState<POSKeyboardShortcut[]>(() => {
     try {
@@ -899,6 +901,20 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     void saveInventorySettings(nextSettings);
   };
 
+  const handleSaveBrand = async () => {
+    setBrandSaveStatus('saving');
+    try {
+      await apiService.upsertItem('brandProfile', brandProfile);
+      setBrandSaveStatus('saved');
+      showToast('Đã lưu hồ sơ cửa hàng', 'success');
+      setTimeout(() => setBrandSaveStatus('idle'), 2000);
+    } catch (e) {
+      setBrandSaveStatus('error');
+      showToast('Lỗi lưu hồ sơ cửa hàng', 'error');
+      setTimeout(() => setBrandSaveStatus('idle'), 3000);
+    }
+  };
+
   const renderStoreTab = () => (
     <div className="space-y-4">
       <Section
@@ -1020,6 +1036,21 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               placeholder="Lý do Phúc Sang ra đời và giá trị mang lại cho khách hàng."
             />
           </label>
+        </div>
+        <div className="flex justify-end pt-4">
+          <button
+            onClick={handleSaveBrand}
+            disabled={brandSaveStatus === 'saving'}
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-normal text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {brandSaveStatus === 'saving' ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
+            ) : brandSaveStatus === 'saved' ? (
+              <><Check className="h-4 w-4" /> Đã lưu</>
+            ) : (
+              <><Save className="h-4 w-4" /> Lưu hồ sơ cửa hàng</>
+            )}
+          </button>
         </div>
       </Section>
     </div>

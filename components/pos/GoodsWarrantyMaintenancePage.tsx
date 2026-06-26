@@ -151,11 +151,11 @@ export const GoodsWarrantyMaintenancePage: React.FC<GoodsWarrantyMaintenancePage
   return (
     <div className="flex h-full min-h-0 gap-4">
       <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex min-h-[58px] flex-col justify-center border-b border-slate-100 px-4">
+        <div className="px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-900">
             Bảo hành, bảo trì
           </h2>
-          <p className="text-2xs uppercase tracking-wide text-slate-400">Hàng hóa</p>
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">Theo dõi phiếu bảo hành sản phẩm</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="border-b border-slate-100 p-4">

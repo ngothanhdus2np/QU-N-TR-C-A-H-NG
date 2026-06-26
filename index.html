@@ -560,6 +560,214 @@
         color: var(--text-muted) !important;
       }
 
+      /* ─── Theme: TraeWork (Light, token-first) ─── */
+      html[data-theme="traework"] {
+        --primary: #4B3FE3;
+        --primary-hover: #3F31C6;
+        --app-bg: #F5F5F5;
+        --surface: #FFFFFF;
+        --surface-muted: #F5F5F5;
+        --surface-subtle: rgba(115, 115, 115, 0.08);
+        --border: rgba(115, 115, 115, 0.18);
+        --text: #171717;
+        --text-muted: #737373;
+        --focus-ring: rgba(75, 63, 227, 0.12);
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 8px;
+      }
+
+      html[data-theme="traework"] body {
+        background-color: var(--app-bg);
+        color: var(--text);
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 20px;
+        letter-spacing: -0.02em;
+      }
+
+      html[data-theme="traework"] .bg-white {
+        background-color: var(--surface) !important;
+      }
+
+      html[data-theme="traework"] .bg-slate-50,
+      html[data-theme="traework"] .bg-slate-100 {
+        background-color: var(--surface-muted) !important;
+      }
+
+      html[data-theme="traework"] .bg-indigo-50,
+      html[data-theme="traework"] .bg-blue-50,
+      html[data-theme="traework"] .bg-violet-50,
+      html[data-theme="traework"] .bg-emerald-50,
+      html[data-theme="traework"] .bg-teal-50,
+      html[data-theme="traework"] .bg-orange-50,
+      html[data-theme="traework"] .bg-amber-50,
+      html[data-theme="traework"] .bg-rose-50,
+      html[data-theme="traework"] .bg-red-50,
+      html[data-theme="traework"] .bg-green-50 {
+        background-color: var(--surface-subtle) !important;
+      }
+
+      html[data-theme="traework"] .bg-indigo-500,
+      html[data-theme="traework"] .bg-indigo-600,
+      html[data-theme="traework"] .bg-blue-600,
+      html[data-theme="traework"] .bg-emerald-500,
+      html[data-theme="traework"] .bg-emerald-600,
+      html[data-theme="traework"] .bg-teal-500,
+      html[data-theme="traework"] .bg-teal-600,
+      html[data-theme="traework"] .bg-orange-500,
+      html[data-theme="traework"] .bg-orange-600,
+      html[data-theme="traework"] .bg-amber-500,
+      html[data-theme="traework"] .bg-amber-600,
+      html[data-theme="traework"] .bg-rose-500,
+      html[data-theme="traework"] .bg-rose-600,
+      html[data-theme="traework"] .bg-red-500,
+      html[data-theme="traework"] .bg-red-600,
+      html[data-theme="traework"] .hover\:bg-indigo-600:hover,
+      html[data-theme="traework"] .hover\:bg-indigo-700:hover,
+      html[data-theme="traework"] .hover\:bg-black:hover {
+        background-color: var(--primary) !important;
+      }
+
+      html[data-theme="traework"] .hover\:bg-indigo-50:hover,
+      html[data-theme="traework"] .hover\:bg-indigo-50\/50:hover,
+      html[data-theme="traework"] .hover\:bg-slate-50:hover {
+        background-color: var(--surface-subtle) !important;
+      }
+
+      html[data-theme="traework"] .text-slate-900,
+      html[data-theme="traework"] .text-slate-800 {
+        color: #171717 !important;
+      }
+
+      html[data-theme="traework"] .text-slate-700,
+      html[data-theme="traework"] .text-slate-600 {
+        color: #404040 !important;
+      }
+
+      html[data-theme="traework"] .text-slate-500,
+      html[data-theme="traework"] .text-slate-400 {
+        color: var(--text-muted) !important;
+      }
+
+      html[data-theme="traework"] .text-indigo-600,
+      html[data-theme="traework"] .text-indigo-700,
+      html[data-theme="traework"] .text-blue-600,
+      html[data-theme="traework"] .text-violet-600 {
+        color: var(--primary) !important;
+      }
+
+      html[data-theme="traework"] .text-indigo-400,
+      html[data-theme="traework"] .text-indigo-500,
+      html[data-theme="traework"] .text-emerald-500,
+      html[data-theme="traework"] .text-emerald-600,
+      html[data-theme="traework"] .text-teal-500,
+      html[data-theme="traework"] .text-teal-600,
+      html[data-theme="traework"] .text-orange-500,
+      html[data-theme="traework"] .text-orange-600,
+      html[data-theme="traework"] .text-amber-500,
+      html[data-theme="traework"] .text-amber-600,
+      html[data-theme="traework"] .text-rose-500,
+      html[data-theme="traework"] .text-rose-600,
+      html[data-theme="traework"] .text-red-500,
+      html[data-theme="traework"] .text-red-600,
+      html[data-theme="traework"] .text-green-500,
+      html[data-theme="traework"] .text-green-600 {
+        color: #404040 !important;
+      }
+
+      html[data-theme="traework"] .border-slate-100,
+      html[data-theme="traework"] .border-slate-200,
+      html[data-theme="traework"] .border-slate-300,
+      html[data-theme="traework"] .border-indigo-100,
+      html[data-theme="traework"] .border-indigo-200,
+      html[data-theme="traework"] .border-indigo-500,
+      html[data-theme="traework"] .border-indigo-600,
+      html[data-theme="traework"] .border-emerald-100,
+      html[data-theme="traework"] .border-emerald-200,
+      html[data-theme="traework"] .border-teal-100,
+      html[data-theme="traework"] .border-teal-200,
+      html[data-theme="traework"] .border-orange-100,
+      html[data-theme="traework"] .border-orange-200,
+      html[data-theme="traework"] .border-amber-100,
+      html[data-theme="traework"] .border-amber-200,
+      html[data-theme="traework"] .border-rose-100,
+      html[data-theme="traework"] .border-rose-200,
+      html[data-theme="traework"] .border-red-100,
+      html[data-theme="traework"] .border-red-200 {
+        border-color: var(--border) !important;
+      }
+
+      html[data-theme="traework"] .divide-slate-100,
+      html[data-theme="traework"] .divide-slate-200 {
+        border-color: var(--border) !important;
+      }
+
+      html[data-theme="traework"] .shadow-sm,
+      html[data-theme="traework"] .shadow-md,
+      html[data-theme="traework"] .shadow-lg,
+      html[data-theme="traework"] .shadow-xl,
+      html[data-theme="traework"] .shadow-2xl,
+      html[data-theme="traework"] [class*="shadow-["] {
+        box-shadow: 0 1px 0 rgba(115, 115, 115, 0.12) !important;
+      }
+
+      html[data-theme="traework"] .rounded-xl,
+      html[data-theme="traework"] .rounded-2xl,
+      html[data-theme="traework"] .rounded-3xl,
+      html[data-theme="traework"] [class*="rounded-[2"],
+      html[data-theme="traework"] [class*="rounded-[3"] {
+        border-radius: var(--radius-lg) !important;
+      }
+
+      html[data-theme="traework"] .rounded-lg {
+        border-radius: var(--radius-md) !important;
+      }
+
+      html[data-theme="traework"] .focus\:border-indigo-500:focus,
+      html[data-theme="traework"] .focus\:ring-indigo-500:focus {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 3px var(--focus-ring) !important;
+      }
+
+      html[data-theme="traework"] input,
+      html[data-theme="traework"] select,
+      html[data-theme="traework"] textarea {
+        background-color: var(--surface) !important;
+        border-color: var(--border) !important;
+        color: var(--text) !important;
+        border-radius: var(--radius-md) !important;
+      }
+
+      html[data-theme="traework"] input::placeholder,
+      html[data-theme="traework"] textarea::placeholder {
+        color: var(--text-muted) !important;
+      }
+
+      html[data-theme="traework"] .glass-card {
+        background-color: var(--surface);
+        border-color: var(--border);
+        box-shadow: 0 1px 0 rgba(115, 115, 115, 0.12);
+        border-radius: var(--radius-lg);
+      }
+
+      html[data-theme="traework"] .btn-primary {
+        background-color: var(--primary);
+        border-radius: var(--radius-md);
+        box-shadow: none;
+        transform: none !important;
+      }
+
+      html[data-theme="traework"] .btn-primary:hover {
+        background-color: var(--primary-hover);
+        transform: none !important;
+        box-shadow: none !important;
+      }
+
+      html[data-theme="traework"] .font-black {
+        font-weight: 600 !important;
+      }
+
       /* Card Styling */
       .glass-card {
         background: white;
@@ -745,7 +953,7 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="app-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;z-index:9999;gap:20px"><img src="/logo.png" alt="Phúc Sang" style="width:72px;height:72px;border-radius:16px;box-shadow:0 8px 24px rgba(99,102,241,.18)"><div style="font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:700;color:#1e293b;letter-spacing:0">Phúc Sang</div><div style="font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:13px;color:#94a3b8;margin-top:-8px">Đang tải hệ thống...</div><div style="width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite;margin-top:4px"></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div></div>
     <div id="print-section"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

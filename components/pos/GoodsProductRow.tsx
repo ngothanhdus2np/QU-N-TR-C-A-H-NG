@@ -2,6 +2,8 @@ import React from 'react';
 import { Star, Edit2, Image as ImageIcon } from 'lucide-react';
 import { POSProduct } from '../../types';
 
+const lastGroup = (path: string) => path.split('>>').pop()?.trim() ?? path;
+
 export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelect, onToggleFavorite, onEdit, onView, visibleColumns, inGroup }: {
   variant: POSProduct;
   isSelected: boolean;
@@ -35,7 +37,7 @@ export const VariantRow = React.memo(({ variant, isSelected, isFavorite, onSelec
     <td className="px-3 py-2 text-slate-700 text-sm min-w-[150px]">
       <div className="flex items-center gap-2 pl-8"><span>{variant.name}</span></div>
     </td>
-    {visibleColumns.includes('category') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.categoryId || <span className="text-slate-300">—</span>}</td>}
+    {visibleColumns.includes('category') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{(variant.categoryPath || variant.categoryId) ? lastGroup(variant.categoryPath || variant.categoryId || '') : <span className="text-slate-300">—</span>}</td>}
     {visibleColumns.includes('productType') && <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{variant.productType || 'Hàng hóa'}</td>}
     {visibleColumns.includes('salePrice') && <td className="px-3 py-2 text-right text-slate-700 text-[13px] tabular-nums whitespace-nowrap">{(Number(variant.salePrice) || 0).toLocaleString()}đ</td>}
     {visibleColumns.includes('importPrice') && <td className="px-3 py-2 text-right font-normal text-slate-400 text-xs tabular-nums whitespace-nowrap">{(Number(variant.importPrice) || 0).toLocaleString()}đ</td>}
@@ -90,6 +92,13 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
   const totalVariantStock = isParent && variants?.length
     ? variants.reduce((s, v) => s + (v.stock || 0), 0)
     : product.stock;
+  // Giá vốn cha = trung bình giá vốn của các variant có importPrice > 0
+  const avgImportPrice = (() => {
+    if (!isParent || !variants?.length) return Number(product.importPrice) || 0;
+    const priced = variants.filter(v => Number(v.importPrice) > 0);
+    if (priced.length === 0) return 0;
+    return Math.round(priced.reduce((s, v) => s + Number(v.importPrice), 0) / priced.length);
+  })();
   // Ảnh đại diện: cha dùng ảnh đầu của variant đầu tiên có ảnh
   const thumbnailImg = isParent && variants?.length
     ? variants.find(v => v.images?.[0])?.images?.[0]
@@ -142,14 +151,14 @@ export const ProductRow = React.memo(({ product, isSelected, isFavorite, onSelec
           {isParent && <span className="text-2xs font-normal">({product.variantCount})</span>}
         </div>
       </td>
-      {visibleColumns.includes('category') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{product.categoryId || <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('category') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{(() => { const cat = product.categoryPath || product.categoryId || variants?.[0]?.categoryPath || variants?.[0]?.categoryId || ''; return cat ? lastGroup(cat) : <span className="text-slate-300">—</span>; })()}</td>}
       {visibleColumns.includes('productType') && <td className={`px-3 py-2 text-[13px] text-slate-500 whitespace-nowrap ${top}`}>{product.productType || 'Hàng hóa'}</td>}
       {visibleColumns.includes('salePrice') && <td className={`px-3 py-2 text-right text-slate-900 text-[13px] tabular-nums whitespace-nowrap ${top}`}>{(Number(product.salePrice) || 0).toLocaleString()}đ</td>}
-      {visibleColumns.includes('importPrice') && <td className={`px-3 py-2 text-right text-slate-400 text-[13px] tabular-nums whitespace-nowrap ${top}`}>{(Number(product.importPrice) || 0).toLocaleString()}đ</td>}
-      {visibleColumns.includes('brand') && <td className={`px-3 py-2 text-sm text-slate-500 w-[160px] ${top}`}>{product.brand || <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('importPrice') && <td className={`px-3 py-2 text-right text-slate-400 text-[13px] tabular-nums whitespace-nowrap ${top}`}>{avgImportPrice > 0 ? `${avgImportPrice.toLocaleString()}đ` : <span className="text-slate-300">—</span>}</td>}
+      {visibleColumns.includes('brand') && <td className={`px-3 py-2 text-sm text-slate-500 w-[160px] ${top}`}>{(product.brand || variants?.find(v => v.brand)?.brand) || <span className="text-slate-300">—</span>}</td>}
       {visibleColumns.includes('location') && (
         <td className={`px-3 py-2 w-[80px] max-w-[80px] ${top}`}>
-          {product.location ? <span className="text-[13px] text-slate-600 truncate block">{product.location}</span> : <span className="text-slate-300 text-[13px]">—</span>}
+          {(() => { const loc = product.location || variants?.find(v => v.location)?.location; return loc ? <span className="text-[13px] text-slate-600 truncate block">{loc}</span> : <span className="text-slate-300 text-[13px]">—</span>; })()}
         </td>
       )}
       {visibleColumns.includes('stock') && (

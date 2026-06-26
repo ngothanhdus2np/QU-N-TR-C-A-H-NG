@@ -32,6 +32,7 @@ import { exportToExcel, printToPDF } from '../../services/exportService';
 import { usePurchaseFormState } from '../../hooks/usePurchaseFormState';
 import { usePurchaseQuickModals } from '../../hooks/usePurchaseQuickModals';
 import { uploadPurchaseInvoice } from '../../services/invoiceService';
+import { apiService } from '../../services/apiService';
 
 interface PurchaseOrdersContainerProps {
   data: AppData;
@@ -43,6 +44,7 @@ interface PurchaseOrdersContainerProps {
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
   initialView?: 'imports' | 'returns';
+  onRefreshData?: () => Promise<void>;
 }
 
 /**
@@ -55,6 +57,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
   onUpdateSurgical,
   onPushBatch,
   initialView = 'imports',
+  onRefreshData,
 }) => {
   const { showToast } = useToast();
   const activePurchaseView = initialView;
@@ -69,6 +72,10 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     setShowPurchaseForm,
     purchaseItems,
     setPurchaseItems,
+    editingTransactionId,
+    setEditingTransactionId,
+    editingTransactionStatus,
+    setEditingTransactionStatus,
     purchaseSupplier,
     setPurchaseSupplier,
     purchaseNote,
@@ -276,16 +283,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
               .filter((product): product is POSProduct => product !== null)
           : [];
 
-      // Bug F fix: find and delete the supplier debt record created for this purchase
-      const relatedDebt = (data.supplierDebts || []).find(d => d.description.includes(id));
+      // Tìm TẤT CẢ debt liên quan: phiếu nhập thủ công dùng UUID, phiếu KiotViet dùng referenceId (PN001072)
+      const relatedDebts = (data.supplierDebts || []).filter(
+        d =>
+          d.description.includes(id) ||
+          (transaction.referenceId && d.description.includes(transaction.referenceId))
+      );
 
       if (onUpdateSurgical) {
         await onUpdateSurgical([
           { key: 'inventoryTransactions', item: { id }, isDelete: true },
           ...rollbackProducts.map(product => ({ key: 'posProducts' as const, item: product })),
-          ...(relatedDebt
-            ? [{ key: 'supplierDebts' as const, item: { id: relatedDebt.id }, isDelete: true }]
-            : []),
+          ...relatedDebts.map(debt => ({
+            key: 'supplierDebts' as const,
+            item: { id: debt.id },
+            isDelete: true,
+          })),
         ]);
       } else {
         if (rollbackProducts.length > 0) {
@@ -295,10 +308,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             products.map(product => rollbackById.get(product.id) || product)
           );
         }
-        if (relatedDebt) {
+        if (relatedDebts.length > 0) {
+          const debtIdsToDelete = new Set(relatedDebts.map(d => d.id));
           await onUpdateData(
             'supplierDebts',
-            (data.supplierDebts || []).filter(d => d.id !== relatedDebt.id)
+            (data.supplierDebts || []).filter(d => !debtIdsToDelete.has(d.id))
           );
         }
         await onUpdateData(
@@ -448,7 +462,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     const supplier = findSupplier(purchaseSupplier);
     const supplierName = supplier?.name || purchaseSupplier.trim() || 'NCC vãng lai';
     const transaction: InventoryTransaction = {
-      id: generateId(),
+      id: editingTransactionId || generateId(),
       date: new Date().toISOString(),
       type: 'Import',
       staffId: getCurrentStaffId(),
@@ -490,6 +504,23 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       console.error('[PurchaseOrdersContainer] Save draft failed', err);
       showToast('Lưu phiếu tạm thất bại. Vui lòng thử lại.', 'error');
     }
+  };
+
+  const handleOpenOrder = (transaction: InventoryTransaction) => {
+    resetPurchaseForm();
+    setEditingTransactionId(transaction.id);
+    setEditingTransactionStatus(transaction.status || 'completed');
+    setPurchaseSupplier(transaction.supplierId || transaction.supplierName || '');
+    if (transaction.referenceId) setPurchaseReferenceId(transaction.referenceId);
+    const items: PurchaseItem[] = transaction.items.map(item => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      price: (item as typeof item & { price?: number }).price || 0,
+      name: item.name || item.productName || item.productId,
+      discount: (item as typeof item & { discount?: number }).discount || 0,
+    }));
+    setPurchaseItems(items);
+    setShowPurchaseForm(true);
   };
 
   const handleSaveReturnDraft = async () => {
@@ -869,9 +900,33 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       );
       const billDiscountAmount = getPurchaseBillDiscountAmount();
 
+      // Nếu đang edit phiếu đã hoàn thành → xoá trước để rollback stock
+      const oldTransaction = editingTransactionId
+        ? (data.inventoryTransactions || []).find(t => t.id === editingTransactionId) ?? null
+        : null;
+      if (editingTransactionId && editingTransactionStatus === 'completed') {
+        await apiService.deleteInventoryTransactionWithStock(editingTransactionId);
+        // Tìm TẤT CẢ debt cũ: nhập tay dùng UUID, KiotViet dùng referenceId (PN001072)
+        const oldDebts = (data.supplierDebts || []).filter(d =>
+          (d as any).description?.includes(editingTransactionId) ||
+          (oldTransaction?.referenceId && (d as any).description?.includes(oldTransaction.referenceId))
+        );
+        if (oldDebts.length > 0) {
+          if (onUpdateSurgical) {
+            await onUpdateSurgical(
+              oldDebts.map(d => ({ key: 'supplierDebts' as const, item: { id: d.id }, isDelete: true }))
+            );
+          } else {
+            for (const d of oldDebts) {
+              await apiService.deleteItem('supplierDebts', d.id);
+            }
+          }
+        }
+      }
+
       // Create inventory transaction
       const transaction: InventoryTransaction = {
-        id: generateId(),
+        id: editingTransactionId || generateId(),
         date: new Date().toISOString(),
         type: 'Import',
         staffId: getCurrentStaffId(),
@@ -960,23 +1015,26 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           }
         }
       } catch (err) {
+        // Rollback phiếu mới vừa apply
         if (onUpdateSurgical) {
           await onUpdateSurgical([
             { key: 'inventoryTransactions', item: { id: transaction.id }, isDelete: true },
             ...(debtRecord
-              ? [
-                  {
-                    key: 'supplierDebts' as const,
-                    item: { id: debtRecord.id },
-                    isDelete: true,
-                  },
-                ]
+              ? [{ key: 'supplierDebts' as const, item: { id: debtRecord.id }, isDelete: true }]
               : []),
             ...purchaseItems
               .map(item => products.find(product => product.id === item.productId))
               .filter((product): product is POSProduct => Boolean(product))
               .map(product => ({ key: 'posProducts' as const, item: product })),
           ]);
+        }
+        // Khôi phục phiếu cũ nếu đây là thao tác sửa — tránh mất tồn kho
+        if (oldTransaction) {
+          try {
+            await apiService.applyInventoryTransactionWithStock(oldTransaction);
+          } catch (restoreErr) {
+            console.error('[PurchaseOrdersContainer] Không thể khôi phục phiếu cũ sau lỗi:', restoreErr);
+          }
         }
         throw err;
       }
@@ -1308,9 +1366,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
             onCreatePurchase={() => setShowPurchaseForm(true)}
-            onViewDetail={handleViewDetail}
             onDeletePurchase={handleDeletePurchase}
             onExportPurchases={handleExportPurchases}
+            onPrintPurchase={handlePrintPurchase}
+            onOpenOrder={handleOpenOrder}
+            onRefreshData={onRefreshData}
           />
         ) : (
           <PurchaseReturnsPage
@@ -1323,15 +1383,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           />
         )}
       </div>
-      {selectedPurchaseDetail && (
+      {selectedPurchaseDetail && selectedPurchaseDetail.type === 'PurchaseReturn' && (
         <PurchaseOrderDetailModal
           transaction={selectedPurchaseDetail}
           onClose={() => setSelectedPurchaseDetail(null)}
-          onExport={
-            selectedPurchaseDetail.type === 'PurchaseReturn'
-              ? handleExportReturns
-              : handleExportPurchases
-          }
+          onExport={handleExportReturns}
           onPrint={handlePrintPurchase}
         />
       )}

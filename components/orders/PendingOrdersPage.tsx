@@ -17,6 +17,7 @@ import { FilterCheckboxGroup, FilterDateRange, FilterSection } from '../shared';
 
 interface PendingOrdersPageProps {
   orders: POSOrder[];
+  isLoading?: boolean;
 }
 
 const PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
@@ -97,7 +98,7 @@ const PlaceholderFilter: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-export default function PendingOrdersPage({ orders }: PendingOrdersPageProps) {
+export default function PendingOrdersPage({ orders, isLoading = false }: PendingOrdersPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [deliveryDateRange, setDeliveryDateRange] = useState({ start: '', end: '' });
@@ -317,7 +318,8 @@ export default function PendingOrdersPage({ orders }: PendingOrdersPageProps) {
     <div className="flex h-full min-h-0 gap-4">
       <aside className="w-64 shrink-0 h-full min-h-0 rounded-2xl border border-slate-100 bg-white shadow-sm flex flex-col overflow-y-auto overscroll-contain">
         <div className="px-4 py-3 border-b border-slate-100">
-          <span className="text-xs font-semibold text-slate-700">Bộ lọc</span>
+          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Đặt hàng</h2>
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">Quản lý đơn đặt hàng từ khách</p>
         </div>
 
         <FilterSection title="Thời gian">

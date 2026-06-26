@@ -46,11 +46,11 @@ export default function PurchaseInvoicesSidebar({
 
   return (
     <div className="w-64 shrink-0 flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-        <Receipt className="w-4 h-4 text-indigo-500" />
-        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+      <div className="px-4 py-3 border-b border-slate-100">
+        <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
           Hóa đơn đầu vào
-        </span>
+        </h2>
+        <p className="text-xs text-slate-400 mt-1 leading-relaxed">Quản lý hóa đơn mua hàng từ NCC</p>
       </div>
 
       <div className="space-y-2 border-b border-slate-100 px-3 py-3">

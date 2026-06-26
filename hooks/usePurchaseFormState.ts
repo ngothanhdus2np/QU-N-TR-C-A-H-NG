@@ -6,6 +6,8 @@ export function usePurchaseFormState() {
   // Purchase form states
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingTransactionStatus, setEditingTransactionStatus] = useState<string | null>(null);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
   const [purchaseNote, setPurchaseNote] = useState('');
   const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(0);
@@ -35,6 +37,8 @@ export function usePurchaseFormState() {
     setPurchaseReferenceId('');
     setInvoiceStatus('none');
     setInvoiceFile(null);
+    setEditingTransactionId(null);
+    setEditingTransactionStatus(null);
   };
 
   const resetReturnForm = () => {
@@ -77,6 +81,10 @@ export function usePurchaseFormState() {
     setShowPurchaseForm,
     purchaseItems,
     setPurchaseItems,
+    editingTransactionId,
+    setEditingTransactionId,
+    editingTransactionStatus,
+    setEditingTransactionStatus,
     purchaseSupplier,
     setPurchaseSupplier,
     purchaseNote,

@@ -1,4 +1,4 @@
-export type AppThemeId = 'classic' | 'codex' | 'phuc-sang';
+export type AppThemeId = 'classic' | 'codex' | 'phuc-sang' | 'traework';
 
 export interface AppTheme {
   id: AppThemeId;
@@ -29,6 +29,13 @@ export const APP_THEMES: AppTheme[] = [
     description: 'Giao diện thương hiệu Giày Dép Phúc Sang — đỏ chủ đạo, trắng sạch, chuẩn cảm ứng.',
     previewBg: '#E63329',
     previewAccent: '#F8C21C',
+  },
+  {
+    id: 'traework',
+    name: 'TraeWork',
+    description: 'Giao diện Light hiện đại từ TRAE — trung tính, gọn, token-first, không shadow thừa.',
+    previewBg: '#4B3FE3',
+    previewAccent: '#F5F5F5',
   },
 ];
 

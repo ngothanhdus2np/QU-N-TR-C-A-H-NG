@@ -637,12 +637,12 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
             <table className="w-full text-sm">
               <thead className="bg-[#f8fafc] border-b font-semibold text-xs uppercase text-slate-700">
                 <tr>
-                  <th className="p-4 text-left">Mã đơn</th>
-                  <th className="p-4 text-left">Ngày nhập</th>
-                  <th className="p-4 text-left">Nhà cung cấp</th>
-                  <th className="p-4 text-right">Giá trị</th>
-                  <th className="p-4 text-left">Chứng từ</th>
-                  <th className="p-4 text-left">Ghi chú</th>
+                  <th className="px-3 py-2 text-left">Mã đơn</th>
+                  <th className="px-3 py-2 text-left">Ngày nhập</th>
+                  <th className="px-3 py-2 text-left">Nhà cung cấp</th>
+                  <th className="px-3 py-2 text-right">Giá trị</th>
+                  <th className="px-3 py-2 text-left">Chứng từ</th>
+                  <th className="px-3 py-2 text-left">Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
@@ -658,28 +658,28 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                     const badge = badges[status as keyof typeof badges] ?? badges.none;
                     return (
                       <tr key={t.id} className="border-b transition-colors hover:bg-slate-50">
-                        <td className="p-4 font-normal text-indigo-600">
+                        <td className="px-3 py-2 font-normal text-indigo-600">
                           {t.id.slice(0, 8)}
                         </td>
-                        <td className="p-4 text-slate-500">
+                        <td className="px-3 py-2 text-slate-500">
                           {new Date(t.date).toLocaleString('vi-VN')}
                         </td>
-                        <td className="p-4 font-normal">{t.supplierName || '---'}</td>
-                        <td className="p-4 text-right font-normal text-emerald-600">
+                        <td className="px-3 py-2 font-normal">{t.supplierName || '---'}</td>
+                        <td className="px-3 py-2 text-right font-normal text-emerald-600">
                           {(
                             t.totalAmount ||
                             t.items.reduce((s, i) => s + i.quantity * (i.price || 0), 0)
                           ).toLocaleString()}
                           đ
                         </td>
-                        <td className="p-4">
+                        <td className="px-3 py-2">
                           <span
                             className={`px-2 py-0.5 rounded text-2xs font-normal ${badge.cls}`}
                           >
                             {badge.label}
                           </span>
                         </td>
-                        <td className="p-4 text-slate-400 text-xs italic">{t.note}</td>
+                        <td className="px-3 py-2 text-slate-400 text-xs italic">{t.note}</td>
                       </tr>
                     );
                   })}

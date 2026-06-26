@@ -31,6 +31,7 @@ const TABLE_MAP: Record<string, string> = {
   inventoryTransactions: 'inventory_transactions',
   suppliers: 'suppliers',
   supplierDebts: 'supplier_debts',
+  customerDebtHistory: 'customer_debt_history',
 };
 
 const AUDITED_TABLES = new Set([
@@ -237,6 +238,57 @@ async function applyInventoryTransactionFallback(
     }
   }
 
+  // Tự tạo sản phẩm mới nếu chưa có trong pos_products (chỉ khi nhập hàng)
+  if (type === 'Import') {
+    const newProductItems = getItems(payload).filter(item => {
+      const pid = getTextField(item, 'productId');
+      return pid && !productSnapshots[pid];
+    });
+    if (newProductItems.length > 0) {
+      const seen = new Set<string>();
+      const newProducts = newProductItems
+        .filter(item => {
+          const pid = getTextField(item, 'productId');
+          if (seen.has(pid)) return false;
+          seen.add(pid);
+          return true;
+        })
+        .map(item => ({
+          id: getTextField(item, 'productId'),
+          sku: getTextField(item, 'sku'),
+          name: getTextField(item, 'name') || getTextField(item, 'productName'),
+          import_price: getNumberField(item, 'nextImportPrice') || getNumberField(item, 'price'),
+          sale_price: 0,
+          stock: getNumberField(item, 'quantity'),
+          unit: getTextField(item, 'unit') || 'Cái',
+          brand: null,
+          category_id: 'Khác',
+          status: 'Active',
+          is_parent: false,
+          product_type: 'Hàng hóa',
+          direct_sale: true,
+          allow_points: true,
+          weight: 0,
+          customer_orders: 0,
+        }))
+        .filter(p => p.id && p.sku);
+      if (newProducts.length > 0) {
+        const { error: createErr } = await supabase
+          .from('pos_products')
+          .upsert(newProducts, { onConflict: 'id' });
+        if (createErr) {
+          console.error('[data] Lỗi tạo sản phẩm mới khi nhập hàng tay:', createErr.message);
+        } else {
+          console.log(`[data] Đã tạo ${newProducts.length} sản phẩm mới từ phiếu nhập tay`);
+          // Cập nhật snapshot để các bước stock bên dưới biết sản phẩm đã tồn tại
+          for (const p of newProducts) {
+            productSnapshots[p.id] = { stock: 0, import_price: p.import_price };
+          }
+        }
+      }
+    }
+  }
+
   try {
     for (const item of getItems(payload)) {
       const productId = getTextField(item, 'productId');
@@ -308,6 +360,14 @@ async function deleteInventoryTransactionFallback(supabase: SupabaseClient, tran
 
       if (type === 'Import') {
         await adjustProductStock(supabase, productId, -getNumberField(item, 'quantity'));
+        // Khôi phục giá vốn về trước khi nhập nếu transaction lưu lại giá trị này
+        const previousImportPrice = getNumberField(item, 'previousImportPrice');
+        if (previousImportPrice > 0) {
+          await supabase
+            .from('pos_products')
+            .update({ import_price: previousImportPrice })
+            .eq('id', productId);
+        }
       } else if (type === 'PurchaseReturn') {
         await adjustProductStock(supabase, productId, Math.abs(getNumberField(item, 'quantity')));
       } else if (type === 'Sale') {

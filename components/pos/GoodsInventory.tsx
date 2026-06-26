@@ -35,6 +35,7 @@ import { GroupTreePicker } from './GroupTreePicker';
 import { GoodsGridView } from './GoodsGridView';
 import { GoodsGridVariantPopup } from './GoodsGridVariantPopup';
 import { GoodsGridDetailModal } from './GoodsGridDetailModal';
+import { BulkChannelLinkModal } from './BulkChannelLinkModal';
 import {
   getBarcodeLabelTemplateSettings,
   buildCode128Svg,
@@ -384,6 +385,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const openInputModal = (config: Omit<typeof inputModal, 'isOpen'>) =>
     setInputModal({ ...config, isOpen: true });
   const closeInputModal = () => setInputModal(prev => ({ ...prev, isOpen: false }));
+  const [bulkChannelLinkOpen, setBulkChannelLinkOpen] = useState(false);
   const [changeGroupModal, setChangeGroupModal] = useState<{ isOpen: boolean; selectedGroupId: string }>({ isOpen: false, selectedGroupId: '' });
   const [createGroupModal, setCreateGroupModal] = useState<{ isOpen: boolean; name: string; parentId: string }>({ isOpen: false, name: '', parentId: '' });
 
@@ -421,6 +423,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const closeConfirm = () => setConfirmDialog(prev => ({ ...prev, isOpen: false }));
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [searchTags, setSearchTags] = useState<string[]>([]);
 
   // Debounce search
   React.useEffect(() => {
@@ -430,6 +433,23 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
 
   const handleSearchChange = (val: string) => {
     setSearchTerm(val);
+    setCurrentPage(1);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const term = searchTerm.trim();
+      if (term && !searchTags.includes(term)) {
+        setSearchTags(prev => [...prev, term]);
+        setSearchTerm('');
+        setDebouncedSearchTerm('');
+        setCurrentPage(1);
+      }
+    }
+  };
+
+  const handleTagRemove = (tag: string) => {
+    setSearchTags(prev => prev.filter(t => t !== tag));
     setCurrentPage(1);
   };
   const [viewingProduct, setViewingProduct] = useState<POSProduct | null>(null);
@@ -521,6 +541,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   const [filterLocation, setFilterLocation] = useState('');
   const [filterAttrs, setFilterAttrs] = useState<string[]>([]);
   const [filterSupplier, setFilterSupplier] = useState<string[]>([]);
+  const [filterPlatforms, setFilterPlatforms] = useState<string[]>([]);
+  const [platformProductIds, setPlatformProductIds] = useState<Map<string, Set<string>>>(new Map());
+  const [availablePlatforms, setAvailablePlatforms] = useState<{ key: string; label: string }[]>([]);
   const [sortKey, setSortKey] = useState<GoodsSortKey>('sku');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
 
@@ -663,6 +686,26 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showColumnPopup]);
 
+  React.useEffect(() => {
+    fetch('/api/channel-links/platforms', { credentials: 'include' })
+      .then(r => r.json())
+      .then((data: { ok: boolean; shops: { id: string; name: string }[]; websiteIds: string[]; shopeeByShop: Record<string, string[]> }) => {
+        if (!data.ok) return;
+        const idMap = new Map<string, Set<string>>();
+        idMap.set('website', new Set(data.websiteIds));
+        for (const [shopId, ids] of Object.entries(data.shopeeByShop)) {
+          idMap.set(`shopee:${shopId}`, new Set(ids));
+        }
+        setPlatformProductIds(idMap);
+        const platforms: { key: string; label: string }[] = [
+          { key: 'website', label: 'Website PHÚC SANG' },
+          ...data.shops.map(s => ({ key: `shopee:${s.id}`, label: `Shopee — ${s.name}` })),
+        ];
+        setAvailablePlatforms(platforms);
+      })
+      .catch(() => {});
+  }, []);
+
   const {
     lowStockProducts,
     uniqueCategories,
@@ -681,17 +724,48 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     transactions,
     suppliers,
     debouncedSearchTerm,
+    searchTags,
     filterCategories,
     filterBrand,
     filterStock,
     filterLocation,
     filterAttrs,
     filterSupplier,
+    filterPlatforms,
+    platformProductIds,
     sortKey,
     sortDirection,
     currentPage,
     itemsPerPage,
   });
+
+  const pendingOrdersMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const order of orders) {
+      if (order.status !== 'pending') continue;
+      for (const item of order.items) {
+        map.set(item.productId, (map.get(item.productId) || 0) + item.quantity);
+      }
+    }
+    return map;
+  }, [orders]);
+
+  const enrichProduct = React.useCallback((p: POSProduct): POSProduct => {
+    const pending = pendingOrdersMap.get(p.id) || 0;
+    const imported = Number(p.customerOrders || 0);
+    const computed = Math.max(pending, imported);
+    return computed !== imported ? { ...p, customerOrders: computed } : p;
+  }, [pendingOrdersMap]);
+
+  const enrichedCurrentProducts = React.useMemo(
+    () => currentProducts.map(enrichProduct),
+    [currentProducts, enrichProduct]
+  );
+
+  const enrichedViewingProduct = React.useMemo(
+    () => viewingProduct ? enrichProduct(viewingProduct) : null,
+    [viewingProduct, enrichProduct]
+  );
 
   React.useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
@@ -714,6 +788,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   } = useGoodsSelection({
     products,
     filteredProducts,
+    currentProducts,
     onUpdateProducts,
     onUpdateSurgical,
     openConfirm,
@@ -1027,7 +1102,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             <div className="flex-1 min-h-0 overflow-auto overscroll-contain no-scrollbar">
               {viewMode === 'grid' ? (
                 <GoodsGridView
-                  products={currentProducts}
+                  products={enrichedCurrentProducts}
                   viewingProductId={gridDetailProduct?.id}
                   onToggleView={handleGridCardClick}
                   onCardWidthChange={setGridCardWidth}
@@ -1038,7 +1113,8 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                 <GoodsProductTableHeader
                   visibleColumns={visibleColumns}
                   isAllSelected={
-                    selectedIds.length === filteredProducts.length && filteredProducts.length > 0
+                    currentProducts.length > 0 &&
+                    currentProducts.every(p => selectedIds.includes(p.id))
                   }
                   onToggleSelectAll={toggleSelectAll}
                   sortKey={sortKey}
@@ -1046,7 +1122,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   onSort={handleSort}
                 />
                 <GoodsProductTableBody
-                  currentProducts={currentProducts}
+                  currentProducts={enrichedCurrentProducts}
                   variantsByParentId={variantsByParentId}
                   transactions={transactions}
                   orders={orders}
@@ -1054,7 +1130,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   selectedIdSet={selectedIdSet}
                   favoriteIdSet={favoriteIdSet}
                   expandedParents={expandedParents}
-                  viewingProduct={viewingProduct}
+                  viewingProduct={enrichedViewingProduct}
                   activeFormTab={activeFormTab}
                   visibleColumns={visibleColumns}
                   onSelect={toggleSelectOne}
@@ -1137,13 +1213,22 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   await onUpdateSurgical(
                     updates
                       .filter(u => existing.has(u.id))
-                      .map(u => ({ key: 'posProducts', item: { ...existing.get(u.id)!, salePrice: u.salePrice } }))
+                      .map(u => {
+                        const patch: Partial<POSProduct> = {};
+                        if (u.salePrice > 0) patch.salePrice = u.salePrice;
+                        if (u.discountPercent != null && u.discountPercent >= 0) patch.discountPercent = u.discountPercent;
+                        return { key: 'posProducts' as const, item: { ...existing.get(u.id)!, ...patch } };
+                      })
                   );
                 } else {
                   onUpdateProducts(
                     products.map(p => {
                       const u = updates.find(x => x.id === p.id);
-                      return u ? { ...p, salePrice: u.salePrice } : p;
+                      if (!u) return p;
+                      const patch: Partial<POSProduct> = {};
+                      if (u.salePrice > 0) patch.salePrice = u.salePrice;
+                      if (u.discountPercent != null && u.discountPercent >= 0) patch.discountPercent = u.discountPercent;
+                      return { ...p, ...patch };
                     })
                   );
                 }
@@ -1208,6 +1293,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           filteredProducts={filteredProducts}
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
+          searchTags={searchTags}
+          onTagRemove={handleTagRemove}
+          onSearchKeyDown={handleSearchKeyDown}
           onOpenCreate={openCreateProduct}
           fileInputRef={fileInputRef}
           importStatus={importStatus}
@@ -1232,6 +1320,9 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           setFilterStock={setFilterStock}
           filterSupplier={filterSupplier}
           setFilterSupplier={setFilterSupplier}
+          filterPlatforms={filterPlatforms}
+          setFilterPlatforms={(v) => { setFilterPlatforms(v); setCurrentPage(1); }}
+          availablePlatforms={availablePlatforms}
           productGroups={productGroups}
           uniqueCategories={uniqueCategories}
           categoryCounts={categoryCounts}
@@ -1248,11 +1339,14 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           onBulkDelete={handleBulkDelete}
           onBulkStopBusiness={handleBulkStopBusiness}
           onBulkChangeGroup={handleBulkChangeGroup}
+          onBulkChannelLink={() => setBulkChannelLinkOpen(true)}
           onGoToWarranty={handleGoToWarranty}
           onResetPage={() => setCurrentPage(1)}
           onCreateGroup={() => setCreateGroupModal({ isOpen: true, name: '', parentId: '' })}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          sidebarTitle="Danh sách hàng hóa"
+          sidebarDescription="Quản lý sản phẩm và tồn kho"
         >
           {renderMainContent()}
         </GoodsProductsWorkspace>
@@ -1366,6 +1460,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         brands={uniqueBrands}
         applyToVariants={applyToVariants}
         onApplyToVariantsChange={setApplyToVariants}
+        onCreateGroup={() => setCreateGroupModal({ isOpen: true, name: '', parentId: '' })}
       />
       <ApplyToVariantsModal
         isOpen={showApplyVariantsModal}
@@ -1430,7 +1525,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       </div>
     )}
     {createGroupModal.isOpen && (
-      <div className="fixed inset-0 z-dropdown flex items-center justify-center bg-black/40">
+      <div className="fixed inset-0 z-toast flex items-center justify-center bg-black/40">
         <div className="bg-white rounded-2xl shadow-2xl w-[500px]">
           <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
             <h2 className="text-base font-semibold text-slate-900">Tạo nhóm hàng</h2>
@@ -1494,7 +1589,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
 
     {gridDetailProduct && (
       <GoodsGridDetailModal
-        product={gridDetailProduct}
+        product={enrichProduct(gridDetailProduct)}
         siblings={gridDetailSiblings.length > 1 ? gridDetailSiblings : undefined}
         parentName={gridDetailProduct.parentId ? products.find(p => p.id === gridDetailProduct.parentId)?.name : undefined}
         transactions={transactions}
@@ -1573,6 +1668,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         </div>
       </div>
     )}
+    <BulkChannelLinkModal
+      isOpen={bulkChannelLinkOpen}
+      onClose={() => setBulkChannelLinkOpen(false)}
+      selectedIds={selectedIds}
+      products={products}
+      onSuccess={() => showToast('Đã cập nhật liên kết kênh thành công', 'success')}
+    />
     </div>
   );
 };

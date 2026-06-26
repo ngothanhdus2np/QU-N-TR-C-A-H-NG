@@ -1,8 +1,36 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { POSPaymentSettings, POSOrder } from '../types';
 import { QuickCustomerForm } from '../components/pos/POSQuickCustomerModal';
 import { ItemDiscountPopupState } from '../components/pos/POSItemDiscountPopup';
 import { InvoiceTab } from '../components/pos/types';
+
+export interface POSPrintSettings {
+  autoPrintInvoice: boolean;
+  mergeItems: boolean;
+  invoiceCopies: number;
+  autoPrintWarranty: boolean;
+  warrantyMode: 'per_item' | 'per_order';
+  warrantyCopies: number;
+}
+
+const DEFAULT_PRINT_SETTINGS: POSPrintSettings = {
+  autoPrintInvoice: true,
+  mergeItems: false,
+  invoiceCopies: 2,
+  autoPrintWarranty: true,
+  warrantyMode: 'per_item',
+  warrantyCopies: 1,
+};
+
+const POS_PRINT_STORAGE_KEY = 'pos_print_settings';
+
+function loadPrintSettings(): POSPrintSettings {
+  try {
+    const saved = localStorage.getItem(POS_PRINT_STORAGE_KEY);
+    if (saved) return { ...DEFAULT_PRINT_SETTINGS, ...JSON.parse(saved) };
+  } catch {}
+  return { ...DEFAULT_PRINT_SETTINGS };
+}
 
 interface UsePOSStateProps {
   paymentSettings?: POSPaymentSettings;
@@ -84,7 +112,23 @@ export function usePOSState({ paymentSettings, isActive = true }: UsePOSStatePro
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showSelectInvoiceModal, setShowSelectInvoiceModal] = useState(false);
   const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
-  const [isAutoPrintEnabled, setIsAutoPrintEnabled] = useState(true);
+  const [printSettings, setPrintSettingsRaw] = useState<POSPrintSettings>(loadPrintSettings);
+
+  const setPrintSettings = useCallback((updater: POSPrintSettings | ((prev: POSPrintSettings) => POSPrintSettings)) => {
+    setPrintSettingsRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { localStorage.setItem(POS_PRINT_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const isAutoPrintEnabled = printSettings.autoPrintInvoice;
+  const setIsAutoPrintEnabled = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    setPrintSettings(prev => ({
+      ...prev,
+      autoPrintInvoice: typeof v === 'function' ? v(prev.autoPrintInvoice) : v,
+    }));
+  }, [setPrintSettings]);
   const [lastOrder, setLastOrder] = useState<POSOrder | null>(null);
 
   // Search state enhancements
@@ -229,6 +273,8 @@ export function usePOSState({ paymentSettings, isActive = true }: UsePOSStatePro
     setShowSelectInvoiceModal,
     selectedCartIndex,
     setSelectedCartIndex,
+    printSettings,
+    setPrintSettings,
     isAutoPrintEnabled,
     setIsAutoPrintEnabled,
     lastOrder,

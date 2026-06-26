@@ -144,29 +144,36 @@ export function createChannelLinksRouter(
       type SpRow = { id: string; shopee_item_id: string | null; is_published: boolean; shop_id: string | null; cover_image_url: string | null; display_order: number };
       type PosRow = { id: string; name: string; sku: string; parent_id: string | null };
 
-      const variants = (varRes.data ?? []) as VarRow[];
+      const variants = ((varRes.data ?? []) as VarRow[]).filter(v => v.pos_product_id && v.shopee_product_id);
       const allShopeeIds = [...new Set(variants.map(v => v.shopee_product_id))];
       const allPosIds   = [...new Set(variants.map(v => v.pos_product_id))];
 
-      const [spRes, posRes] = await Promise.all([
-        allShopeeIds.length > 0
-          ? supabase.from('shopee_products').select('id, shopee_item_id, is_published, shop_id, cover_image_url, display_order').in('id', allShopeeIds)
-          : Promise.resolve({ data: [], error: null }),
-        allPosIds.length > 0
-          ? supabase.from('pos_products').select('id, name, sku, parent_id').in('id', allPosIds)
-          : Promise.resolve({ data: [], error: null }),
+      // Batch helper: tránh URI too long khi .in() có quá nhiều ID
+      // UUID = 36 ký tự; 100 UUID × 37 ≈ 3700 chars → an toàn dưới 8KB URL limit
+      const BATCH = 100;
+      const inBatches = async <T>(table: string, select: string, ids: string[]): Promise<T[]> => {
+        const results: T[] = [];
+        for (let i = 0; i < ids.length; i += BATCH) {
+          const { data, error } = await supabase.from(table).select(select).in('id', ids.slice(i, i + BATCH));
+          if (error) throw new Error(error.message);
+          if (data) results.push(...(data as T[]));
+        }
+        return results;
+      };
+
+      const [spData, posData] = await Promise.all([
+        allShopeeIds.length > 0 ? inBatches<SpRow>('shopee_products', 'id, shopee_item_id, is_published, shop_id, cover_image_url, display_order', allShopeeIds) : [],
+        allPosIds.length > 0   ? inBatches<PosRow>('pos_products', 'id, name, sku, parent_id', allPosIds) : [],
       ]);
-      if (spRes.error) throw new Error(spRes.error.message);
-      if (posRes.error) throw new Error(posRes.error.message);
 
-      const spMap  = new Map((spRes.data  ?? []).map((p: SpRow)  => [p.id, p]));
-      const posMap = new Map((posRes.data ?? []).map((p: PosRow) => [p.id, p]));
+      const spMap  = new Map(spData.map(p => [p.id, p]));
+      const posMap = new Map(posData.map(p => [p.id, p]));
 
-      const parentIds = [...new Set((posRes.data ?? []).map((p: PosRow) => p.parent_id).filter(Boolean))] as string[];
+      const parentIds = [...new Set(posData.map(p => p.parent_id).filter(Boolean))] as string[];
       let parentMap = new Map<string, PosRow>();
       if (parentIds.length > 0) {
-        const { data: parents } = await supabase.from('pos_products').select('id, name, sku, parent_id').in('id', parentIds);
-        parentMap = new Map((parents ?? []).map((p: PosRow) => [p.id, p]));
+        const parents = await inBatches<PosRow>('pos_products', 'id, name, sku, parent_id', parentIds);
+        parentMap = new Map(parents.map(p => [p.id, p]));
       }
 
       type ShopEntry = {
@@ -229,9 +236,169 @@ export function createChannelLinksRouter(
       ]);
       res.json({
         ok: true,
-        website: (wsRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id),
-        shopee: (spRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id),
+        website: (wsRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id).filter(Boolean),
+        shopee: (spRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id).filter(Boolean),
       });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // GET /api/channel-links/platforms — danh sách nền tảng + tập pos_product_id đã liên kết
+  // Trả về root product IDs (không phải variant IDs) để khớp với filteredProducts trong frontend
+  router.get('/api/channel-links/platforms', requireAuth, async (_req, res) => {
+    try {
+      const [shopsRes, wsRes, spvRes] = await Promise.all([
+        supabase.from('shopee_shops').select('id, name'),
+        supabase.from('store_product_variants').select('pos_product_id').eq('is_published', true),
+        supabase.from('shopee_product_variants').select('pos_product_id, shopee_product_id').eq('is_published', true),
+      ]);
+      const shops: { id: string; name: string }[] = shopsRes.data ?? [];
+      const rawWebsiteIds: string[] = (wsRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id);
+      const spVariants: { pos_product_id: string; shopee_product_id: string }[] = spvRes.data ?? [];
+
+      // Resolve tất cả variant IDs → root parent IDs bằng cách query pos_products
+      const allLinkedIds = [...new Set([...rawWebsiteIds, ...spVariants.map(v => v.pos_product_id)])];
+      const parentIdMap = new Map<string, string>(); // variantId -> rootId
+      if (allLinkedIds.length > 0) {
+        // Batch query theo chunks 500 để tránh URL quá dài
+        for (let i = 0; i < allLinkedIds.length; i += 500) {
+          const chunk = allLinkedIds.slice(i, i + 500);
+          const { data: rows } = await supabase
+            .from('pos_products')
+            .select('id, parent_id')
+            .in('id', chunk);
+          for (const row of rows ?? []) {
+            parentIdMap.set(row.id, row.parent_id ?? row.id);
+          }
+        }
+      }
+
+      // Website: dùng root ID
+      const websiteIds: string[] = [...new Set(rawWebsiteIds.map(id => parentIdMap.get(id) ?? id))];
+
+      // Lấy shopee_products để biết shop_id
+      const spProductIds = [...new Set(spVariants.map(v => v.shopee_product_id))];
+      let shopeeProductShopMap: Map<string, string> = new Map();
+      if (spProductIds.length > 0) {
+        const { data: spData } = await supabase.from('shopee_products').select('id, shop_id').in('id', spProductIds);
+        for (const sp of spData ?? []) {
+          if (sp.shop_id) shopeeProductShopMap.set(sp.id, sp.shop_id);
+        }
+      }
+
+      // Map shopId -> root pos_product_id[]
+      const shopeeByShop: Record<string, string[]> = {};
+      for (const v of spVariants) {
+        const shopId = shopeeProductShopMap.get(v.shopee_product_id);
+        if (!shopId) continue;
+        const rootId = parentIdMap.get(v.pos_product_id) ?? v.pos_product_id;
+        if (!shopeeByShop[shopId]) shopeeByShop[shopId] = [];
+        shopeeByShop[shopId].push(rootId);
+      }
+      // Deduplicate
+      for (const k of Object.keys(shopeeByShop)) {
+        shopeeByShop[k] = [...new Set(shopeeByShop[k])];
+      }
+
+      res.json({ ok: true, shops, websiteIds, shopeeByShop });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // GET /api/channel-links/bulk-status?ids=id1,id2,...
+  // Trả về trạng thái link hiện tại của danh sách root product IDs
+  router.get('/api/channel-links/bulk-status', requireAuth, async (req, res) => {
+    try {
+      const ids = String(req.query.ids ?? '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!ids.length) { res.json({ ok: true, website: false, shopee: {} }); return; }
+
+      // Fetch children for these roots
+      const { data: children } = await supabase
+        .from('pos_products')
+        .select('id, parent_id')
+        .in('parent_id', ids);
+      const childMap = new Map<string, string[]>(); // parentId → [childIds]
+      for (const c of (children ?? [])) {
+        if (!childMap.has(c.parent_id)) childMap.set(c.parent_id, []);
+        childMap.get(c.parent_id)!.push(c.id);
+      }
+
+      // Build all leaf IDs per root
+      const leafsByRoot = new Map<string, string[]>();
+      for (const rootId of ids) {
+        const leaves = childMap.get(rootId);
+        leafsByRoot.set(rootId, leaves && leaves.length > 0 ? leaves : [rootId]);
+      }
+      const allLeafIds = [...leafsByRoot.values()].flat();
+
+      // Check website links
+      const { data: wsLinks } = await supabase
+        .from('store_product_variants')
+        .select('pos_product_id')
+        .in('pos_product_id', allLeafIds);
+      const wsLinkedLeafs = new Set((wsLinks ?? []).map((r: { pos_product_id: string }) => r.pos_product_id));
+      // Root is linked if ALL its leaves are linked
+      const websiteLinkedRoots = ids.filter(rootId =>
+        leafsByRoot.get(rootId)!.every(leafId => wsLinkedLeafs.has(leafId))
+      );
+      const websiteAll = websiteLinkedRoots.length === ids.length;
+
+      // Check shopee links per shop
+      const { data: shopsData } = await supabase.from('shopee_shops').select('id').order('display_order');
+      const shopIds = (shopsData ?? []).map((s: { id: string }) => s.id);
+
+      const { data: spvLinks } = await supabase
+        .from('shopee_product_variants')
+        .select('pos_product_id, shopee_product_id')
+        .in('pos_product_id', allLeafIds);
+
+      const spvRows = spvLinks ?? [];
+      const shopeeProductIds = [...new Set(spvRows.map((r: { shopee_product_id: string }) => r.shopee_product_id))];
+
+      // Map shopee_product_id → shop_id
+      const shopeeByProduct = new Map<string, string>();
+      if (shopeeProductIds.length > 0) {
+        const { data: spRows } = await supabase
+          .from('shopee_products')
+          .select('id, shop_id')
+          .in('id', shopeeProductIds);
+        for (const sp of (spRows ?? [])) shopeeByProduct.set(sp.id, sp.shop_id);
+      }
+
+      // For each shop: which leaf IDs are linked?
+      const shopeeResult: Record<string, boolean> = {};
+      for (const shopId of shopIds) {
+        const linkedLeafs = new Set(
+          spvRows
+            .filter((r: { shopee_product_id: string }) => shopeeByProduct.get(r.shopee_product_id) === shopId)
+            .map((r: { pos_product_id: string }) => r.pos_product_id)
+        );
+        const linkedRoots = ids.filter(rootId =>
+          leafsByRoot.get(rootId)!.every(leafId => linkedLeafs.has(leafId))
+        );
+        shopeeResult[shopId] = linkedRoots.length === ids.length;
+      }
+
+      res.json({ ok: true, website: websiteAll, shopee: shopeeResult });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // GET /api/channel-links/shopee-shops — danh sách tất cả shops (cho modal bulk)
+  router.get('/api/channel-links/shopee-shops', requireAuth, async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('shopee_shops')
+        .select('id, name')
+        .order('display_order');
+      if (error) throw new Error(error.message);
+      res.json({ ok: true, shops: data ?? [] });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ ok: false, error: msg });
@@ -359,10 +526,9 @@ export function createChannelLinksRouter(
         return;
       }
 
-      // Website publishing is content management, not a generic catalog toggle.
-      // Enforce this on the server so hiding the frontend control is never the
-      // only protection. Legacy owner/manager accounts retain admin access.
-      if (channel === 'website') {
+      // Website publishing requires role check in production.
+      // Dev mode bypasses this (same as requireAuth) since there's no real Supabase session.
+      if (channel === 'website' && process.env.NODE_ENV === 'production') {
         const authHeader = req.headers.authorization;
         const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         if (!jwt) {
@@ -475,6 +641,135 @@ export function createChannelLinksRouter(
               if (e1) throw new Error(`[shopee_product_variants] delete: ${e1.message}`);
               const { error: e2 } = await supabase.from('shopee_product_variants').insert({ shopee_product_id: shopeeProductId, pos_product_id: product.id, sku: product.sku, is_published: true });
               if (e2) throw new Error(`[shopee_product_variants] insert: ${e2.message}`);
+            }
+          }
+        }
+      }
+
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // POST /api/channel-links/bulk-toggle
+  // Body: { operations: [{channel, action, shopId?}], posProductIds: string[] }
+  router.post('/api/channel-links/bulk-toggle', requireAuth, async (req, res) => {
+    try {
+      const { operations, posProductIds } = req.body as {
+        operations: Array<{ channel: 'website' | 'shopee'; action: 'link' | 'unlink'; shopId?: string }>;
+        posProductIds: string[];
+      };
+
+      if (!operations?.length || !posProductIds?.length) {
+        res.status(400).json({ ok: false, error: 'Thiếu tham số operations hoặc posProductIds' });
+        return;
+      }
+
+      // Fetch root products
+      const { data: rootProducts, error: rootErr } = await supabase
+        .from('pos_products')
+        .select('id, name, sku, parent_id')
+        .in('id', posProductIds);
+      if (rootErr) throw new Error(rootErr.message);
+      if (!rootProducts?.length) { res.json({ ok: true }); return; }
+
+      // Fetch all active children for these roots
+      const { data: allChildren } = await supabase
+        .from('pos_products')
+        .select('id, name, sku, parent_id')
+        .in('parent_id', rootProducts.map(p => p.id))
+        .eq('status', 'Active');
+
+      const childrenByParent = new Map<string, Array<{ id: string; sku: string }>>();
+      for (const child of (allChildren ?? [])) {
+        if (!childrenByParent.has(child.parent_id)) childrenByParent.set(child.parent_id, []);
+        childrenByParent.get(child.parent_id)!.push({ id: child.id, sku: child.sku });
+      }
+
+      // Build groups: each root with its leaves
+      type Group = { root: { id: string; name: string; sku: string }; leaves: Array<{ id: string; sku: string }> };
+      const groups: Group[] = rootProducts.map(root => {
+        const children = childrenByParent.get(root.id) ?? [];
+        return {
+          root: { id: root.id, name: root.name, sku: root.sku },
+          leaves: children.length > 0 ? children : [{ id: root.id, sku: root.sku }],
+        };
+      });
+
+      const allLeafIds = groups.flatMap(g => g.leaves.map(l => l.id));
+
+      for (const op of operations) {
+        if (op.channel === 'website') {
+          if (op.action === 'unlink') {
+            const { error } = await supabase
+              .from('store_product_variants')
+              .delete()
+              .in('pos_product_id', allLeafIds);
+            if (error) throw new Error(`[store_product_variants] bulk delete: ${error.message}`);
+          } else {
+            for (const { root, leaves } of groups) {
+              const storeProductId = await ensureStoreProduct(root.id, root.name, root.sku);
+              const { error: e1 } = await supabase
+                .from('store_product_variants')
+                .delete()
+                .in('pos_product_id', leaves.map(l => l.id));
+              if (e1) throw new Error(`[store_product_variants] delete: ${e1.message}`);
+              const { error: e2 } = await supabase
+                .from('store_product_variants')
+                .insert(leaves.map(l => ({ store_product_id: storeProductId, pos_product_id: l.id, sku: l.sku, is_published: true })));
+              if (e2) throw new Error(`[store_product_variants] insert: ${e2.message}`);
+            }
+          }
+        } else {
+          // shopee
+          if (op.action === 'unlink') {
+            if (op.shopId) {
+              const { data: variants } = await supabase
+                .from('shopee_product_variants')
+                .select('shopee_product_id')
+                .in('pos_product_id', allLeafIds);
+              const spIds = [...new Set((variants ?? []).map((v: { shopee_product_id: string }) => v.shopee_product_id))];
+              if (spIds.length > 0) {
+                const { data: spForShop } = await supabase
+                  .from('shopee_products')
+                  .select('id')
+                  .in('id', spIds)
+                  .eq('shop_id', op.shopId);
+                const idsToRemove = (spForShop ?? []).map((s: { id: string }) => s.id);
+                if (idsToRemove.length > 0) {
+                  const { error } = await supabase
+                    .from('shopee_product_variants')
+                    .delete()
+                    .in('pos_product_id', allLeafIds)
+                    .in('shopee_product_id', idsToRemove);
+                  if (error) throw new Error(`[shopee_product_variants] bulk delete by shop: ${error.message}`);
+                }
+              }
+            } else {
+              const { error } = await supabase
+                .from('shopee_product_variants')
+                .delete()
+                .in('pos_product_id', allLeafIds);
+              if (error) throw new Error(`[shopee_product_variants] bulk delete: ${error.message}`);
+            }
+          } else {
+            for (const { root, leaves } of groups) {
+              const shopeeProductId = await ensureShopeeProduct(root.id, root.name, undefined, op.shopId);
+              const { data: existing } = await supabase
+                .from('shopee_product_variants')
+                .select('pos_product_id')
+                .in('pos_product_id', leaves.map(l => l.id))
+                .eq('shopee_product_id', shopeeProductId);
+              const existingIds = new Set((existing ?? []).map((e: { pos_product_id: string }) => e.pos_product_id));
+              const toInsert = leaves.filter(l => !existingIds.has(l.id));
+              if (toInsert.length > 0) {
+                const { error } = await supabase
+                  .from('shopee_product_variants')
+                  .insert(toInsert.map(l => ({ shopee_product_id: shopeeProductId, pos_product_id: l.id, sku: l.sku, is_published: true })));
+                if (error) throw new Error(`[shopee_product_variants] bulk insert shopee: ${error.message}`);
+              }
             }
           }
         }

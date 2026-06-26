@@ -80,6 +80,7 @@ function mapProductRow(p: any): POSProduct {
     weightUnit: p.weight_unit || p.weightUnit,
     location: p.location,
     relatedSku: p.related_sku || p.relatedSku || null,
+    discountPercent: n(p.discount_percent || p.discountPercent),
     customerOrders: n(p.customer_orders || p.customerOrders),
     directSale: p.direct_sale !== false,
     productType: p.product_type || p.productType || 'Hàng hóa',

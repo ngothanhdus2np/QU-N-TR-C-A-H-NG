@@ -303,6 +303,7 @@ const initialState: AppState = {
   diagEndDate: localTodayStr,
   syncErrors: null,
   lastSyncTime: null,
+  isDataReady: false,
 };
 
 export function useAppData() {
@@ -483,7 +484,16 @@ export function useAppData() {
       }
 
       if (results.brandProfile) {
-        const mappedBrand = dataMapper.mapBrandProfile(results.brandProfile);
+        // Nếu Supabase trả null cho phone/address, ưu tiên dữ liệu từ IndexedDB
+        // (IndexedDB được cập nhật mỗi khi user gõ qua debounce auto-save,
+        //  khác với localStorage chỉ được ghi khi Supabase trả về data).
+        const cachedBrandForMerge = await appDataCache.getBrandProfile();
+        const serverRaw = {
+          ...results.brandProfile,
+          phone: results.brandProfile.phone ?? cachedBrandForMerge?.phone,
+          address: results.brandProfile.address ?? cachedBrandForMerge?.address,
+        };
+        const mappedBrand = dataMapper.mapBrandProfile(serverRaw);
         brandFromServerRef.current = true;
         dispatch({ type: 'SET_BRAND_PROFILE', payload: mappedBrand });
         localStorage.setItem('cfo_brain_brand_profile', JSON.stringify(mappedBrand));
@@ -1151,5 +1161,6 @@ export function useAppData() {
     offlineOrderPendingCount,
     drainQueue,
     isDraining,
+    isDataReady: state.isDataReady,
   };
 }

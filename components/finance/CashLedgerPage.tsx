@@ -748,6 +748,7 @@ const CashLedgerPage: React.FC<Props> = ({ data, onAddExpense, onAddPosOrder }) 
       sidebar={sidebar}
       toolbar={toolbar}
       sidebarTitle="Sổ quỹ"
+      sidebarDescription="Quản lý thu chi và dòng tiền"
       hasActiveFilters={hasActiveFilters}
       onClearFilters={clearFilters}
       pagination={

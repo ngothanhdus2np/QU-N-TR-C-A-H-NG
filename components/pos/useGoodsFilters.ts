@@ -1,6 +1,7 @@
 import React from 'react';
 import { POSProduct, InventoryTransaction, Supplier } from '../../types';
 import { useProductSearchIndex } from './useProductSearchIndex';
+import { fuzzyMatch } from '../../src/lib/fuzzySearch';
 
 export type GoodsSortKey = 'sku' | 'salePrice' | 'importPrice' | 'stock';
 export type GoodsSortDirection = 'desc' | 'asc';
@@ -10,12 +11,15 @@ interface UseGoodsFiltersParams {
   transactions: InventoryTransaction[];
   suppliers: Supplier[];
   debouncedSearchTerm: string;
+  searchTags: string[];
   filterCategories: string[];
   filterBrand: string;
   filterStock: 'all' | 'in_stock' | 'out_of_stock' | 'low_stock';
   filterLocation: string;
   filterAttrs: string[];
   filterSupplier: string[];
+  filterPlatforms: string[];
+  platformProductIds: Map<string, Set<string>>;
   sortKey: GoodsSortKey;
   sortDirection: GoodsSortDirection;
   currentPage: number;
@@ -78,12 +82,15 @@ export const useGoodsFilters = ({
   transactions,
   suppliers,
   debouncedSearchTerm,
+  searchTags,
   filterCategories,
   filterBrand,
   filterStock,
   filterLocation,
   filterAttrs,
   filterSupplier,
+  filterPlatforms,
+  platformProductIds,
   sortKey,
   sortDirection,
   currentPage,
@@ -250,6 +257,18 @@ export const useGoodsFilters = ({
     return map;
   }, [products]);
 
+  // Map parentId → Set<childId> — dùng để filter platform khi platform set chứa variant IDs
+  const parentToChildIds = React.useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const p of products) {
+      if (p.parentId) {
+        if (!map.has(p.parentId)) map.set(p.parentId, new Set());
+        map.get(p.parentId)!.add(p.id);
+      }
+    }
+    return map;
+  }, [products]);
+
   // Map id → product cho tra cứu nhanh parent
   const productById = React.useMemo(() => {
     const map = new Map<string, POSProduct>();
@@ -258,28 +277,19 @@ export const useGoodsFilters = ({
   }, [products]);
 
   const filteredProductCandidates = React.useMemo(() => {
-    // Use search index for fast search (10x faster than linear scan)
-    let searchResults: POSProduct[];
-    if (debouncedSearchTerm) {
-      const lowerSearch = debouncedSearchTerm.toLowerCase();
-      const raw = searchProducts(debouncedSearchTerm);
+    // Hàm tìm kiếm theo 1 term, trả về resultSet
+    const runSearch = (term: string): Map<string, POSProduct> => {
+      const raw = searchProducts(term);
       const resultSet = new Map<string, POSProduct>();
-
-      // Thêm tất cả kết quả từ index
       for (const p of raw) resultSet.set(p.id, p);
-
-      // Nếu child match → include parent của nó
       for (const p of raw) {
         if (p.parentId) {
           const parent = productById.get(p.parentId);
           if (parent) resultSet.set(parent.id, parent);
         }
       }
-
-      // Full SKU scan với includes() — tìm parent kể cả khi parent.sku='' trong cache cũ
       for (const p of products) {
-        const skuMatch = (p.sku?.toLowerCase() || '').includes(lowerSearch);
-        if (!skuMatch) continue;
+        if (!fuzzyMatch(p.sku || '', term)) continue;
         if (p.parentId) {
           const parent = productById.get(p.parentId);
           if (parent) resultSet.set(parent.id, parent);
@@ -287,8 +297,18 @@ export const useGoodsFilters = ({
           resultSet.set(p.id, p);
         }
       }
+      return resultSet;
+    };
 
-      searchResults = Array.from(resultSet.values());
+    let searchResults: POSProduct[];
+    const allTerms = [...searchTags, ...(debouncedSearchTerm ? [debouncedSearchTerm] : [])];
+    if (allTerms.length > 0) {
+      // Union kết quả của tất cả các term
+      const unionSet = new Map<string, POSProduct>();
+      for (const term of allTerms) {
+        for (const [id, p] of runSearch(term)) unionSet.set(id, p);
+      }
+      searchResults = Array.from(unionSet.values());
     } else {
       searchResults = products;
     }
@@ -328,11 +348,30 @@ export const useGoodsFilters = ({
           // Variant chưa có phiếu nhập riêng → kiểm tra qua parent
           return productSupplierMap.get(p.parentId)?.has(sel) ?? parentProductSupplierMap.get(p.parentId)?.has(sel) ?? false;
         });
-      return matchCategory && matchBrand && matchStock && matchLocation && matchAttr && matchSupplier;
+      const matchPlatform =
+        filterPlatforms.length === 0 ||
+        filterPlatforms.some(key => {
+          const idSet = platformProductIds.get(key);
+          if (!idSet) return false;
+          // Self match (standalone product or variant linked directly)
+          if (idSet.has(p.id)) return true;
+          // Variant product: check parent
+          if (p.parentId && idSet.has(p.parentId)) return true;
+          // Parent product: check if any child variant is linked (platform sets contain variant IDs)
+          const children = parentToChildIds.get(p.id);
+          if (children) {
+            for (const childId of children) {
+              if (idSet.has(childId)) return true;
+            }
+          }
+          return false;
+        });
+      return matchCategory && matchBrand && matchStock && matchLocation && matchAttr && matchSupplier && matchPlatform;
     });
   }, [
     searchProducts,
     debouncedSearchTerm,
+    searchTags,
     products,
     productById,
     filterCategories,
@@ -344,6 +383,9 @@ export const useGoodsFilters = ({
     productSupplierMap,
     parentProductSupplierMap,
     parentTotalStock,
+    filterPlatforms,
+    platformProductIds,
+    parentToChildIds,
   ]);
 
 

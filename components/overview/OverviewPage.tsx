@@ -21,9 +21,11 @@ import {
 import type { AppData, POSOrder } from '../../types';
 import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import { usePosOrders } from '../../hooks/usePosOrders';
+import { CardSkeleton, Skeleton } from '../shared/ui/Skeleton';
 
 interface Props {
   data: AppData;
+  isLoading?: boolean;
 }
 
 const fmt = (n: number) =>
@@ -96,7 +98,7 @@ const REVENUE_PERIODS: { id: RevenuePeriod; label: string; title: string }[] = [
 const WEEKDAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}h`);
 
-const OverviewPage: React.FC<Props> = ({ data }) => {
+const OverviewPage: React.FC<Props> = ({ data, isLoading = false }) => {
   const [chartTab, setChartTab] = useState<ChartTab>('day');
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>('thisMonth');
   const [productTopMetric, setProductTopMetric] = useState<ProductTopMetric>('quantity');
@@ -402,75 +404,86 @@ const OverviewPage: React.FC<Props> = ({ data }) => {
         <div className="bg-white rounded-xl border border-slate-100 p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-4">Kết quả bán hàng hôm nay</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-            {/* Doanh thu */}
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                <ShoppingCart className="w-4.5 h-4.5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Doanh thu</p>
-                <p className="text-lg font-bold text-slate-800">{fmtFull(todayRevenue)}</p>
-                <p className="text-xs text-slate-400">{todayOrders.length} đơn</p>
-              </div>
-            </div>
-            {/* Trả hàng */}
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
-                <RotateCcw className="w-4.5 h-4.5 text-orange-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Trả hàng</p>
-                <p className="text-lg font-bold text-slate-800">{fmtFull(todayReturnAmt)}</p>
-                <p className="text-xs text-slate-400">{todayReturns.length} đơn</p>
-              </div>
-            </div>
-            {/* Doanh thu thuần */}
-            <div className="flex items-start gap-3">
-              <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  netChangePct !== null && netChangePct < 0 ? 'bg-red-50' : 'bg-emerald-50'
-                }`}
-              >
-                {netChangePct !== null && netChangePct < 0 ? (
-                  <TrendingDown className="w-4.5 h-4.5 text-red-400" />
-                ) : (
-                  <TrendingUp className="w-4.5 h-4.5 text-emerald-500" />
-                )}
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Doanh thu thuần</p>
-                <p className="text-lg font-bold text-slate-800">{fmtFull(todayNet)}</p>
-                {netChangePct !== null && (
-                  <p
-                    className={`text-xs font-medium ${
-                      netChangePct < 0 ? 'text-red-500' : 'text-emerald-600'
+            {isLoading ? (
+              <>
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+              </>
+            ) : (
+              <>
+                {/* Doanh thu */}
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <ShoppingCart className="w-4.5 h-4.5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Doanh thu</p>
+                    <p className="text-lg font-bold text-slate-800">{fmtFull(todayRevenue)}</p>
+                    <p className="text-xs text-slate-400">{todayOrders.length} đơn</p>
+                  </div>
+                </div>
+                {/* Trả hàng */}
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                    <RotateCcw className="w-4.5 h-4.5 text-orange-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Trả hàng</p>
+                    <p className="text-lg font-bold text-slate-800">{fmtFull(todayReturnAmt)}</p>
+                    <p className="text-xs text-slate-400">{todayReturns.length} đơn</p>
+                  </div>
+                </div>
+                {/* Doanh thu thuần */}
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      netChangePct !== null && netChangePct < 0 ? 'bg-red-50' : 'bg-emerald-50'
                     }`}
                   >
-                    {netChangePct > 0 ? '+' : ''}
-                    {fmtPct(netChangePct)}% so với cùng kỳ tháng trước
-                  </p>
-                )}
-              </div>
-            </div>
-            {/* Lợi nhuận */}
-            <div className="flex items-start gap-3">
-              <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  todayProfit < 0 ? 'bg-red-50' : 'bg-violet-50'
-                }`}
-              >
-                <BadgeDollarSign
-                  className={`w-4.5 h-4.5 ${todayProfit < 0 ? 'text-red-400' : 'text-violet-500'}`}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Lợi nhuận</p>
-                <p className="text-lg font-bold text-slate-800">{fmtFull(todayProfit)}</p>
-                <p className="text-xs text-slate-400">
-                  {todayMargin !== null ? `${todayMargin.toFixed(1)}% biên gộp` : 'Sau giá vốn'}
-                </p>
-              </div>
-            </div>
+                    {netChangePct !== null && netChangePct < 0 ? (
+                      <TrendingDown className="w-4.5 h-4.5 text-red-400" />
+                    ) : (
+                      <TrendingUp className="w-4.5 h-4.5 text-emerald-500" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Doanh thu thuần</p>
+                    <p className="text-lg font-bold text-slate-800">{fmtFull(todayNet)}</p>
+                    {netChangePct !== null && (
+                      <p
+                        className={`text-xs font-medium ${
+                          netChangePct < 0 ? 'text-red-500' : 'text-emerald-600'
+                        }`}
+                      >
+                        {netChangePct > 0 ? '+' : ''}
+                        {fmtPct(netChangePct)}% so với cùng kỳ tháng trước
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* Lợi nhuận */}
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      todayProfit < 0 ? 'bg-red-50' : 'bg-violet-50'
+                    }`}
+                  >
+                    <BadgeDollarSign
+                      className={`w-4.5 h-4.5 ${todayProfit < 0 ? 'text-red-400' : 'text-violet-500'}`}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Lợi nhuận</p>
+                    <p className="text-lg font-bold text-slate-800">{fmtFull(todayProfit)}</p>
+                    <p className="text-xs text-slate-400">
+                      {todayMargin !== null ? `${todayMargin.toFixed(1)}% biên gộp` : 'Sau giá vốn'}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

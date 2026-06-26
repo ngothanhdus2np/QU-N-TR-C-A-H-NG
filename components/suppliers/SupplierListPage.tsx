@@ -28,6 +28,7 @@ interface SupplierListPageProps {
   onImportFile: () => void;
   onExportSuppliers: (suppliers: Supplier[]) => void;
   onToggleFavorite: (supplier: Supplier) => Promise<void>;
+  isLoading?: boolean;
 }
 
 type SortKey = 'code' | 'name' | 'totalPurchase' | 'currentDebt';
@@ -44,6 +45,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   onImportFile,
   onExportSuppliers,
   onToggleFavorite,
+  isLoading = false,
 }) => {
   const { showToast } = useToast();
 
@@ -525,6 +527,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       <div className="h-full">
         <ListPageLayout
           sidebarTitle="Nhà cung cấp"
+          sidebarDescription="Quản lý nhà cung cấp và công nợ"
           sidebar={sidebar}
           toolbar={toolbar}
           pagination={pagination}
@@ -538,6 +541,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
             sortKey={sortKey}
             sortDirection={sortDirection}
             onSort={handleSort}
+            isLoading={isLoading}
             onRowClick={supplier => onViewDetail(supplier)}
             expandedRowId={viewingSupplier?.id}
             expandedRowContent={expandedRowContent}

@@ -7,6 +7,7 @@ interface ListPageLayoutProps {
   toolbar: React.ReactNode;
   pagination?: React.ReactNode;
   sidebarTitle?: string;
+  sidebarDescription?: string;
   onClearFilters?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -24,6 +25,7 @@ export const ListPageLayout: React.FC<ListPageLayoutProps> = ({
   toolbar,
   pagination,
   sidebarTitle = 'Bộ lọc',
+  sidebarDescription,
   onClearFilters,
   hasActiveFilters = false,
 }) => {
@@ -43,26 +45,35 @@ export const ListPageLayout: React.FC<ListPageLayoutProps> = ({
       ) : (
         <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
           {/* Sidebar Header */}
-          <div className="px-4 min-h-[60px] border-b border-slate-100 shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
-              {sidebarTitle}
-            </h2>
-            <div className="flex items-center gap-2">
-              {hasActiveFilters && onClearFilters && (
+          <div className="px-4 py-3 border-b border-slate-100 shrink-0">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">
+                  {sidebarTitle}
+                </h2>
+                {sidebarDescription && (
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    {sidebarDescription}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                {hasActiveFilters && onClearFilters && (
+                  <button
+                    onClick={onClearFilters}
+                    className="text-2xs text-indigo-600 font-normal hover:underline"
+                  >
+                    Xóa lọc
+                  </button>
+                )}
                 <button
-                  onClick={onClearFilters}
-                  className="text-2xs text-indigo-600 font-normal hover:underline"
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  className="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 flex items-center justify-center transition-colors"
+                  title="Ẩn bộ lọc"
                 >
-                  Xóa lọc
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
-              )}
-              <button
-                onClick={() => setIsSidebarCollapsed(true)}
-                className="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 flex items-center justify-center transition-colors"
-                title="Ẩn bộ lọc"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
+              </div>
             </div>
           </div>
 

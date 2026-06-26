@@ -152,6 +152,7 @@ interface POSCartProps {
   onUpdateSalesperson?: (productId: string, employeeId: string) => void;
   onDiscountClick: (productId: string, price: number, discount: number, rect: DOMRect) => void;
   onOrderNoteChange: (note: string) => void;
+  isDataReady?: boolean;
 }
 
 const POSCart: React.FC<POSCartProps> = ({
@@ -176,6 +177,7 @@ const POSCart: React.FC<POSCartProps> = ({
   onUpdateSalesperson,
   onDiscountClick,
   onOrderNoteChange,
+  isDataReady = true,
 }) => {
   const [exchangeSearch, setExchangeSearch] = useState('');
   const exchangeInputRef = useRef<HTMLInputElement>(null);
@@ -369,6 +371,7 @@ const POSCart: React.FC<POSCartProps> = ({
       productGroups={productGroups}
       addToCart={addToCart}
       searchRef={consultantSearchRef}
+      isDataReady={isDataReady}
     />
   </div>
   );
