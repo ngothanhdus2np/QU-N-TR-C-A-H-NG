@@ -62,15 +62,32 @@ export function createChannelLinksRouter(
     return data.id;
   }
 
-  async function ensureShopeeProduct(productId: string, productName: string, parentId?: string): Promise<string> {
+  async function ensureShopeeProduct(productId: string, productName: string, parentId?: string, shopId?: string): Promise<string> {
     const lookupId = parentId ?? productId;
-    const { data: byParent } = await supabase
+
+    // Lấy tất cả shopee_product_id đang link với product
+    const { data: linkedVariants } = await supabase
       .from('shopee_product_variants')
       .select('shopee_product_id')
-      .eq('pos_product_id', lookupId)
-      .limit(1)
-      .maybeSingle();
-    if (byParent?.shopee_product_id) return byParent.shopee_product_id;
+      .eq('pos_product_id', lookupId);
+    const linkedIds = [...new Set((linkedVariants ?? []).map((v: { shopee_product_id: string }) => v.shopee_product_id))];
+
+    if (linkedIds.length > 0) {
+      if (shopId) {
+        // Tìm shopee_product thuộc đúng shop này
+        const { data: match } = await supabase
+          .from('shopee_products')
+          .select('id')
+          .in('id', linkedIds)
+          .eq('shop_id', shopId)
+          .limit(1)
+          .maybeSingle();
+        if (match?.id) return match.id;
+      } else {
+        // Fallback: trả về bất kỳ product nào đã link
+        return linkedIds[0];
+      }
+    }
 
     if (parentId) {
       const { data: siblings } = await supabase
@@ -80,19 +97,31 @@ export function createChannelLinksRouter(
         .neq('id', productId)
         .limit(50);
       if (siblings && siblings.length > 0) {
-        const { data: bySibling } = await supabase
+        const { data: siblingVariants } = await supabase
           .from('shopee_product_variants')
           .select('shopee_product_id')
-          .in('pos_product_id', siblings.map((s: { id: string }) => s.id))
-          .limit(1)
-          .maybeSingle();
-        if (bySibling?.shopee_product_id) return bySibling.shopee_product_id;
+          .in('pos_product_id', siblings.map((s: { id: string }) => s.id));
+        const siblingIds = [...new Set((siblingVariants ?? []).map((v: { shopee_product_id: string }) => v.shopee_product_id))];
+        if (siblingIds.length > 0) {
+          if (shopId) {
+            const { data: match } = await supabase
+              .from('shopee_products')
+              .select('id')
+              .in('id', siblingIds)
+              .eq('shop_id', shopId)
+              .limit(1)
+              .maybeSingle();
+            if (match?.id) return match.id;
+          } else {
+            return siblingIds[0];
+          }
+        }
       }
     }
 
     const { data, error } = await supabase
       .from('shopee_products')
-      .insert({ name: productName, is_published: true })
+      .insert({ name: productName, is_published: true, ...(shopId ? { shop_id: shopId } : {}) })
       .select('id')
       .single();
     if (error) throw new Error(error.message);
@@ -106,7 +135,6 @@ export function createChannelLinksRouter(
       const [varRes, shopsRes] = await Promise.all([
         supabase.from('shopee_product_variants')
           .select('id, pos_product_id, shopee_product_id, sku, size, color_name, shopee_price_override, is_published, display_order')
-          .eq('is_published', true)
           .order('display_order', { ascending: true }),
         supabase.from('shopee_shops').select('id, name, slug'),
       ]);
@@ -210,6 +238,56 @@ export function createChannelLinksRouter(
     }
   });
 
+  // GET /api/channel-links/shopee-shops-status?productId=X&isParent=true
+  // Trả về trạng thái link Shopee per-shop cho 1 sản phẩm
+  router.get('/api/channel-links/shopee-shops-status', requireAuth, async (req, res) => {
+    try {
+      const { productId, isParent } = req.query as { productId?: string; isParent?: string };
+      if (!productId) { res.status(400).json({ ok: false, error: 'Thiếu productId' }); return; }
+
+      const { data: shopsData } = await supabase.from('shopee_shops').select('id, name, slug');
+      const shops = shopsData ?? [];
+
+      // Lấy tất cả pos_product_id liên quan (chính nó hoặc children nếu là parent)
+      let posIds: string[] = [productId];
+      if (isParent === 'true') {
+        const { data: children } = await supabase.from('pos_products').select('id').eq('parent_id', productId).eq('status', 'Active');
+        posIds = (children ?? []).map((c: { id: string }) => c.id);
+      }
+
+      if (posIds.length === 0) {
+        res.json({ ok: true, shops: shops.map((s: { id: string; name: string; slug: string }) => ({ id: s.id, name: s.name, linked: false })) });
+        return;
+      }
+
+      // Lấy shopee_products đang link với product này
+      const { data: variants } = await supabase
+        .from('shopee_product_variants')
+        .select('shopee_product_id')
+        .in('pos_product_id', posIds);
+      const linkedProductIds = [...new Set((variants ?? []).map((v: { shopee_product_id: string }) => v.shopee_product_id))];
+
+      let shopeeProducts: { id: string; shop_id: string | null }[] = [];
+      if (linkedProductIds.length > 0) {
+        const { data: spData } = await supabase.from('shopee_products').select('id, shop_id').in('id', linkedProductIds);
+        shopeeProducts = spData ?? [];
+      }
+      const linkedShopIds = new Set(shopeeProducts.map(p => p.shop_id).filter(Boolean));
+
+      res.json({
+        ok: true,
+        shops: shops.map((s: { id: string; name: string; slug: string }) => ({
+          id: s.id,
+          name: s.name,
+          linked: linkedShopIds.has(s.id),
+        })),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   // GET /api/channel-links/status?productId=...&isParent=true
   router.get('/api/channel-links/status', requireAuth, async (req, res) => {
     try {
@@ -267,12 +345,13 @@ export function createChannelLinksRouter(
   // Body: { channel: 'website'|'shopee', action: 'link'|'unlink', product: POSProduct, childIds?: string[] }
   router.post('/api/channel-links/toggle', requireAuth, async (req, res) => {
     try {
-      const { channel, action, product, childIds, variantId } = req.body as {
+      const { channel, action, product, childIds, variantId, shopId } = req.body as {
         channel: 'website' | 'shopee';
         action: 'link' | 'unlink';
         product: { id: string; name: string; sku: string; parentId?: string; isParent?: boolean };
         childIds?: { id: string; sku: string }[];
         variantId?: string;
+        shopId?: string;
       };
 
       if (!channel || !action || !product) {
@@ -327,7 +406,26 @@ export function createChannelLinksRouter(
         }
       } else {
         if (action === 'unlink') {
-          if (childIds && childIds.length > 0) {
+          if (shopId) {
+            // Unlink chỉ shop này: tìm shopee_product thuộc shop đó rồi xóa variant tương ứng
+            const posIds = childIds ? childIds.map(c => c.id) : [product.id];
+            const { data: variants } = await supabase
+              .from('shopee_product_variants')
+              .select('id, shopee_product_id')
+              .in('pos_product_id', posIds);
+            const spIds = [...new Set((variants ?? []).map((v: { shopee_product_id: string }) => v.shopee_product_id))];
+            if (spIds.length > 0) {
+              const { data: spForShop } = await supabase.from('shopee_products').select('id').in('id', spIds).eq('shop_id', shopId);
+              const idsToRemove = (spForShop ?? []).map((s: { id: string }) => s.id);
+              if (idsToRemove.length > 0) {
+                const { error } = await supabase.from('shopee_product_variants')
+                  .delete()
+                  .in('pos_product_id', posIds)
+                  .in('shopee_product_id', idsToRemove);
+                if (error) throw new Error(`[shopee_product_variants] delete by shop: ${error.message}`);
+              }
+            }
+          } else if (childIds && childIds.length > 0) {
             const { error } = await supabase.from('shopee_product_variants').delete().in('pos_product_id', childIds.map(c => c.id));
             if (error) throw new Error(`[shopee_product_variants] delete: ${error.message}`);
           } else if (variantId) {
@@ -338,17 +436,46 @@ export function createChannelLinksRouter(
             if (error) throw new Error(`[shopee_product_variants] delete: ${error.message}`);
           }
         } else {
-          const shopeeProductId = await ensureShopeeProduct(product.id, product.name, product.parentId);
+          const shopeeProductId = await ensureShopeeProduct(product.id, product.name, product.parentId, shopId);
           if (childIds && childIds.length > 0) {
-            const { error: e1 } = await supabase.from('shopee_product_variants').delete().in('pos_product_id', childIds.map(c => c.id));
-            if (e1) throw new Error(`[shopee_product_variants] delete: ${e1.message}`);
-            const { error: e2 } = await supabase.from('shopee_product_variants').insert(childIds.map(c => ({ shopee_product_id: shopeeProductId, pos_product_id: c.id, sku: c.sku, is_published: true })));
-            if (e2) throw new Error(`[shopee_product_variants] insert: ${e2.message}`);
+            if (shopId) {
+              // Link per-shop: chỉ insert những child chưa có link với shop này
+              const { data: existing } = await supabase
+                .from('shopee_product_variants')
+                .select('pos_product_id')
+                .in('pos_product_id', childIds.map(c => c.id))
+                .eq('shopee_product_id', shopeeProductId);
+              const existingIds = new Set((existing ?? []).map((e: { pos_product_id: string }) => e.pos_product_id));
+              const toInsert = childIds.filter(c => !existingIds.has(c.id));
+              if (toInsert.length > 0) {
+                const { error } = await supabase.from('shopee_product_variants').insert(toInsert.map(c => ({ shopee_product_id: shopeeProductId, pos_product_id: c.id, sku: c.sku, is_published: true })));
+                if (error) throw new Error(`[shopee_product_variants] insert by shop: ${error.message}`);
+              }
+            } else {
+              const { error: e1 } = await supabase.from('shopee_product_variants').delete().in('pos_product_id', childIds.map(c => c.id));
+              if (e1) throw new Error(`[shopee_product_variants] delete: ${e1.message}`);
+              const { error: e2 } = await supabase.from('shopee_product_variants').insert(childIds.map(c => ({ shopee_product_id: shopeeProductId, pos_product_id: c.id, sku: c.sku, is_published: true })));
+              if (e2) throw new Error(`[shopee_product_variants] insert: ${e2.message}`);
+            }
           } else {
-            const { error: e1 } = await supabase.from('shopee_product_variants').delete().eq('pos_product_id', product.id);
-            if (e1) throw new Error(`[shopee_product_variants] delete: ${e1.message}`);
-            const { error: e2 } = await supabase.from('shopee_product_variants').insert({ shopee_product_id: shopeeProductId, pos_product_id: product.id, sku: product.sku, is_published: true });
-            if (e2) throw new Error(`[shopee_product_variants] insert: ${e2.message}`);
+            if (shopId) {
+              // Link per-shop: chỉ insert nếu chưa tồn tại link với shop này
+              const { data: existing } = await supabase
+                .from('shopee_product_variants')
+                .select('id')
+                .eq('pos_product_id', product.id)
+                .eq('shopee_product_id', shopeeProductId)
+                .maybeSingle();
+              if (!existing) {
+                const { error } = await supabase.from('shopee_product_variants').insert({ shopee_product_id: shopeeProductId, pos_product_id: product.id, sku: product.sku, is_published: true });
+                if (error) throw new Error(`[shopee_product_variants] insert by shop: ${error.message}`);
+              }
+            } else {
+              const { error: e1 } = await supabase.from('shopee_product_variants').delete().eq('pos_product_id', product.id);
+              if (e1) throw new Error(`[shopee_product_variants] delete: ${e1.message}`);
+              const { error: e2 } = await supabase.from('shopee_product_variants').insert({ shopee_product_id: shopeeProductId, pos_product_id: product.id, sku: product.sku, is_published: true });
+              if (e2) throw new Error(`[shopee_product_variants] insert: ${e2.message}`);
+            }
           }
         }
       }

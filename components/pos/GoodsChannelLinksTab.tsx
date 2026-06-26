@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Globe, ShoppingCart, Loader2, AlertCircle } from 'lucide-react';
+import { Globe, ShoppingBag, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { POSProduct } from '../../types';
 
@@ -7,6 +7,12 @@ interface ChannelStatus {
   linked: boolean;
   variantId?: string;
   storeProductId?: string;
+}
+
+interface ShopeeShopStatus {
+  id: string;
+  name: string;
+  linked: boolean;
 }
 
 interface Props {
@@ -19,31 +25,29 @@ async function toggleChannelBackend(payload: {
   product: { id: string; name: string; sku: string; parentId?: string; isParent?: boolean };
   childIds?: { id: string; sku: string }[];
   variantId?: string;
+  shopId?: string;
 }): Promise<void> {
-  console.log('[ChannelLinks] Sending request:', payload);
   const res = await fetch('/api/channel-links/toggle', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(payload),
   });
-  console.log('[ChannelLinks] Response status:', res.status);
   let json: { ok: boolean; error?: string };
   try {
     json = await res.json();
   } catch (parseErr) {
-    console.error('[ChannelLinks] JSON parse error:', parseErr);
     throw new Error(`Lỗi server (HTTP ${res.status}) — server có thể chưa restart sau cập nhật`);
   }
-  console.log('[ChannelLinks] Response body:', JSON.stringify(json));
   if (!json.ok) throw new Error(json.error ?? 'Lỗi không xác định');
 }
 
 export function GoodsChannelLinksTab({ product }: Props) {
   const [website, setWebsite] = useState<ChannelStatus | null>(null);
-  const [shopee, setShopee] = useState<ChannelStatus | null>(null);
+  const [shopeeShops, setShopeeShops] = useState<ShopeeShopStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingChannel, setSavingChannel] = useState<'website' | 'shopee' | null>(null);
+  const [savingChannel, setSavingChannel] = useState<'website' | null>(null);
+  const [togglingShop, setTogglingShop] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [childCount, setChildCount] = useState<{ website: number; shopee: number; total: number } | null>(null);
 
@@ -52,18 +56,25 @@ export function GoodsChannelLinksTab({ product }: Props) {
     setError(null);
     try {
       const params = new URLSearchParams({ productId: product.id, isParent: product.isParent ? 'true' : 'false' });
-      const res = await fetch(`/api/channel-links/status?${params}`, { credentials: 'include' });
-      const json: {
+
+      const [statusRes, shopsRes] = await Promise.all([
+        fetch(`/api/channel-links/status?${params}`, { credentials: 'include' }),
+        fetch(`/api/channel-links/shopee-shops-status?${params}`, { credentials: 'include' }),
+      ]);
+
+      const statusJson: {
         ok: boolean;
         error?: string;
         website: ChannelStatus;
         shopee: ChannelStatus;
         childCount?: { website: number; shopee: number; total: number };
-      } = await res.json();
-      if (!json.ok) throw new Error(json.error ?? 'Lỗi tải trạng thái kênh');
-      setWebsite(json.website);
-      setShopee(json.shopee);
-      if (json.childCount) setChildCount(json.childCount);
+      } = await statusRes.json();
+      if (!statusJson.ok) throw new Error(statusJson.error ?? 'Lỗi tải trạng thái kênh');
+      setWebsite(statusJson.website);
+      if (statusJson.childCount) setChildCount(statusJson.childCount);
+
+      const shopsJson: { ok: boolean; error?: string; shops: ShopeeShopStatus[] } = await shopsRes.json();
+      if (shopsJson.ok) setShopeeShops(shopsJson.shops);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e);
       setError(msg);
@@ -109,16 +120,16 @@ export function GoodsChannelLinksTab({ product }: Props) {
     }
   };
 
-  const toggleShopee = async () => {
-    setSavingChannel('shopee');
+  const toggleShopeeShop = async (shop: ShopeeShopStatus) => {
+    setTogglingShop(shop.id);
     setError(null);
     try {
       if (!product.isParent) {
         await toggleChannelBackend({
           channel: 'shopee',
-          action: shopee?.linked ? 'unlink' : 'link',
+          action: shop.linked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
-          variantId: shopee?.variantId,
+          shopId: shop.id,
         });
       } else {
         const { data: children, error: childErr } = await supabase
@@ -130,9 +141,10 @@ export function GoodsChannelLinksTab({ product }: Props) {
         if (!children || children.length === 0) throw new Error('Sản phẩm cha không có biến thể con nào đang hoạt động');
         await toggleChannelBackend({
           channel: 'shopee',
-          action: shopee?.linked ? 'unlink' : 'link',
+          action: shop.linked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, isParent: true },
           childIds: children as { id: string; sku: string }[],
+          shopId: shop.id,
         });
       }
       await loadStatus();
@@ -140,7 +152,7 @@ export function GoodsChannelLinksTab({ product }: Props) {
       const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e);
       setError(msg);
     } finally {
-      setSavingChannel(null);
+      setTogglingShop(null);
     }
   };
 
@@ -189,7 +201,7 @@ export function GoodsChannelLinksTab({ product }: Props) {
           </div>
           <button
             onClick={toggleWebsite}
-            disabled={savingChannel !== null}
+            disabled={savingChannel !== null || togglingShop !== null}
             className={`relative w-12 h-6 rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
               website?.linked ? 'bg-indigo-600' : 'bg-slate-200'
             }`}
@@ -208,49 +220,59 @@ export function GoodsChannelLinksTab({ product }: Props) {
         </div>
       </div>
 
-      {/* Shopee */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-              <ShoppingCart className="h-5 w-5 text-orange-500" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-900">Shopee</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {product.isParent && childCount
-                  ? childCount.shopee > 0
-                    ? `${childCount.shopee}/${childCount.total} biến thể đang bán`
-                    : 'Chưa liên kết kênh nào'
-                  : shopee?.linked
-                    ? 'Đang bán'
-                    : 'Chưa liên kết'}
-              </p>
-            </div>
+      {/* Shopee — per-shop toggles */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100">
+          <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+            <ShoppingBag className="h-4 w-4 text-orange-500" />
           </div>
-          <button
-            onClick={toggleShopee}
-            disabled={savingChannel !== null}
-            className={`relative w-12 h-6 rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
-              shopee?.linked ? 'bg-orange-500' : 'bg-slate-200'
-            }`}
-            aria-label={shopee?.linked ? 'Tắt bán Shopee' : 'Bật bán Shopee'}
-          >
-            {savingChannel === 'shopee' ? (
-              <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" />
-            ) : (
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                  shopee?.linked ? 'left-7' : 'left-1'
-                }`}
-              />
-            )}
-          </button>
+          <span className="text-sm font-medium text-slate-900">Shopee</span>
         </div>
+
+        {shopeeShops.length === 0 ? (
+          <div className="px-4 py-8 text-center text-xs text-slate-400">
+            Chưa có shop Shopee nào được kết nối.<br />
+            Vào <span className="font-medium">Cài đặt → Tích hợp</span> để thêm shop.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {shopeeShops.map(shop => {
+              const isToggling = togglingShop === shop.id;
+              return (
+                <div key={shop.id} className="flex items-center justify-between px-4 py-3.5">
+                  <div>
+                    <p className="text-sm text-slate-700">{shop.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {shop.linked ? 'Đang bán trên shop này' : 'Chưa đăng bán'}
+                    </p>
+                  </div>
+                  <button
+                    disabled={isToggling || savingChannel !== null || (togglingShop !== null && togglingShop !== shop.id)}
+                    onClick={() => toggleShopeeShop(shop)}
+                    className={`relative w-12 h-6 rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
+                      shop.linked ? 'bg-orange-500' : 'bg-slate-200'
+                    }`}
+                    aria-label={shop.linked ? `Tắt bán shop ${shop.name}` : `Bật bán shop ${shop.name}`}
+                  >
+                    {isToggling ? (
+                      <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" />
+                    ) : (
+                      <span
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          shop.linked ? 'left-7' : 'left-1'
+                        }`}
+                      />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-slate-400 px-1">
-        Sau khi bật, sản phẩm sẽ hiện trong trang Catalog Online và website/Shopee có thể bán hàng.
+        Sau khi bật, sản phẩm sẽ hiện trong trang Catalog Online và có thể bán hàng trên kênh tương ứng.
       </p>
     </div>
   );
