@@ -55,14 +55,14 @@ const SHOP_COLORS = [
 ];
 function shopColor(idx: number) { return SHOP_COLORS[idx % SHOP_COLORS.length]; }
 
-function makeEditForm(entry: ShopEntry): EditForm {
+function makeEditForm(entry: ShopEntry, productName: string): EditForm {
   return {
     cover_image_url: entry.cover_image_url ?? '',
     shopee_item_id: entry.shopee_item_id ?? '',
     shop_id: entry.shop_id ?? '',
     is_published: entry.is_published,
     display_order: entry.display_order,
-    product_name: entry.name ?? '',
+    product_name: productName,
     other_images: [],
     category: '',
     variantDrafts: [...entry.shopee_product_variants]
@@ -211,17 +211,17 @@ const SHOPEE_TABS: { id: ShopeeTab; label: string }[] = [
 
 // ─── Detail panel cho 1 shop entry ───────────────────────────────────────────
 function ShopDetailPanel({
-  entry, shops, colorIdx, onSaved,
-}: { entry: ShopEntry; shops: ShopeeShop[]; colorIdx: number; onSaved: () => void }) {
+  entry, shops, colorIdx, onSaved, productName,
+}: { entry: ShopEntry; shops: ShopeeShop[]; colorIdx: number; onSaved: () => void; productName: string }) {
   const { showToast } = useToast();
   const colors = shopColor(colorIdx);
   const [tab, setTab] = useState<ShopeeTab>('co-ban');
-  const [form, setForm] = useState<EditForm>(() => makeEditForm(entry));
+  const [form, setForm] = useState<EditForm>(() => makeEditForm(entry, productName));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => { setForm(makeEditForm(entry)); setDirty(false); setTab('co-ban'); }, [entry.id]);
+  useEffect(() => { setForm(makeEditForm(entry, productName)); setDirty(false); setTab('co-ban'); }, [entry.id]);
 
   const setF = (patch: Partial<EditForm>) => { setForm(prev => ({ ...prev, ...patch })); setDirty(true); };
 
@@ -745,6 +745,7 @@ export default function ShopeeProductsPage() {
                               shops={shops}
                               colorIdx={colorIdx}
                               onSaved={loadProducts}
+                              productName={product.name}
                             />
                           </td>
                         </tr>

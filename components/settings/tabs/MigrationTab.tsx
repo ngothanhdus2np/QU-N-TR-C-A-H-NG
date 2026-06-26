@@ -5,14 +5,12 @@ import {
   Trash2,
   Package,
   BarChart3,
-  Users,
   Truck,
   CheckCircle2,
   XCircle,
   Loader2,
   AlertTriangle,
   ChevronRight,
-  RefreshCw,
   FileText,
 } from 'lucide-react';
 
@@ -84,20 +82,14 @@ const StatusBanner: React.FC<{ status: ImportStatus; onClose: () => void }> = ({
 
 const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const productsFileRef = useRef<HTMLInputElement>(null);
-  const revenueFileRef = useRef<HTMLInputElement>(null);
-  const customersFileRef = useRef<HTMLInputElement>(null);
   const purchaseDetailsFileRef = useRef<HTMLInputElement>(null);
+  const invoicesFileRef = useRef<HTMLInputElement>(null);
 
   const [productsStatus, setProductsStatus] = useState<ImportStatus | null>(null);
-  const [revenueStatus, setRevenueStatus] = useState<ImportStatus | null>(null);
-  const [customersStatus, setCustomersStatus] = useState<ImportStatus | null>(null);
   const [purchaseDetailsStatus, setPurchaseDetailsStatus] = useState<ImportStatus | null>(null);
+  const [invoicesStatus, setInvoicesStatus] = useState<ImportStatus | null>(null);
   const [deleteProductsState, setDeleteProductsState] = useState<DeleteState>('idle');
   const [deleteRevenueState, setDeleteRevenueState] = useState<DeleteState>('idle');
-  const [invoicesStatus, setInvoicesStatus] = useState<ImportStatus | null>(null);
-  const invoicesFileRef = useRef<HTMLInputElement>(null);
-  const [returnsStatus, setReturnsStatus] = useState<ImportStatus | null>(null);
-  const returnsFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,71 +111,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
       });
     } catch (err) {
       setProductsStatus({
-        status: 'error',
-        message: err instanceof Error ? err.message : 'Lỗi không xác định',
-      });
-    }
-  };
-
-  const handleImportRevenue = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setRevenueStatus({
-      status: 'running',
-      message: `Đang xử lý "${file.name}", có thể mất vài giây với file lớn...`,
-    });
-    try {
-      const fileBase64 = await fileToBase64(file);
-      const res = await fetch('/api/import/kiotviet-revenue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64 }),
-      });
-      const data = await readImportResponse(res);
-      if (!res.ok) {
-        const debugInfo = data.debug ? ` [debug: col6="${data.debug.sample_col6}", col8="${data.debug.sample_col8}" (${data.debug.sample_col8_type})]` : '';
-        throw new Error((data.error || 'Import thất bại') + debugInfo);
-      }
-      await appDataCache.clearDataKeys(['revenue', 'posOrders', 'productGroups', 'productGroupRevenue']);
-      setRevenueStatus({
-        status: 'done',
-        message: `Đã import ${data.days} ngày, ${data.ordersUpserted ?? data.orders} đơn hàng, ${data.groups} nhóm hàng.`,
-      });
-      onRefresh?.();
-    } catch (err) {
-      setRevenueStatus({
-        status: 'error',
-        message: err instanceof Error ? err.message : 'Lỗi không xác định',
-      });
-    }
-  };
-
-  const handleImportCustomers = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setCustomersStatus({
-      status: 'running',
-      message: `Đang import khách hàng từ "${file.name}"...`,
-    });
-    try {
-      const fileBase64 = await fileToBase64(file);
-      const res = await fetch('/api/import/kiotviet-customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64 }),
-      });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Import thất bại');
-      await appDataCache.clearDataKeys(['posCustomers', 'posOrders']);
-      setCustomersStatus({
-        status: 'done',
-        message: `Đã import ${data.customers} khách hàng, gắn ${data.matchedOrders}/${data.orderLinks} hóa đơn. Bỏ qua ${data.guestRows} dòng Khách lẻ.`,
-      });
-      onRefresh?.();
-    } catch (err) {
-      setCustomersStatus({
         status: 'error',
         message: err instanceof Error ? err.message : 'Lỗi không xác định',
       });
@@ -240,30 +167,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
       } catch {
         setDeleteProductsState('idle');
       }
-    }
-  };
-
-  const handleImportReturns = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setReturnsStatus({ status: 'running', message: `Đang xử lý "${file.name}"...` });
-    try {
-      const fileBase64 = await fileToBase64(file);
-      const res = await fetch('/api/import/kiotviet-returns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64 }),
-      });
-      const data = await readImportResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Import thất bại');
-      setReturnsStatus({
-        status: 'done',
-        message: `Hoàn tất: ${data.returns} phiếu trả hàng đã import.`,
-      });
-      onRefresh?.();
-    } catch (err) {
-      setReturnsStatus({ status: 'error', message: err instanceof Error ? err.message : 'Lỗi không xác định' });
     }
   };
 
@@ -344,22 +247,17 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
             {
               step: '2',
               label: 'Import hàng hóa',
-              desc: 'Xuất file "Danh sách hàng hóa" từ KiotViet → Hàng hóa → Xuất file.',
+              desc: 'Xuất file "Danh sách hàng hóa" từ KiotViet → Hàng hóa → Xuất file. Cần import trước để sản phẩm có đúng nhóm hàng.',
             },
             {
               step: '3',
-              label: 'Import doanh thu',
-              desc: 'Xuất file "Báo cáo bán hàng theo lợi nhuận" từ KiotViet → Phân tích → Bán hàng.',
+              label: 'Import hoá đơn',
+              desc: 'Xuất file "Danh sách chi tiết hoá đơn" từ KiotViet → Bán hàng. Tự động tạo khách hàng, đơn hàng và doanh thu — kể cả đơn trả (mã TH).',
             },
             {
               step: '4',
-              label: 'Import khách hàng',
-              desc: 'Xuất file "Báo cáo bán hàng theo khách" để tạo CRM và gắn khách vào hóa đơn.',
-            },
-            {
-              step: '5',
-              label: 'Import phiếu nhập chi tiết',
-              desc: 'Xuất file "Danh sách chi tiết nhập hàng" để tạo nhà cung cấp và chi tiết từng phiếu nhập.',
+              label: 'Import phiếu nhập hàng',
+              desc: 'Xuất file "Danh sách chi tiết nhập hàng" từ KiotViet → Nhập hàng. Tự động tạo nhà cung cấp và công nợ NCC.',
             },
           ].map(({ step, label, desc }) => (
             <li key={step} className="flex items-start gap-3">
@@ -417,42 +315,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
             />
           </div>
 
-          {/* Import doanh thu */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-                  <BarChart3 className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Doanh thu</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Báo cáo bán hàng theo lợi nhuận" xuất từ KiotViet (.xlsx)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => revenueFileRef.current?.click()}
-                disabled={revenueStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-emerald-600 shadow-sm transition-colors hover:bg-emerald-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {revenueStatus && (
-              <StatusBanner status={revenueStatus} onClose={() => setRevenueStatus(null)} />
-            )}
-            <input
-              ref={revenueFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportRevenue}
-            />
-          </div>
-
           {/* Import hoá đơn — tự động tạo khách + đơn hàng + doanh thu */}
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-4">
@@ -461,9 +323,9 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
                   <FileText className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Hoá đơn <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-2xs font-normal text-violet-600">Khuyên dùng</span></p>
+                  <p className="text-sm font-semibold text-slate-800">Hoá đơn</p>
                   <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách chi tiết hoá đơn" — tự động tạo khách, đơn hàng &amp; doanh thu
+                    File "Danh sách chi tiết hoá đơn" — tự động tạo khách hàng, đơn hàng, doanh thu và đơn trả (TH)
                   </p>
                 </div>
               </div>
@@ -490,78 +352,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
             />
           </div>
 
-          {/* Import phiếu trả hàng */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
-                  <RefreshCw className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Phiếu trả hàng</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách chi tiết phiếu trả hàng" xuất từ KiotViet → Đơn hàng → Trả hàng
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => returnsFileRef.current?.click()}
-                disabled={returnsStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-rose-600 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {returnsStatus && (
-              <StatusBanner status={returnsStatus} onClose={() => setReturnsStatus(null)} />
-            )}
-            <input
-              ref={returnsFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportReturns}
-            />
-          </div>
-
-          {/* Import khách hàng */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
-                  <Users className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Khách hàng</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Báo cáo bán hàng theo khách" xuất từ KiotViet (.xlsx)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => customersFileRef.current?.click()}
-                disabled={customersStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-sky-600 shadow-sm transition-colors hover:bg-sky-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {customersStatus && (
-              <StatusBanner status={customersStatus} onClose={() => setCustomersStatus(null)} />
-            )}
-            <input
-              ref={customersFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportCustomers}
-            />
-          </div>
-
           {/* Import phiếu nhập chi tiết */}
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-4">
@@ -570,9 +360,9 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
                   <Truck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Phiếu nhập chi tiết</p>
+                  <p className="text-sm font-semibold text-slate-800">Phiếu nhập hàng</p>
                   <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách chi tiết nhập hàng" xuất từ KiotViet (.xlsx)
+                    File "Danh sách chi tiết nhập hàng" — tự động tạo nhà cung cấp và công nợ NCC
                   </p>
                 </div>
               </div>

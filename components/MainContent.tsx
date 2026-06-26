@@ -13,6 +13,7 @@ import {
   ProductLine,
   RevenueSubTab,
 } from '../types';
+import { AppThemeId } from '../constants/themes';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
@@ -88,12 +89,17 @@ interface MainContentProps {
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
+  isDataReady?: boolean;
+  isSyncing?: boolean;
   offlinePendingCount?: number;
   offlineOrderPendingCount?: number;
   isDraining?: boolean;
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
+  onRefreshData?: () => Promise<void>;
   userRole?: string;
   onManagerUnlocked?: () => void;
+  activeThemeId?: AppThemeId;
+  onThemeChange?: (id: AppThemeId) => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -116,12 +122,17 @@ const MainContent: React.FC<MainContentProps> = ({
   updateSurgical,
   pushBatch,
   loadInventoryOut,
+  isDataReady = true,
   offlinePendingCount: _offlinePendingCount,
   offlineOrderPendingCount,
   isDraining,
+  isSyncing,
   onDrainOfflineQueue,
+  onRefreshData,
   userRole,
   onManagerUnlocked,
+  activeThemeId,
+  onThemeChange,
 }) => {
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
   const [eodDismissed, setEodDismissed] = useState(false);
@@ -281,7 +292,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'help':
         return <HelpCenter />;
       case 'overview':
-        return <OverviewPage data={data} />;
+        return <OverviewPage data={data} isLoading={!isDataReady} />;
       case 'orders':
         return <PendingOrdersPage orders={data.posOrders || []} />;
       case 'customers':
@@ -292,6 +303,7 @@ const MainContent: React.FC<MainContentProps> = ({
             customerDebtHistory={data.customerDebtHistory || []}
             onUpdateCustomers={newList => updateData('posCustomers', newList)}
             onUpdateSurgical={updateSurgical}
+            isLoading={!isDataReady}
           />
         );
       case 'suppliers':
@@ -300,6 +312,7 @@ const MainContent: React.FC<MainContentProps> = ({
             data={data}
             onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
+            isLoading={!isDataReady}
           />
         );
       case 'product-groups':
@@ -564,6 +577,7 @@ const MainContent: React.FC<MainContentProps> = ({
             onUpdateSurgical={updateSurgical}
             onPushBatch={pushBatch}
             initialView={activeTab === 'purchase-returns' ? 'returns' : 'imports'}
+            onRefreshData={onRefreshData}
           />
         );
       case 'goods-audit':
@@ -867,6 +881,9 @@ const MainContent: React.FC<MainContentProps> = ({
               }
               onUpdateSurgical={updateSurgical}
               revenue={data.revenue || []}
+              isDataReady={isDataReady}
+              activeThemeId={activeThemeId}
+              onThemeChange={onThemeChange}
             />
             </React.Suspense>
           </ErrorBoundary>

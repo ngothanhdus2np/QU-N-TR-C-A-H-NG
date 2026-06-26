@@ -87,6 +87,7 @@ const App: React.FC = () => {
     offlineOrderPendingCount,
     drainQueue,
     isDraining,
+    isDataReady,
   } = useAppData();
 
   useRealtimeSync(mergeRemoteUpdate);
@@ -287,6 +288,7 @@ const App: React.FC = () => {
             setDiagEndDate={setDiagEndDate}
             suggestedFocusProducts={suggestedFocusProducts}
             breakEvenAnalysis={breakEvenAnalysis}
+            isSyncing={isSyncing}
             updateData={updateData}
             updateSurgical={updateSurgical}
             pushBatch={pushBatch}
@@ -295,7 +297,11 @@ const App: React.FC = () => {
             offlineOrderPendingCount={offlineOrderPendingCount}
             isDraining={isDraining}
             onDrainOfflineQueue={drainQueue}
+            isDataReady={isDataReady}
+            onRefreshData={() => fetchData(true)}
             userRole={userRole}
+            activeThemeId={themeId}
+            onThemeChange={setThemeId}
             onManagerUnlocked={() => {
               setManagerUnlocked(true);
               navigate('/overview');

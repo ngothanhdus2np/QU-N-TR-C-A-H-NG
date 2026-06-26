@@ -14,7 +14,7 @@ import POSQuickCustomerModal, { QuickCustomerForm } from './POSQuickCustomerModa
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCurrentStaffId } from '../shared/staff';
 import { signOut } from '../../services/auth';
-import { openPrintInvoice } from './printInvoiceFromTemplate';
+import { openPrintInvoice, openPrintWarranty } from './printInvoiceFromTemplate';
 import {
   AppDataSurgicalUpdate,
   POSProduct,
@@ -31,6 +31,7 @@ import {
   RevenueRecord,
   DEFAULT_POS_KEYBOARD_SHORTCUTS,
 } from '../../types';
+import { AppThemeId } from '../../constants/themes';
 import { InvoiceTab } from './types';
 import { usePOSKeyboard } from './usePOSKeyboard';
 import { usePOSReturnFlow } from './usePOSReturnFlow';
@@ -115,6 +116,9 @@ interface POSComputerProps {
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   revenue?: RevenueRecord[];
+  isDataReady?: boolean;
+  activeThemeId?: AppThemeId;
+  onThemeChange?: (id: AppThemeId) => void;
 }
 
 const POSComputer: React.FC<POSComputerProps> = ({
@@ -138,6 +142,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
   onDrainOfflineQueue,
   onUpdateSurgical,
   revenue = [],
+  isDataReady = true,
+  activeThemeId,
+  onThemeChange,
 }) => {
   const { showToast } = useToast();
   const [showManagerUnlock, setShowManagerUnlock] = useState(false);
@@ -195,6 +202,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setShowSelectInvoiceModal,
     selectedCartIndex,
     setSelectedCartIndex,
+    printSettings,
+    setPrintSettings,
     isAutoPrintEnabled,
     setIsAutoPrintEnabled,
     lastOrder,
@@ -1065,17 +1074,41 @@ const POSComputer: React.FC<POSComputerProps> = ({
     if (!lastOrder) return;
     const staffName = employees.find(e => e.id === lastOrder.staffId)?.name || defaultSalespersonName;
     const customer = customers.find(c => c.id === lastOrder.customerId);
-    const ok = openPrintInvoice({
-      order: lastOrder,
-      storeName: brandProfile?.name,
-      storeAddress: brandProfile?.address,
-      storePhone: brandProfile?.phone,
-      customerPhone: customer?.phone,
-      customerAddress: customer?.address,
-      staffName,
-    });
-    if (!ok) {
+
+    const invoiceOk = openPrintInvoice(
+      {
+        order: lastOrder,
+        storeName: brandProfile?.name,
+        storeAddress: brandProfile?.address,
+        storePhone: brandProfile?.phone,
+        customerPhone: customer?.phone,
+        customerAddress: customer?.address,
+        staffName,
+      },
+      printSettings.invoiceCopies,
+    );
+    if (!invoiceOk) {
       showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in hóa đơn.', 'warning');
+      return;
+    }
+
+    if (printSettings.autoPrintWarranty) {
+      const warrantyByProductId: Record<string, string> = {};
+      for (const item of lastOrder.items) {
+        const product = products.find(p => p.id === item.productId);
+        if (product?.warranty) warrantyByProductId[item.productId] = product.warranty;
+      }
+      openPrintWarranty(
+        {
+          order: lastOrder,
+          storeName: brandProfile?.name,
+          storeAddress: brandProfile?.address,
+          storePhone: brandProfile?.phone,
+          mode: printSettings.warrantyMode,
+          warrantyByProductId,
+        },
+        printSettings.warrantyCopies,
+      );
     }
   };
 
@@ -1200,6 +1233,9 @@ const POSComputer: React.FC<POSComputerProps> = ({
         isDraining={isDraining}
         isAutoPrintEnabled={isAutoPrintEnabled}
         setIsAutoPrintEnabled={setIsAutoPrintEnabled}
+        printSettings={printSettings}
+        setPrintSettings={setPrintSettings}
+        brandProfile={brandProfile}
         showGridMenu={showGridMenu}
         setShowGridMenu={setShowGridMenu}
         onGoToManagement={
@@ -1230,6 +1266,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
           setShowReturnModal(true);
         }}
         onLogout={resetPOSSession}
+        activeThemeId={activeThemeId}
+        onThemeChange={onThemeChange}
       />
 
       <div
@@ -1261,6 +1299,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
             setItemDiscountPopup({ productId, price, discount, rect });
           }}
           onOrderNoteChange={note => updateActiveTab({ orderNote: note })}
+          isDataReady={isDataReady}
         />
 
         {/* Right Sidebar (Checkout) */}
