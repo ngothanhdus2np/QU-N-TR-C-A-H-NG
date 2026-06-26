@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Globe, ShoppingBag, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { POSProduct } from '../../types';
@@ -36,20 +36,53 @@ async function toggleChannelBackend(payload: {
   let json: { ok: boolean; error?: string };
   try {
     json = await res.json();
-  } catch (parseErr) {
+  } catch {
     throw new Error(`Lỗi server (HTTP ${res.status}) — server có thể chưa restart sau cập nhật`);
   }
   if (!json.ok) throw new Error(json.error ?? 'Lỗi không xác định');
+}
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  color,
+  'aria-label': ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  color: 'indigo' | 'orange';
+  'aria-label': string;
+}) {
+  const activeClass = color === 'indigo' ? 'bg-indigo-600' : 'bg-orange-500';
+  return (
+    <button
+      onClick={onChange}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed ${
+        checked ? activeClass : 'bg-slate-200'
+      }`}
+    >
+      <span
+        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          checked ? 'translate-x-6' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
 }
 
 export function GoodsChannelLinksTab({ product }: Props) {
   const [website, setWebsite] = useState<ChannelStatus | null>(null);
   const [shopeeShops, setShopeeShops] = useState<ShopeeShopStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingChannel, setSavingChannel] = useState<'website' | null>(null);
-  const [togglingShop, setTogglingShop] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [childCount, setChildCount] = useState<{ website: number; shopee: number; total: number } | null>(null);
+  // track which shops are mid-flight to prevent double-click
+  const pendingShops = useRef<Set<string>>(new Set());
+  const [websitePending, setWebsitePending] = useState(false);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -76,7 +109,7 @@ export function GoodsChannelLinksTab({ product }: Props) {
       const shopsJson: { ok: boolean; error?: string; shops: ShopeeShopStatus[] } = await shopsRes.json();
       if (shopsJson.ok) setShopeeShops(shopsJson.shops);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e);
+      const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
       setLoading(false);
@@ -86,15 +119,19 @@ export function GoodsChannelLinksTab({ product }: Props) {
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
   const toggleWebsite = async () => {
-    setSavingChannel('website');
+    if (websitePending || !website) return;
+    const wasLinked = website.linked;
+    // optimistic update
+    setWebsite(prev => prev ? { ...prev, linked: !prev.linked } : prev);
+    setWebsitePending(true);
     setError(null);
     try {
       if (!product.isParent) {
         await toggleChannelBackend({
           channel: 'website',
-          action: website?.linked ? 'unlink' : 'link',
+          action: wasLinked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
-          variantId: website?.variantId,
+          variantId: website.variantId,
         });
       } else {
         const { data: children, error: childErr } = await supabase
@@ -106,28 +143,33 @@ export function GoodsChannelLinksTab({ product }: Props) {
         if (!children || children.length === 0) throw new Error('Sản phẩm cha không có biến thể con nào đang hoạt động');
         await toggleChannelBackend({
           channel: 'website',
-          action: website?.linked ? 'unlink' : 'link',
+          action: wasLinked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, isParent: true },
           childIds: children as { id: string; sku: string }[],
         });
       }
-      await loadStatus();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e);
+      // rollback
+      setWebsite(prev => prev ? { ...prev, linked: wasLinked } : prev);
+      const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
-      setSavingChannel(null);
+      setWebsitePending(false);
     }
   };
 
   const toggleShopeeShop = async (shop: ShopeeShopStatus) => {
-    setTogglingShop(shop.id);
+    if (pendingShops.current.has(shop.id)) return;
+    const wasLinked = shop.linked;
+    // optimistic update
+    setShopeeShops(prev => prev.map(s => s.id === shop.id ? { ...s, linked: !s.linked } : s));
+    pendingShops.current.add(shop.id);
     setError(null);
     try {
       if (!product.isParent) {
         await toggleChannelBackend({
           channel: 'shopee',
-          action: shop.linked ? 'unlink' : 'link',
+          action: wasLinked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
           shopId: shop.id,
         });
@@ -141,18 +183,19 @@ export function GoodsChannelLinksTab({ product }: Props) {
         if (!children || children.length === 0) throw new Error('Sản phẩm cha không có biến thể con nào đang hoạt động');
         await toggleChannelBackend({
           channel: 'shopee',
-          action: shop.linked ? 'unlink' : 'link',
+          action: wasLinked ? 'unlink' : 'link',
           product: { id: product.id, name: product.name, sku: product.sku, isParent: true },
           childIds: children as { id: string; sku: string }[],
           shopId: shop.id,
         });
       }
-      await loadStatus();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e);
+      // rollback
+      setShopeeShops(prev => prev.map(s => s.id === shop.id ? { ...s, linked: wasLinked } : s));
+      const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
-      setTogglingShop(null);
+      pendingShops.current.delete(shop.id);
     }
   };
 
@@ -199,24 +242,13 @@ export function GoodsChannelLinksTab({ product }: Props) {
               </p>
             </div>
           </div>
-          <button
-            onClick={toggleWebsite}
-            disabled={savingChannel !== null || togglingShop !== null}
-            className={`relative w-12 h-6 rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
-              website?.linked ? 'bg-indigo-600' : 'bg-slate-200'
-            }`}
+          <ToggleSwitch
+            checked={!!website?.linked}
+            onChange={toggleWebsite}
+            disabled={websitePending}
+            color="indigo"
             aria-label={website?.linked ? 'Tắt bán Website' : 'Bật bán Website'}
-          >
-            {savingChannel === 'website' ? (
-              <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" />
-            ) : (
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                  website?.linked ? 'left-7' : 'left-1'
-                }`}
-              />
-            )}
-          </button>
+          />
         </div>
       </div>
 
@@ -236,37 +268,22 @@ export function GoodsChannelLinksTab({ product }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-slate-50">
-            {shopeeShops.map(shop => {
-              const isToggling = togglingShop === shop.id;
-              return (
-                <div key={shop.id} className="flex items-center justify-between px-4 py-3.5">
-                  <div>
-                    <p className="text-sm text-slate-700">{shop.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {shop.linked ? 'Đang bán trên shop này' : 'Chưa đăng bán'}
-                    </p>
-                  </div>
-                  <button
-                    disabled={isToggling || savingChannel !== null || (togglingShop !== null && togglingShop !== shop.id)}
-                    onClick={() => toggleShopeeShop(shop)}
-                    className={`relative w-12 h-6 rounded-full transition-colors focus:outline-none disabled:opacity-60 ${
-                      shop.linked ? 'bg-orange-500' : 'bg-slate-200'
-                    }`}
-                    aria-label={shop.linked ? `Tắt bán shop ${shop.name}` : `Bật bán shop ${shop.name}`}
-                  >
-                    {isToggling ? (
-                      <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-white" />
-                    ) : (
-                      <span
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                          shop.linked ? 'left-7' : 'left-1'
-                        }`}
-                      />
-                    )}
-                  </button>
+            {shopeeShops.map(shop => (
+              <div key={shop.id} className="flex items-center justify-between px-4 py-3.5">
+                <div>
+                  <p className="text-sm text-slate-700">{shop.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {shop.linked ? 'Đang bán trên shop này' : 'Chưa đăng bán'}
+                  </p>
                 </div>
-              );
-            })}
+                <ToggleSwitch
+                  checked={shop.linked}
+                  onChange={() => toggleShopeeShop(shop)}
+                  color="orange"
+                  aria-label={shop.linked ? `Tắt bán shop ${shop.name}` : `Bật bán shop ${shop.name}`}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>
