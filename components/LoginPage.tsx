@@ -28,16 +28,32 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loggedIn, setLoggedIn] = useState<{ displayName: string; role: string } | null>(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    if (!loginInput.trim()) { setError('Vui lòng nhập thông tin đăng nhập.'); return; }
+    // Đọc thẳng giá trị từ DOM tại thời điểm submit — tránh trường hợp autofill/trình duyệt
+    // điền vào ô nhưng React state chưa kịp cập nhật → gửi mật khẩu rỗng/cũ → GoTrue trả 400
+    // ("sai mật khẩu" dù tài khoản đúng, lần sau gõ lại thì vào được).
+    const fd = new FormData(e.currentTarget);
+    const rawInput = (((fd.get('username') as string) ?? '') || loginInput).trim();
+    const rawPassword = ((fd.get('password') as string) ?? '') || password; // KHÔNG trim — mật khẩu có thể chứa khoảng trắng
+    if (!rawInput) { setError('Vui lòng nhập thông tin đăng nhập.'); return; }
+    if (!rawPassword) { setError('Vui lòng nhập mật khẩu.'); return; }
     setIsLoading(true);
-    const email = resolveEmail(loginInput);
-    const result = await signIn({ email, password });
+    const email = resolveEmail(rawInput);
+    const result = await signIn({ email, password: rawPassword });
     setIsLoading(false);
     if (result.error) {
-      setError('Tên đăng nhập hoặc mật khẩu không đúng.');
+      const err = result.error as { status?: number; message?: string };
+      const msg = (err.message || '').toLowerCase();
+      if (err.status === 400 || msg.includes('invalid login credentials')) {
+        setError('Tên đăng nhập hoặc mật khẩu không đúng.');
+      } else if (err.status === 429 || msg.includes('rate limit')) {
+        setError('Hệ thống đang bận. Vui lòng đợi vài giây rồi thử lại.');
+      } else {
+        // Lỗi mạng/timeout/máy chủ — KHÔNG phải sai mật khẩu
+        setError('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.');
+      }
       return;
     }
     const meta = result.user?.user_metadata || {};
@@ -139,11 +155,15 @@ export default function LoginPage() {
                   </label>
                   <input
                     type="text"
+                    name="username"
                     value={loginInput}
                     onChange={e => setLoginInput(e.target.value)}
                     placeholder="vd: thungan01 · 0901234567 · email@..."
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all"
                     autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                   />
                 </div>
@@ -155,11 +175,15 @@ export default function LoginPage() {
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       placeholder="••••••••"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 pr-11 text-sm text-slate-800 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all"
                       autoComplete="current-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       required
                     />
                     <button

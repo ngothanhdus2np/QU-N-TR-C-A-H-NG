@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — Fix đăng nhập chập chờn "sai mật khẩu" dù tài khoản đúng
+
+- Triệu chứng: thỉnh thoảng báo sai tài khoản/mật khẩu, lát sau cùng tài khoản lại vào được. Log GoTrue prod xác nhận pattern: 400 Invalid credentials rồi 6-12s sau 200 (cùng account), thời gian phản hồi ~120ms → KHÔNG phải timeout/mạng mà mật khẩu gửi lần đầu thật sự khác
+- Nguyên nhân: (1) `LoginPage` gán MỌI lỗi thành "sai mật khẩu" (kể cả lỗi mạng/429); (2) form đọc mật khẩu từ React state có thể chưa kịp cập nhật khi autofill điền → gửi rỗng/cũ → 400; (3) input thiếu `autoCapitalize/autoCorrect/spellCheck` → bàn phím di động viết hoa/sửa ký tự (nhất là khi bấm hiện mật khẩu)
+- Fix: đọc giá trị thẳng từ `FormData` lúc submit (chống race autofill); thêm `name` + `autoCapitalize=none`/`autoCorrect=off`/`spellCheck=false` cho cả 2 ô; phân biệt lỗi (400→sai mật khẩu, 429→bận, còn lại→lỗi kết nối, không đổ oan mật khẩu)
+- Verify: tsc sạch, trang `/login` render đúng thuộc tính mới
+- Files: `components/LoginPage.tsx`
+
 ### 2026-06-27 — #3 Auth hardening: xóa code chết rủi ro bảo mật
 
 - Phát hiện: `signUp` / `updatePassword` / `resetPassword` / `getUserMetadata` / `isAdmin` / `isManager` trong `services/auth.ts` **không nơi nào gọi** (dead code) → các lỗ hổng BUG-SEC (default role='owner', signUp không guard, updatePassword không cần mật khẩu cũ...) chỉ tồn tại trên code chết
