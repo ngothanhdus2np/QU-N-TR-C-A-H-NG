@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — #2 Làm cứng checkout POS Mobile (atomic transaction)
+
+- Thay 6 bước insert/update tuần tự trong `routes/posMobile.ts` bằng 1 RPC `pos_mobile_checkout` chạy trong **1 transaction DB**: insert đơn + trừ tồn inline atomic + cộng dồn `revenue_records` atomic (`ON CONFLICT (date)`) + cập nhật KH/nợ + audit (best-effort). Lỗi bất kỳ bước nào → rollback toàn bộ
+- Khắc phục 2 rủi ro #2: (a) đơn tạo nhưng revenue/tồn lệch khi fail giữa chừng; (b) race read-modify-write revenue khi 2 đơn cùng ngày
+- **Phát hiện schema drift trên production**: migration 013 (RPC `*_v2`) và cột `branch_id`/constraint `(date,branch_id)` của `revenue_records` CHƯA từng chạy trên DB self-hosted. Hàm mới tự chứa (inline trừ tồn, không phụ thuộc RPC ngoài), revenue conflict theo `(date)` + cast `date::DATE` để khớp prod thật. Web POS không ảnh hưởng (`routes/data.ts` đã fallback legacy `apply_inventory_transaction_with_stock`)
+- Verify trực tiếp trên prod (BEGIN/ROLLBACK qua `docker exec supabase-db`): happy-path tồn -1, revenue cộng dồn đúng (gross/COGS/lãi gộp), rollback sạch 0 đơn; thiếu tồn → RAISE `Insufficient stock` + rollback (0 đơn ghi)
+- Đã apply hàm lên production. Files: `routes/posMobile.ts`, `supabase_migrations/019_pos_mobile_checkout.sql`, `supabase_setup.sql`
+
 ### 2026-06-27 — Fix lỗi "máy mới vào báo lỗi, reload mới được" (Service Worker)
 
 - Root cause (từ console máy mới): (1) `service-worker.js` handler mặc định cache MỌI response không kiểm method → `cache.put()` ném `Request method 'HEAD' is unsupported` flood (app poll health/kết nối bằng HEAD); (2) `controllerchange` ép `window.location.reload()` ngay cả lần cài SW đầu tiên → giật giữa lúc khởi tạo

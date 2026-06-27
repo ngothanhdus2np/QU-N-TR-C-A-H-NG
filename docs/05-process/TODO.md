@@ -17,9 +17,13 @@
 
 > `routes/posMobile.ts` mount không `requireAuth`, 3 endpoint public dùng service role → đã thêm token `POS_MOBILE_TOKEN` (header `x-pos-mobile-token` / `?t=`), bỏ `import_price` khỏi response. Verify đầy đủ. Xem HISTORY.md.
 
-### [ ] Làm cứng checkout POS Mobile — transaction + atomic revenue *(phát hiện khi test 2026-06-27)*
+### [x] Làm cứng checkout POS Mobile — transaction + atomic revenue *(xong 2026-06-27)*
 
-> `routes/posMobile.ts` checkout gồm 6 bước insert/update **tuần tự, không transaction tổng** → fail giữa chừng gây lệch dữ liệu (đơn tạo nhưng revenue chưa ghi). `revenue_records` update kiểu read-modify-write **không atomic** → 2 đơn cùng ngày đồng thời ghi đè nhau. Nên gói trong RPC transaction hoặc dùng RPC cộng dồn atomic cho revenue.
+> Gói toàn bộ checkout vào RPC `pos_mobile_checkout` (1 transaction DB): insert đơn + trừ tồn inline atomic + cộng dồn revenue atomic + KH/nợ + audit. Verify trên prod (rollback test). Xem HISTORY.md.
+
+### [ ] Đồng bộ schema production với migrations *(phát hiện khi làm #2 — 2026-06-27)*
+
+> Production self-hosted (iMac, container `supabase-db`) **chưa chạy** một số migration: RPC `*_v2` (013) và cột `branch_id`/constraint `(date,branch_id)` của `revenue_records`. Hệ thống vẫn chạy nhờ fallback legacy, nhưng `supabase_setup.sql`/migrations đang **lệch** với DB thật. Nên rà soát & chạy bù các migration còn thiếu (hoặc cập nhật setup cho khớp) để tránh bẫy cho lần sau.
 
 ### [ ] Làm cứng auth `services/auth.ts` *(phát hiện khi test 2026-06-27)*
 
