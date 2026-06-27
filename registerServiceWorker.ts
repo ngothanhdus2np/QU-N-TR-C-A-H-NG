@@ -12,9 +12,12 @@ export function registerServiceWorker(config?: ServiceWorkerConfig) {
     return;
   }
 
-  // Khi SW mới activate và claim clients → tự động reload trang
+  // Chỉ tự reload khi SW MỚI thay thế SW CŨ (update thật). Lần cài đầu trên máy mới
+  // (chưa có controller) thì bỏ qua — tránh ép reload giữa lúc đang khởi tạo/đăng nhập.
+  const hadController = !!navigator.serviceWorker.controller;
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // lần đầu cài SW → không reload
     if (reloading) return;
     reloading = true;
     window.location.reload();

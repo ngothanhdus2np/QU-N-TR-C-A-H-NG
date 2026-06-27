@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — Fix lỗi "máy mới vào báo lỗi, reload mới được" (Service Worker)
+
+- Root cause (từ console máy mới): (1) `service-worker.js` handler mặc định cache MỌI response không kiểm method → `cache.put()` ném `Request method 'HEAD' is unsupported` flood (app poll health/kết nối bằng HEAD); (2) `controllerchange` ép `window.location.reload()` ngay cả lần cài SW đầu tiên → giật giữa lúc khởi tạo
+- Fix 1: SW bỏ qua mọi request non-GET (`if (request.method !== 'GET') return;`) — diệt sạch flood, không cache nhầm request mutate
+- Fix 2: chỉ auto-reload khi đã có controller trước đó (update thật) — `hadController` guard; lần cài SW đầu không reload
+- Verify: tsc sạch, app boot không lỗi console (SW không đăng ký trong preview headless nên phép thử thật là trên production sau deploy)
+- Files: `public/service-worker.js`, `registerServiceWorker.ts`
+
 ### 2026-06-27 — Fix lỗi ngẫu nhiên "1 trang báo lỗi, trang khác bình thường"
 
 - Nguyên nhân kép: (#2) ChunkLoadError sau deploy — chunk đổi hash, bản cũ trong cache/SW 404 khi `import()`; (#1) truy cập `.items` không null-guard trên record cache cũ thiếu trường

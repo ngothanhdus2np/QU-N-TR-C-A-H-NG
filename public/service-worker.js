@@ -67,6 +67,13 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // SW chỉ xử lý GET. Các method khác (HEAD/POST/PUT/DELETE) đi thẳng ra mạng —
+  // Cache API .put() ném lỗi với HEAD ("Request method 'HEAD' is unsupported"),
+  // và không bao giờ nên cache request mutate.
+  if (request.method !== 'GET') {
+    return;
+  }
+
   // Skip cross-origin requests
   if (url.origin !== location.origin) {
     return;
