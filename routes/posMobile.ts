@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, RequestHandler } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -48,17 +49,48 @@ interface CheckoutBody {
   finalAmount: number;
 }
 
-export function createPosMobileRouter(supabase: SupabaseClient) {
+export function createPosMobileRouter(supabase: SupabaseClient, requireAuth: RequestHandler) {
   const router = Router();
 
-  // Public — không cần auth, backend dùng service role
+  // Bảo vệ bằng token bí mật (POS_MOBILE_TOKEN): desktop POS đã đăng nhập lấy token
+  // qua /api/pos-mobile/token rồi nhúng vào QR. Điện thoại gửi token qua header
+  // 'x-pos-mobile-token' hoặc query '?t='. Backend dùng service role nên token này
+  // là lớp xác thực duy nhất cho các endpoint mobile.
+  const POS_MOBILE_TOKEN = process.env.POS_MOBILE_TOKEN || '';
 
-  router.get('/api/pos-mobile/products', async (req: Request, res: Response) => {
+  const safeEqual = (a: string, b: string): boolean => {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ab.length === bb.length && timingSafeEqual(ab, bb);
+  };
+
+  const requireMobileToken: RequestHandler = (req, res, next) => {
+    if (!POS_MOBILE_TOKEN) {
+      return res.status(503).json({ error: 'POS mobile chưa được cấu hình (thiếu POS_MOBILE_TOKEN)' });
+    }
+    const provided =
+      (req.headers['x-pos-mobile-token'] as string) ||
+      (typeof req.query.t === 'string' ? req.query.t : '') ||
+      '';
+    if (provided && safeEqual(provided, POS_MOBILE_TOKEN)) return next();
+    return res.status(401).json({ error: 'Unauthorized - thiếu hoặc sai token POS mobile' });
+  };
+
+  // Desktop POS (đã đăng nhập) lấy token để dựng mã QR
+  router.get('/api/pos-mobile/token', requireAuth, (_req: Request, res: Response) => {
+    if (!POS_MOBILE_TOKEN) {
+      return res.status(503).json({ error: 'Chưa cấu hình POS_MOBILE_TOKEN trên server' });
+    }
+    return res.json({ token: POS_MOBILE_TOKEN });
+  });
+
+  router.get('/api/pos-mobile/products', requireMobileToken, async (req: Request, res: Response) => {
     const q = String(req.query.q || '').trim();
     try {
       let query = supabase
         .from('pos_products')
-        .select('id, name, sku, barcode, sale_price, stock, import_price, image_url, unit')
+        // Không trả import_price (giá vốn) ra client — checkout tự lấy giá vốn từ DB
+        .select('id, name, sku, barcode, sale_price, stock, image_url, unit')
         .order('name')
         .limit(50);
       if (q) {
@@ -75,7 +107,7 @@ export function createPosMobileRouter(supabase: SupabaseClient) {
     }
   });
 
-  router.get('/api/pos-mobile/customers', async (req: Request, res: Response) => {
+  router.get('/api/pos-mobile/customers', requireMobileToken, async (req: Request, res: Response) => {
     const q = String(req.query.q || '').trim();
     try {
       let query = supabase
@@ -94,7 +126,7 @@ export function createPosMobileRouter(supabase: SupabaseClient) {
     }
   });
 
-  router.post('/api/pos-mobile/checkout', async (req: Request, res: Response) => {
+  router.post('/api/pos-mobile/checkout', requireMobileToken, async (req: Request, res: Response) => {
     const {
       cart, customerId, customerName, paymentMethod, splitPayments,
       cashReceived, isDebtMode, notes, totalAmount, discount, finalAmount,

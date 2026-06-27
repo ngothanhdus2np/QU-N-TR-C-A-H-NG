@@ -3,6 +3,36 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — Bảo mật: vá lỗ hổng API POS Mobile mở công khai
+
+- Root cause: `routes/posMobile.ts` mount không `requireAuth`, 3 endpoint public dùng service role (bypass RLS) → lộ giá vốn + PII khách, cho phép tạo đơn giả/trừ kho/ghi doanh thu từ Internet (app expose qua Cloudflare Tunnel)
+- Fix: thêm token bí mật `POS_MOBILE_TOKEN` — desktop lấy qua `GET /api/pos-mobile/token` (có requireAuth), nhúng vào QR; điện thoại gửi qua header `x-pos-mobile-token` (hoặc `?t=`); server đối chiếu timing-safe (`crypto.timingSafeEqual`)
+- Bỏ `import_price` khỏi response `/products` (checkout vẫn tự lấy giá vốn từ DB nên không sai COGS)
+- Verify (browser + curl): không/sai token → 401, đúng token → 200 và không lộ giá vốn, `/token` có auth → 401 khi thiếu JWT, trang `/pos-quick?t=` bán được
+- Files: `routes/posMobile.ts`, `server.ts`, `components/pos/POSHeaderToolbar.tsx`, `components/pos/POSQuickPage.tsx`, `components/LoginPage.tsx`, `.env.local` (thêm `POS_MOBILE_TOKEN`)
+
+### 2026-06-27 — Fix mergeRemoteUpdate không ghi vào IndexedDB
+
+- Root cause: `mergeRemoteUpdate` (gọi khi nhận realtime event từ thiết bị khác) chỉ update RAM, không ghi IndexedDB → reload trang thì mất update
+- Fix: thêm IndexedDB persistence vào `mergeRemoteUpdate` trong `hooks/useAppData.ts:828` (giống pattern của `updateSurgical`)
+- Files: `hooks/useAppData.ts`
+
+### 2026-06-27 — Refactor OnlineCatalogPage dùng AppData thay vì fetch Supabase riêng
+
+- Root cause: trang catalog tự fetch sản phẩm từ Supabase 1 lần khi mount → không phản ánh sửa đổi từ GoodsInventory
+- Fix: loại bỏ `RawProduct` interface + Supabase product fetch; dùng `products: POSProduct[]` prop từ AppData (luôn đồng bộ realtime)
+- `platformMap` (raw từ API) → `enrichedPlatformMap` (tính via useMemo: kế thừa platform từ cha xuống con)
+- Grid popup: thay Supabase fetch bằng `variantById.get(popupVariantId)` trực tiếp từ AppData
+- `MainContent.tsx` line 767: thêm `products={data.posProducts || []}` prop
+- Files: `components/website/OnlineCatalogPage.tsx`, `components/MainContent.tsx`
+
+### 2026-06-27 — Fix tên sản phẩm biến thể bị lặp thuộc tính
+
+- Root cause: DB chỉ lưu thuộc tính vào cột `name` của sản phẩm con (vd: "Đen - 38"), không lưu tên cha → `buildVariantProductName("Đen - 38", {Màu:"Đen",Size:"38"})` = "Đen - 38 - Đen - 38"
+- Fix trong `dataMapper.ts`: thêm pre-pass xây `parentNameMap` (id → name của sản phẩm cha), dùng tên cha làm `baseName` khi map sản phẩm con — two-pass IIFE pattern
+- Fix trong `useRealtimeSync.ts`: dùng `stripVariantProductNameSuffix` để bóc suffix cũ trước khi gọi `buildVariantProductName` khi nhận realtime update
+- Files: `services/dataMapper.ts`, `hooks/useRealtimeSync.ts`
+
 ### 2026-06-27 — Fix lỗi ngẫu nhiên "Module gặp lỗi" trên nhiều trang
 
 - Root cause: `o.items.forEach()` / `.reduce()` / `.map()` không có null guard → crash khi orders từ cache cũ (IndexedDB) thiếu trường `items`

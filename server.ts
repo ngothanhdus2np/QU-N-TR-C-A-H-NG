@@ -564,7 +564,7 @@ async function startServer() {
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
     app.use(createShopeeSyncRouter(requireAuth));
     app.use(createInventoryOutSyncRouter(supabase, requireAuth));
-    app.use(createPosMobileRouter(supabase));
+    app.use(createPosMobileRouter(supabase, requireAuth));
 
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
     if (!IS_PROD) {

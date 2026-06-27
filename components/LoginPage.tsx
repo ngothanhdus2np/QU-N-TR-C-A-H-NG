@@ -43,7 +43,6 @@ export default function LoginPage() {
     const meta = result.user?.user_metadata || {};
     const role = meta.role || 'owner';
     if (role === 'cashier') {
-      fetch('/api/pos-mobile/products?q=').catch(() => null);
       triggerCashierTransition(() => navigate('/pos'));
       return;
     }

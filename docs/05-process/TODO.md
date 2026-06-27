@@ -9,6 +9,24 @@
 
 ---
 
+### [x] Vá lỗ hổng API POS Mobile mở công khai *(xong 2026-06-27)*
+
+> `routes/posMobile.ts` mount không `requireAuth`, 3 endpoint public dùng service role → đã thêm token `POS_MOBILE_TOKEN` (header `x-pos-mobile-token` / `?t=`), bỏ `import_price` khỏi response. Verify đầy đủ. Xem HISTORY.md.
+
+### [ ] Làm cứng checkout POS Mobile — transaction + atomic revenue *(phát hiện khi test 2026-06-27)*
+
+> `routes/posMobile.ts` checkout gồm 6 bước insert/update **tuần tự, không transaction tổng** → fail giữa chừng gây lệch dữ liệu (đơn tạo nhưng revenue chưa ghi). `revenue_records` update kiểu read-modify-write **không atomic** → 2 đơn cùng ngày đồng thời ghi đè nhau. Nên gói trong RPC transaction hoặc dùng RPC cộng dồn atomic cho revenue.
+
+### [ ] Làm cứng auth `services/auth.ts` *(phát hiện khi test 2026-06-27)*
+
+> ① `getUserMetadata` fallback `role:'owner'`/`tenant:'phuc-sang'` khi metadata thiếu → nên throw. ② `signUp` export không admin-check. ③ `updatePassword` không yêu cầu mật khẩu cũ.
+
+### [ ] Dọn 7 lỗi TypeScript `routes/channelLinks.ts` + test giòn `adminStoreModule` *(phát hiện khi test 2026-06-27)*
+
+> 7 lỗi type `inBatches<T>` (data thành `unknown`) — không chặn build nhưng nên fix generic. Test `tests/unit/adminStoreModule.test.ts` fail do string-match `requireRole(...)` lệch với source dùng spread `...requireRole(...)` — cập nhật test cho khớp.
+
+---
+
 ### [x] Sửa trang khách hàng: lấy dữ liệu từ đơn hàng thực tế + redesign tab lịch sử *(xong 2026-06-23)*
 
 > Thay `c.totalSpent` bằng `orderStats` từ đơn hàng thực tế. Load all-time orders (POS_ORDER_BOOTSTRAP_DAYS=0).

@@ -53,6 +53,9 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 export const POSQuickPage: React.FC = () => {
+  // Token bí mật lấy từ QR (?t=...) — gửi kèm mọi lời gọi API mobile để xác thực
+  const mobileToken = new URLSearchParams(window.location.search).get('t') || '';
+
   const [step, setStep] = useState<Step>('cart');
 
   // Sản phẩm + tìm kiếm
@@ -109,7 +112,9 @@ export const POSQuickPage: React.FC = () => {
     searchTimeout.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/pos-mobile/products?q=${encodeURIComponent(searchTerm)}`);
+        const res = await fetch(`/api/pos-mobile/products?q=${encodeURIComponent(searchTerm)}`, {
+          headers: { 'x-pos-mobile-token': mobileToken },
+        });
         const json = await res.json();
         setSearchResults(json.products || []);
         setShowResults(true);
@@ -126,7 +131,9 @@ export const POSQuickPage: React.FC = () => {
     custTimeout.current = setTimeout(async () => {
       setSearchingCustomer(true);
       try {
-        const res = await fetch(`/api/pos-mobile/customers?q=${encodeURIComponent(customerSearch)}`);
+        const res = await fetch(`/api/pos-mobile/customers?q=${encodeURIComponent(customerSearch)}`, {
+          headers: { 'x-pos-mobile-token': mobileToken },
+        });
         const json = await res.json();
         setCustomerResults(json.customers || []);
         setShowCustomerResults(true);
@@ -302,7 +309,7 @@ export const POSQuickPage: React.FC = () => {
     try {
       const res = await fetch('/api/pos-mobile/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-pos-mobile-token': mobileToken },
         body: JSON.stringify({
           cart,
           customerId: selectedCustomer?.id,

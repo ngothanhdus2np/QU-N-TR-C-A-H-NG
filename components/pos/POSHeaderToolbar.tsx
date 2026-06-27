@@ -144,11 +144,16 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   const [showMobileQR, setShowMobileQR] = React.useState(false);
   const [showOnlineOrdersPopup, setShowOnlineOrdersPopup] = React.useState(false);
   const [lanIp, setLanIp] = React.useState<string>('');
+  const [mobileToken, setMobileToken] = React.useState<string>('');
   const isLocalhost =
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const mobileUrl = isLocalhost && lanIp
+  const baseMobileUrl = isLocalhost && lanIp
     ? `http://${lanIp}:${window.location.port || 3000}/pos-quick`
     : window.location.origin + '/pos-quick';
+  // Chỉ phát QR khi đã có token — tránh tạo link mở API mobile không bảo vệ
+  const mobileUrl = mobileToken
+    ? `${baseMobileUrl}?t=${encodeURIComponent(mobileToken)}`
+    : baseMobileUrl;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mobileUrl)}`;
 
   React.useEffect(() => {
@@ -156,6 +161,12 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
       fetch('/api/local-ip').then(r => r.json()).then(d => { if (d.ip) setLanIp(d.ip); }).catch(() => {});
     }
   }, [isLocalhost, lanIp]);
+
+  React.useEffect(() => {
+    adminStoreRequest<{ token: string }>('/api/pos-mobile/token')
+      .then(d => { if (d?.token) setMobileToken(d.token); })
+      .catch(() => {});
+  }, []);
   const sortOptions = [
     { value: 'skuDesc' as const, label: 'Theo mã hàng', helper: 'Cao - thấp' },
     { value: 'priceDesc' as const, label: 'Theo giá tiền', helper: 'Cao - thấp' },
