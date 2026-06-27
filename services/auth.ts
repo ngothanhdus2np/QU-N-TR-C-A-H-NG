@@ -11,15 +11,6 @@ export interface SignInCredentials {
   password: string;
 }
 
-export interface SignUpCredentials extends SignInCredentials {
-  metadata?: {
-    tenant_id?: string;
-    branch_id?: string;
-    role?: string;
-    [key: string]: any;
-  };
-}
-
 export interface AuthResponse {
   user: User | null;
   session: Session | null;
@@ -33,25 +24,6 @@ export const signIn = async (credentials: SignInCredentials): Promise<AuthRespon
   const { data, error } = await supabase.auth.signInWithPassword({
     email: credentials.email,
     password: credentials.password,
-  });
-
-  return {
-    user: data.user,
-    session: data.session,
-    error,
-  };
-};
-
-/**
- * Sign up new user (admin only - should be done via Supabase Dashboard)
- */
-export const signUp = async (credentials: SignUpCredentials): Promise<AuthResponse> => {
-  const { data, error } = await supabase.auth.signUp({
-    email: credentials.email,
-    password: credentials.password,
-    options: {
-      data: credentials.metadata || {},
-    },
   });
 
   return {
@@ -96,54 +68,10 @@ export const refreshSession = async (): Promise<{ session: Session | null; error
   };
 };
 
-/**
- * Reset password (send reset email)
- */
-export const resetPassword = async (email: string): Promise<{ error: AuthError | null }> => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  });
-  return { error };
-};
-
-/**
- * Update password
- */
-export const updatePassword = async (newPassword: string): Promise<{ error: AuthError | null }> => {
-  const { error } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
-  return { error };
-};
-
-/**
- * Get user metadata (tenant_id, branch_id, role)
- */
-export const getUserMetadata = (user: User | null): {
-  tenant_id: string;
-  branch_id: string;
-  role: string;
-} => {
-  const metadata = user?.user_metadata || {};
-  return {
-    tenant_id: metadata.tenant_id || 'phuc-sang',
-    branch_id: metadata.branch_id || 'main',
-    role: metadata.role || 'owner',
-  };
-};
-
-/**
- * Check if user is admin
- */
-export const isAdmin = (user: User | null): boolean => {
-  const { role } = getUserMetadata(user);
-  return role === 'admin';
-};
-
-/**
- * Check if user is manager
- */
-export const isManager = (user: User | null): boolean => {
-  const { role } = getUserMetadata(user);
-  return role === 'admin' || role === 'manager';
-};
+// Đã xóa (code chết, không nơi nào gọi → loại bỏ rủi ro bảo mật BUG-SEC):
+//   signUp           — tạo user phải làm qua Supabase Dashboard (admin)
+//   resetPassword    — không rate-limit
+//   updatePassword   — không xác thực mật khẩu cũ
+//   getUserMetadata  — fallback nguy hiểm role='owner'/tenant='phuc-sang'
+//   isAdmin/isManager— chỉ dựa metadata client; phân quyền thật do RLS + requireAuth lo
+// Nếu sau này cần phân quyền theo role, hãy kiểm tra phía server (RLS/route), không tin client.

@@ -25,9 +25,9 @@
 
 > Production self-hosted (iMac, container `supabase-db`) **chưa chạy** một số migration: RPC `*_v2` (013) và cột `branch_id`/constraint `(date,branch_id)` của `revenue_records`. Hệ thống vẫn chạy nhờ fallback legacy, nhưng `supabase_setup.sql`/migrations đang **lệch** với DB thật. Nên rà soát & chạy bù các migration còn thiếu (hoặc cập nhật setup cho khớp) để tránh bẫy cho lần sau.
 
-### [ ] Làm cứng auth `services/auth.ts` *(phát hiện khi test 2026-06-27)*
+### [x] Làm cứng auth `services/auth.ts` *(xong 2026-06-27)*
 
-> ① `getUserMetadata` fallback `role:'owner'`/`tenant:'phuc-sang'` khi metadata thiếu → nên throw. ② `signUp` export không admin-check. ③ `updatePassword` không yêu cầu mật khẩu cũ.
+> Hóa ra 6 hàm bị gắn cờ (signUp/updatePassword/resetPassword/getUserMetadata/isAdmin/isManager) đều là code chết → đã xóa, diệt rủi ro với 0 ảnh hưởng. Xem HISTORY.md.
 
 ### [ ] Dọn 7 lỗi TypeScript `routes/channelLinks.ts` + test giòn `adminStoreModule` *(phát hiện khi test 2026-06-27)*
 

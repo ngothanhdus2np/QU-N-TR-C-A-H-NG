@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — #3 Auth hardening: xóa code chết rủi ro bảo mật
+
+- Phát hiện: `signUp` / `updatePassword` / `resetPassword` / `getUserMetadata` / `isAdmin` / `isManager` trong `services/auth.ts` **không nơi nào gọi** (dead code) → các lỗ hổng BUG-SEC (default role='owner', signUp không guard, updatePassword không cần mật khẩu cũ...) chỉ tồn tại trên code chết
+- Giải pháp an toàn nhất: **xóa 6 hàm + interface `SignUpCredentials`** → loại bỏ rủi ro với 0 ảnh hưởng hành vi. Giữ `signIn`/`signOut`/`getCurrentUser`/`getCurrentSession`/`refreshSession` (đang dùng)
+- Phân quyền thật vẫn do RLS + `requireAuth` (server) đảm nhiệm — không tin client
+- Verify: tsc sạch, build OK, app boot + luồng login nguyên vẹn
+- Files: `services/auth.ts`
+
 ### 2026-06-27 — #2 Làm cứng checkout POS Mobile (atomic transaction)
 
 - Thay 6 bước insert/update tuần tự trong `routes/posMobile.ts` bằng 1 RPC `pos_mobile_checkout` chạy trong **1 transaction DB**: insert đơn + trừ tồn inline atomic + cộng dồn `revenue_records` atomic (`ON CONFLICT (date)`) + cập nhật KH/nợ + audit (best-effort). Lỗi bất kỳ bước nào → rollback toàn bộ
