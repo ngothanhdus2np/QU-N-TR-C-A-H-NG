@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — Fix lỗi ngẫu nhiên "1 trang báo lỗi, trang khác bình thường"
+
+- Nguyên nhân kép: (#2) ChunkLoadError sau deploy — chunk đổi hash, bản cũ trong cache/SW 404 khi `import()`; (#1) truy cập `.items` không null-guard trên record cache cũ thiếu trường
+- #2: `ErrorBoundary` tự khôi phục khi gặp ChunkLoadError → xóa toàn bộ cache + reload 1 lần (guard 10s qua sessionStorage chống vòng lặp); nút "Thử lại" cũng reload khi là lỗi chunk
+- #1: thêm guard `(x || [])` cho 5 chỗ `.items` còn sót: `printInvoiceFromTemplate.ts` (2), `GoodsAuditForm.tsx` (2), `GoodsPurchaseForm.tsx` (1)
+- Verify: tsc sạch (chỉ còn 7 lỗi channelLinks.ts có sẵn), app boot không lỗi console / không module error
+- Files: `components/ui/ErrorBoundary.tsx`, `components/pos/printInvoiceFromTemplate.ts`, `components/pos/GoodsAuditForm.tsx`, `components/pos/GoodsPurchaseForm.tsx`
+
 ### 2026-06-27 — Bảo mật: vá lỗ hổng API POS Mobile mở công khai
 
 - Root cause: `routes/posMobile.ts` mount không `requireAuth`, 3 endpoint public dùng service role (bypass RLS) → lộ giá vốn + PII khách, cho phép tạo đơn giả/trừ kho/ghi doanh thu từ Internet (app expose qua Cloudflare Tunnel)

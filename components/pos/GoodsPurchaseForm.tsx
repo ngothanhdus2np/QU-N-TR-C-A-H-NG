@@ -668,7 +668,7 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                         <td className="px-3 py-2 text-right font-normal text-emerald-600">
                           {(
                             t.totalAmount ||
-                            t.items.reduce((s, i) => s + i.quantity * (i.price || 0), 0)
+                            (t.items || []).reduce((s, i) => s + i.quantity * (i.price || 0), 0)
                           ).toLocaleString()}
                           đ
                         </td>

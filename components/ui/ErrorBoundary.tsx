@@ -11,6 +11,16 @@ interface State {
   error: Error | null;
 }
 
+// Lỗi tải chunk động (thường xảy ra sau deploy: file chunk đổi hash, bản cũ trong
+// cache/Service Worker không còn tồn tại trên server → import() 404).
+const isChunkLoadError = (error: Error | null): boolean => {
+  if (!error) return false;
+  const sig = `${error.name} ${error.message}`;
+  return /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(sig);
+};
+
+const CHUNK_RELOAD_KEY = 'cfo_chunk_reload_at';
+
 class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
@@ -20,9 +30,31 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(`[ErrorBoundary] ${this.props.moduleName ?? 'module'} crashed:`, error, info.componentStack);
+
+    // Tự khôi phục khi lỗi do chunk cũ sau deploy: xóa cache rồi tải lại 1 lần.
+    // Guard 10s qua sessionStorage để tránh vòng lặp reload vô hạn nếu lỗi thật.
+    if (isChunkLoadError(error)) {
+      const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0);
+      if (Date.now() - last > 10000) {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+        const reload = () => window.location.reload();
+        if (typeof caches !== 'undefined') {
+          caches.keys()
+            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+            .finally(reload);
+        } else {
+          reload();
+        }
+      }
+    }
   }
 
   handleReset = () => {
+    // Lỗi chunk: reset state không đủ (chunk vẫn thiếu) → tải lại trang để lấy bản mới
+    if (isChunkLoadError(this.state.error)) {
+      window.location.reload();
+      return;
+    }
     this.setState({ hasError: false, error: null });
   };
 

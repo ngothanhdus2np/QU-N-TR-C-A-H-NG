@@ -9,6 +9,10 @@
 
 ---
 
+### [x] Fix lỗi ngẫu nhiên "1 trang báo lỗi" *(xong 2026-06-27)*
+
+> 2 nguyên nhân: ChunkLoadError sau deploy + `.items` không null-guard trên cache cũ. ErrorBoundary tự reload khi lỗi chunk; vá 5 chỗ `.items` còn sót. Xem HISTORY.md.
+
 ### [x] Vá lỗ hổng API POS Mobile mở công khai *(xong 2026-06-27)*
 
 > `routes/posMobile.ts` mount không `requireAuth`, 3 endpoint public dùng service role → đã thêm token `POS_MOBILE_TOKEN` (header `x-pos-mobile-token` / `?t=`), bỏ `import_price` khỏi response. Verify đầy đủ. Xem HISTORY.md.

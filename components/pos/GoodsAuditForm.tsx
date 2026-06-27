@@ -54,7 +54,7 @@ export const GoodsKhoHistory: React.FC<GoodsKhoHistoryProps> = ({ transactions }
               <td className="p-4 text-indigo-600 font-normal">#{t.id.slice(0, 8)}</td>
               <td className="p-4 text-slate-500">{new Date(t.date).toLocaleDateString()}</td>
               <td className="p-4 text-right font-normal">
-                {t.items.reduce((s, i) => s + i.quantity, 0)}
+                {(t.items || []).reduce((s, i) => s + i.quantity, 0)}
               </td>
               <td className="p-4 text-center">
                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-normal uppercase">
@@ -617,7 +617,7 @@ export const GoodsAuditForm: React.FC<GoodsAuditFormProps> = ({
                 </div>
               ) : (
                 recentChecks.map(transaction => {
-                  const diff = transaction.items.reduce((sum, item) => sum + item.quantity, 0);
+                  const diff = (transaction.items || []).reduce((sum, item) => sum + item.quantity, 0);
                   return (
                     <div key={transaction.id} className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">

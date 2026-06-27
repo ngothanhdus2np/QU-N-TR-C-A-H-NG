@@ -170,7 +170,7 @@ export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | nu
       const nameTpl = templateLines[itemNameLineIdx];
       const valueTpl = templateLines[itemValueLineIdx];
 
-      order.items.forEach(item => {
+      (order.items || []).forEach(item => {
         const isReturn = item.lineType === 'return';
         const isExchange = item.lineType === 'exchange';
         const prefix = isReturn ? '[TRẢ] ' : isExchange ? '[ĐỔI] ' : '';
@@ -415,7 +415,7 @@ function buildWarrantyHtml(opts: PrintWarrantyOptions, items: POSOrder['items'])
 }
 
 export function openPrintWarranty(opts: PrintWarrantyOptions, copies = 1): boolean {
-  const saleItems = opts.order.items.filter(i => i.lineType !== 'return');
+  const saleItems = (opts.order.items || []).filter(i => i.lineType !== 'return');
   if (saleItems.length === 0) return false;
 
   if (opts.mode === 'per_item') {
