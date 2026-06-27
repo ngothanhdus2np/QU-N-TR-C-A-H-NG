@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { AppDataSurgicalUpdate, POSOrder, POSProduct, RevenueRecord } from '../types';
-import { buildVariantProductName } from '../src/lib/businessLogic.inventory';
+import { buildVariantProductName, stripVariantProductNameSuffix } from '../src/lib/businessLogic.inventory';
 
 // IDs vừa được local device ghi — dùng để bỏ qua echo từ Realtime
 const _recentLocalWrites = new Set<string>();
@@ -50,7 +50,7 @@ function mapProductRow(p: any): POSProduct {
   const variantAttributes = p.variant_attributes || p.variantAttributes || {};
   const isParent = p.is_parent ?? p.isParent ?? false;
   const name = !isParent && (p.parent_id || p.parentId)
-    ? buildVariantProductName(p.name || '', variantAttributes)
+    ? buildVariantProductName(stripVariantProductNameSuffix(p.name || '', variantAttributes), variantAttributes)
     : (p.name || '');
   return {
     id: p.id,

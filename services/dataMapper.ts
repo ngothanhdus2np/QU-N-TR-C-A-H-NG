@@ -505,20 +505,31 @@ export const dataMapper = {
         return Array.from(bestByOrder.values());
       })(),
       posProducts: this.mergeBy(
-        (results.posProducts || []).map(p => {
+        (() => {
+          const rawProducts = results.posProducts || [];
+          const parentNameMap = new Map<string, string>();
+          for (const p of rawProducts) {
+            if (p.is_parent ?? p.isParent ?? false) {
+              parentNameMap.set(p.id as string, (p.name || '') as string);
+            }
+          }
+          return rawProducts.map(p => {
           const attrText = (p.attributes_text || p.attributesText || '') as string;
           const variantAttributes =
             p.variant_attributes ||
             p.variantAttributes ||
             parseVariantAttrText(attrText);
           const isParent = p.is_parent ?? p.isParent ?? false;
+          const parentId = (p.parent_id || p.parentId || null) as string | null;
+          const baseName = (!isParent && parentId)
+            ? (parentNameMap.get(parentId) || (p.name || '') as string)
+            : (p.name || '') as string;
           return {
             id: p.id,
             sku: p.sku || '',
-            name:
-              !isParent && (p.parent_id || p.parentId)
-                ? buildVariantProductName((p.name || '') as string, variantAttributes as Record<string, string>)
-                : (p.name || '') as string,
+            name: (!isParent && parentId)
+              ? buildVariantProductName(baseName, variantAttributes as Record<string, string>)
+              : baseName,
             categoryId: p.category_id || p.categoryId,
             categoryPath: p.category_path || p.categoryPath,
             importPrice: Number(p.import_price || p.importPrice || 0),
@@ -557,7 +568,8 @@ export const dataMapper = {
             isParent,
             variantCount: Number(p.variant_count ?? p.variantCount ?? 0),
           };
-        }),
+        });
+        })(),
         localData?.posProducts || []
       ),
       posOrders: this.mergeBy(
