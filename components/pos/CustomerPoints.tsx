@@ -298,7 +298,7 @@ const CustomerPoints: React.FC<CustomerPointsProps> = ({
                         <div className="space-y-1">
                           <div className="font-normal text-slate-900 text-sm">{o.orderCode}</div>
                           <div className="text-2xs font-normal text-slate-400 uppercase tracking-widest">
-                            {new Date(o.date).toLocaleDateString('vi-VN')} · {o.items.length} sản phẩm · {o.paymentMethod}
+                            {new Date(o.date).toLocaleDateString('vi-VN')} · {(o.items || []).length} sản phẩm · {o.paymentMethod}
                           </div>
                         </div>
                         <div className="text-right shrink-0">

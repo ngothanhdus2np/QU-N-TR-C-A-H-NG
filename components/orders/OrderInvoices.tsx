@@ -427,7 +427,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
       `Khách hàng: ${order.customerName || 'Khách lẻ'}`,
       `Ngày bán: ${formatOrderDateTime(order.date)}`,
       `Tổng thanh toán: ${fmt(order.finalAmount)}`,
-      `Sản phẩm: ${order.items.map(item => `${item.name} x ${item.quantity}`).join('; ')}`,
+      `Sản phẩm: ${(order.items || []).map(item => `${item.name} x ${item.quantity}`).join('; ')}`,
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
@@ -486,7 +486,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
         date: returnOrder.date,
         type: 'Return' as const,
         staffId: order.staffId,
-        items: order.items.map(item => {
+        items: (order.items || []).map(item => {
           const product = products.find(p => p.id === item.productId);
           return {
             productId: item.productId,
@@ -506,7 +506,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
     // Cập nhật revenue: trừ doanh thu, trừ COGS (hàng trả về kho)
     const returnDateKey = new Date(returnOrder.date).toLocaleDateString('en-CA');
     const existingRevenue = (revenue || []).find(r => r.date === returnDateKey);
-    const returnCogs = order.items.reduce((sum, item) => {
+    const returnCogs = (order.items || []).reduce((sum, item) => {
       const product = products.find(p => p.id === item.productId);
       return sum + (product?.importPrice || 0) * item.quantity;
     }, 0);
@@ -570,7 +570,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
 
   const renderOrderDetail = (order: AppData['posOrders'][number]) => {
     const customer = getOrderCustomer(order);
-    const totalQuantity = order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const totalQuantity = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     const isEditing = editingOrderId === order.id;
     return (
       <tr>
@@ -736,7 +736,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {order.items.map((item, index) => (
+                    {(order.items || []).map((item, index) => (
                       <tr key={`${item.productId || item.sku}-${index}`}>
                         <td className="px-3 py-3 font-medium text-blue-600">{item.sku || item.productId || '—'}</td>
                         <td className="px-3 py-3 font-normal text-slate-900">{item.name}</td>

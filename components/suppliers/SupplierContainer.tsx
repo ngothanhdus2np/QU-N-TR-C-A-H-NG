@@ -147,7 +147,7 @@ const SupplierContainer: React.FC<SupplierContainerProps> = ({
         }, 0);
       const categorySet = new Set<string>();
       importTxns.forEach(t => {
-        t.items.forEach(item => {
+        (t.items || []).forEach(item => {
           const cat = productCatMap.get(item.productId);
           if (cat) categorySet.add(cat);
         });

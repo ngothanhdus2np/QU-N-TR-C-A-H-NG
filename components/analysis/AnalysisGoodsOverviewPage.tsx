@@ -90,7 +90,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
     (orders || []).forEach(o => {
       const orderDate = toDateInputValue(new Date(o.date));
       if (orderDate < startDate || orderDate > endDate) return;
-      o.items.forEach(item => {
+      (o.items || []).forEach(item => {
         const prod = productMap.get(item.productId);
         const groupName = getGroupName(prod?.categoryPath || prod?.categoryId || '');
         const importPrice = prod?.importPrice ?? 0;
@@ -146,7 +146,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
     >();
 
     salesOrders.forEach(o => {
-      o.items.forEach(item => {
+      (o.items || []).forEach(item => {
         const prod = productMap.get(item.productId);
         const importPrice = prod?.importPrice ?? 0;
         const gp = (item.price - importPrice) * item.quantity - item.discount;
@@ -168,7 +168,7 @@ const AnalysisGoodsOverviewPage: React.FC<Props> = ({ data }) => {
     });
 
     returnOrders.forEach(o => {
-      o.items.forEach(item => {
+      (o.items || []).forEach(item => {
         const prev = pMap.get(item.productId);
         if (prev) pMap.set(item.productId, { ...prev, retQty: prev.retQty + item.quantity });
       });

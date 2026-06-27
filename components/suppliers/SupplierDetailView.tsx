@@ -386,7 +386,7 @@ const SupplierDetailView: React.FC<SupplierDetailViewProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(purchase.date)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{purchase.items.length}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{(purchase.items || []).length}</td>
                     <td className={`px-4 py-3 text-right ${purchase.type === 'Import' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatMoney(purchase.totalAmount || 0)}
                     </td>

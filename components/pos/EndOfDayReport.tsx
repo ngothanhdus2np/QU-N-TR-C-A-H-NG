@@ -60,7 +60,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     let totalAllOrders = 0, allQty = 0;
 
     for (const o of filteredOrders) {
-      const qty = o.items.reduce((q, i) => q + i.quantity, 0);
+      const qty = (o.items || []).reduce((q, i) => q + i.quantity, 0);
       allQty += qty;
       if (!o.isReturn) totalAllOrders += Math.abs(o.totalAmount);
       if (o.isReturn) {
@@ -129,7 +129,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     ordersByMethod.forEach((methodOrders, method) => {
       const sales      = methodOrders.filter(o => !o.isReturn);
       const returns    = methodOrders.filter(o => !!o.isReturn);
-      const qty        = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
+      const qty        = methodOrders.reduce((s, o) => s + (o.items || []).reduce((q, i) => q + i.quantity, 0), 0);
       // Tổng tiền hàng = chỉ đơn bán (trả hàng hiển thị riêng ở group "Trả hàng")
       const totienHang = sales.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
       const traHang    = returns.reduce((s, o) => s + Math.abs(o.totalAmount), 0);
@@ -150,7 +150,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
       m.set(o.id, {
         time:      fmtTime(o.date),
         staffName: o.staffName || staffNameMap.get(o.staffId) || '',
-        qty:       o.items.reduce((s, i) => s + i.quantity, 0),
+        qty:       (o.items || []).reduce((s, i) => s + i.quantity, 0),
         disc:      Math.abs(o.discount || 0),
       });
     });
@@ -197,8 +197,8 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
 
     const uniqueProducts = new Set<string>();
     const productQty = salesOrders.reduce((sum, order) => {
-      order.items.forEach(item => uniqueProducts.add(item.productId || item.sku || item.name));
-      return sum + order.items.reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0);
+      (order.items || []).forEach(item => uniqueProducts.add(item.productId || item.sku || item.name));
+      return sum + (order.items || []).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0);
     }, 0);
 
     const paymentTotal = payments.cash + payments.bank + payments.card + payments.wallet + payments.points + payments.voucher;
@@ -337,7 +337,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
     const printMethodRows = Array.from(ordersByMethod.entries()).map(([method, methodOrders]) => {
       const mSales    = methodOrders.filter(o => !o.isReturn);
       const mReturns  = methodOrders.filter(o => !!o.isReturn);
-      const mQty      = methodOrders.reduce((s, o) => s + o.items.reduce((q, i) => q + i.quantity, 0), 0);
+      const mQty      = methodOrders.reduce((s, o) => s + (o.items || []).reduce((q, i) => q + i.quantity, 0), 0);
       const mTienHang = mSales.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
       const mTraHang  = mReturns.reduce((s, o) => s + Math.abs(Number(o.totalAmount) || 0), 0);
       const mDoanhThu = mSales.reduce((s, o) => s + calcOrderRevenue(o), 0); // = totalAmount - discount
@@ -358,7 +358,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
           ${dtd(fmtCustomer(order.customerName))}
           ${dtd(staffName)}
           ${dtd(`<span style="color:#94a3b8">${time}</span>`)}
-          ${dtdR(String(order.items.reduce((s, i) => s + i.quantity, 0)))}
+          ${dtdR(String((order.items || []).reduce((s, i) => s + i.quantity, 0)))}
           ${dtdR(isRet ? fmt(retAmt) : fmt(tienHang), isRet ? '#e11d48' : '')}
           ${dtdR('0')}
           ${dtdR(isRet ? '0' : fmt(doanhThuOrder))}
@@ -389,7 +389,7 @@ const EndOfDayReport: React.FC<EndOfDayReportProps> = ({
         ${dtd(fmtCustomer(order.customerName))}
         ${dtd(staffName)}
         ${dtd(`<span style="color:#94a3b8">${time}</span>`)}
-        ${dtdR(String(order.items.reduce((s, i) => s + i.quantity, 0)))}
+        ${dtdR(String((order.items || []).reduce((s, i) => s + i.quantity, 0)))}
         ${dtdR(fmt(retAmt), '#e11d48')}
         ${dtdR('0')}${dtdR('0')}
         ${dtdR('0')}${dtdR('0')}${dtdR('0')}

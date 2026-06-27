@@ -233,7 +233,7 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
     const totals = new Map<string, { qty: number; amount: number }>();
     inventoryTransactions.forEach(transaction => {
       if (transaction.status === 'cancelled' || transaction.type !== 'Import') return;
-      transaction.items.forEach(item => {
+      (transaction.items || []).forEach(item => {
         const key = item.productId || item.sku;
         if (!key) return;
         const qty = Number(item.quantity) || 0;
@@ -272,7 +272,7 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
       if (!row) return;
       if (order.isReturn) {
         row.returnsValue += Math.abs(Number(order.totalAmount) || 0);
-        order.items.forEach(item => {
+        (order.items || []).forEach(item => {
           const itemCost = Number(item.importPrice);
           const unitCost = itemCost > 0 ? itemCost : (
             productCostById.get(item.productId) ??
@@ -291,7 +291,7 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
         row.grossRevenue += totalAmt;
         row.discount += disc;
         row.netRevenue += totalAmt - disc; // chuẩn KiotViet: không trừ điểm tích lũy
-        order.items.forEach(item => {
+        (order.items || []).forEach(item => {
           const itemCost = Number(item.importPrice);
           const unitCost = itemCost > 0 ? itemCost : (
             productCostById.get(item.productId) ??
@@ -328,7 +328,7 @@ const FinanceReportPage: React.FC<FinanceReportPageProps> = ({
       if (normalizedType !== 'disposal' && normalizedType !== 'internal_use') return;
       row.disposalCost +=
         Number(transaction.totalAmount) ||
-        transaction.items.reduce((sum, item) => {
+        (transaction.items || []).reduce((sum, item) => {
           const qty = Number(item.quantity) || 0;
           const price = Number(item.price) || 0;
           return sum + qty * price;

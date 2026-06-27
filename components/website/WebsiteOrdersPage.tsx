@@ -348,7 +348,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                       <div>
                         <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1">
                           <Package size={12} />
-                          Sản phẩm ({order.items.length} dòng)
+                          Sản phẩm ({(order.items || []).length} dòng)
                         </p>
                         <div className="border border-slate-100 rounded-lg overflow-hidden">
                           <table className="w-full text-sm">
@@ -362,7 +362,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
                               </tr>
                             </thead>
                             <tbody>
-                              {order.items.map((item, i) => (
+                              {(order.items || []).map((item, i) => (
                                 <tr key={i} className="border-b border-slate-50 last:border-0">
                                   <td className="px-3 py-2 text-xs text-slate-600">{item.sku}</td>
                                   <td className="px-3 py-2 text-slate-700">{item.productName}</td>

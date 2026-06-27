@@ -188,7 +188,7 @@ const AnalysisBusinessPage: React.FC<Props> = ({
       const inC = inCurr(o.date);
       const inP = inPrev(o.date);
       if (!inC && !inP) return;
-      o.items.forEach(item => {
+      (o.items || []).forEach(item => {
         const prod = productMap.get(item.productId);
         const importPrice = prod?.importPrice ?? 0;
         const catPath = prod?.categoryPath || prod?.categoryId || '';
@@ -348,7 +348,7 @@ const AnalysisBusinessPage: React.FC<Props> = ({
       const orderYear = orderDate.getFullYear();
       if (orderDate.getMonth() !== targetMonth || orderYear >= targetYear) return;
 
-      order.items.forEach(item => {
+      (order.items || []).forEach(item => {
         const product = productMap.get(item.productId);
         const groupName = getPrimaryGroupName(product?.categoryPath || product?.categoryId || '');
         const importPrice = product?.importPrice || 0;

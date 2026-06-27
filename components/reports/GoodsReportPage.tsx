@@ -184,7 +184,7 @@ const GoodsReportPage: React.FC<GoodsReportPageProps> = ({
     () =>
       getReportDropdownOptions([
         ...products.map(product => product.name || product.sku),
-        ...orders.flatMap(order => order.items.map(item => item.name || item.sku)),
+        ...orders.flatMap(order => (order.items || []).map(item => item.name || item.sku)),
       ]),
     [orders, products]
   );

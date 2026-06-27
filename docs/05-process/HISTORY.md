@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-27 — Fix lỗi ngẫu nhiên "Module gặp lỗi" trên nhiều trang
+
+- Root cause: `o.items.forEach()` / `.reduce()` / `.map()` không có null guard → crash khi orders từ cache cũ (IndexedDB) thiếu trường `items`
+- Thêm `(o.items || [])` guard tại 14 chỗ trong 7 file: `AnalysisGoodsOverviewPage.tsx` (3 chỗ), `AnalysisBusinessPage.tsx` (2 chỗ), `ProductGroupManager.tsx`, `SupplierContainer.tsx`, `SupplierDetailView.tsx`, `EndOfDayReport.tsx` (6 chỗ), `WebsiteOrdersPage.tsx` (2 chỗ), `CustomerPoints.tsx`
+- TypeScript check: chỉ còn lỗi cũ trong `routes/channelLinks.ts` (server-side, không ảnh hưởng React)
+- Files: `components/analysis/AnalysisGoodsOverviewPage.tsx`, `components/analysis/AnalysisBusinessPage.tsx`, `components/ProductGroupManager.tsx`, `components/suppliers/SupplierContainer.tsx`, `components/suppliers/SupplierDetailView.tsx`, `components/pos/EndOfDayReport.tsx`, `components/website/WebsiteOrdersPage.tsx`, `components/pos/CustomerPoints.tsx`
+
 ### 2026-06-25 — Shopee: Thêm trạng thái FAILED cho đơn giao hàng thất bại
 
 - Thêm cột `cancel_reason TEXT` vào bảng `shopee_inventory_out` (migration SQL trong `supabase_setup.sql`)

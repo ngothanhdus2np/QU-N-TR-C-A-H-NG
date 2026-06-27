@@ -151,7 +151,7 @@ const OrderReportPage: React.FC<OrderReportPageProps> = ({
     () =>
       getReportDropdownOptions([
         ...products.map(product => product.name || product.sku),
-        ...orderReportOrders.flatMap(order => order.items.map(item => item.name || item.sku)),
+        ...orderReportOrders.flatMap(order => (order.items || []).map(item => item.name || item.sku)),
       ]),
     [orderReportOrders, products]
   );

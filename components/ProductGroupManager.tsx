@@ -221,7 +221,7 @@ const ProductGroupManager: React.FC<Props> = ({
       }
       monthBucket.yearSet.add(year);
 
-      order.items.forEach(item => {
+      (order.items || []).forEach(item => {
         const groupName = productGroupPathMap.get(item.productId) || 'Chưa phân loại';
         const current = monthBucket.groups.get(groupName) || { groupName, rev: 0, qty: 0 };
         current.rev += item.total || item.price * item.quantity;

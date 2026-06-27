@@ -156,7 +156,7 @@ export default function OrderReturns({
         date: t.date,
         customerId: '',
         customerName: t.note?.match(/Khách hàng: ([^\n]+)/)?.[1] || 'Khách lẻ',
-        items: t.items.map(item => ({
+        items: (t.items || []).map(item => ({
           productId: item.productId,
           sku: item.sku || '',
           name: item.name || item.productName || item.productId,
@@ -167,11 +167,11 @@ export default function OrderReturns({
         })),
         totalAmount:
           t.totalAmount ||
-          t.items.reduce((sum, item) => sum + Math.max(0, item.quantity * (item.price || 0) - (item.discount || 0)), 0),
+          (t.items || []).reduce((sum, item) => sum + Math.max(0, item.quantity * (item.price || 0) - (item.discount || 0)), 0),
         discount: 0,
         finalAmount:
           t.totalAmount ||
-          t.items.reduce((sum, item) => sum + Math.max(0, item.quantity * (item.price || 0) - (item.discount || 0)), 0),
+          (t.items || []).reduce((sum, item) => sum + Math.max(0, item.quantity * (item.price || 0) - (item.discount || 0)), 0),
         paymentMethod: 'Other' as const,
         staffId: t.staffId || '',
         channelName: 'Bán trực tiếp',
@@ -205,7 +205,7 @@ export default function OrderReturns({
         candidate.notes?.includes(order.orderCode)
       )
       .forEach(candidate => {
-        candidate.items.forEach(item => {
+        (candidate.items || []).forEach(item => {
           returned.set(
             item.productId,
             (returned.get(item.productId) || 0) + Math.abs(Number(item.quantity) || 0)
@@ -220,7 +220,7 @@ export default function OrderReturns({
         (transaction.referenceId === order.id || transaction.note?.includes(order.orderCode))
       )
       .forEach(transaction => {
-        transaction.items.forEach(item => {
+        (transaction.items || []).forEach(item => {
           returned.set(
             item.productId,
             (returned.get(item.productId) || 0) + Math.abs(Number(item.quantity) || 0)
@@ -332,7 +332,7 @@ export default function OrderReturns({
     const returnedQuantities = getReturnedQuantitiesByProduct(order);
     setSelectedOrder(order);
     setReturnItems(
-      order.items.map(item => {
+      (order.items || []).map(item => {
         const maxQuantity = Math.max(
           0,
           (Number(item.quantity) || 0) - (returnedQuantities.get(item.productId) || 0)
@@ -586,7 +586,7 @@ export default function OrderReturns({
       }
     }
 
-    order.items.forEach(item => {
+    (order.items || []).forEach(item => {
       const product = products.find(product => product.id === item.productId);
       if (!product) return;
       updates.push({
@@ -599,7 +599,7 @@ export default function OrderReturns({
     // Hoàn lại revenue đã trừ khi xử lý phiếu trả
     const cancelDateKey = new Date(order.date).toLocaleDateString('en-CA');
     const existingRevenue = (revenue || []).find(r => r.date === cancelDateKey);
-    const cancelReturnCogs = order.items.reduce((sum, item) => {
+    const cancelReturnCogs = (order.items || []).reduce((sum, item) => {
       const product = products.find(p => p.id === item.productId);
       return sum + (product?.importPrice || 0) * Math.abs(Number(item.quantity) || 0);
     }, 0);
@@ -1325,7 +1325,7 @@ export default function OrderReturns({
                           {new Date(order.date).toLocaleDateString('vi-VN')}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {order.items.length} sản phẩm •{' '}
+                          {(order.items || []).length} sản phẩm •{' '}
                           {PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}
                         </p>
                       </div>
