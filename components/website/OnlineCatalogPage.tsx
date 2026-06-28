@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package, ShoppingBag } from 'lucide-react';
-import { supabase } from '../../services/supabase';
 import { GoodsPagination } from '../pos/GoodsPagination';
 import { GoodsProductDetailPanel } from '../pos/GoodsProductDetailPanel';
 import type { POSProduct } from '../../types';
@@ -14,31 +13,12 @@ type Platform = 'website' | 'shopee';
 interface Props {
   navigationSlot?: React.ReactNode;
   onNavigate?: (tab: string) => void;
-}
-
-interface RawProduct {
-  id: string;
-  sku: string;
-  name: string;
-  category_path: string | null;
-  import_price: number;
-  stock: number;
-  location: string | null;
-  brand: string | null;
-  parent_id: string | null;
-  is_parent: boolean;
-  variant_count: number | null;
-  status: string;
-  images?: string[] | null;
-  sale_price?: number | null;
+  products: POSProduct[];
 }
 
 type RootRow =
-  | { kind: 'group'; parentId: string; parent: RawProduct; children: RawProduct[] }
-  | { kind: 'single'; product: RawProduct };
-
-const PRODUCT_COLUMNS =
-  'id, sku, name, category_path, import_price, sale_price, stock, location, brand, parent_id, is_parent, variant_count, status, images';
+  | { kind: 'group'; parentId: string; parent: POSProduct; children: POSProduct[] }
+  | { kind: 'single'; product: POSProduct };
 
 const leafCategory = (path?: string | null) => (path ?? '').split('>').pop()?.trim() || '—';
 
@@ -64,13 +44,10 @@ function PlatformBadge({ platform }: { platform: Platform }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-// Layout clone từ trang "Danh sách hàng hóa" (GoodsInventory + GoodsFilterSidebar + GoodsToolbar).
-// Dữ liệu lấy từ pos_products (cha-con qua parent_id) join shopee_product_variants /
-// store_product_variants (is_published=true) để biết SKU nào đang bán nền tảng nào.
+// Dữ liệu sản phẩm lấy từ AppData (posProducts) — luôn đồng bộ với GoodsInventory.
+// Chỉ fetch platform links từ /api/channel-links/catalog-links để biết sản phẩm nào đang bán ở đâu.
 
-export default function OnlineCatalogPage({ navigationSlot }: Props) {
-  // Filter sidebar — Nhóm hàng/Nhà cung cấp/Thương hiệu/Thuộc tính/Vị trí vẫn là placeholder
-  // tĩnh (chưa nối logic lọc thật), chỉ Tồn kho + ô tìm kiếm là lọc thật trên data đã tải.
+export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
   const [filterCategories] = useState<string[]>([]);
   const [filterSupplier] = useState<string[]>([]);
   const [filterBrand] = useState('');
@@ -85,132 +62,32 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [rawVariants, setRawVariants] = useState<RawProduct[]>([]);
-  const [rawParents, setRawParents] = useState<RawProduct[]>([]);
   const [platformMap, setPlatformMap] = useState<Record<string, Platform[]>>({});
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
 
-  // Grid popup state
   const [popupParentId, setPopupParentId] = useState<string | null>(null);
   const [popupVariantId, setPopupVariantId] = useState<string | null>(null);
-  const [popupFullProduct, setPopupFullProduct] = useState<POSProduct | null>(null);
-  const [popupFullLoading, setPopupFullLoading] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // Chỉ fetch platform links — sản phẩm lấy từ AppData (prop products)
+  const loadPlatformLinks = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      // Đọc qua backend (service role) để bypass RLS trên shopee_product_variants
-      const catalogRes = await fetch('/api/channel-links/catalog-links', { credentials: 'include' });
-      const catalogJson: { ok: boolean; error?: string; website: string[]; shopee: string[] } = await catalogRes.json();
-      if (!catalogJson.ok) throw new Error(catalogJson.error ?? 'Lỗi tải danh sách kênh');
+      const res = await fetch('/api/channel-links/catalog-links', { credentials: 'include' });
+      const json: { ok: boolean; error?: string; website: string[]; shopee: string[] } = await res.json();
+      if (!json.ok) throw new Error(json.error ?? 'Lỗi tải danh sách kênh');
 
-      // Gom platform theo pos_product_id
-      const platformMap: Record<string, Platform[]> = {};
-      const addPlatform = (id: string, p: Platform) => {
-        if (!platformMap[id]) platformMap[id] = [];
-        if (!platformMap[id].includes(p)) platformMap[id].push(p);
+      const map: Record<string, Platform[]> = {};
+      const add = (id: string, p: Platform) => {
+        if (!map[id]) map[id] = [];
+        if (!map[id].includes(p)) map[id].push(p);
       };
-      catalogJson.website.forEach(id => addPlatform(id, 'website'));
-      catalogJson.shopee.forEach(id => addPlatform(id, 'shopee'));
-
-      const linkedIds = Object.keys(platformMap);
-      if (linkedIds.length === 0) {
-        setRawVariants([]);
-        setRawParents([]);
-        setPlatformMap({});
-        return;
-      }
-
-      // Fetch các pos_products được link — chunk 30 IDs/request để tránh 414 URI Too Long
-      const CHUNK = 30;
-      const linkedChunks: string[][] = [];
-      for (let i = 0; i < linkedIds.length; i += CHUNK) linkedChunks.push(linkedIds.slice(i, i + CHUNK));
-      const linkedResults = await Promise.all(
-        linkedChunks.map(chunk =>
-          supabase.from('pos_products').select(PRODUCT_COLUMNS).in('id', chunk)
-        )
-      );
-      for (const r of linkedResults) if (r.error) throw r.error;
-      const linkedProducts = linkedResults.flatMap(r => (r.data ?? []) as RawProduct[]);
-
-      // Tách: sản phẩm cha được link trực tiếp → cần fetch con của chúng
-      const directParents = linkedProducts.filter(p => p.is_parent);
-      // Sản phẩm con / đơn lẻ được link trực tiếp
-      const directChildren = linkedProducts.filter(p => !p.is_parent);
-
-      // Fetch tất cả con của các sản phẩm cha được link
-      let parentChildren: RawProduct[] = [];
-      if (directParents.length > 0) {
-        const { data: childData } = await supabase
-          .from('pos_products')
-          .select(PRODUCT_COLUMNS)
-          .in('parent_id', directParents.map(p => p.id))
-          .eq('status', 'Active');
-        parentChildren = (childData ?? []) as RawProduct[];
-      }
-
-      // Kế thừa platform từ cha xuống con (nếu cha được link thì con cũng mang platform đó)
-      const enrichedPlatformMap: Record<string, Platform[]> = { ...platformMap };
-      for (const parent of directParents) {
-        const parentPlatforms = platformMap[parent.id] ?? [];
-        for (const child of parentChildren.filter(c => c.parent_id === parent.id)) {
-          if (!enrichedPlatformMap[child.id]) enrichedPlatformMap[child.id] = [];
-          for (const pf of parentPlatforms) {
-            if (!enrichedPlatformMap[child.id].includes(pf)) {
-              enrichedPlatformMap[child.id].push(pf);
-            }
-          }
-        }
-      }
-
-      // rawVariants = tất cả biến thể/sản phẩm đơn cần hiển thị
-      const variantSet = new Map<string, RawProduct>();
-      for (const p of [...parentChildren, ...directChildren]) {
-        variantSet.set(p.id, p);
-      }
-
-      // rawParents = các sản phẩm cha
-      const parentSet = new Map<string, RawProduct>();
-      for (const p of directParents) parentSet.set(p.id, p);
-
-      // Fetch cha của các con được link trực tiếp (nếu có)
-      const missingParentIds = Array.from(
-        new Set(directChildren.map(c => c.parent_id).filter((id): id is string => !!id && !parentSet.has(id)))
-      );
-      if (missingParentIds.length > 0) {
-        const { data: extraParents } = await supabase
-          .from('pos_products')
-          .select(PRODUCT_COLUMNS)
-          .in('id', missingParentIds);
-        for (const p of (extraParents ?? []) as RawProduct[]) parentSet.set(p.id, p);
-      }
-
-      // Nếu con được link trực tiếp có anh em chưa được link → cũng fetch để hiển thị đầy đủ nhóm
-      const groupParentIds = Array.from(new Set(directChildren.map(c => c.parent_id).filter(Boolean))) as string[];
-      if (groupParentIds.length > 0) {
-        const { data: siblings } = await supabase
-          .from('pos_products')
-          .select(PRODUCT_COLUMNS)
-          .in('parent_id', groupParentIds)
-          .eq('status', 'Active');
-        for (const s of (siblings ?? []) as RawProduct[]) {
-          if (!variantSet.has(s.id)) variantSet.set(s.id, s);
-        }
-      }
-
-      // Các sản phẩm đơn lẻ được link mà không thuộc nhóm nào
-      const standaloneLinked = directChildren.filter(c => !c.parent_id);
-      for (const s of standaloneLinked) {
-        if (!enrichedPlatformMap[s.id]) enrichedPlatformMap[s.id] = platformMap[s.id] ?? [];
-      }
-
-      setRawVariants(Array.from(variantSet.values()));
-      setRawParents(Array.from(parentSet.values()));
-      setPlatformMap(enrichedPlatformMap);
+      json.website.forEach(id => add(id, 'website'));
+      json.shopee.forEach(id => add(id, 'shopee'));
+      setPlatformMap(map);
     } catch (err: unknown) {
       const msg = err instanceof Error
         ? err.message
@@ -221,22 +98,81 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadPlatformLinks(); }, [loadPlatformLinks]);
+
+  // ─── Tính rawVariants, rawParents, enrichedPlatformMap từ AppData ────────────
+  const { enrichedPlatformMap, rawVariants, rawParents } = useMemo(() => {
+    const linkedIds = Object.keys(platformMap);
+    if (linkedIds.length === 0 || products.length === 0) {
+      return { enrichedPlatformMap: platformMap, rawVariants: [] as POSProduct[], rawParents: [] as POSProduct[] };
+    }
+
+    const byId = new Map(products.map(p => [p.id, p]));
+    const enriched: Record<string, Platform[]> = { ...platformMap };
+
+    // Kế thừa platform từ cha xuống con
+    for (const [id, platforms] of Object.entries(platformMap)) {
+      const p = byId.get(id);
+      if (p?.isParent) {
+        for (const child of products.filter(c => c.parentId === id && c.status === 'Active')) {
+          if (!enriched[child.id]) enriched[child.id] = [];
+          for (const pf of platforms) {
+            if (!enriched[child.id].includes(pf)) enriched[child.id].push(pf);
+          }
+        }
+      }
+    }
+
+    // Xác định biến thể hiển thị
+    const visibleIds = new Set<string>();
+    for (const [id] of Object.entries(platformMap)) {
+      const p = byId.get(id);
+      if (!p) continue;
+      if (!p.isParent) {
+        visibleIds.add(id);
+        // Thêm anh em để hiển thị đủ nhóm
+        if (p.parentId) {
+          for (const s of products.filter(s => s.parentId === p.parentId && s.status === 'Active')) {
+            visibleIds.add(s.id);
+          }
+        }
+      } else {
+        // Cha được link → hiển thị tất cả con
+        for (const child of products.filter(c => c.parentId === id && c.status === 'Active')) {
+          visibleIds.add(child.id);
+        }
+      }
+    }
+
+    const rawVariants = products.filter(p => visibleIds.has(p.id));
+
+    // Tập hợp cha cần hiển thị
+    const neededParentIds = new Set<string>();
+    for (const v of rawVariants) {
+      if (v.parentId) neededParentIds.add(v.parentId);
+    }
+    for (const [id] of Object.entries(platformMap)) {
+      const p = byId.get(id);
+      if (p?.isParent) neededParentIds.add(id);
+    }
+    const rawParents = products.filter(p => neededParentIds.has(p.id));
+
+    return { enrichedPlatformMap: enriched, rawVariants, rawParents };
+  }, [platformMap, products]);
 
   // ─── Gom cha-con ───────────────────────────────────────────────────────────
   const rootRows = useMemo<RootRow[]>(() => {
     const parentMap = new Map(rawParents.map(p => [p.id, p]));
-    const byParent = new Map<string, RawProduct[]>();
-    const standalone: RawProduct[] = [];
+    const byParent = new Map<string, POSProduct[]>();
+    const standalone: POSProduct[] = [];
 
     for (const v of rawVariants) {
-      if (v.parent_id && parentMap.has(v.parent_id)) {
-        const arr = byParent.get(v.parent_id) ?? [];
+      if (v.parentId && parentMap.has(v.parentId)) {
+        const arr = byParent.get(v.parentId) ?? [];
         arr.push(v);
-        byParent.set(v.parent_id, arr);
+        byParent.set(v.parentId, arr);
       } else {
         standalone.push(v);
       }
@@ -257,8 +193,8 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
     });
   }, [rawVariants, rawParents]);
 
-  // ─── Lọc tìm kiếm + tồn kho (áp dụng ở cấp biến thể) ─────────────────────────
-  const matchesFilters = useCallback((p: RawProduct) => {
+  // ─── Lọc tìm kiếm + tồn kho ────────────────────────────────────────────────
+  const matchesFilters = useCallback((p: POSProduct) => {
     const q = searchTerm.trim().toLowerCase();
     if (q && !p.sku.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) return false;
     if (filterStock === 'in_stock' && !(p.stock > 5)) return false;
@@ -289,7 +225,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
   const variantById = useMemo(() => new Map(rawVariants.map(p => [p.id, p])), [rawVariants]);
 
   const detailProduct = detailId ? variantById.get(detailId) ?? null : null;
-  const detailPlatforms = detailId ? platformMap[detailId] ?? [] : [];
+  const detailPlatforms = detailId ? enrichedPlatformMap[detailId] ?? [] : [];
 
   const toggleExpand = (parentId: string) => {
     setExpandedIds(prev => {
@@ -304,64 +240,15 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
     setDetailTab('info');
   };
 
-  useEffect(() => {
-    if (!popupVariantId) { setPopupFullProduct(null); return; }
-    setPopupFullLoading(true);
-    supabase
-      .from('pos_products')
-      .select('id,sku,name,category_id,category_path,import_price,sale_price,stock,min_stock,max_stock,unit,base_unit_code,conversion_value,units,attributes,attributes_text,brand,barcode,description,note_template,components,warranty,weight,weight_unit,location,related_sku,images,status,parent_id,is_parent,variant_attributes,variant_count,allow_points,customer_orders,direct_sale,product_type,expected_out_of_stock')
-      .eq('id', popupVariantId)
-      .single()
-      .then(({ data: r, error }) => {
-        if (!error && r) {
-          setPopupFullProduct({
-            id: r.id, sku: r.sku, name: r.name,
-            categoryId: r.category_id ?? '',
-            categoryPath: r.category_path ?? undefined,
-            importPrice: r.import_price ?? 0,
-            salePrice: r.sale_price ?? 0,
-            stock: r.stock ?? 0,
-            minStock: r.min_stock ?? 0,
-            maxStock: r.max_stock ?? undefined,
-            unit: r.unit ?? 'Cái',
-            baseUnitCode: r.base_unit_code ?? undefined,
-            conversionValue: r.conversion_value ?? undefined,
-            units: r.units ?? undefined,
-            attributes: r.attributes ?? undefined,
-            attributesText: r.attributes_text ?? undefined,
-            brand: r.brand ?? undefined,
-            barcode: r.barcode ?? undefined,
-            description: r.description ?? undefined,
-            noteTemplate: r.note_template ?? undefined,
-            components: r.components ?? undefined,
-            warranty: r.warranty ?? undefined,
-            weight: r.weight ?? undefined,
-            weightUnit: r.weight_unit ?? undefined,
-            location: r.location ?? undefined,
-            relatedSku: r.related_sku ?? undefined,
-            images: r.images ?? undefined,
-            status: (r.status as 'Active' | 'Inactive') ?? 'Active',
-            parentId: r.parent_id ?? undefined,
-            isParent: r.is_parent ?? false,
-            variantAttributes: r.variant_attributes ?? undefined,
-            variantCount: r.variant_count ?? undefined,
-            allowPoints: r.allow_points ?? undefined,
-            customerOrders: r.customer_orders ?? undefined,
-            directSale: r.direct_sale ?? undefined,
-            productType: r.product_type ?? undefined,
-            expectedOutOfStock: r.expected_out_of_stock ?? undefined,
-          });
-        }
-        setPopupFullLoading(false);
-      });
-  }, [popupVariantId]);
-
   const openGridPopup = (variantId: string, parentId: string | null = null) => {
     setPopupVariantId(variantId);
     setPopupParentId(parentId);
     setDetailTab('info');
   };
   const closeGridPopup = () => { setPopupVariantId(null); setPopupParentId(null); };
+
+  // Dùng AppData trực tiếp thay vì fetch Supabase riêng
+  const popupProduct = popupVariantId ? variantById.get(popupVariantId) ?? null : null;
 
   const hasActiveFilters =
     filterCategories.length > 0 ||
@@ -373,7 +260,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
 
   return (
     <div className="flex h-full min-h-0 gap-4">
-      {/* === Sidebar lọc — clone GoodsFilterSidebar === */}
+      {/* === Sidebar lọc === */}
       <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
         {navigationSlot && <div className="border-b border-slate-100 p-3">{navigationSlot}</div>}
 
@@ -385,7 +272,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          {/* 1. Nhóm hàng */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Nhóm hàng</span>
             <div className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between">
@@ -394,7 +280,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
             </div>
           </div>
 
-          {/* 2. Nhà cung cấp */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Nhà cung cấp</span>
             <div className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between">
@@ -403,7 +288,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
             </div>
           </div>
 
-          {/* 3. Thương hiệu */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Thương hiệu</span>
             <div className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between">
@@ -412,7 +296,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
             </div>
           </div>
 
-          {/* 4. Thuộc tính */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Thuộc tính</span>
             <div className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-100 rounded-lg text-slate-400">
@@ -420,7 +303,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
             </div>
           </div>
 
-          {/* 5. Vị trí */}
           <div className="px-4 py-3 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Vị trí</span>
             <input
@@ -431,7 +313,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
             />
           </div>
 
-          {/* 6. Tồn kho */}
           <div className="px-4 py-3">
             <span className="text-xs font-bold text-slate-700 mb-2 block">Tồn kho</span>
             <div
@@ -457,7 +338,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
         </div>
       </aside>
 
-      {/* === Panel chính — clone GoodsToolbar + bảng + GoodsPagination === */}
+      {/* === Panel chính === */}
       <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {/* Toolbar */}
         <div className="px-4 min-h-[52px] border-b border-slate-100 flex items-center gap-3 shrink-0">
@@ -492,7 +373,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
           </div>
         </div>
 
-        {/* Dòng tóm tắt + filter chips */}
+        {/* Dòng tóm tắt */}
         <div className="px-4 py-2 bg-slate-50/60 border-b border-slate-100 flex items-center gap-2 flex-wrap shrink-0">
           <span className="text-2xs font-bold text-slate-500">
             Hiển thị <span className="font-semibold text-slate-800">{flatVisibleCount}</span> / {rawVariants.length} sản phẩm
@@ -507,10 +388,9 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
           )}
         </div>
 
-        {/* Nội dung chính — bảng hoặc lưới tùy viewMode */}
+        {/* Nội dung chính */}
         <div className="flex-1 min-h-0 overflow-auto overscroll-contain no-scrollbar">
           {viewMode === 'grid' ? (
-            /* ── Chế độ lưới ── */
             loading ? (
               <div className="flex items-center justify-center py-20 text-sm text-slate-400">Đang tải...</div>
             ) : loadError ? (
@@ -526,12 +406,11 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
               </div>
             ) : (
               <div className="p-4">
-                {/* Lưới phẳng — click card → mở popup */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
                   {pageRows.map(row => {
                     if (row.kind === 'single') {
                       const p = row.product;
-                      const platforms = platformMap[p.id] ?? [];
+                      const platforms = enrichedPlatformMap[p.id] ?? [];
                       const stockColor = p.stock <= 0 ? 'text-rose-500 bg-rose-50' : p.stock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
                       return (
                         <CatalogGridCard
@@ -541,7 +420,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                           thumb={p.images?.[0]}
                           stock={p.stock}
                           stockColor={stockColor}
-                          importPrice={p.import_price}
+                          importPrice={p.importPrice}
                           platforms={platforms}
                           variantLabel={null}
                           isSelected={popupVariantId === p.id && !popupParentId}
@@ -551,10 +430,10 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                     }
 
                     const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
-                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
+                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => enrichedPlatformMap[c.id] ?? [])));
                     const thumb = row.parent.images?.[0] ?? row.children.find(c => c.images?.[0])?.images?.[0];
                     const stockColor = totalStock <= 0 ? 'text-rose-500 bg-rose-50' : totalStock <= 5 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
-                    const variantCount = row.parent.variant_count ?? row.children.length;
+                    const variantCount = row.parent.variantCount ?? row.children.length;
                     return (
                       <CatalogGridCard
                         key={row.parentId}
@@ -563,7 +442,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                         thumb={thumb}
                         stock={totalStock}
                         stockColor={stockColor}
-                        importPrice={row.children[0]?.import_price ?? 0}
+                        importPrice={row.children[0]?.importPrice ?? 0}
                         platforms={groupPlatforms}
                         variantLabel={`${variantCount} biến thể`}
                         isSelected={popupParentId === row.parentId}
@@ -575,7 +454,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
               </div>
             )
           ) : (
-            /* ── Chế độ bảng (giữ nguyên) ── */
+            /* ── Chế độ bảng ── */
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
                 <tr>
@@ -630,7 +509,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                   pageRows.map(row => {
                     if (row.kind === 'single') {
                       const p = row.product;
-                      const platforms = platformMap[p.id] ?? [];
+                      const platforms = enrichedPlatformMap[p.id] ?? [];
                       return (
                         <tr
                           key={p.id}
@@ -649,8 +528,8 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">{p.sku}</td>
-                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.category_path)}</td>
-                          <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{p.import_price.toLocaleString('vi-VN')}đ</td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.categoryPath)}</td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{p.importPrice.toLocaleString('vi-VN')}đ</td>
                           <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'text-rose-500' : p.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{p.stock}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{p.location || '—'}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-600">{p.brand || '—'}</td>
@@ -665,7 +544,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                     }
 
                     const isExpanded = expandedIds.has(row.parentId);
-                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => platformMap[c.id] ?? [])));
+                    const groupPlatforms = Array.from(new Set(row.children.flatMap(c => enrichedPlatformMap[c.id] ?? [])));
                     const totalStock = row.children.reduce((s, c) => s + c.stock, 0);
 
                     return (
@@ -690,11 +569,11 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                           <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <span>{row.parent.sku}</span>
-                              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-normal text-indigo-700">({row.parent.variant_count ?? row.children.length})</span>
+                              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-normal text-indigo-700">({row.parent.variantCount ?? row.children.length})</span>
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">
-                            {leafCategory(row.parent.category_path ?? row.children[0]?.category_path)}
+                            {leafCategory(row.parent.categoryPath ?? row.children[0]?.categoryPath)}
                           </td>
                           <td className="px-4 py-2.5 text-right text-xs text-slate-400">—</td>
                           <td className="px-4 py-2.5 text-right text-xs text-slate-700 font-semibold tabular-nums">{totalStock}</td>
@@ -725,14 +604,14 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 pl-6 text-xs font-medium text-slate-700 whitespace-nowrap">{v.sku}</td>
-                              <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.category_path)}</td>
-                              <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{v.import_price.toLocaleString('vi-VN')}đ</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.categoryPath)}</td>
+                              <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{v.importPrice.toLocaleString('vi-VN')}đ</td>
                               <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${v.stock <= 0 ? 'text-rose-500' : v.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{v.stock}</td>
                               <td className="px-4 py-2.5 text-xs text-slate-500">{v.location || '—'}</td>
                               <td className="px-4 py-2.5 text-xs text-slate-600">{v.brand || '—'}</td>
                               <td className="px-4 py-2.5">
                                 <div className="flex flex-wrap gap-1">
-                                  {(platformMap[v.id] ?? []).map(pf => <PlatformBadge key={pf} platform={pf} />)}
+                                  {(enrichedPlatformMap[v.id] ?? []).map(pf => <PlatformBadge key={pf} platform={pf} />)}
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 border-r-2 border-indigo-200"></td>
@@ -774,9 +653,8 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
 
       {/* ── Grid popup modal ── */}
       {popupVariantId && (() => {
-        const popupProduct = variantById.get(popupVariantId);
         if (!popupProduct) return null;
-        const popupPlatforms = platformMap[popupVariantId] ?? [];
+        const popupPlatforms = enrichedPlatformMap[popupVariantId] ?? [];
         const popupParentRow = popupParentId
           ? rootRows.find((r): r is Extract<RootRow, { kind: 'group' }> => r.kind === 'group' && r.parentId === popupParentId)
           : undefined;
@@ -791,7 +669,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
               className="relative w-full max-w-5xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -806,7 +683,6 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                 </button>
               </div>
 
-              {/* Hàng biến thề — mini card style */}
               {popupChildren && popupChildren.length > 0 && (
                 <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
                   <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
@@ -837,7 +713,7 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                             </p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[9px] font-normal text-indigo-500">
-                                {(v.sale_price ?? v.import_price ?? 0).toLocaleString('vi-VN')}đ
+                                {(v.salePrice ?? v.importPrice ?? 0).toLocaleString('vi-VN')}đ
                               </span>
                               <span className={`text-[9px] font-normal ${stockColor}`}>
                                 · Tồn: {stock}
@@ -851,26 +727,21 @@ export default function OnlineCatalogPage({ navigationSlot }: Props) {
                 </div>
               )}
 
-              {/* Chi tiết sản phẩm */}
               <div className="flex-1 min-h-0 flex flex-col">
-                {popupFullLoading ? (
-                  <div className="flex items-center justify-center py-20 text-sm text-slate-400">Đang tải...</div>
-                ) : popupFullProduct ? (
-                  <GoodsProductDetailPanel
-                    product={popupFullProduct}
-                    transactions={[]}
-                    orders={[]}
-                    activeTab={detailTab}
-                    onTabChange={setDetailTab}
-                    onDelete={() => {}}
-                    onEdit={() => {}}
-                    onClose={closeGridPopup}
-                    deleteConfirmText="Vào trang Hàng hóa để xóa sản phẩm"
-                    noBorder
-                    fillHeight
-                    showCopyPrintActions={false}
-                  />
-                ) : null}
+                <GoodsProductDetailPanel
+                  product={popupProduct}
+                  transactions={[]}
+                  orders={[]}
+                  activeTab={detailTab}
+                  onTabChange={setDetailTab}
+                  onDelete={() => {}}
+                  onEdit={() => {}}
+                  onClose={closeGridPopup}
+                  deleteConfirmText="Vào trang Hàng hóa để xóa sản phẩm"
+                  noBorder
+                  fillHeight
+                  showCopyPrintActions={false}
+                />
               </div>
             </div>
           </div>
@@ -938,10 +809,10 @@ const CatalogGridCard = memo(function CatalogGridCard({
   );
 });
 
-// ─── Bảng chi tiết — clone chrome từ GoodsProductDetailPanel.tsx ───────────────
+// ─── Detail panel inline trong bảng ──────────────────────────────────────────
 
 function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bordered = true }: {
-  product: RawProduct;
+  product: POSProduct;
   platforms: Platform[];
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
@@ -982,7 +853,7 @@ function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bord
                 <div className="flex-1">
                   <h2 className="text-xl font-normal text-slate-900 mb-2">{product.name}</h2>
                   <p className="text-sm text-slate-600 mb-3">
-                    Nhóm hàng: <span className="font-normal">{product.category_path || 'Chưa phân loại'}</span>
+                    Nhóm hàng: <span className="font-normal">{product.categoryPath || 'Chưa phân loại'}</span>
                   </p>
                 </div>
               </div>
@@ -1000,7 +871,7 @@ function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bord
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 font-normal mb-2 block">Giá vốn</label>
-                  <div className="text-sm font-normal text-slate-900">{product.import_price.toLocaleString('vi-VN')}đ</div>
+                  <div className="text-sm font-normal text-slate-900">{product.importPrice.toLocaleString('vi-VN')}đ</div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-500 font-normal mb-2 block">Thương hiệu</label>
@@ -1018,7 +889,7 @@ function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bord
         {activeTab === 'desc' && (
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <label className="text-sm font-normal text-slate-700 mb-3 block">Mô tả chi tiết</label>
-            <div className="text-sm text-slate-600">Chưa có mô tả</div>
+            <div className="text-sm text-slate-600">{product.description || 'Chưa có mô tả'}</div>
           </div>
         )}
 

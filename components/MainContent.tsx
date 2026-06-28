@@ -764,7 +764,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'online-catalog':
         return (
           <React.Suspense fallback={<CardSkeleton />}>
-            <OnlineCatalogPage navigationSlot={renderOnlineNav()} onNavigate={handleSetActiveTab} />
+            <OnlineCatalogPage navigationSlot={renderOnlineNav()} onNavigate={handleSetActiveTab} products={data.posProducts || []} />
           </React.Suspense>
         );
       case 'website-products':
