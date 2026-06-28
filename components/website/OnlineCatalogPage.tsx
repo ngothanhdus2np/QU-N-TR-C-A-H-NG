@@ -466,7 +466,7 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                   <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
                     Mã hàng
                   </th>
-                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[200px]">
+                  <th className="px-4 py-3 text-left font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap min-w-[160px]">
                     Nhóm hàng
                   </th>
                   <th className="px-4 py-3 text-right font-semibold text-2xs uppercase tracking-widest text-slate-500 whitespace-nowrap">
@@ -528,7 +528,7 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">{p.sku}</td>
-                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.categoryPath)}</td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{leafCategory(p.categoryPath || p.categoryId)}</td>
                           <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{p.importPrice.toLocaleString('vi-VN')}đ</td>
                           <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'text-rose-500' : p.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{p.stock}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{p.location || '—'}</td>
@@ -573,9 +573,16 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">
-                            {leafCategory(row.parent.categoryPath ?? row.children[0]?.categoryPath)}
+                            {leafCategory(row.parent.categoryPath || row.parent.categoryId || row.children[0]?.categoryPath || row.children[0]?.categoryId)}
                           </td>
-                          <td className="px-4 py-2.5 text-right text-xs text-slate-400">—</td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">
+                            {(() => {
+                              const priced = row.children.filter(c => Number(c.importPrice) > 0);
+                              if (priced.length === 0) return <span className="text-slate-400">—</span>;
+                              const avg = Math.round(priced.reduce((s, c) => s + Number(c.importPrice), 0) / priced.length);
+                              return `${avg.toLocaleString('vi-VN')}đ`;
+                            })()}
+                          </td>
                           <td className="px-4 py-2.5 text-right text-xs text-slate-700 font-semibold tabular-nums">{totalStock}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-400">—</td>
                           <td className="px-4 py-2.5 text-xs text-slate-600">{row.parent.brand || row.children[0]?.brand || '—'}</td>
@@ -604,7 +611,7 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 pl-6 text-xs font-medium text-slate-700 whitespace-nowrap">{v.sku}</td>
-                              <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.categoryPath)}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500">{leafCategory(v.categoryPath || v.categoryId || row.parent.categoryPath || row.parent.categoryId)}</td>
                               <td className="px-4 py-2.5 text-right text-xs text-slate-700 tabular-nums">{v.importPrice.toLocaleString('vi-VN')}đ</td>
                               <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${v.stock <= 0 ? 'text-rose-500' : v.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{v.stock}</td>
                               <td className="px-4 py-2.5 text-xs text-slate-500">{v.location || '—'}</td>

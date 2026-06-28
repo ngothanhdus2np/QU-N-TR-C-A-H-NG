@@ -639,8 +639,27 @@ export default function ShopeeProductsPage() {
             <tbody>
               {filtered.map(product => {
                 const isExpanded = expandedIds.has(product.pos_product_id);
-                const publishedCount = product.shopee_entries.filter(e => e.is_published).length;
-                const totalVariants = product.shopee_entries.reduce((s, e) => s + e.shopee_product_variants.length, 0);
+
+                // Deduplicate shops: mỗi shop_id chỉ hiện 1 chip, ghi nhận có bất kỳ entry nào đang bán không
+                const shopChips = product.shopee_entries
+                  .filter(e => e.shop_id)
+                  .reduce<{ shop_id: string; listingCount: number; anyPublished: boolean }[]>((acc, e) => {
+                    const existing = acc.find(a => a.shop_id === e.shop_id);
+                    if (existing) {
+                      existing.listingCount++;
+                      if (e.is_published) existing.anyPublished = true;
+                    } else {
+                      acc.push({ shop_id: e.shop_id!, listingCount: 1, anyPublished: e.is_published });
+                    }
+                    return acc;
+                  }, []);
+
+                // Đếm unique pos_product_id thực sự (tránh đếm trùng qua nhiều listings)
+                const uniqueSkuCount = new Set(
+                  product.shopee_entries.flatMap(e => e.shopee_product_variants.map(v => v.pos_product_id))
+                ).size;
+
+                const publishedCount = shopChips.filter(c => c.anyPublished).length;
 
                 return (
                   <React.Fragment key={product.pos_product_id}>
@@ -673,42 +692,43 @@ export default function ShopeeProductsPage() {
                         </div>
                       </td>
 
-                      {/* Chips shop tóm tắt */}
+                      {/* Chips shop — deduplicated theo shop_id */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {product.shopee_entries
-                            .filter(e => e.shop_id)
-                            .map((entry) => {
-                              const shop = shopMap.get(entry.shop_id!);
-                              const shopIdx = shops.findIndex(s => s.id === entry.shop_id);
-                              const colors = shopColor(shopIdx >= 0 ? shopIdx : 0);
-                              return (
-                                <span key={entry.id}
-                                  className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                                    entry.is_published ? colors.badge : 'bg-slate-100 text-slate-400'
-                                  }`}>
-                                  <Store size={10} />
-                                  {shop?.name ?? entry.shop_id}
-                                </span>
-                              );
-                            })}
-                          {product.shopee_entries.every(e => !e.shop_id) && (
+                          {shopChips.map(chip => {
+                            const shop = shopMap.get(chip.shop_id);
+                            const shopIdx = shops.findIndex(s => s.id === chip.shop_id);
+                            const colors = shopColor(shopIdx >= 0 ? shopIdx : 0);
+                            return (
+                              <span key={chip.shop_id}
+                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  chip.anyPublished ? colors.badge : 'bg-slate-100 text-slate-400'
+                                }`}>
+                                <Store size={10} />
+                                {shop?.name ?? chip.shop_id}
+                                {chip.listingCount > 1 && (
+                                  <span className="text-[10px] opacity-70">×{chip.listingCount}</span>
+                                )}
+                              </span>
+                            );
+                          })}
+                          {shopChips.length === 0 && (
                             <span className="text-xs text-slate-300">Chưa gán shop</span>
                           )}
                         </div>
                       </td>
 
-                      {/* SKU count */}
+                      {/* SKU count — unique pos_product_id */}
                       <td className="px-4 py-3 text-center">
-                        <span className="text-slate-600 font-medium">{totalVariants}</span>
+                        <span className="text-slate-600 font-medium">{uniqueSkuCount}</span>
                         <span className="text-xs text-slate-400 ml-1">SKU</span>
                       </td>
 
                       {/* Trạng thái */}
                       <td className="px-4 py-3 text-center">
-                        {product.shopee_entries.length === 0 ? (
+                        {shopChips.length === 0 ? (
                           <span className="text-xs text-slate-300">—</span>
-                        ) : publishedCount === product.shopee_entries.length ? (
+                        ) : publishedCount === shopChips.length ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-full bg-orange-100 text-orange-700">
                             <Eye size={11} /> Đang bán
                           </span>
@@ -718,7 +738,7 @@ export default function ShopeeProductsPage() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-full bg-yellow-100 text-yellow-700">
-                            <Eye size={11} /> {publishedCount}/{product.shopee_entries.length} shop
+                            <Eye size={11} /> {publishedCount}/{shopChips.length} shop
                           </span>
                         )}
                       </td>
