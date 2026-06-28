@@ -14,8 +14,21 @@ from datetime import datetime
 # ──────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────
-SUPABASE_URL = "https://tqouzxlnihfjdyxqlbqs.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxb3V6eGxuaWhmamR5eHFsYnFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDEyNzk3MSwiZXhwIjoyMDg1NzAzOTcxfQ.epmAHShEIr2ZAS0n3UA5EAZCC5uYNsnOzDp0oWl5DvY"
+from pathlib import Path
+
+# Đọc .env.local — KHÔNG hardcode secret
+_env_path = Path(__file__).resolve().parent.parent / ".env.local"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        if "=" in _line and not _line.startswith("#"):
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise SystemExit("❌ Thiếu SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY trong .env.local")
 
 SHOP_BASE = "/Users/apple/Downloads/Đơn Hàng Shopee/shopee_exports"
 SHOPS = [

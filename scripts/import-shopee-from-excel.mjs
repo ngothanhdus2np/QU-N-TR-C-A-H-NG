@@ -7,10 +7,26 @@
 import XLSX from 'xlsx';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const SUPABASE_URL = 'https://app.phucsang.com.vn';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgwNjc3OTMxLCJleHAiOjIwOTYwMzc5MzF9.HwLgWn3LgxZHUTTVLr1dAglqpDw4c2Fb7MMHqsxj6RE';
+// Đọc .env.local thủ công (không cần dotenv) — KHÔNG hardcode secret
+const __dir = dirname(fileURLToPath(import.meta.url));
+const env = Object.fromEntries(
+  readFileSync(join(__dir, '..', '.env.local'), 'utf8')
+    .split('\n')
+    .filter(l => l.includes('=') && !l.startsWith('#'))
+    .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+);
+
+const SUPABASE_URL = env.SUPABASE_URL;
+const SUPABASE_KEY = env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('❌ Thiếu SUPABASE_URL hoặc SUPABASE_ANON_KEY trong .env.local');
+  process.exit(1);
+}
 const EXCEL_PATH = '/Users/apple/Downloads/DonHang_TatCa_2024_2026.xlsx';
 const OUTPUT_SQL = '/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/scripts/shopee_import.sql';
 
