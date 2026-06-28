@@ -882,6 +882,9 @@ CREATE TABLE IF NOT EXISTS customer_debt_history (
 );
 ALTER TABLE customer_debt_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_all" ON customer_debt_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- Lưu ý: bảng này chỉ cho 'authenticated' đọc, role 'anon' KHÔNG đọc được qua /rest/v1.
+-- App đọc bảng này qua server (service-role) ở route GET /api/data/customer-debt-history
+-- (xem routes/data.ts + apiService.fetchCustomerDebtHistory), KHÔNG đọc trực tiếp bằng anon.
 
 -- =============================================================================
 -- SECURITY MIGRATION: Restrict write access to authenticated users only

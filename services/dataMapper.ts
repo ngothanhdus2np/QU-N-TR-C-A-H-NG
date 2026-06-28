@@ -60,6 +60,7 @@ interface DataMapperResults {
   inventoryTransactions?: DbRow[];
   suppliers?: DbRow[];
   supplierDebts?: DbRow[];
+  customerDebtHistory?: DbRow[];
 }
 
 const getConfigValue = (configs: ConfigRow[] | undefined, key: string) =>
@@ -687,6 +688,18 @@ export const dataMapper = {
           description: d.description || '',
         })),
         localData?.supplierDebts || []
+      ),
+      customerDebtHistory: this.mergeBy(
+        (results.customerDebtHistory || []).map(r => ({
+          id: r.id,
+          customerId: r.customer_id || r.customerId,
+          date: r.date,
+          orderId: r.order_id || r.orderId || undefined,
+          type: r.type,
+          amount: Number(r.amount || 0),
+          note: r.note || undefined,
+        })),
+        localData?.customerDebtHistory || []
       ),
     };
   },

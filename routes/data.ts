@@ -410,6 +410,24 @@ async function auditLog(
 export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestHandler): Router {
   const router = Router();
 
+  // customer_debt_history bật RLS "TO authenticated" → role anon (app dùng để đọc /rest/v1) bị
+  // chặn, không bao giờ thấy bản ghi điều chỉnh/thu nợ dù đã ghi. Đọc qua server bằng service-role
+  // (giống cách bảng này được GHI qua /api/data/upsert) để bỏ qua RLS, không phơi dữ liệu cho anon.
+  router.get('/api/data/customer-debt-history', requireAuth, async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_debt_history')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(5000);
+      if (error) throw error;
+      res.json({ data: data || [] });
+    } catch (error: unknown) {
+      console.error('[DataRoute] customer-debt-history read failed:', error);
+      writeErrorResponse(res, 'Không thể đọc lịch sử công nợ');
+    }
+  });
+
   router.post('/api/data/upsert', requireAuth, async (req, res) => {
     const tableName = resolveTable(req.body?.key);
     const payload = req.body?.payload;

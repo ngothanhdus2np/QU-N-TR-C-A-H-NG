@@ -110,12 +110,19 @@ const CustomerDetailPage: React.FC<Props> = ({
 
   const netSpent = orderStats ? orderStats.sold - orderStats.returned : 0;
 
-  const customerDebt = Math.max(0, customerOrders.reduce((sum, o) => {
+  // Nợ = (tiền hàng − khách đưa) theo đơn + các bản ghi điều chỉnh/thu nợ (repay trừ, debt cộng),
+  // ép sàn 0. Phải khớp đúng công thức debtStats ở CustomerListPage, nếu không 2 trang lệch nhau.
+  const orderDebt = customerOrders.reduce((sum, o) => {
     const finalAmt = Number(o.finalAmount) || 0;
     const cashRecv = Number(o.cashReceived) || 0;
     const debt = finalAmt - cashRecv;
     return sum + (o.isReturn ? -debt : debt);
-  }, 0));
+  }, 0);
+  const recordDelta = debtRecords.reduce(
+    (sum, r) => sum + (r.type === 'repay' ? -r.amount : r.amount),
+    0
+  );
+  const customerDebt = Math.max(0, orderDebt + recordDelta);
 
   const handleOpenPaymentModal = () => {
     setPaymentAmount('');

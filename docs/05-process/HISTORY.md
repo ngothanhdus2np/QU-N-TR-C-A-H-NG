@@ -3,6 +3,32 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-28 — Fix nợ khách "clear data + đăng nhập lại nợ trở về" (RLS chặn anon đọc) — ROOT CAUSE
+
+- Triệu chứng: điều chỉnh nợ về 0, nhưng clear data + đăng nhập lại thì nợ quay về
+- Điều tra (test thật trên DB): các bản ghi điều chỉnh ĐÃ ghi vào DB (server ghi bằng service-role, bypass RLS) — query service-role thấy 4 bản ghi "Điều chỉnh chị Khiêm" type=repay 1.540.000. Nhưng app ĐỌC bằng role `anon` qua `/rest/v1`, mà `customer_debt_history` chỉ có policy "FOR ALL TO authenticated" → anon BỊ CHẶN đọc (pos_orders/pos_customers thì anon đọc được do RLS khác) → app luôn nhận rỗng → nợ tính lại từ đơn
+- (Đã loại trừ nhầm: ban đầu nghi dual-DB do lỗi NOT NULL của payload thiếu cột; test round-trip pos_customers chứng minh GHI & ĐỌC cùng 1 DB)
+- Fix (không phụ thuộc RLS, tự verify được): đọc `customer_debt_history` QUA SERVER (service-role) thay vì supabase client anon. Thêm route `GET /api/data/customer-debt-history` (routes/data.ts) + `apiService.fetchCustomerDebtHistory()` thay query trực tiếp trong `fetchAllData`. An toàn hơn (không phơi nợ cho anon), nhất quán với cách bảng này được GHI
+- Verify: endpoint trả đúng 4 bản ghi (200); load sạch sau restart → chị Khiêm hiện nợ = 0 (đơn 1.540.000 + 4×repay floored 0); tsc sạch. Dọn 3 bản ghi trùng (do double-count cũ), giữ 1 repay → nợ chị Khiêm = 0 sạch
+- Files: `routes/data.ts`, `services/apiService.ts`, `supabase_setup.sql` (ghi chú)
+
+### 2026-06-28 — Fix nợ khách "điều chỉnh về 0 vẫn còn nợ" (công thức trang chi tiết)
+
+- Triệu chứng (khách "chị Khiêm"): chỉnh nợ về 0 nhiều lần nhưng vẫn hiện 1.540.000
+- Truy dữ liệu thật: nợ 1.540.000 đến từ 1 đơn chưa thu tiền (HD063779, giao 1.540.000 / khách đưa 0). Số nợ được TÍNH LẠI từ đơn mỗi lần mở, không phải số gõ tay
+- Root cause: `CustomerDetailPage.customerDebt` chỉ cộng nợ từ đơn hàng, BỎ QUA `customerDebtHistory` (điều chỉnh/thu nợ) — trong khi `CustomerListPage.debtStats` lại cộng cả 2. Hai trang lệch công thức → điều chỉnh về 0 tạo bản ghi repay nhưng chi tiết vẫn tính lại = nợ đơn → "vẫn còn nợ"; bấm lại còn tạo repay chồng (diff tính từ số sai)
+- Fix: `customerDebt = max(0, Σ orderDebt + Σ recordDelta)` với recordDelta = repay(−)/debt(+), khớp đúng debtStats
+- Verify trên browser (DB thật): mở chị Khiêm → điều chỉnh về 0 → chi tiết hiện 0 NGAY (trước lì 1.540.000) + badge "!" tắt; reload → bản ghi repay persist, list & detail đều 0; sau đó XÓA bản ghi test → chị Khiêm về đúng 1.540.000. tsc sạch
+- Files: `components/customers/CustomerDetailPage.tsx`, `docs/business-knowledge/FORMULAS.md` (mục 8.7)
+
+### 2026-06-28 — Fix nợ khách hàng "sửa xong không lưu" (read path thiếu)
+
+- Triệu chứng: trong trang khách hàng, Thu nợ/Điều chỉnh/Ghi giảm nợ thấy số đổi đúng lúc đó nhưng reload lại quay về số cũ
+- Root cause: bảng `customer_debt_history` được GHI xuống Supabase đầy đủ nhưng KHÔNG nơi nào ĐỌC lại — `fetchAllData` không query, `mapAllData` không map (còn ghi đè cache thành rỗng mỗi lần sync), merge list ở `useAppData` thiếu key → debt tính lại chỉ từ orders → mất các bản ghi điều chỉnh
+- Fix: (1) `fetchAllData` thêm query `customer_debt_history` (order date desc, limit 2000) + trả về trong results; (2) `dataMapper.mapAllData` thêm map cloud→app (snake→camel) + `mergeBy` với localData để hết ghi đè cache rỗng; (3) thêm `customerDebtHistory` vào `SyncableDataKey` + danh sách sync-force của `useAppData`; (4) thêm field vào `DataMapperResults`
+- Verify: tsc sạch (3 file sửa không lỗi), server build sạch; network xác nhận app GIỜ gửi `GET /rest/v1/customer_debt_history → 200` lúc bootstrap (trước đây hoàn toàn không có request này). Luồng ghi client→server→bảng đã đúng sẵn, không đổi
+- Files: `services/apiService.ts`, `services/dataMapper.ts`, `hooks/useAppData.ts`
+
 ### 2026-06-27 — Fix đăng nhập chập chờn "sai mật khẩu" dù tài khoản đúng
 
 - Triệu chứng: thỉnh thoảng báo sai tài khoản/mật khẩu, lát sau cùng tài khoản lại vào được. Log GoTrue prod xác nhận pattern: 400 Invalid credentials rồi 6-12s sau 200 (cùng account), thời gian phản hồi ~120ms → KHÔNG phải timeout/mạng mà mật khẩu gửi lần đầu thật sự khác

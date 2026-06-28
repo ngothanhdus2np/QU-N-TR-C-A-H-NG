@@ -532,14 +532,19 @@ Trong đó:
 
 ### 8.7 Nợ hiện tại của khách hàng (Customer Debt)
 
+> Source: `CustomerListPage.tsx` → `debtStats`; `CustomerDetailPage.tsx` → `customerDebt`
+> **Hai nơi PHẢI dùng đúng cùng công thức này** — nếu lệch, danh sách và chi tiết hiện 2 số khác nhau.
+
 ```
-customerDebt = max(0, Σ orderDebt)    cho tất cả đơn của khách đó
+recordDelta  = Σ ( type === 'repay' ? -amount : +amount )   trên customer_debt_history của khách
+customerDebt = max(0, Σ orderDebt + recordDelta)            cho tất cả đơn + bản ghi của khách đó
 ```
 
 Quy tắc:
-- Nợ tính từ **toàn bộ đơn hàng** (all-time), không giới hạn thời gian
-- Nợ **không được âm** (floor ở 0) — khách trả thừa không tạo credit, khớp logic KiotViet
-- Chỉ tính đơn có `customerId` khớp với `pos_customers.id`
+- Nợ tính từ **toàn bộ đơn hàng** (all-time) **cộng** các bản ghi điều chỉnh thủ công (`customer_debt_history`)
+- Bản ghi `customer_debt_history`: "Thu nợ" và "Ghi giảm nợ" là `type='repay'` (trừ nợ); "Điều chỉnh" có thể `repay` hoặc `debt` tùy chênh lệch so với nợ hiện tại
+- Nợ **không được âm** (floor ở 0) — khách trả thừa / ghi giảm quá tay không tạo credit, khớp logic KiotViet
+- Chỉ tính đơn + bản ghi có `customerId` khớp với `pos_customers.id`
 
 ### 8.8 Tổng nợ trang danh sách khách hàng
 

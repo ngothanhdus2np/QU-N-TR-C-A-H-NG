@@ -592,6 +592,20 @@ const postDataRoute = async (path: string, body: Record<string, unknown>) => {
   return data;
 };
 
+// customer_debt_history bị RLS chặn role anon → không đọc trực tiếp qua supabase client (anon) được.
+// Đọc qua server (service-role) để khớp cách bảng này được ghi. Trả cùng shape { data, error }
+// như các query supabase khác trong fetchAllData.
+const fetchCustomerDebtHistory = async (): Promise<{ data: any[]; error: { message: string } | null }> => {
+  try {
+    const res = await fetch('/api/data/customer-debt-history');
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { data: [], error: { message: json?.error || `HTTP ${res.status}` } };
+    return { data: json?.data || [], error: null };
+  } catch (e: unknown) {
+    return { data: [], error: { message: e instanceof Error ? e.message : 'fetch failed' } };
+  }
+};
+
 type PosOrderPageFilters = {
   search?: string;
   startDate?: string;
@@ -886,6 +900,7 @@ export const apiService = {
         supplierDebts,
         cashflow,
         recurringExpenses,
+        customerDebtHistory,
       ] = await Promise.all([
         supabase.from('employees').select('*').limit(500),
         supabase.from('salary_policies').select('*'),
@@ -980,6 +995,7 @@ export const apiService = {
           .select('*')
           .order('created_at', { ascending: false })
           .limit(DEFAULT_META_LIMIT),
+        fetchCustomerDebtHistory(),
       ]);
 
       const res_arr = [
@@ -1013,6 +1029,7 @@ export const apiService = {
         { name: 'SupplierDebts', res: supplierDebts },
         { name: 'Cashflow', res: cashflow },
         { name: 'RecurringExpenses', res: recurringExpenses },
+        { name: 'CustomerDebtHistory', res: customerDebtHistory },
       ];
 
       const errors = res_arr
@@ -1051,6 +1068,7 @@ export const apiService = {
           supplierDebts: supplierDebts.data,
           cashflow: cashflow.data,
           recurringExpenses: recurringExpenses.data,
+          customerDebtHistory: customerDebtHistory.data,
         },
         errors: errors.length > 0 ? errors : null,
       };

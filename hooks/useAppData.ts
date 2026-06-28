@@ -51,7 +51,8 @@ type SyncableDataKey =
   | 'productGroups'
   | 'productGroupRevenue'
   | 'cashflow'
-  | 'recurringExpenses';
+  | 'recurringExpenses'
+  | 'customerDebtHistory';
 type ConfigDataKey =
   | 'violationTypes'
   | 'violationOccurrences'
@@ -555,6 +556,7 @@ export function useAppData() {
           { key: 'productGroupRevenue', cloud: results.pGroupRev, matchKey: 'id' },
           { key: 'cashflow', cloud: results.cashflow, matchKey: 'id' },
           { key: 'recurringExpenses', cloud: results.recurringExpenses, matchKey: 'id' },
+          { key: 'customerDebtHistory', cloud: results.customerDebtHistory, matchKey: 'id' },
         ];
         const syncConfigs = allSyncConfigs.filter(
           config => !(skipPosProducts && config.key === 'posProducts')
@@ -825,8 +827,22 @@ export function useAppData() {
     []
   );
 
-  const mergeRemoteUpdate = useCallback((updates: AppDataSurgicalUpdate[]) => {
+  const mergeRemoteUpdate = useCallback(async (updates: AppDataSurgicalUpdate[]) => {
     dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
+    try {
+      const cachedData = await loadCachedDataSnapshot();
+      const currentLocalData: Record<string, unknown> = { ...(cachedData || {}) };
+      for (const u of updates) {
+        const key = u.key as string;
+        const existingItems = Array.isArray(currentLocalData[key]) ? currentLocalData[key] : [];
+        const newList = [...(existingItems as unknown[])];
+        const idx = newList.findIndex(item => (item as { id?: string })?.id === u.item.id);
+        if (u.isDelete) { if (idx > -1) newList.splice(idx, 1); }
+        else { if (idx > -1) newList[idx] = { ...newList[idx] as object, ...u.item }; else newList.push(u.item); }
+        currentLocalData[key] = newList;
+      }
+      await saveDataSnapshot(currentLocalData as Partial<AppData>);
+    } catch (e) { console.error('[Realtime] IndexedDB sync error:', e); }
   }, []);
 
   // Reload shopeeInventoryOut từ Supabase vào local state (không write lại Supabase)
