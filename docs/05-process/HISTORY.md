@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-28 — Fix ghi dữ liệu qua tunnel bị 401 (hồ sơ cửa hàng/nợ không lưu qua app.phucsang.com.vn)
+
+- Triệu chứng: hồ sơ cửa hàng (SĐT/địa chỉ) sửa nhiều lần vẫn mất; thực ra mọi thao tác lưu qua app.phucsang.com.vn đều thất bại âm thầm (auto-save không báo lỗi)
+- Điều tra: ghi DB bằng service-role OK; dev/LAN lưu OK; nhưng POST `/api/data/*` qua tunnil → 401. AuthGate: dev bypass auth, prod bắt buộc session Supabase thật → prod CÓ JWT. Nhưng `postDataRoute` + `fetchCustomerDebtHistory` KHÔNG gắn JWT → qua tunnel (dev-bypass tắt do header X-Forwarded) → requireAuth 401. `clearTable` thì đã gắn JWT sẵn (chỉ 2 chỗ kia sót)
+- Fix: thêm helper `getAuthHeaders()` (lấy Bearer từ `supabase.auth.getSession()`), gắn vào `postDataRoute` (mọi lệnh ghi: khách/đơn/sản phẩm/nợ/tồn kho/cấu hình) + `fetchCustomerDebtHistory` (đọc nợ trên prod). Gom `clearTable` dùng chung helper. Dev/LAN không session → header rỗng → dev-bypass như cũ (no regression, đã test brand save dev vẫn lưu)
+- Lưu ý: các fetch `/api/ai/*`, `/api/import/*`, `/api/notifications/*` cũng có vấn đề tương tự (ngoài phạm vi, ghi chú lại)
+- Files: `services/apiService.ts`
+
 ### 2026-06-28 — Fix nợ khách "clear data + đăng nhập lại nợ trở về" (RLS chặn anon đọc) — ROOT CAUSE
 
 - Triệu chứng: điều chỉnh nợ về 0, nhưng clear data + đăng nhập lại thì nợ quay về

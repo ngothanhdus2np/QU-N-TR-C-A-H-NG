@@ -579,10 +579,24 @@ const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
   }
 };
 
+// Gắn JWT của session đăng nhập vào request tới /api/* để server requireAuth xác thực được.
+// Bắt buộc khi chạy production qua tunnel (app.phucsang.com.vn) — lúc đó dev-bypass theo localhost
+// bị tắt, nếu không có Bearer token thì mọi ghi/đọc đều 401. Dev/LAN không có session → rỗng,
+// requireAuth dùng dev-bypass như cũ. supabase-js tự refresh token hết hạn.
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const jwt = session?.access_token;
+    return jwt ? { Authorization: `Bearer ${jwt}` } : {};
+  } catch {
+    return {};
+  }
+};
+
 const postDataRoute = async (path: string, body: Record<string, unknown>) => {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -597,7 +611,7 @@ const postDataRoute = async (path: string, body: Record<string, unknown>) => {
 // như các query supabase khác trong fetchAllData.
 const fetchCustomerDebtHistory = async (): Promise<{ data: any[]; error: { message: string } | null }> => {
   try {
-    const res = await fetch('/api/data/customer-debt-history');
+    const res = await fetch('/api/data/customer-debt-history', { headers: await getAuthHeaders() });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) return { data: [], error: { message: json?.error || `HTTP ${res.status}` } };
     return { data: json?.data || [], error: null };
@@ -1091,14 +1105,9 @@ export const apiService = {
     if (!tableName) {
       throw new Error(`Không tìm thấy bảng cho key: ${key}`);
     }
-    const { data: { session } } = await supabase.auth.getSession();
-    const jwt = session?.access_token;
     const res = await fetch('/api/data/clear', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ key }),
     });
     const data = await res.json().catch(() => ({}));
