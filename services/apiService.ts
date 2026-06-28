@@ -583,7 +583,7 @@ const fetchRecentPosOrders = async (days = POS_ORDER_BOOTSTRAP_DAYS) => {
 // Bắt buộc khi chạy production qua tunnel (app.phucsang.com.vn) — lúc đó dev-bypass theo localhost
 // bị tắt, nếu không có Bearer token thì mọi ghi/đọc đều 401. Dev/LAN không có session → rỗng,
 // requireAuth dùng dev-bypass như cũ. supabase-js tự refresh token hết hạn.
-const getAuthHeaders = async (): Promise<Record<string, string>> => {
+export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const jwt = session?.access_token;

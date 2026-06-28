@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export function createAuthRouter(supabase: SupabaseClient) {
+export function createAuthRouter(supabase: SupabaseClient, requireAuth: RequestHandler) {
   const router = Router();
 
   /**
@@ -10,7 +10,7 @@ export function createAuthRouter(supabase: SupabaseClient) {
    * Thu ngân: { username, password, role: 'cashier' }
    * Quản lý/Chủ: { email, password, role: 'manager' | 'owner', displayName? }
    */
-  router.post('/api/auth/register', async (req, res) => {
+  router.post('/api/auth/register', requireAuth, async (req, res) => {
     const { username, email, password, role, displayName } = req.body as {
       username?: string;
       email?: string;
@@ -70,7 +70,7 @@ export function createAuthRouter(supabase: SupabaseClient) {
    * GET /api/auth/accounts
    * Lấy danh sách tất cả tài khoản (chỉ dùng trong Settings).
    */
-  router.get('/api/auth/accounts', async (_req, res) => {
+  router.get('/api/auth/accounts', requireAuth, async (_req, res) => {
     const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (error) {
       console.error('[AUTH] admin.listUsers error:', error.message, error.status);
@@ -94,8 +94,8 @@ export function createAuthRouter(supabase: SupabaseClient) {
    * PATCH /api/auth/accounts/:id/role
    * Đổi chức vụ cho tài khoản.
    */
-  router.patch('/api/auth/accounts/:id/role', async (req, res) => {
-    const { id } = req.params;
+  router.patch('/api/auth/accounts/:id/role', requireAuth, async (req, res) => {
+    const { id } = req.params as { id: string };
     const { role } = req.body as { role?: string };
     if (!role || !['cashier', 'manager', 'owner'].includes(role)) {
       return res.status(400).json({ error: 'Chức vụ không hợp lệ.' });
@@ -113,8 +113,8 @@ export function createAuthRouter(supabase: SupabaseClient) {
    * PATCH /api/auth/accounts/:id/password
    * Đặt lại mật khẩu cho tài khoản.
    */
-  router.patch('/api/auth/accounts/:id/password', async (req, res) => {
-    const { id } = req.params;
+  router.patch('/api/auth/accounts/:id/password', requireAuth, async (req, res) => {
+    const { id } = req.params as { id: string };
     const { password } = req.body as { password?: string };
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự.' });
@@ -128,8 +128,8 @@ export function createAuthRouter(supabase: SupabaseClient) {
    * DELETE /api/auth/accounts/:id
    * Xóa tài khoản.
    */
-  router.delete('/api/auth/accounts/:id', async (req, res) => {
-    const { id } = req.params;
+  router.delete('/api/auth/accounts/:id', requireAuth, async (req, res) => {
+    const { id } = req.params as { id: string };
     const { error } = await supabase.auth.admin.deleteUser(id);
     if (error) return res.status(400).json({ error: error.message });
     return res.json({ success: true });

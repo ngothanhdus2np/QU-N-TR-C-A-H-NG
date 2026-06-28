@@ -4,6 +4,7 @@ import {
   ShoppingCart, LayoutDashboard, Crown, RefreshCw, X, Check,
 } from 'lucide-react';
 import { useToast } from '../../ui/Toast';
+import { getAuthHeaders } from '../../../services/apiService';
 
 type UserRole = 'cashier' | 'manager' | 'owner';
 
@@ -66,7 +67,7 @@ export default function AccountsTab() {
   const loadAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/auth/accounts');
+      const res = await fetch('/api/auth/accounts', { headers: await getAuthHeaders() });
       const json = await res.json();
       if (res.ok) setAccounts(json.accounts || []);
       else showToast(json.error || 'Không tải được danh sách tài khoản.', 'error');
@@ -94,7 +95,7 @@ export default function AccountsTab() {
 
       const res = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify(body),
       });
       const json = await res.json();
@@ -122,7 +123,7 @@ export default function AccountsTab() {
     try {
       const res = await fetch(`/api/auth/accounts/${id}/password`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({ password: resetPassword }),
       });
       const json = await res.json();
@@ -142,7 +143,7 @@ export default function AccountsTab() {
     try {
       const res = await fetch(`/api/auth/accounts/${id}/role`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({ role: newRole }),
       });
       const json = await res.json();
@@ -160,7 +161,7 @@ export default function AccountsTab() {
   const handleDelete = async (id: string) => {
     setDeleting(true);
     try {
-      const res = await fetch(`/api/auth/accounts/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/auth/accounts/${id}`, { method: 'DELETE', headers: await getAuthHeaders() });
       const json = await res.json();
       if (!res.ok) { showToast(json.error || 'Không thể xóa tài khoản.', 'error'); return; }
       showToast('Đã xóa tài khoản.', 'success');

@@ -552,7 +552,7 @@ async function startServer() {
 
     const facebookRoutes = createFacebookRouter({ supabase, requireAuth, configDir: __dirname });
     app.use(facebookRoutes.router);
-    app.use(createAuthRouter(supabase));
+    app.use(createAuthRouter(supabase, requireAuth));
     app.use(createAiRouter(requireAuth));
     app.use(createChannelLinksRouter(supabase, requireAuth));
     app.use(createChannelManagementRouter(supabase, requireAuth));
