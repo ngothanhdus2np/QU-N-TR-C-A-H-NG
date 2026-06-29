@@ -132,19 +132,28 @@ export function createChannelLinksRouter(
   // Trả về: mỗi pos_product cha → { name, shopee_entries: [{ shopee_product_id, shop_id, ... }] }
   router.get('/api/channel-links/shopee-catalog', requireAuth, async (_req, res) => {
     try {
-      const [varRes, shopsRes] = await Promise.all([
-        supabase.from('shopee_product_variants')
-          .select('id, pos_product_id, shopee_product_id, sku, size, color_name, shopee_price_override, is_published, display_order')
-          .order('display_order', { ascending: true }),
-        supabase.from('shopee_shops').select('id, name, slug'),
-      ]);
-      if (varRes.error) throw new Error(varRes.error.message);
-
       type VarRow = { id: string; pos_product_id: string; shopee_product_id: string; sku: string; size: string | null; color_name: string | null; shopee_price_override: number | null; is_published: boolean; display_order: number };
       type SpRow = { id: string; shopee_item_id: string | null; is_published: boolean; shop_id: string | null; cover_image_url: string | null; display_order: number };
-      type PosRow = { id: string; name: string; sku: string; parent_id: string | null };
+      type PosRow = { id: string; name: string; sku: string; parent_id: string | null; category_path: string | null; category_id: string | null };
 
-      const variants = ((varRes.data ?? []) as VarRow[]).filter(v => v.pos_product_id && v.shopee_product_id);
+      // Paginate để không bị giới hạn 1000 rows mặc định của Supabase
+      const PAGE = 1000;
+      const allVarRows: VarRow[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase.from('shopee_product_variants')
+          .select('id, pos_product_id, shopee_product_id, sku, size, color_name, shopee_price_override, is_published, display_order')
+          .order('display_order', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        if (data) allVarRows.push(...(data as VarRow[]));
+        if (!data || data.length < PAGE) break;
+      }
+
+      const [shopsRes] = await Promise.all([
+        supabase.from('shopee_shops').select('id, name, slug'),
+      ]);
+
+      const variants = allVarRows.filter(v => v.pos_product_id && v.shopee_product_id);
       const allShopeeIds = [...new Set(variants.map(v => v.shopee_product_id))];
       const allPosIds   = [...new Set(variants.map(v => v.pos_product_id))];
 
@@ -163,7 +172,7 @@ export function createChannelLinksRouter(
 
       const [spData, posData] = await Promise.all([
         allShopeeIds.length > 0 ? inBatches<SpRow>('shopee_products', 'id, shopee_item_id, is_published, shop_id, cover_image_url, display_order', allShopeeIds) : [],
-        allPosIds.length > 0   ? inBatches<PosRow>('pos_products', 'id, name, sku, parent_id', allPosIds) : [],
+        allPosIds.length > 0   ? inBatches<PosRow>('pos_products', 'id, name, sku, parent_id, category_path, category_id', allPosIds) : [],
       ]);
 
       const spMap  = new Map(spData.map(p => [p.id, p]));
@@ -172,16 +181,17 @@ export function createChannelLinksRouter(
       const parentIds = [...new Set(posData.map(p => p.parent_id).filter(Boolean))] as string[];
       let parentMap = new Map<string, PosRow>();
       if (parentIds.length > 0) {
-        const parents = await inBatches<PosRow>('pos_products', 'id, name, sku, parent_id', parentIds);
+        const parents = await inBatches<PosRow>('pos_products', 'id, name, sku, parent_id, category_path, category_id', parentIds);
         parentMap = new Map(parents.map(p => [p.id, p]));
       }
+
 
       type ShopEntry = {
         id: string; shop_id: string | null; shopee_item_id: string | null;
         is_published: boolean; cover_image_url: string | null; display_order: number;
-        shopee_product_variants: { id: string; sku: string; size: string | null; color_name: string | null; shopee_price_override: number | null; pos_product_id: string; is_published: boolean; display_order: number }[];
+        shopee_product_variants: { id: string; sku: string; pos_sku: string; size: string | null; color_name: string | null; shopee_price_override: number | null; pos_product_id: string; is_published: boolean; display_order: number }[];
       };
-      type ProductEntry = { pos_product_id: string; name: string; shopee_entries: ShopEntry[] };
+      type ProductEntry = { pos_product_id: string; name: string; group_name: string; shopee_entries: ShopEntry[] };
 
       // Gom theo pos_product cha: mỗi pos_product cha → list shopee_entries (một per shop)
       const productMap = new Map<string, ProductEntry>();
@@ -192,11 +202,15 @@ export function createChannelLinksRouter(
         // Key nhóm = parent pos_product_id nếu có, else chính nó
         const groupKey  = pos?.parent_id ?? v.pos_product_id;
         const groupName = parent?.name ?? pos?.name ?? '';
+        // Ưu tiên: parent.category_path → parent.category_id → pos(variant).category_path → pos.category_id
+        const groupCat = parent?.category_path || parent?.category_id || pos?.category_path || pos?.category_id || '';
 
         if (!productMap.has(groupKey)) {
-          productMap.set(groupKey, { pos_product_id: groupKey, name: groupName, shopee_entries: [] });
+          productMap.set(groupKey, { pos_product_id: groupKey, name: groupName, group_name: groupCat, shopee_entries: [] });
         }
         const product = productMap.get(groupKey)!;
+        // Cập nhật group_name nếu trước đó trống và giờ có dữ liệu
+        if (!product.group_name && groupCat) product.group_name = groupCat;;
 
         // Tìm hoặc tạo shopee_entry cho shopee_product_id này
         let entry = product.shopee_entries.find(e => e.id === v.shopee_product_id);
@@ -214,7 +228,7 @@ export function createChannelLinksRouter(
           product.shopee_entries.push(entry);
         }
         entry.shopee_product_variants.push({
-          id: v.id, sku: v.sku, size: v.size, color_name: v.color_name,
+          id: v.id, sku: v.sku, pos_sku: pos?.sku ?? '', size: v.size, color_name: v.color_name,
           shopee_price_override: v.shopee_price_override, pos_product_id: v.pos_product_id,
           is_published: v.is_published, display_order: v.display_order,
         });
@@ -230,14 +244,42 @@ export function createChannelLinksRouter(
   // GET /api/channel-links/catalog-links — trả về tất cả pos_product_id đã link (cả website lẫn shopee)
   router.get('/api/channel-links/catalog-links', requireAuth, async (_req, res) => {
     try {
-      const [wsRes, spRes] = await Promise.all([
+      const [wsRes, spvRes, shopsRes] = await Promise.all([
         supabase.from('store_product_variants').select('pos_product_id').eq('is_published', true),
-        supabase.from('shopee_product_variants').select('pos_product_id').eq('is_published', true),
+        supabase.from('shopee_product_variants').select('pos_product_id, shopee_product_id').eq('is_published', true),
+        supabase.from('shopee_shops').select('id, name'),
       ]);
+
+      const spVariants: { pos_product_id: string; shopee_product_id: string }[] = spvRes.data ?? [];
+      const spProductIds = [...new Set(spVariants.map(v => v.shopee_product_id).filter(Boolean))];
+
+      const shopeeProductShopMap = new Map<string, string>();
+      if (spProductIds.length > 0) {
+        const { data: spData } = await supabase.from('shopee_products').select('id, shop_id').in('id', spProductIds);
+        for (const sp of spData ?? []) {
+          if (sp.shop_id) shopeeProductShopMap.set(sp.id, sp.shop_id);
+        }
+      }
+
+      // shopee_by_shop: { shopId: pos_product_id[] } — unique per shop
+      const shopeeByShopRaw: Record<string, Set<string>> = {};
+      for (const v of spVariants) {
+        const shopId = shopeeProductShopMap.get(v.shopee_product_id);
+        if (!shopId || !v.pos_product_id) continue;
+        if (!shopeeByShopRaw[shopId]) shopeeByShopRaw[shopId] = new Set();
+        shopeeByShopRaw[shopId].add(v.pos_product_id);
+      }
+      const shopeeByShop: Record<string, string[]> = {};
+      for (const [shopId, ids] of Object.entries(shopeeByShopRaw)) {
+        shopeeByShop[shopId] = [...ids];
+      }
+
       res.json({
         ok: true,
         website: (wsRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id).filter(Boolean),
-        shopee: (spRes.data ?? []).map((r: { pos_product_id: string }) => r.pos_product_id).filter(Boolean),
+        shopee: spVariants.map(v => v.pos_product_id).filter(Boolean),
+        shopee_by_shop: shopeeByShop,
+        shops: (shopsRes.data ?? []) as { id: string; name: string }[],
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

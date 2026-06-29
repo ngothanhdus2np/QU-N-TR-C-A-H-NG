@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   Plus, Search, X, Check, RefreshCw, Globe, ExternalLink,
   Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, Save, Loader2, Package, ImageIcon,
-  Tag, Link2, FileText, SearchIcon,
+  Tag, Link2, FileText, SearchIcon, LayoutGrid, List,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { adminStoreRequest } from '../../services/adminStoreApi';
 import { useToast } from '../ui/Toast';
+import { GoodsPagination } from '../pos/GoodsPagination';
 
 interface Props {
   navigationSlot?: React.ReactNode;
@@ -158,6 +159,20 @@ const TAB_ITEMS: { id: DetailTab; label: string; icon: React.ElementType }[] = [
   { id: 'variants', label: 'SKU liên kết', icon: Link2 },
   { id: 'seo', label: 'SEO', icon: SearchIcon },
 ];
+
+async function uploadMediaFile(file: File): Promise<string> {
+  const dataBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const result = await adminStoreRequest<{ url: string }>('/api/admin/store/media', {
+    method: 'POST',
+    body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64, altText: '' }),
+  });
+  return result.url;
+}
 
 function MediaUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
   const [uploading, setUploading] = useState(false);
@@ -383,6 +398,8 @@ function DetailPanel({
   const [form, setForm] = useState<EditForm>(() => makeEditForm(product));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [coverDragOver, setCoverDragOver] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
 
   const setF = (patch: Partial<EditForm>) => {
     setForm(prev => ({ ...prev, ...patch }));
@@ -547,14 +564,48 @@ function DetailPanel({
                 placeholder="https://..."
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {form.cover_image_url && (
-                <img
-                  src={form.cover_image_url}
-                  alt="preview"
-                  className="mt-2 h-20 w-20 object-cover rounded-lg border border-slate-200"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              )}
+              <div
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setCoverDragOver(true); }}
+                onDragLeave={() => setCoverDragOver(false)}
+                onDrop={async e => {
+                  e.preventDefault();
+                  setCoverDragOver(false);
+                  const raw = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '';
+                  const url = raw.split('\n')[0].trim();
+                  if (url.startsWith('http')) { setF({ cover_image_url: url }); return; }
+                  const file = e.dataTransfer.files[0];
+                  if (file?.type.startsWith('image/')) {
+                    setCoverUploading(true);
+                    try { setF({ cover_image_url: await uploadMediaFile(file) }); }
+                    catch (err) { showToast(err instanceof Error ? err.message : 'Không thể upload', 'error'); }
+                    finally { setCoverUploading(false); }
+                  }
+                }}
+                className={`mt-2 rounded-xl border-2 transition-all ${
+                  coverDragOver ? 'border-blue-400 bg-blue-50' : 'border-dashed border-slate-200 hover:border-blue-200'
+                }`}
+              >
+                {coverUploading ? (
+                  <div className="h-20 flex items-center justify-center gap-2 text-blue-500 text-xs">
+                    <Loader2 size={14} className="animate-spin" /> Đang upload...
+                  </div>
+                ) : form.cover_image_url ? (
+                  <div className="flex items-center gap-3 p-2">
+                    <img
+                      src={form.cover_image_url}
+                      alt="preview"
+                      className="h-16 w-16 object-cover rounded-lg border border-slate-200 shrink-0"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                    <p className="text-xs text-slate-400">Kéo ảnh mới từ browser vào đây để thay thế</p>
+                  </div>
+                ) : (
+                  <div className="h-20 flex items-center justify-center gap-2 text-slate-400 text-xs">
+                    <ImageIcon size={16} className="text-slate-300" />
+                    Kéo ảnh từ browser vào đây
+                  </div>
+                )}
+              </div>
               <MediaUpload onUploaded={url => setF({ cover_image_url: url })} />
             </div>
             <div>
@@ -964,6 +1015,66 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   );
 }
 
+// ─── Grid card ───────────────────────────────────────────────────────────────
+const WebsiteGridCard = memo(function WebsiteGridCard({
+  product,
+  isSelected,
+  onClick,
+}: {
+  product: StoreProduct;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all text-left ${
+        isSelected
+          ? 'border-blue-400 ring-2 ring-blue-300 shadow-md'
+          : 'border-slate-200 hover:border-blue-200 hover:shadow-md'
+      }`}
+    >
+      {/* Image */}
+      <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
+        {product.cover_image_url ? (
+          <img
+            src={product.cover_image_url}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+            loading="lazy"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <div className="flex items-center justify-center w-full h-full">
+            <Globe size={28} className="text-slate-300" />
+          </div>
+        )}
+        {/* SKU count badge */}
+        {product.store_product_variants.length > 0 && (
+          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 bg-black/60 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+            <Package size={9} />
+            <span className="ml-0.5">{product.store_product_variants.length} SKU</span>
+          </div>
+        )}
+        {/* Published status dot */}
+        <div className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full border border-white shadow ${product.is_published ? 'bg-green-500' : 'bg-slate-400'}`} />
+      </div>
+
+      {/* Footer */}
+      <div className="px-2 py-2 bg-white flex flex-col gap-1 min-w-0">
+        <p className="text-xs font-medium text-slate-800 truncate leading-tight">{product.name}</p>
+        {(product.is_best_seller || product.is_new || product.is_featured) && (
+          <div className="flex flex-wrap gap-1">
+            {product.is_best_seller && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Best Seller</span>}
+            {product.is_new && <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Mới</span>}
+            {product.is_featured && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Nổi bật</span>}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+});
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function WebsiteProductsPage({ navigationSlot }: Props) {
   const { showToast } = useToast();
@@ -972,6 +1083,10 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [gridPopupId, setGridPopupId] = useState<string | null>(null);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -1004,6 +1119,14 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
   );
 
   const selectedProduct = selectedId ? products.find(p => p.id === selectedId) ?? null : null;
+  const gridPopupProduct = gridPopupId ? products.find(p => p.id === gridPopupId) ?? null : null;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const pageFiltered = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalSkuItems = filtered.reduce((sum, p) => sum + p.store_product_variants.length, 0);
+
+  const openGridPopup = (product: StoreProduct) => setGridPopupId(product.id);
+  const closeGridPopup = () => setGridPopupId(null);
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)] gap-4 overflow-hidden bg-slate-50 px-4 pb-5 pt-10">
@@ -1029,6 +1152,19 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                 <X size={13} />
               </button>
             )}
+          </div>
+
+          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center justify-center w-8 h-8 transition-all ${viewMode === 'table' ? 'bg-blue-50 text-blue-600' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="Xem dạng bảng"
+            ><List size={14} /></button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center justify-center w-8 h-8 border-l border-slate-200 transition-all ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="Xem dạng lưới ảnh"
+            ><LayoutGrid size={14} /></button>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -1058,8 +1194,8 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
+        {/* Content */}
+        <div className="flex-1 overflow-auto min-h-0">
           {loading ? (
             <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-sm">
               <Loader2 size={16} className="animate-spin" /> Đang tải...
@@ -1074,6 +1210,19 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                 </button>
               )}
             </div>
+          ) : viewMode === 'grid' ? (
+            <div className="p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+                {pageFiltered.map(product => (
+                  <WebsiteGridCard
+                    key={product.id}
+                    product={product}
+                    isSelected={gridPopupId === product.id}
+                    onClick={() => openGridPopup(product)}
+                  />
+                ))}
+              </div>
+            </div>
           ) : (
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 z-10">
@@ -1087,7 +1236,7 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(product => {
+                {pageFiltered.map(product => {
                   const isSelected = selectedId === product.id;
                   return (
                     <React.Fragment key={product.id}>
@@ -1173,10 +1322,83 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
             </table>
           )}
         </div>
+        <GoodsPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          itemsPerPage={itemsPerPage}
+          totalItems={filtered.length}
+          totalSkuItems={totalSkuItems}
+          setCurrentPage={setCurrentPage}
+          onItemsPerPageChange={(n) => { setItemsPerPage(n); setCurrentPage(1); }}
+        />
       </div>
 
       {showCreate && (
         <CreateModal onClose={() => setShowCreate(false)} onSaved={loadProducts} />
+      )}
+
+      {/* Grid popup */}
+      {gridPopupProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
+          onClick={closeGridPopup}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8 flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+              <div className="flex items-center gap-2 min-w-0">
+                <Globe size={16} className="text-blue-500 shrink-0" />
+                <span className="font-semibold text-slate-800 truncate">{gridPopupProduct.name}</span>
+                <span className="text-xs text-slate-400 shrink-0">
+                  · {gridPopupProduct.store_product_variants.length} SKU
+                </span>
+              </div>
+              <button
+                onClick={closeGridPopup}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg shrink-0 ml-3 transition-colors"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            {/* Variant chips */}
+            {gridPopupProduct.store_product_variants.length > 0 && (
+              <div className="shrink-0 flex gap-2 overflow-x-auto px-5 py-3 border-b border-slate-100">
+                {gridPopupProduct.store_product_variants
+                  .slice()
+                  .sort((a, b) => a.display_order - b.display_order)
+                  .map(variant => (
+                    <div
+                      key={variant.id}
+                      className="flex items-center gap-2 shrink-0 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-medium text-blue-700"
+                    >
+                      {variant.color_hex && (
+                        <span
+                          className="w-3 h-3 rounded-full border border-white shadow-sm shrink-0"
+                          style={{ backgroundColor: variant.color_hex }}
+                        />
+                      )}
+                      <span>{[variant.size, variant.color_name].filter(Boolean).join(' · ') || variant.sku}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${variant.is_published ? 'bg-green-500' : 'bg-slate-300'}`} />
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Detail panel */}
+            <div className="flex-1 overflow-y-auto">
+              <DetailPanel
+                key={gridPopupProduct.id}
+                product={gridPopupProduct}
+                onClose={closeGridPopup}
+                onSaved={loadProducts}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Globe, ShoppingBag, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { POSProduct } from '../../types';
@@ -106,9 +106,8 @@ export function GoodsChannelLinksTab({ product }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [childCount, setChildCount] = useState<{ website: number; shopee: number; total: number } | null>(null);
-  // track which shops are mid-flight to prevent double-click
-  const pendingShops = useRef<Set<string>>(new Set());
   const [websitePending, setWebsitePending] = useState(false);
+  const [shopeePending, setShopeePending] = useState(false);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -184,46 +183,50 @@ export function GoodsChannelLinksTab({ product }: Props) {
     }
   };
 
-  const toggleShopeeShop = async (shop: ShopeeShopStatus) => {
-    if (pendingShops.current.has(shop.id)) return;
-    const wasLinked = shop.linked;
-    // optimistic update
-    setShopeeShops(prev => prev.map(s => s.id === shop.id ? { ...s, linked: !s.linked } : s));
-    pendingShops.current.add(shop.id);
+  const toggleAllShopee = async () => {
+    if (shopeePending || shopeeShops.length === 0) return;
+    const shopeeLinked = shopeeShops.some(s => s.linked);
+    const action: 'link' | 'unlink' = shopeeLinked ? 'unlink' : 'link';
+    setShopeeShops(prev => prev.map(s => ({ ...s, linked: !shopeeLinked })));
+    setShopeePending(true);
     setError(null);
     try {
-      if (!product.isParent) {
-        await toggleChannelBackend({
-          channel: 'shopee',
-          action: wasLinked ? 'unlink' : 'link',
-          product: { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
-          shopId: shop.id,
-        });
-      } else {
-        const { data: children, error: childErr } = await supabase
+      let children: { id: string; sku: string }[] | null = null;
+      if (product.isParent) {
+        const { data, error: childErr } = await supabase
           .from('pos_products')
           .select('id, sku')
           .eq('parent_id', product.id)
           .eq('status', 'Active');
         if (childErr) throw new Error(childErr.message);
-        if (!children || children.length === 0) throw new Error('Sản phẩm cha không có biến thể con nào đang hoạt động');
-        await toggleChannelBackend({
-          channel: 'shopee',
-          action: wasLinked ? 'unlink' : 'link',
-          product: { id: product.id, name: product.name, sku: product.sku, isParent: true },
-          childIds: children as { id: string; sku: string }[],
-          shopId: shop.id,
-        });
+        if (!data || data.length === 0) throw new Error('Sản phẩm cha không có biến thể con nào đang hoạt động');
+        children = data as { id: string; sku: string }[];
+      }
+      for (const shop of shopeeShops) {
+        if (product.isParent) {
+          await toggleChannelBackend({
+            channel: 'shopee', action,
+            product: { id: product.id, name: product.name, sku: product.sku, isParent: true },
+            childIds: children!,
+            shopId: shop.id,
+          });
+        } else {
+          await toggleChannelBackend({
+            channel: 'shopee', action,
+            product: { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
+            shopId: shop.id,
+          });
+        }
       }
     } catch (e: unknown) {
-      // rollback
-      setShopeeShops(prev => prev.map(s => s.id === shop.id ? { ...s, linked: wasLinked } : s));
+      loadStatus();
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
-      pendingShops.current.delete(shop.id);
+      setShopeePending(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -278,38 +281,45 @@ export function GoodsChannelLinksTab({ product }: Props) {
         </div>
       </div>
 
-      {/* Shopee — per-shop toggles */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100">
-          <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
-            <ShoppingBag className="h-4 w-4 text-orange-500" />
-          </div>
-          <span className="text-sm font-medium text-slate-900">Shopee</span>
-        </div>
-
+      {/* Shopee — combined toggle */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
         {shopeeShops.length === 0 ? (
-          <div className="px-4 py-8 text-center text-xs text-slate-400">
-            Chưa có shop Shopee nào được kết nối.<br />
-            Vào <span className="font-medium">Cài đặt → Tích hợp</span> để thêm shop.
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+              <ShoppingBag className="h-5 w-5 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-900">Shopee</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Chưa có shop nào. Vào <span className="font-medium">Cài đặt → Tích hợp</span> để thêm.
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="divide-y divide-slate-50">
-            {shopeeShops.map(shop => (
-              <div key={shop.id} className="flex items-center justify-between px-4 py-3.5">
-                <div>
-                  <p className="text-sm text-slate-700">{shop.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {shop.linked ? 'Đang bán trên shop này' : 'Chưa đăng bán'}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  checked={shop.linked}
-                  onChange={() => toggleShopeeShop(shop)}
-                  color="orange"
-                  aria-label={shop.linked ? `Tắt bán shop ${shop.name}` : `Bật bán shop ${shop.name}`}
-                />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                <ShoppingBag className="h-5 w-5 text-orange-500" />
               </div>
-            ))}
+              <div>
+                <p className="text-sm font-medium text-slate-900">Shopee</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {(() => {
+                    const linkedCount = shopeeShops.filter(s => s.linked).length;
+                    if (linkedCount === 0) return 'Chưa đăng bán shop nào';
+                    if (linkedCount === shopeeShops.length) return `Đang bán trên ${linkedCount} shop`;
+                    return `Đang bán trên ${linkedCount}/${shopeeShops.length} shop`;
+                  })()}
+                </p>
+              </div>
+            </div>
+            <ToggleSwitch
+              checked={shopeeShops.some(s => s.linked)}
+              onChange={toggleAllShopee}
+              disabled={shopeePending}
+              color="orange"
+              aria-label={shopeeShops.some(s => s.linked) ? 'Tắt bán Shopee' : 'Bật bán Shopee'}
+            />
           </div>
         )}
       </div>

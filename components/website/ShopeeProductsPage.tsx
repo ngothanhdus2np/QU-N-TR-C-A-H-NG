@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   Search, X, Check, RefreshCw, ExternalLink,
   Eye, EyeOff, ChevronRight, Save, Loader2, Package, ShoppingBag, Store,
-  Image as ImageIcon, Video, Edit2, Download,
+  Image as ImageIcon, Video, Edit2, Download, LayoutGrid, List,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { useToast } from '../ui/Toast';
+import { GoodsPagination } from '../pos/GoodsPagination';
 
 interface ShopeeShop { id: string; name: string; slug: string; }
 
 interface ShopeeVariant {
-  id: string; sku: string; size: string | null; color_name: string | null;
+  id: string; sku: string; pos_sku: string; size: string | null; color_name: string | null;
   shopee_price_override: number | null; pos_product_id: string;
   is_published: boolean; display_order: number;
 }
@@ -28,13 +29,15 @@ interface ShopEntry {
 interface CatalogProduct {
   pos_product_id: string;
   name: string;
+  group_name?: string;
   shopee_entries: ShopEntry[];
 }
 
 interface PosProduct { id: string; sku: string; name: string; sale_price: number; stock: number; }
 
 interface VariantDraft {
-  pos_product_id: string; sku: string; size: string; color_name: string; shopee_price_override: string;
+  id: string;
+  pos_product_id: string; sku: string; pos_sku: string; size: string; color_name: string; shopee_price_override: string;
 }
 
 interface EditForm {
@@ -68,8 +71,10 @@ function makeEditForm(entry: ShopEntry, productName: string): EditForm {
     variantDrafts: [...entry.shopee_product_variants]
       .sort((a, b) => a.display_order - b.display_order)
       .map(v => ({
+        id: v.id,
         pos_product_id: v.pos_product_id,
         sku: v.sku,
+        pos_sku: v.pos_sku ?? '',
         size: v.size ?? '',
         color_name: v.color_name ?? '',
         shopee_price_override: v.shopee_price_override != null ? String(v.shopee_price_override) : '',
@@ -111,13 +116,12 @@ function VariantsEditor({ drafts, onChange }: { drafts: VariantDraft[]; onChange
   const { skuSearch, skuResults, skuLoading, searchSku, clearSearch } = useSkuSearch();
 
   const addVariant = (pos: PosProduct) => {
-    if (drafts.some(v => v.pos_product_id === pos.id)) return;
-    onChange([...drafts, { pos_product_id: pos.id, sku: pos.sku, size: '', color_name: '', shopee_price_override: '' }]);
+    onChange([...drafts, { id: crypto.randomUUID(), pos_product_id: pos.id, sku: '', pos_sku: pos.sku, size: '', color_name: '', shopee_price_override: '' }]);
     clearSearch();
   };
-  const removeVariant = (posId: string) => onChange(drafts.filter(v => v.pos_product_id !== posId));
-  const updateVariant = (posId: string, field: keyof Omit<VariantDraft, 'pos_product_id' | 'sku'>, value: string) =>
-    onChange(drafts.map(v => v.pos_product_id === posId ? { ...v, [field]: value } : v));
+  const removeVariant = (id: string) => onChange(drafts.filter(v => v.id !== id));
+  const updateVariant = (id: string, field: keyof Omit<VariantDraft, 'id' | 'pos_product_id' | 'sku'>, value: string) =>
+    onChange(drafts.map(v => v.id === id ? { ...v, [field]: value } : v));
 
   return (
     <div className="space-y-3">
@@ -160,6 +164,7 @@ function VariantsEditor({ drafts, onChange }: { drafts: VariantDraft[]; onChange
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-3 py-2 font-medium text-slate-500">SKU</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">SKU Shopee</th>
                 <th className="text-left px-3 py-2 font-medium text-slate-500">Size</th>
                 <th className="text-left px-3 py-2 font-medium text-slate-500">Màu</th>
                 <th className="text-left px-3 py-2 font-medium text-slate-500">Giá Shopee</th>
@@ -168,23 +173,24 @@ function VariantsEditor({ drafts, onChange }: { drafts: VariantDraft[]; onChange
             </thead>
             <tbody>
               {drafts.map(v => (
-                <tr key={v.pos_product_id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 text-slate-700 font-medium">{v.sku}</td>
+                <tr key={v.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-3 py-2 text-slate-700 font-medium">{v.pos_sku || <span className="text-slate-300 italic">chưa link</span>}</td>
+                  <td className="px-3 py-2 text-slate-500">{v.sku || <span className="text-slate-300">—</span>}</td>
                   <td className="px-3 py-2">
-                    <input value={v.size} onChange={e => updateVariant(v.pos_product_id, 'size', e.target.value)}
+                    <input value={v.size} onChange={e => updateVariant(v.id, 'size', e.target.value)}
                       placeholder="40" className="w-14 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-orange-400" />
                   </td>
                   <td className="px-3 py-2">
-                    <input value={v.color_name} onChange={e => updateVariant(v.pos_product_id, 'color_name', e.target.value)}
+                    <input value={v.color_name} onChange={e => updateVariant(v.id, 'color_name', e.target.value)}
                       placeholder="Đen" className="w-20 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-orange-400" />
                   </td>
                   <td className="px-3 py-2">
                     <input type="number" value={v.shopee_price_override}
-                      onChange={e => updateVariant(v.pos_product_id, 'shopee_price_override', e.target.value)}
+                      onChange={e => updateVariant(v.id, 'shopee_price_override', e.target.value)}
                       placeholder="Giá POS" className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-orange-400" />
                   </td>
                   <td className="px-2 py-2">
-                    <button onClick={() => removeVariant(v.pos_product_id)} className="text-slate-300 hover:text-red-500 transition-colors p-0.5">
+                    <button onClick={() => removeVariant(v.id)} className="text-slate-300 hover:text-red-500 transition-colors p-0.5">
                       <X size={13} />
                     </button>
                   </td>
@@ -244,30 +250,16 @@ function ShopDetailPanel({
   };
 
   const handleSync = async () => {
-    if (!form.shopee_item_id) return;
     setSyncing(true);
     try {
-      const res = await fetch('/api/shopee-sync', {
+      const res = await fetch('/api/shopee-sync/all', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopIdx: colorIdx,
-          itemId: form.shopee_item_id,
-          shopeeProductId: entry.id,
-        }),
+        body: JSON.stringify({ shopIdx: colorIdx }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? 'Bot không phản hồi');
-
-      // Cập nhật form với data vừa lấy về từ Shopee
-      const patch: Partial<EditForm> = {};
-      if (json.coverImage)         patch.cover_image_url = json.coverImage;
-      if (json.name)               patch.product_name    = json.name;
-      if (json.gallery?.length)    patch.other_images    = json.gallery.slice(0, 6);
-      if (Object.keys(patch).length) { setF(patch); }
-
-      showToast(`Sync xong — lấy được ${json.totalImages ?? 0} ảnh`, 'success');
-      onSaved(); // refresh danh sách (thumbnail)
+      showToast('Đã kích hoạt quét Shop — biến thể sẽ được cập nhật tự động (xem pm2 logs)', 'success');
     } catch (err: unknown) {
       showToast('Sync lỗi: ' + (err instanceof Error ? err.message : String(err)), 'error');
     } finally {
@@ -307,8 +299,8 @@ function ShopDetailPanel({
           )}
           <button
             onClick={handleSync}
-            disabled={syncing || !form.shopee_item_id}
-            title={!form.shopee_item_id ? 'Cần điền Item ID trước' : 'Lấy ảnh & tên từ Shopee Seller Center'}
+            disabled={syncing}
+            title="Quét toàn bộ sản phẩm & biến thể của shop từ Shopee Seller Center"
             className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 rounded-lg transition-colors whitespace-nowrap"
           >
             {syncing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
@@ -540,11 +532,17 @@ export default function ShopeeProductsPage() {
   const [shops, setShops] = useState<ShopeeShop[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
-  // set chứa pos_product_id đang expanded
+  // table mode
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  // entry đang mở detail panel (shopee_product_id)
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
+
+  // grid popup
+  const [gridPopupProduct, setGridPopupProduct] = useState<CatalogProduct | null>(null);
+  const [gridActiveEntryId, setGridActiveEntryId] = useState<string | null>(null);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -570,6 +568,15 @@ export default function ShopeeProductsPage() {
     p.shopee_entries.some(e => (e.shopee_item_id ?? '').includes(search))
   );
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const pageFiltered = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const openGridPopup = (product: CatalogProduct) => {
+    setGridPopupProduct(product);
+    setGridActiveEntryId(product.shopee_entries[0]?.id ?? null);
+  };
+  const closeGridPopup = () => { setGridPopupProduct(null); setGridActiveEntryId(null); };
+
   const toggleProduct = (posId: string) => {
     setExpandedIds(prev => {
       const next = new Set(prev);
@@ -587,7 +594,7 @@ export default function ShopeeProductsPage() {
   const publishedEntries = products.reduce((s, p) => s + p.shopee_entries.filter(e => e.is_published).length, 0);
 
   // số cột cố định trong bảng (checkbox + tên + shop chips + SKU + trạng thái)
-  const COL_COUNT = 5;
+  const COL_COUNT = 6;
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -611,10 +618,26 @@ export default function ShopeeProductsPage() {
           <button onClick={loadProducts} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Tải lại">
             <RefreshCw size={15} />
           </button>
+          <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center justify-center w-8 h-8 transition-all ${viewMode === 'table' ? 'bg-orange-50 text-orange-600' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="Xem dạng bảng"
+            >
+              <List size={14} />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center justify-center w-8 h-8 border-l border-slate-200 transition-all ${viewMode === 'grid' ? 'bg-orange-50 text-orange-600' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="Xem dạng lưới ảnh"
+            >
+              <LayoutGrid size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Nội dung chính */}
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-sm">
@@ -625,19 +648,35 @@ export default function ShopeeProductsPage() {
             <ShoppingBag size={32} className="mb-2 opacity-40" />
             <p className="text-sm">{search ? 'Không tìm thấy sản phẩm phù hợp.' : 'Chưa có sản phẩm Shopee nào.'}</p>
           </div>
+        ) : viewMode === 'grid' ? (
+          <div className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+              {pageFiltered.map(product => (
+                <ShopeeGridCard
+                  key={product.pos_product_id}
+                  product={product}
+                  shops={shops}
+                  shopMap={shopMap}
+                  isSelected={gridPopupProduct?.pos_product_id === product.pos_product_id}
+                  onClick={() => openGridPopup(product)}
+                />
+              ))}
+            </div>
+          </div>
         ) : (
           <table className="w-full text-sm border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="w-8" />
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Sản phẩm</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Nhóm hàng</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Shop</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">SKU</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(product => {
+              {pageFiltered.map(product => {
                 const isExpanded = expandedIds.has(product.pos_product_id);
 
                 // Deduplicate shops: mỗi shop_id chỉ hiện 1 chip, ghi nhận có bất kỳ entry nào đang bán không
@@ -692,6 +731,15 @@ export default function ShopeeProductsPage() {
                         </div>
                       </td>
 
+                      {/* Nhóm hàng */}
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-slate-500">
+                          {product.group_name
+                            ? (product.group_name.split('>').pop()?.trim() || product.group_name)
+                            : <span className="text-slate-300">—</span>}
+                        </span>
+                      </td>
+
                       {/* Chips shop — deduplicated theo shop_id */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -706,9 +754,6 @@ export default function ShopeeProductsPage() {
                                 }`}>
                                 <Store size={10} />
                                 {shop?.name ?? chip.shop_id}
-                                {chip.listingCount > 1 && (
-                                  <span className="text-[10px] opacity-70">×{chip.listingCount}</span>
-                                )}
                               </span>
                             );
                           })}
@@ -784,6 +829,204 @@ export default function ShopeeProductsPage() {
           </table>
         )}
       </div>
+
+      <GoodsPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        itemsPerPage={itemsPerPage}
+        totalItems={filtered.length}
+        totalSkuItems={filtered.length}
+        setCurrentPage={setCurrentPage}
+        onItemsPerPageChange={n => { setItemsPerPage(n); setCurrentPage(1); }}
+      />
+
+      {/* Grid popup modal */}
+      {gridPopupProduct && (() => {
+        const activeEntry = gridPopupProduct.shopee_entries.find(e => e.id === gridActiveEntryId) ?? null;
+        const entryIdx = activeEntry ? shops.findIndex(s => s.id === activeEntry.shop_id) : -1;
+        const colorIdx = entryIdx >= 0 ? entryIdx
+          : activeEntry ? gridPopupProduct.shopee_entries.indexOf(activeEntry) : 0;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={closeGridPopup}
+          >
+            <div
+              className="relative w-full max-w-5xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{gridPopupProduct.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {gridPopupProduct.shopee_entries.length} shop · {new Set(gridPopupProduct.shopee_entries.flatMap(e => e.shopee_product_variants.map(v => v.pos_product_id))).size} SKU
+                  </p>
+                </div>
+                <button onClick={closeGridPopup} className="rounded-lg p-1.5 hover:bg-slate-100 text-slate-400 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Shop entry selector — giống variant selector của Catalog */}
+              {gridPopupProduct.shopee_entries.length > 0 && (
+                <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {gridPopupProduct.shopee_entries.map((entry, idx) => {
+                      const shop = shopMap.get(entry.shop_id ?? '');
+                      const shopIdx = shops.findIndex(s => s.id === entry.shop_id);
+                      const colors = shopColor(shopIdx >= 0 ? shopIdx : idx);
+                      const isActive = gridActiveEntryId === entry.id;
+                      const skuCount = entry.shopee_product_variants.length;
+                      return (
+                        <button
+                          key={entry.id}
+                          onClick={() => setGridActiveEntryId(entry.id)}
+                          className={`flex items-center gap-2 shrink-0 rounded-xl border px-2.5 py-2 transition-colors ${
+                            isActive
+                              ? `${colors.border} ${colors.activeBg} shadow-sm`
+                              : 'border-slate-200 bg-white hover:border-orange-200 hover:bg-orange-50/40'
+                          }`}
+                        >
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center shrink-0">
+                            {entry.cover_image_url ? (
+                              <img src={entry.cover_image_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <ShoppingBag className="w-4 h-4 text-slate-300" strokeWidth={1} />
+                            )}
+                          </div>
+                          <div className="text-left min-w-0">
+                            <p className={`text-2xs font-normal truncate max-w-[120px] ${isActive ? 'text-orange-700' : 'text-slate-700'}`}>
+                              {shop?.name ?? `Shop ${idx + 1}`}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${entry.is_published ? colors.dot : 'bg-slate-300'}`} />
+                              <span className="text-[9px] font-normal text-slate-400">
+                                {skuCount} SKU
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ShopDetailPanel cho entry đang chọn */}
+              <div className="flex-1 min-h-0 overflow-auto">
+                {activeEntry ? (
+                  <ShopDetailPanel
+                    key={activeEntry.id}
+                    entry={activeEntry}
+                    shops={shops}
+                    colorIdx={colorIdx}
+                    onSaved={() => { loadProducts(); }}
+                    productName={gridPopupProduct.name}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                    <Store size={32} className="mb-2" />
+                    <p className="text-sm">Chọn shop để xem chi tiết</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
+
+// ─── Grid card cho Shopee ────────────────────────────────────────────────────
+
+const ShopeeGridCard = memo(function ShopeeGridCard({
+  product, shops, shopMap, isSelected, onClick,
+}: {
+  product: CatalogProduct;
+  shops: ShopeeShop[];
+  shopMap: Map<string, ShopeeShop>;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const coverImage = product.shopee_entries[0]?.cover_image_url ?? null;
+
+  const shopChips = product.shopee_entries
+    .filter(e => e.shop_id)
+    .reduce<{ shop_id: string; anyPublished: boolean }[]>((acc, e) => {
+      const existing = acc.find(a => a.shop_id === e.shop_id);
+      if (existing) { if (e.is_published) existing.anyPublished = true; }
+      else acc.push({ shop_id: e.shop_id!, anyPublished: e.is_published });
+      return acc;
+    }, []);
+
+  const publishedCount = shopChips.filter(c => c.anyPublished).length;
+  const uniqueSkuCount = new Set(
+    product.shopee_entries.flatMap(e => e.shopee_product_variants.map(v => v.pos_product_id))
+  ).size;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full bg-white rounded-2xl border transition-all active:scale-[0.98] overflow-hidden group flex flex-col text-left ${
+        isSelected
+          ? 'border-orange-300 shadow-md shadow-orange-100'
+          : 'border-slate-100 hover:border-orange-200 hover:shadow-md shadow-sm'
+      }`}
+    >
+      {/* Ảnh bìa */}
+      <div className="bg-slate-100/60 relative w-full aspect-square flex-shrink-0 flex items-center justify-center overflow-hidden">
+        {coverImage ? (
+          <img src={coverImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <ShoppingBag className="h-10 w-10 text-slate-300" strokeWidth={1} />
+        )}
+        {/* Trạng thái badge */}
+        {shopChips.length > 0 && (
+          <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-medium shadow-sm ${
+            publishedCount === shopChips.length
+              ? 'bg-orange-500 text-white'
+              : publishedCount === 0
+                ? 'bg-slate-200 text-slate-500'
+                : 'bg-yellow-400 text-white'
+          }`}>
+            {publishedCount === shopChips.length ? 'Đang bán' : publishedCount === 0 ? 'Đã ẩn' : `${publishedCount}/${shopChips.length}`}
+          </div>
+        )}
+        {uniqueSkuCount > 0 && (
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-white/90 text-slate-600 text-[9px] font-normal rounded-full shadow-sm border border-slate-100">
+            {uniqueSkuCount} SKU
+          </div>
+        )}
+      </div>
+
+      {/* Thông tin */}
+      <div className="px-2.5 py-2 flex flex-col gap-1 flex-1">
+        <p className="text-xs font-normal text-slate-800 line-clamp-2 leading-tight group-hover:text-orange-600 transition-colors text-center">
+          {product.name}
+        </p>
+        {/* Shop chips */}
+        {shopChips.length > 0 && (
+          <div className="flex flex-wrap gap-0.5 mt-auto pt-1 justify-center">
+            {shopChips.map((chip, idx) => {
+              const shop = shopMap.get(chip.shop_id);
+              const shopIdx = shops.findIndex(s => s.id === chip.shop_id);
+              const colors = shopColor(shopIdx >= 0 ? shopIdx : idx);
+              return (
+                <span key={chip.shop_id}
+                  className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                    chip.anyPublished ? colors.badge : 'bg-slate-100 text-slate-400'
+                  }`}>
+                  <Store size={8} />
+                  {shop?.name ?? `Shop ${idx + 1}`}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+});

@@ -52,12 +52,14 @@
 
 ---
 
-### [ ] Nối sản phẩm Shopee với sản phẩm POS (link SKU)
+### [x] Nối sản phẩm Shopee với sản phẩm POS (link SKU) *(xong 2026-06-29)*
 
-> Bot đã lưu toàn bộ sản phẩm Shopee (94 SP, 905 variants). `pos_product_id` hiện đang null vì SKU Shopee (`DKD06`, `DBD01-Đen-43-Kèm Hộp`) không khớp với SKU POS. Cần:
-> 1. UI để user tự match: chọn variant Shopee → chọn sản phẩm POS tương ứng
-> 2. Hoặc chạy fuzzy match tự động theo tên/SKU
-> Ưu tiên sau khi đã lưu hết dữ liệu (đã xong 2026-06-22).
+> Fix buildSkuMap() phân trang (load đủ 14.855 SKU thay vì 1000). Strip suffix "Kèm Hộp/Không Hộp". Bot đã rescan — Shop1: 378/415 variants linked; Shop2: 174/310 variants linked. SP chưa link (SKU rỗng trong Shopee Seller Center) cần user tự thêm SKU trên Shopee.
+
+### [ ] Thêm SKU trên Shopee Seller Center cho các sản phẩm chưa link
+
+> ~7 SP shop1 và ~9 SP shop2 có SKU rỗng ("") trong Shopee → bot không thể auto-link với POS. User cần vào Shopee Seller Center, chỉnh từng biến thể → thêm SKU đúng định dạng (vd: DQND25-Đen-38). Sau đó bấm "Sync Shopee" để bot cập nhật.
+> SP ví dụ: Dép Nữ, Unisex, DQND25-Đen (một số màu).
 
 ---
 

@@ -1,8 +1,9 @@
 import { Router, RequestHandler } from 'express';
 import axios from 'axios';
 
-// Index 0 → shop1 port 3001, index 1 → shop2 port 3002
-const SHOP_PORTS: Record<number, number> = { 0: 3001, 1: 3002 };
+// DB shops[0] slug=giaydepphucsang → pm2 shopee-shop2 port 3002
+// DB shops[1] slug=phuc-sang-store  → pm2 shopee-shop1 port 3001
+const SHOP_PORTS: Record<number, number> = { 0: 3002, 1: 3001 };
 
 export function createShopeeSyncRouter(requireAuth: RequestHandler) {
   const router = Router();

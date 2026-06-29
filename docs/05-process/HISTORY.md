@@ -3,6 +3,28 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-29 — Grid view cho ShopeeProductsPage & WebsiteProductsPage + drag-drop ảnh
+
+- Bỏ hậu tố ×2/×3 sau tên shop trong ShopeeProductsPage (mỗi chip chỉ hiện 1 lần)
+- Thêm chế độ grid (List/Grid toggle) cho ShopeeProductsPage: `ShopeeGridCard` memo, popup chọn shop với chip biến thể scroll ngang + ShopDetailPanel
+- Thêm chế độ grid cho WebsiteProductsPage: `WebsiteGridCard` memo, popup với chip biến thể (color dot + size + published dot) + DetailPanel đầy đủ 6 tab
+- Thêm GoodsPagination cho cả 2 trang (cả table lẫn grid mode)
+- Thêm drag-and-drop ảnh bìa trong DetailPanel: kéo từ browser → URL tự điền; kéo file → upload lên store-media
+- Files: `components/website/ShopeeProductsPage.tsx`, `components/website/WebsiteProductsPage.tsx`
+
+### 2026-06-29 — Fix Shopee variant linking: hiển thị đúng số biến thể mỗi shop
+
+- **Vấn đề**: ShopeeProductsPage hiện "0 đã link POS" cho tất cả sản phẩm shop2 và một số shop1. Nút "Sync Shopee" không hoạt động với sản phẩm chưa có shopee_item_id
+- **Root cause 1**: `buildSkuMap()` trong `/Users/apple/shopee-monitor/bots/products.js` chỉ load 1000 row đầu (Supabase default limit), trong khi DB có 14.855 sản phẩm POS Active → hầu hết SKU không tìm thấy
+- **Fix 1**: Đổi sang vòng lặp phân trang `.range(from, from+999)` để load toàn bộ 14.855 SKU
+- **Root cause 2**: Shopee variant SKU dạng "DQND26-Đen-38-Kèm Hộp" không khớp POS SKU "DQND26-Đen-38"
+- **Fix 2**: Strip suffix "-Kèm Hộp" / "-Không Hộp" trước khi fallback lookup trong `upsertVariants()`
+- **Root cause 3**: Nút "Sync Shopee" trên UI gọi `/api/shopee-sync` (sync 1 SP, cần itemId) nhưng disabled khi chưa có shopee_item_id → không scan được SP mới
+- **Fix 3**: Đổi handleSync gọi `/api/shopee-sync/all` (quét toàn shop), bỏ disable condition. Thêm endpoint `/api/shopee-sync/all` vào `routes/shopeeSync.ts`
+- **Kết quả sau restart bot + rescan**: DQND26 Shop1=12 biến thể ✅, Shop2=6 biến thể ✅; Shop1 tổng 378/415 linked (22/29 SP đủ); Shop2 tổng 174/310 linked (25/34 SP đủ)
+- **Sản phẩm chưa link được** (7 SP shop1, 9 SP shop2): SKU rỗng trong Shopee Seller Center → cần user thêm SKU trực tiếp trên Shopee
+- Files: `/Users/apple/shopee-monitor/bots/products.js`, `components/website/ShopeeProductsPage.tsx`, `routes/shopeeSync.ts`
+
 ### 2026-06-28 — Fix ghi dữ liệu qua tunnel bị 401 (hồ sơ cửa hàng/nợ không lưu qua app.phucsang.com.vn)
 
 - Triệu chứng: hồ sơ cửa hàng (SĐT/địa chỉ) sửa nhiều lần vẫn mất; thực ra mọi thao tác lưu qua app.phucsang.com.vn đều thất bại âm thầm (auto-save không báo lỗi)

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package, ShoppingBag } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package, ShoppingBag, Loader2 } from 'lucide-react';
 import { GoodsPagination } from '../pos/GoodsPagination';
 import { GoodsProductDetailPanel } from '../pos/GoodsProductDetailPanel';
+import { supabase } from '../../services/supabase';
 import type { POSProduct } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +30,93 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: 'units', label: 'Tồn kho' },
   { id: 'channels', label: 'Liên kết kênh bán' },
 ];
+
+async function toggleChannelBackend(payload: {
+  channel: 'website' | 'shopee';
+  action: 'link' | 'unlink';
+  product: { id: string; name: string; sku: string; parentId?: string; isParent?: boolean };
+  childIds?: { id: string; sku: string }[];
+  shopId?: string;
+}): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+  const res = await fetch('/api/channel-links/toggle', {
+    method: 'POST', headers, credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json: { ok: boolean; error?: string } = await res.json();
+  if (!json.ok) throw new Error(json.error ?? 'Lỗi không xác định');
+}
+
+function ChannelBtn({ linked, loading, label, color, title, onClick }: {
+  linked: boolean; loading: boolean; label: string;
+  color: 'indigo' | 'orange' | 'violet'; title?: string; onClick: () => void;
+}) {
+  const onCls = {
+    indigo: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+    orange: 'bg-orange-100 text-orange-700 border-orange-300',
+    violet: 'bg-violet-100 text-violet-700 border-violet-300',
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      title={title}
+      className={`flex items-center justify-center h-6 min-w-[32px] px-1.5 rounded-full text-[10px] font-medium border transition-all ${
+        loading ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+      } ${linked ? onCls[color] : 'bg-white text-slate-300 border-dashed border-slate-200 hover:text-slate-500 hover:border-slate-400'}`}
+    >
+      {loading ? <Loader2 size={9} className="animate-spin" /> : label}
+    </button>
+  );
+}
+
+function ChannelButtons({
+  product, children: childProducts,
+  platformMap, shopeeByShop, shops, pending, onToggle,
+}: {
+  product: POSProduct;
+  children: POSProduct[];
+  platformMap: Record<string, Platform[]>;
+  shopeeByShop: Record<string, string[]>;
+  shops: { id: string; name: string }[];
+  pending: Set<string>;
+  onToggle: (product: POSProduct, children: POSProduct[], channel: string, action: 'link' | 'unlink') => void;
+}) {
+  const affectedIds = childProducts.length > 0 ? childProducts.map(c => c.id) : [product.id];
+  const websiteLinked = affectedIds.some(id => (platformMap[id] ?? []).includes('website'));
+  const shopLinked = (shopId: string) => {
+    const ids = shopeeByShop[shopId] ?? [];
+    return affectedIds.some(id => ids.includes(id));
+  };
+  return (
+    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+      <ChannelBtn
+        linked={websiteLinked}
+        loading={pending.has(`${product.id}:website`)}
+        label="Web"
+        color="indigo"
+        title={websiteLinked ? 'Đang bán trên Website — click để tắt' : 'Bật bán trên Website'}
+        onClick={() => onToggle(product, childProducts, 'website', websiteLinked ? 'unlink' : 'link')}
+      />
+      {shops.map((shop, idx) => {
+        const linked = shopLinked(shop.id);
+        return (
+          <ChannelBtn
+            key={shop.id}
+            linked={linked}
+            loading={pending.has(`${product.id}:${shop.id}`)}
+            label={`S${idx + 1}`}
+            color={idx === 0 ? 'orange' : 'violet'}
+            title={linked ? `Đang bán trên ${shop.name} — click để tắt` : `Bật bán trên ${shop.name}`}
+            onClick={() => onToggle(product, childProducts, shop.id, linked ? 'unlink' : 'link')}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 function PlatformBadge({ platform }: { platform: Platform }) {
   if (platform === 'website') return (
@@ -63,6 +151,9 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [platformMap, setPlatformMap] = useState<Record<string, Platform[]>>({});
+  const [shopeeByShop, setShopeeByShop] = useState<Record<string, string[]>>({});
+  const [shops, setShops] = useState<{ id: string; name: string }[]>([]);
+  const [pendingChannels, setPendingChannels] = useState<Set<string>>(new Set());
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -77,7 +168,12 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
     setLoadError(null);
     try {
       const res = await fetch('/api/channel-links/catalog-links', { credentials: 'include' });
-      const json: { ok: boolean; error?: string; website: string[]; shopee: string[] } = await res.json();
+      const json: {
+        ok: boolean; error?: string;
+        website: string[]; shopee: string[];
+        shopee_by_shop: Record<string, string[]>;
+        shops: { id: string; name: string }[];
+      } = await res.json();
       if (!json.ok) throw new Error(json.error ?? 'Lỗi tải danh sách kênh');
 
       const map: Record<string, Platform[]> = {};
@@ -88,6 +184,8 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
       json.website.forEach(id => add(id, 'website'));
       json.shopee.forEach(id => add(id, 'shopee'));
       setPlatformMap(map);
+      setShopeeByShop(json.shopee_by_shop ?? {});
+      setShops(json.shops ?? []);
     } catch (err: unknown) {
       const msg = err instanceof Error
         ? err.message
@@ -99,6 +197,83 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
       setLoading(false);
     }
   }, []);
+
+  const handleToggle = useCallback(async (
+    product: POSProduct,
+    childProducts: POSProduct[],
+    channel: string,
+    action: 'link' | 'unlink',
+  ) => {
+    const pendingKey = `${product.id}:${channel}`;
+    if (pendingChannels.has(pendingKey)) return;
+    setPendingChannels(prev => new Set([...prev, pendingKey]));
+
+    const isParent = childProducts.length > 0;
+    const affectedIds = isParent ? childProducts.map(c => c.id) : [product.id];
+
+    // Optimistic update
+    if (channel === 'website') {
+      setPlatformMap(prev => {
+        const next = { ...prev };
+        for (const id of affectedIds) {
+          const cur = next[id] ?? [];
+          next[id] = action === 'link'
+            ? (cur.includes('website') ? cur : [...cur, 'website'])
+            : cur.filter(p => p !== 'website');
+        }
+        return next;
+      });
+    } else {
+      const shopId = channel;
+      setShopeeByShop(prev => {
+        const cur = [...(prev[shopId] ?? [])];
+        const next = { ...prev };
+        if (action === 'link') {
+          for (const id of affectedIds) if (!cur.includes(id)) cur.push(id);
+          next[shopId] = cur;
+        } else {
+          const rm = new Set(affectedIds);
+          next[shopId] = cur.filter(id => !rm.has(id));
+        }
+        return next;
+      });
+      if (action === 'link') {
+        setPlatformMap(prev => {
+          const next = { ...prev };
+          for (const id of affectedIds) {
+            const cur = next[id] ?? [];
+            if (!cur.includes('shopee')) next[id] = [...cur, 'shopee'];
+          }
+          return next;
+        });
+      }
+    }
+
+    try {
+      if (channel === 'website') {
+        await toggleChannelBackend({
+          channel: 'website', action,
+          product: isParent
+            ? { id: product.id, name: product.name, sku: product.sku, isParent: true }
+            : { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
+          childIds: isParent ? childProducts.map(c => ({ id: c.id, sku: c.sku })) : undefined,
+        });
+      } else {
+        await toggleChannelBackend({
+          channel: 'shopee', action,
+          product: isParent
+            ? { id: product.id, name: product.name, sku: product.sku, isParent: true }
+            : { id: product.id, name: product.name, sku: product.sku, parentId: product.parentId },
+          childIds: isParent ? childProducts.map(c => ({ id: c.id, sku: c.sku })) : undefined,
+          shopId: channel,
+        });
+      }
+    } catch {
+      loadPlatformLinks();
+    } finally {
+      setPendingChannels(prev => { const next = new Set(prev); next.delete(pendingKey); return next; });
+    }
+  }, [pendingChannels, loadPlatformLinks]);
 
   useEffect(() => { loadPlatformLinks(); }, [loadPlatformLinks]);
 
@@ -533,10 +708,16 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                           <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'text-rose-500' : p.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{p.stock}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{p.location || '—'}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-600">{p.brand || '—'}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-wrap gap-1">
-                              {platforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                            </div>
+                          <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                            <ChannelButtons
+                              product={p}
+                              children={[]}
+                              platformMap={enrichedPlatformMap}
+                              shopeeByShop={shopeeByShop}
+                              shops={shops}
+                              pending={pendingChannels}
+                              onToggle={handleToggle}
+                            />
                           </td>
                           <td className="px-4 py-2.5"></td>
                         </tr>
@@ -586,10 +767,16 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                           <td className="px-4 py-2.5 text-right text-xs text-slate-700 font-semibold tabular-nums">{totalStock}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-400">—</td>
                           <td className="px-4 py-2.5 text-xs text-slate-600">{row.parent.brand || row.children[0]?.brand || '—'}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-wrap gap-1">
-                              {groupPlatforms.map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                            </div>
+                          <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                            <ChannelButtons
+                              product={row.parent}
+                              children={row.children}
+                              platformMap={enrichedPlatformMap}
+                              shopeeByShop={shopeeByShop}
+                              shops={shops}
+                              pending={pendingChannels}
+                              onToggle={handleToggle}
+                            />
                           </td>
                           <td className="px-4 py-2.5"></td>
                         </tr>
@@ -616,10 +803,16 @@ export default function OnlineCatalogPage({ navigationSlot, products }: Props) {
                               <td className={`px-4 py-2.5 text-right text-xs font-semibold tabular-nums ${v.stock <= 0 ? 'text-rose-500' : v.stock <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>{v.stock}</td>
                               <td className="px-4 py-2.5 text-xs text-slate-500">{v.location || '—'}</td>
                               <td className="px-4 py-2.5 text-xs text-slate-600">{v.brand || '—'}</td>
-                              <td className="px-4 py-2.5">
-                                <div className="flex flex-wrap gap-1">
-                                  {(enrichedPlatformMap[v.id] ?? []).map(pf => <PlatformBadge key={pf} platform={pf} />)}
-                                </div>
+                              <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                                <ChannelButtons
+                                  product={v}
+                                  children={[]}
+                                  platformMap={enrichedPlatformMap}
+                                  shopeeByShop={shopeeByShop}
+                                  shops={shops}
+                                  pending={pendingChannels}
+                                  onToggle={handleToggle}
+                                />
                               </td>
                               <td className="px-4 py-2.5 border-r-2 border-indigo-200"></td>
                             </tr>
