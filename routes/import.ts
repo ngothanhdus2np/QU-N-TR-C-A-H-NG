@@ -11,6 +11,14 @@ import {
   formatAutoSku,
 } from '../src/lib';
 import { EXCEL_MAX_ROWS, assertSafeExcelBuffer } from '../src/lib/excelSafety';
+import {
+  parseInvoiceDetailRow,
+  accumulateInvoiceDayAgg,
+  orderRevenue,
+  emptyDayAgg,
+  resolveReturnColumns,
+  parseReturnRow,
+} from './importParsers';
 
 type KiotVietRevenueInput = {
   date?: string;
@@ -829,96 +837,59 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
           });
         }
       } else if (isChiTietHoaDon) {
-        // ── Format "Chi tiết hóa đơn" KiotViet ──
-        // col1=Mã HĐ, col6=Thời gian (ISO), col12=Mã KH, col13=Tên KH, col21=Người bán,
-        // col22=Kênh bán, col38=Tổng tiền hàng, col39=GG HĐ, col41=Khách cần trả,
-        // col43=Tiền mặt, col44=Thẻ, col45=Ví, col46=CK, col50=Trạng thái,
-        // col52=Mã hàng, col53=Tên hàng, col57=SL, col58=Đơn giá, col61=Giá bán, col62=Thành tiền
+        // ── Format "Chi tiết hóa đơn" KiotViet — parse thuần ở routes/importParsers.ts ──
         for (const row of rows.slice(1)) {
-          const orderCode = String(row[1] || '').trim();
-          if (!orderCode) continue;
+          const p = parseInvoiceDetailRow(row);
+          if (!p.orderCode) continue;
+          if (p.status === 'Đã huỷ' || p.status === 'Huỷ') continue;
 
-          const status = String(row[50] || '').trim();
-          if (status === 'Đã huỷ' || status === 'Huỷ') continue;
-
-          const dateTime = excelDateToLocalIsoDateTime(row[6]);
+          const dateTime = excelDateToLocalIsoDateTime(p.rawDateTime);
           if (!dateTime) continue;
           const date = dateTime.slice(0, 10);
 
-          const isReturnOrder = /^TH/i.test(orderCode) || String(row[11] || '').trim() !== '';
-          const totalGross = Number(row[38] || 0);
-          const discount = Number(row[39] || 0);
-          const finalAmount = Number(row[41] || 0);
+          if (!seenOrders.has(p.orderCode)) {
+            seenOrders.add(p.orderCode);
+            dateMap.set(date, accumulateInvoiceDayAgg(dateMap.get(date) ?? emptyDayAgg(), p));
 
-          if (!seenOrders.has(orderCode)) {
-            seenOrders.add(orderCode);
-            const prev: DayAgg = dateMap.get(date) ?? {
-              totalGross: 0, discount: 0, returnsGross: 0, netRev: 0, cogs: 0, profit: 0,
-            };
-            dateMap.set(date, {
-              totalGross: isReturnOrder ? prev.totalGross : prev.totalGross + totalGross,
-              discount: prev.discount + discount,
-              returnsGross: isReturnOrder ? prev.returnsGross + Math.abs(totalGross) : prev.returnsGross,
-              netRev: prev.netRev + finalAmount,
-              cogs: prev.cogs,
-              profit: prev.profit + finalAmount,
-            });
-
-            const cashReceived = Number(row[42] || 0);
-            const cash = Number(row[43] || 0);
-            const card = Number(row[44] || 0);
-            const transfer = Number(row[46] || 0);
-            const wallet = Number(row[45] || 0);
-            const paymentMethod = card > 0 ? 'Card' : transfer > 0 ? 'Transfer' : wallet > 0 ? 'Wallet' : 'Cash';
-            const staffName = String(row[21] || '').trim();
-            const channelRaw = String(row[22] || '').trim();
-            const channel = channelRaw.includes('online') || channelRaw.includes('Online') ? 'online' : 'direct';
-            const customerName = String(row[13] || '').trim();
-
-            orderMap.set(orderCode, {
+            const rev = orderRevenue(p);
+            orderMap.set(p.orderCode, {
               date: dateTime,
-              totalAmount: totalGross,
-              discount,
-              finalAmount,
-              isReturn: isReturnOrder,
+              totalAmount: p.totalGross,
+              // Lưu discount = Tổng tiền hàng − doanh thu để calcOrderRevenue (totalAmount − discount)
+              // ra đúng doanh thu. Đơn bán thường = giảm giá thật (rev = Khách cần trả);
+              // đơn đổi/trả = phần chênh do hàng đổi (rev = Khách đã trả).
+              discount: Math.max(0, p.totalGross - rev),
+              finalAmount: rev,
+              isReturn: p.isReturn,
               items: new Map(),
-              paymentMethod,
-              customerName: customerName && customerName !== 'Khách lẻ' ? customerName : undefined,
-              staffId: staffName || undefined,
-              channel,
-              cashReceived,
+              paymentMethod: p.paymentMethod,
+              customerName: p.customerName && p.customerName !== 'Khách lẻ' ? p.customerName : undefined,
+              staffId: p.staffName || undefined,
+              channel: p.channel,
+              cashReceived: p.cashReceived,
             });
           }
 
-          const customerCode = String(row[12] || '').trim();
-          const customerName = String(row[13] || '').trim();
-          if (customerCode && /^KH/i.test(customerCode) && customerName) {
-            const cid = customerIdFromKiotVietCode(customerCode);
-            if (!customerMap.has(cid)) customerMap.set(cid, { name: customerName });
+          if (p.customerCode && /^KH/i.test(p.customerCode) && p.customerName) {
+            const cid = customerIdFromKiotVietCode(p.customerCode);
+            if (!customerMap.has(cid)) customerMap.set(cid, { name: p.customerName });
           }
 
-          const sku = String(row[52] || '').trim();
-          const itemName = String(row[53] || '').trim();
-          const rawQty = Number(row[57] || 0);
-          const itemQty = Math.abs(rawQty);
-          const itemPrice = Number(row[61] || row[58] || 0);
-          const itemTotal = Math.abs(Number(row[62] || 0));
-
-          if (sku && itemName && itemQty > 0) {
-            const ord = orderMap.get(orderCode)!;
-            const existingItem = ord.items.get(sku);
+          if (p.item) {
+            const ord = orderMap.get(p.orderCode)!;
+            const existingItem = ord.items.get(p.item.sku);
             if (existingItem) {
-              existingItem.quantity += itemQty;
-              existingItem.total += itemTotal;
+              existingItem.quantity += p.item.quantity;
+              existingItem.total += p.item.total;
             } else {
-              ord.items.set(sku, {
-                productId: productIdFromSku(sku),
-                sku,
-                name: itemName,
-                quantity: itemQty,
-                price: itemPrice,
-                discount: Math.abs(Number(row[60] || 0)),
-                total: itemTotal,
+              ord.items.set(p.item.sku, {
+                productId: productIdFromSku(p.item.sku),
+                sku: p.item.sku,
+                name: p.item.name,
+                quantity: p.item.quantity,
+                price: p.item.price,
+                discount: p.item.discount,
+                total: p.item.total,
               });
             }
           }
@@ -2396,48 +2367,28 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         });
       }
 
-      // Detect column positions từ header (tránh bị sai khi KiotViet thêm/bớt cột)
-      const colMap = new Map<string, number>();
-      (h as unknown[]).forEach((cell, i) => { if (cell) colMap.set(String(cell).trim(), i); });
-      const col = (name: string, fallback: number) => colMap.get(name) ?? fallback;
+      // Detect column positions từ header — parse thuần ở routes/importParsers.ts
+      const cols = resolveReturnColumns(h);
 
-      const iCode      = col('Mã phiếu trả', 1) !== 1 ? col('Mã phiếu trả', 1) : col('Mã trả hàng', 1);
-      const iTime      = col('Thời gian', 6);
-      // File TH dùng "Tổng tiền hàng trả" / "Cần trả khách", file HĐ dùng "Tổng tiền hàng" / "Khách cần trả"
-      const iTotal     = colMap.get('Tổng tiền hàng trả') ?? col('Tổng tiền hàng', 13);
-      const iFinal     = colMap.get('Cần trả khách') ?? col('Khách cần trả', 18);
-      const iSku       = col('Mã hàng', 26);
-      const iQty       = col('Số lượng', 31);
-      const iLineTotal = colMap.get('Giá bán') ?? col('Thành tiền', 32);
-      const iInvoiceRef = col('Mã hóa đơn', 11);
-
-      type ReturnOrd = { date: string; invoiceRef: string; totalAmount: number; finalAmount: number; items: Map<string, { sku: string; name: string; quantity: number; total: number }> };
-      const returnMap   = new Map<string, ReturnOrd>();
-      const seenReturns = new Set<string>();
+      type ReturnOrd = { date: string; invoiceRef: string; goodsValue: number; cashRefunded: number; items: Map<string, { sku: string; name: string; quantity: number; total: number }> };
+      const returnMap = new Map<string, ReturnOrd>();
 
       for (const row of rows.slice(1)) {
-        const returnCode = String(row[iCode] || '').trim();
-        if (!returnCode) continue;
+        const p = parseReturnRow(cols, row);
+        if (!p.returnCode) continue;
 
-        const dateTime = excelDateToLocalIsoDateTime(row[iTime]);
+        const dateTime = excelDateToLocalIsoDateTime(p.rawDateTime);
         if (!dateTime) continue;
 
-        const totalAmount = Math.abs(Number(row[iTotal] || 0));
-        const finalAmount = Math.abs(Number(row[iFinal] || 0));
-        const invoiceRef  = String(row[iInvoiceRef] || '').trim();
-
-        if (!returnMap.has(returnCode)) {
-          returnMap.set(returnCode, { date: dateTime, invoiceRef, totalAmount, finalAmount, items: new Map() });
+        if (!returnMap.has(p.returnCode)) {
+          returnMap.set(p.returnCode, { date: dateTime, invoiceRef: p.invoiceRef, goodsValue: p.totalAmount, cashRefunded: p.cashRefunded, items: new Map() });
         }
 
-        const sku = String(row[iSku] || '').trim();
-        const qty = Math.abs(Number(row[iQty] || 0));
-        if (sku && qty > 0) {
-          const ord = returnMap.get(returnCode)!;
-          const existing = ord.items.get(sku);
-          const lineTotal = Math.abs(Number(row[iLineTotal] || 0));
-          if (existing) { existing.quantity += qty; existing.total += lineTotal; }
-          else ord.items.set(sku, { sku, name: String(row[(iSku + 1)] || '').trim(), quantity: qty, total: lineTotal });
+        if (p.sku && p.quantity > 0) {
+          const ord = returnMap.get(p.returnCode)!;
+          const existing = ord.items.get(p.sku);
+          if (existing) { existing.quantity += p.quantity; existing.total += p.lineTotal; }
+          else ord.items.set(p.sku, { sku: p.sku, name: p.name, quantity: p.quantity, total: p.lineTotal });
         }
       }
 
@@ -2453,18 +2404,21 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
 
       const ordersToUpsert = allCodes.map(code => {
         const d = returnMap.get(code)!;
+        // Doanh thu đơn trả = −(tiền mặt thực hoàn) để khớp KiotViet: lưu total_amount = cashRefunded
+        // → calcOrderRevenue (đơn trả = -totalAmount) ra đúng -|Đã trả khách|. Đơn đổi (hoàn 0) → 0.
+        // Giá trị hàng trả (goodsValue) lưu trong items + notes để đối chiếu/tồn kho.
         return {
           id:            existingMap.get(code) ?? stableUuidFromKey(`kiotviet-return:${code}`),
           order_code:    code,
           date:          d.date,
-          total_amount:  d.totalAmount,
+          total_amount:  d.cashRefunded,
           discount:      0,
-          final_amount:  d.finalAmount,
-          refund_amount: d.finalAmount,
+          final_amount:  d.cashRefunded,
+          refund_amount: d.cashRefunded,
           is_return:     true,
           payment_method: 'Cash' as const,
           points_earned: 0,
-          notes:         d.invoiceRef ? `Trả hàng HĐ ${d.invoiceRef}` : null,
+          notes:         `Trả hàng${d.invoiceRef ? ` HĐ ${d.invoiceRef}` : ''} — giá trị hàng: ${d.goodsValue}`,
           items:         Array.from(d.items.values()),
         };
       });

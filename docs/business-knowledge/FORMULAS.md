@@ -109,6 +109,60 @@ profit = revenue - COGS
 returnRefund = |order.finalAmount|       (đơn trả hàng)
 ```
 
+### 2.6 Import KiotViet — Doanh thu theo ngày ("Chi tiết hóa đơn")
+
+> Source: `routes/importParsers.ts` → `parseInvoiceDetailRow()`, `orderRevenue()`, `accumulateInvoiceDayAgg()`
+> Đầu vào: file Excel "Chi tiết hóa đơn" KiotViet. Mỗi đơn dedup theo mã HĐ.
+
+Doanh thu mỗi đơn (`orderRevenue`):
+
+```
+rev = đơn trả thuần (mã "TH")           → -Tổng tiền hàng
+      đơn ĐỔI/trả (có "Mã trả hàng" c11) → "Khách đã trả"  (col 42, đã net hàng đổi)
+      đơn bán thường                     → "Khách cần trả" (col 41, ghi nhận ĐỦ kể cả COD chưa thu)
+
+netRev  += rev
+profit  += rev
+totalGross   += Tổng tiền hàng   (col 38, chỉ đơn bán)
+returnsGross += |Tổng tiền hàng|  (chỉ đơn trả thuần)
+```
+
+- **Đơn trả** nhận diện CHỈ qua mã bắt đầu `TH`. Hóa đơn bán có "Mã trả hàng" (col 11)
+  là đơn **BÁN** liên kết phiếu đổi/trả (sửa BUG: trước đây nhận nhầm thành đơn trả → hiện số âm).
+- **Tại sao 2 cơ sở khác nhau:** đơn bán thường lấy "Khách cần trả" (ghi nhận đủ, đúng kế toán,
+  khớp KiotViet, không hụt đơn online/COD chưa thu). Đơn đổi/trả lấy "Khách đã trả" để tự trừ
+  phần hàng khách đổi lại (vì file "Phiếu trả hàng" KHÔNG được import riêng).
+- Đơn lưu vào `pos_orders` với `discount = max(0, Tổng tiền hàng − rev)`, `finalAmount = rev`
+  → `calcOrderRevenue` (mục 2.1) ra đúng doanh thu cho mọi báo cáo UI.
+- **Để khớp KiotViet 100%:** import THÊM file "Phiếu trả hàng" (xem 2.7) — trừ doanh thu theo
+  "Đã trả khách". Đã kiểm chứng tháng 05/2026: hóa đơn 294.105.000 − phiếu trả 435.000 =
+  **293.670.000**, khớp đúng số "Doanh thu" KiotViet.
+
+### 2.7 Import KiotViet — Phiếu trả hàng ("Danh sách chi tiết phiếu trả hàng")
+
+> Source: `routes/importParsers.ts` → `resolveReturnColumns()` + `parseReturnRow()`
+> Endpoint: `/api/import/kiotviet-returns`. Mỗi phiếu trả → 1 đơn `pos_orders` với `is_return = true`.
+
+**Doanh thu đơn trả** (khớp KiotViet):
+
+```
+doanh thu giảm = -|Đã trả khách|     (col 19 — tiền mặt THỰC hoàn)
+```
+
+- Lưu `total_amount = |Đã trả khách|` → `calcOrderRevenue` (đơn trả = −totalAmount) ra đúng
+  −tiền hoàn. Đơn **ĐỔI hàng** (hoàn 0) → doanh thu giảm **0** (đúng: đổi hàng không sinh/mất doanh thu).
+- KHÔNG trừ theo "Tổng tiền hàng trả" (giá trị hàng) — sẽ trừ thừa rất nhiều (hàng đổi). Giá trị
+  hàng lưu trong `items` + `notes` để đối chiếu/tồn kho.
+
+**Thành tiền dòng** (line item):
+
+```
+lineTotal = có cột "Thành tiền"/"Thành tiền trả"  → giá trị cột đó
+            chỉ có cột "Giá bán" (đơn giá)         → |Giá bán| × quantity
+```
+
+- Phải dùng **"Thành tiền"** (line total), KHÔNG dùng "Giá bán" (đơn giá) (BUG #7 đã sửa).
+
 ---
 
 ## 3. LƯƠNG & NHÂN SỰ
