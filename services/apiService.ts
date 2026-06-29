@@ -630,8 +630,11 @@ type PosOrderPageFilters = {
   statusFilter?: string[];         // 'processing' | 'completed' | 'failed' | 'cancelled'
 };
 
-const inferIsReturnOrder = (orderCode: string, finalAmount: number, explicit?: boolean) =>
-  explicit === true || /^TH/i.test(orderCode || '') || finalAmount < 0;
+// AUDIT-008: chỉ dùng is_return (explicit) — bỏ heuristic prefix "TH" / finalAmount<0 để
+// NHẤT QUÁN với services/dataMapper.ts (tránh false positive: đơn giảm giá 100%, hoặc mã
+// bắt đầu "TH" nhưng là đơn bán). Trước đây 2 đường map lệch nhau → cùng đơn ra doanh thu khác dấu.
+const inferIsReturnOrder = (_orderCode: string, _finalAmount: number, explicit?: boolean) =>
+  explicit === true;
 
 const mapPosOrderRow = (o: any): POSOrder => ({
   id: o.id,
