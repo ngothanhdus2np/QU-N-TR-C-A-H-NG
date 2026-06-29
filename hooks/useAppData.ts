@@ -274,6 +274,21 @@ const isNetworkSyncError = (err: unknown) =>
     .toLowerCase()
     .includes('network');
 
+// Lỗi nên GIỮ write local + enqueue retry (KHÔNG xóa dữ liệu): mất mạng, hết phiên đăng nhập
+// (401 — hay gặp khi chạy qua tunnel, session chưa/đã hết hạn), hoặc lỗi server tạm thời (5xx/429/timeout).
+// Chỉ lỗi dữ liệu thực sự (400/409/422...) mới rollback + throw để báo người dùng.
+const isRetryableSyncError = (err: unknown): boolean => {
+  if (isNetworkSyncError(err)) return true;
+  const msg = String(err instanceof Error ? err.message : err).toLowerCase();
+  return (
+    msg.includes('401') ||
+    msg.includes('unauthorized') ||
+    msg.includes('timeout') ||
+    msg.includes('429') ||
+    /\(5\d\d\)/.test(msg)
+  );
+};
+
 const canReachLocalServer = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return true;
   try {
@@ -1003,7 +1018,7 @@ export function useAppData() {
         const errorMsg = `LỖI ĐỒNG BỘ DỮ LIỆU: ${message}`;
         dispatch({ type: 'SET_SYNC_ERRORS', payload: [errorMsg] });
 
-        if (isNetworkSyncError(err)) {
+        if (isRetryableSyncError(err)) {
           for (const u of updates) {
             if (shouldUseInventoryRpc && u.key === 'posProducts') continue;
             try {
@@ -1077,7 +1092,7 @@ export function useAppData() {
         console.error(`Error pushing batch to ${key}:`, err);
         dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
         // === Offline Queue: lưu vào IndexedDB để retry sau ===
-        if (isNetworkSyncError(err)) {
+        if (isRetryableSyncError(err)) {
           await enqueueOp({ opType: 'pushBatch', dataKey: key as string, payload: items });
         } else {
           const newCount = incrementPending();
