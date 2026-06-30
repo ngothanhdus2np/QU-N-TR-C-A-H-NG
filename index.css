@@ -335,4 +335,97 @@ tbody td span[class*="bg-"] {
 [data-theme="phuc-sang"] aside .text-blue-400,
 [data-theme="phuc-sang"] aside .text-orange-400 {
   color: #F8C21C !important;
+/* ─── Theme overrides — outside @layer so they always beat Tailwind utilities ─── */
+
+html[data-theme="codex"] .bg-slate-50,
+html[data-theme="codex"] .bg-slate-100 {
+  background-color: var(--app-bg) !important;
+}
+
+html[data-theme="codex"] .bg-white {
+  background-color: var(--surface) !important;
+}
+
+html[data-theme="prestige"] body {
+  background-color: var(--app-bg) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="prestige"] .bg-white {
+  background-color: var(--surface) !important;
+}
+
+html[data-theme="prestige"] .bg-slate-50,
+html[data-theme="prestige"] .bg-slate-100 {
+  background-color: var(--surface-muted) !important;
+}
+
+html[data-theme="prestige"] .bg-indigo-50,
+html[data-theme="prestige"] .bg-blue-50,
+html[data-theme="prestige"] .bg-violet-50,
+html[data-theme="prestige"] .bg-emerald-50,
+html[data-theme="prestige"] .bg-teal-50,
+html[data-theme="prestige"] .bg-amber-50,
+html[data-theme="prestige"] .bg-orange-50,
+html[data-theme="prestige"] .bg-rose-50,
+html[data-theme="prestige"] .bg-red-50,
+html[data-theme="prestige"] .bg-green-50 {
+  background-color: var(--surface-subtle) !important;
+}
+
+html[data-theme="prestige"] .bg-indigo-500,
+html[data-theme="prestige"] .bg-indigo-600,
+html[data-theme="prestige"] .bg-blue-600,
+html[data-theme="prestige"] .hover\:bg-indigo-600:hover,
+html[data-theme="prestige"] .hover\:bg-indigo-700:hover {
+  background-color: var(--primary) !important;
+}
+
+html[data-theme="prestige"] .hover\:bg-slate-50:hover,
+html[data-theme="prestige"] .hover\:bg-indigo-50:hover,
+html[data-theme="prestige"] .hover\:bg-indigo-50\/50:hover {
+  background-color: var(--surface-subtle) !important;
+}
+
+html[data-theme="prestige"] .text-slate-900,
+html[data-theme="prestige"] .text-slate-800 {
+  color: var(--text) !important;
+}
+
+html[data-theme="prestige"] .text-slate-700,
+html[data-theme="prestige"] .text-slate-600 {
+  color: rgba(245, 240, 232, 0.72) !important;
+}
+
+html[data-theme="prestige"] .text-slate-500,
+html[data-theme="prestige"] .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="prestige"] .text-indigo-600,
+html[data-theme="prestige"] .text-indigo-700 {
+  color: var(--primary) !important;
+}
+
+html[data-theme="prestige"] .border-slate-50,
+html[data-theme="prestige"] .border-slate-100,
+html[data-theme="prestige"] .border-slate-200,
+html[data-theme="prestige"] .border-slate-300 {
+  border-color: var(--border) !important;
+}
+
+html[data-theme="prestige"] input,
+html[data-theme="prestige"] select,
+html[data-theme="prestige"] textarea {
+  background-color: var(--surface-muted) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="prestige"] .shadow-sm,
+html[data-theme="prestige"] .shadow-md,
+html[data-theme="prestige"] .shadow-lg,
+html[data-theme="prestige"] .shadow-xl,
+html[data-theme="prestige"] .shadow-2xl {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
 }

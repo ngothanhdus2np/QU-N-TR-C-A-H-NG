@@ -191,7 +191,7 @@ const App: React.FC = () => {
 
   return (
     <AuthGate>
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--app-bg)' }}>
       <OfflineIndicator />
       <AnimatePresence initial={false}>
         {activeTab !== 'pos' && (
