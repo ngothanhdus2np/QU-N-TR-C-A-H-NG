@@ -30,6 +30,8 @@ import {
   ProductGroup,
   RevenueRecord,
   DEFAULT_POS_KEYBOARD_SHORTCUTS,
+  ExpenseRecord,
+  ExpenseCategory,
 } from '../../types';
 import { AppThemeId } from '../../constants/themes';
 import { InvoiceTab } from './types';
@@ -116,6 +118,9 @@ interface POSComputerProps {
   onDrainOfflineQueue?: () => Promise<{ synced: number; failed: number }>;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   revenue?: RevenueRecord[];
+  expenses?: ExpenseRecord[];
+  expenseCategories?: ExpenseCategory[];
+  onAddExpense?: (expense: ExpenseRecord) => void;
   isDataReady?: boolean;
   activeThemeId?: AppThemeId;
   onThemeChange?: (id: AppThemeId) => void;
@@ -145,9 +150,19 @@ const POSComputer: React.FC<POSComputerProps> = ({
   isDataReady = true,
   activeThemeId,
   onThemeChange,
+  expenses = [],
+  expenseCategories = [],
+  onAddExpense,
 }) => {
   const { showToast } = useToast();
   const [showManagerUnlock, setShowManagerUnlock] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseDraft, setExpenseDraft] = React.useState<{
+    category: string;
+    amount: string;
+    description: string;
+    staffName: string;
+  }>({ category: '', amount: '', description: '', staffName: '' });
   // Use custom hook for all state management
   const posState = usePOSState({ paymentSettings, isActive });
 
@@ -1265,6 +1280,11 @@ const POSComputer: React.FC<POSComputerProps> = ({
           setShowGridMenu(false);
           setShowReturnModal(true);
         }}
+        onCreateExpense={() => {
+          setShowGridMenu(false);
+          setExpenseDraft({ category: expenseCategories[0]?.name || '', amount: '', description: '', staffName: defaultSalespersonName || '' });
+          setShowExpenseModal(true);
+        }}
         onLogout={resetPOSSession}
         activeThemeId={activeThemeId}
         onThemeChange={onThemeChange}
@@ -1473,6 +1493,110 @@ const POSComputer: React.FC<POSComputerProps> = ({
           }}
           onCancel={() => setShowManagerUnlock(false)}
         />
+      )}
+
+      {/* Quick Expense Modal */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowExpenseModal(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">Lập phiếu chi</h3>
+              <button onClick={() => setShowExpenseModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Ngày</label>
+                <input
+                  readOnly
+                  value={new Date().toLocaleDateString('vi-VN')}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500 bg-slate-50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Danh mục chi <span className="text-rose-500">*</span></label>
+                {expenseCategories.length > 0 ? (
+                  <select
+                    value={expenseDraft.category}
+                    onChange={e => setExpenseDraft(p => ({ ...p, category: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  >
+                    <option value="">-- Chọn danh mục --</option>
+                    {expenseCategories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={expenseDraft.category}
+                    onChange={e => setExpenseDraft(p => ({ ...p, category: e.target.value }))}
+                    placeholder="Nhập danh mục chi..."
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Số tiền <span className="text-rose-500">*</span></label>
+                <input
+                  type="number"
+                  min="0"
+                  value={expenseDraft.amount}
+                  onChange={e => setExpenseDraft(p => ({ ...p, amount: e.target.value }))}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Người chi</label>
+                <input
+                  value={expenseDraft.staffName}
+                  onChange={e => setExpenseDraft(p => ({ ...p, staffName: e.target.value }))}
+                  placeholder="Tên người chi..."
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Ghi chú</label>
+                <textarea
+                  rows={2}
+                  value={expenseDraft.description}
+                  onChange={e => setExpenseDraft(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Ghi chú thêm..."
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={() => setShowExpenseModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={!expenseDraft.category.trim() || !expenseDraft.amount || Number(expenseDraft.amount) <= 0}
+                onClick={() => {
+                  const record: ExpenseRecord = {
+                    id: generateId(),
+                    date: new Date().toISOString(),
+                    category: expenseDraft.category.trim(),
+                    amount: Number(expenseDraft.amount),
+                    description: expenseDraft.description.trim(),
+                    staffName: expenseDraft.staffName.trim() || undefined,
+                  };
+                  onAddExpense?.(record);
+                  setShowExpenseModal(false);
+                  showToast('Đã lập phiếu chi thành công', 'success');
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-normal hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Lưu phiếu chi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

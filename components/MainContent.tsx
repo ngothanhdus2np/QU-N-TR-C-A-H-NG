@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DashboardEodBanner } from './dashboard/DashboardEodBanner';
@@ -134,6 +135,9 @@ const MainContent: React.FC<MainContentProps> = ({
   activeThemeId,
   onThemeChange,
 }) => {
+  const location = useLocation();
+  const editProductId = new URLSearchParams(location.search).get('edit') ?? undefined;
+
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
   const [eodDismissed, setEodDismissed] = useState(false);
   const [onlineShopeeSubTab, setOnlineShopeeSubTab] = useState<RevenueSubTab>('source');
@@ -884,6 +888,9 @@ const MainContent: React.FC<MainContentProps> = ({
               isDataReady={isDataReady}
               activeThemeId={activeThemeId}
               onThemeChange={onThemeChange}
+              expenses={data.expenses || []}
+              expenseCategories={data.expenseCategories || []}
+              onAddExpense={expense => updateData('expenses', [...(data.expenses || []), expense])}
             />
             </React.Suspense>
           </ErrorBoundary>
@@ -913,6 +920,7 @@ const MainContent: React.FC<MainContentProps> = ({
                       ? 'goods'
                       : undefined
               }
+              initialProductId={editProductId}
             />
             </React.Suspense>
           </ErrorBoundary>

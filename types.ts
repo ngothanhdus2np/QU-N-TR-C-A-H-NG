@@ -261,6 +261,7 @@ export interface ExpenseRecord {
   category: string;
   amount: number;
   description: string;
+  staffName?: string;
 }
 
 export interface RecurringExpense {

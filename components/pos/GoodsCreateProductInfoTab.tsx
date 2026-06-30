@@ -183,6 +183,20 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
     });
     return groupFlatTree.filter(item => matching.has(item.fullPath));
   }, [groupFlatTree, groupSearchText]);
+  const [draftUnit, setDraftUnit] = React.useState<{ name: string; price: string } | null>(null);
+
+  const confirmDraftUnit = () => {
+    const name = draftUnit?.name.trim() || '';
+    if (!name) { setDraftUnit(null); return; }
+    const price = Number(draftUnit?.price) || 0;
+    setFormData(prev => ({
+      ...prev,
+      unit: prev.unit || name,
+      units: [...(prev.units || []), { id: generateId(), name, factor: 1, price, isBase: true }],
+    }));
+    setDraftUnit(null);
+  };
+
   const [firstAttributeDraft, setFirstAttributeDraft] = React.useState({
     name: '',
     values: [] as string[],
@@ -591,26 +605,75 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
             <p className="text-xs text-slate-500 mb-3">
               Thêm đơn vị bán hoặc nhập như chai, lốc, thùng. Đặt công thức quy đổi để tính nhanh giá và tồn kho. Ví dụ: 1 lốc = 4 chai, 1 thùng = 20 lốc.
             </p>
-            <button onClick={addBaseUnit} className="text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1">
-              + Thêm đơn vị cơ bản
-            </button>
+            {(formData.units && formData.units.length > 0) || draftUnit !== null ? (
+              <table className="w-full mt-2 text-sm border-collapse">
+                <thead>
+                  <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+                    <th className="pb-1 font-normal w-1/2">Tên đơn vị</th>
+                    <th className="pb-1 font-normal w-1/2">Giá bán</th>
+                    <th className="pb-1 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(formData.units || []).map((unit, idx) => (
+                    <tr key={unit.id} className="border-b border-slate-100 last:border-0">
+                      <td className="py-1.5 pr-3 text-slate-700">{unit.name}</td>
+                      <td className="py-1.5 pr-3 text-slate-700">{unit.price.toLocaleString()}đ</td>
+                      <td className="py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, units: formData.units?.filter((_, i) => i !== idx) })}
+                          className="text-slate-400 hover:text-rose-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {draftUnit !== null && (
+                    <tr className="border-b border-slate-100">
+                      <td className="py-1 pr-3">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={draftUnit.name}
+                          onChange={e => setDraftUnit(d => d && { ...d, name: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.closest('tr')?.querySelector<HTMLInputElement>('td:nth-child(2) input')?.focus(); if (e.key === 'Escape') setDraftUnit(null); }}
+                          placeholder="VD: Hộp, Thùng..."
+                          className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:border-indigo-500"
+                        />
+                      </td>
+                      <td className="py-1 pr-3">
+                        <input
+                          type="number"
+                          min={0}
+                          value={draftUnit.price}
+                          onChange={e => setDraftUnit(d => d && { ...d, price: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') confirmDraftUnit(); if (e.key === 'Escape') setDraftUnit(null); }}
+                          onBlur={confirmDraftUnit}
+                          placeholder="Giá bán"
+                          className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:border-indigo-500"
+                        />
+                      </td>
+                      <td className="py-1">
+                        <button type="button" onClick={() => setDraftUnit(null)} className="text-slate-400 hover:text-rose-600">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : null}
 
-            {formData.units && formData.units.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {formData.units.map((unit, idx) => (
-                  <div key={unit.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-sm font-normal text-slate-700 flex-1">{unit.name}</span>
-                    <span className="text-xs text-slate-500">Hệ số: {unit.factor}</span>
-                    <span className="text-sm font-normal text-slate-700">{unit.price.toLocaleString()}đ</span>
-                    <button
-                      onClick={() => setFormData({ ...formData, units: formData.units?.filter((_, i) => i !== idx) })}
-                      className="text-slate-400 hover:text-rose-600"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            {draftUnit === null && (
+              <button
+                type="button"
+                onClick={() => setDraftUnit({ name: '', price: '' })}
+                className="mt-2 text-sm text-indigo-600 font-normal hover:underline flex items-center gap-1"
+              >
+                + Thêm đơn vị cơ bản
+              </button>
             )}
           </div>
 
@@ -635,7 +698,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
                     <option value="Dung tích">Dung tích</option>
                   </select>
 
-                  <div className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus-within:border-indigo-500 h-[38px] flex items-center gap-1 flex-wrap">
+                  <div className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus-within:border-indigo-500 min-h-[38px] flex items-start gap-1 flex-wrap">
                     {firstAttributeDraft.values.map((val, valIdx) => (
                       <span key={valIdx} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 rounded text-sm font-normal text-slate-700">
                         {val}
@@ -657,13 +720,13 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
                       value={firstAttributeDraft.currentValue}
                       onChange={e => setFirstAttributeDraft(prev => ({ ...prev, currentValue: e.target.value }))}
                       onKeyDown={e => {
-                        if (e.key === 'Enter') {
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                           e.preventDefault();
                           const value = firstAttributeDraft.currentValue.trim();
                           if (!value) return;
                           setFirstAttributeDraft(prev => ({
                             ...prev,
-                            values: [...prev.values, value],
+                            values: prev.values.includes(value) ? prev.values : [...prev.values, value],
                             currentValue: '',
                           }));
                         }
@@ -740,7 +803,7 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
                       <option value="Dung tích">Dung tích</option>
                     </select>
 
-	                    <div className="flex-1 px-2 py-1 border border-slate-300 rounded-lg text-sm focus-within:border-indigo-500 min-h-[38px] flex items-center gap-1 flex-wrap">
+	                    <div className="flex-1 px-2 py-1 border border-slate-300 rounded-lg text-sm focus-within:border-indigo-500 min-h-[38px] flex items-start gap-1 flex-wrap">
 	                      {attr.values.map((val, valIdx) => (
 	                        <span key={valIdx} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 rounded text-sm font-normal text-slate-700">
 	                          {val}
@@ -770,14 +833,16 @@ export const GoodsCreateProductInfoTab: React.FC<GoodsCreateProductInfoTabProps>
 	                        }))}
 	                        placeholder={attr.name ? 'Nhập giá trị và enter' : 'Chọn thuộc tính trước'}
 	                        onKeyDown={e => {
-	                          if (e.key === 'Enter') {
+	                          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
 	                            e.preventDefault();
 	                            const value = (attributeValueDrafts[attr.id] || '').trim();
 	                            if (value) {
 	                              const newAttrs = [...(formData.attributes || [])];
 	                              newAttrs[idx] = {
                                 ...newAttrs[idx],
-	                                values: [...newAttrs[idx].values, value]
+	                                values: newAttrs[idx].values.includes(value)
+	                                  ? newAttrs[idx].values
+	                                  : [...newAttrs[idx].values, value],
 	                              };
 	                              setFormData({ ...formData, attributes: newAttrs });
 	                              setAttributeValueDrafts(prev => ({ ...prev, [attr.id]: '' }));

@@ -57,6 +57,7 @@ interface GoodsInventoryProps {
   onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
   onAddTransaction?: (transaction: InventoryTransaction) => void;
   requestedTab?: 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty';
+  initialProductId?: string;
 }
 
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
@@ -366,6 +367,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   onPushBatch,
   onAddTransaction,
   requestedTab,
+  initialProductId,
 }) => {
   // === Toast & Modal State ===
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -663,6 +665,13 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     openInputModal,
     closeInputModal,
   });
+
+  // Mở modal chỉnh sửa sản phẩm khi có initialProductId từ URL (?edit=<id>)
+  React.useEffect(() => {
+    if (!initialProductId) return;
+    const prod = products.find(p => p.id === initialProductId);
+    if (prod) openProductEditor(prod);
+  }, [initialProductId, products, openProductEditor]);
 
   React.useEffect(() => {
     localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(visibleColumns));

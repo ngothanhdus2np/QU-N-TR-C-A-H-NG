@@ -9,6 +9,21 @@
 
 ---
 
+### [ ] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện 2026-06-30)*
+
+> **Severity: HIGH** — Security review phát hiện 2 lớp bypass liên kết:
+>
+> **Lớp 1** — `server.ts:548`: `requireAuth` bỏ qua JWT khi `NODE_ENV !== 'production'` + request từ IP LAN (`192.168.x.x`) + không có `X-Forwarded-*` header + `Origin` khớp `allowedOrigins`. Bất kỳ thiết bị nào trong WiFi cửa hàng đều bypass được.
+>
+> **Lớp 2** — `routes/auth.ts:21`: Sau khi bypass lớp 1, `resolveCaller()` tự cấp `{ role: 'owner', userId: 'dev-user' }` → leo quyền cao nhất mà không cần đăng nhập. Có thể gọi: đổi role, reset mật khẩu, xóa tài khoản bất kỳ ai.
+>
+> **Bước làm:**
+> 1. Kiểm tra ngay `NODE_ENV` trên iMac: `ssh -i ~/.ssh/imac_deploy mac@192.168.1.3 "grep NODE_ENV ~/cfobrain/.env.local"` — nếu thiếu `NODE_ENV=production` thì đang bị lộ ngay lúc này
+> 2. Sửa `auth.ts:21`: đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (trả 401)
+> 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header
+
+---
+
 ### [x] Fix lỗi ngẫu nhiên "1 trang báo lỗi" *(xong 2026-06-27)*
 
 > 2 nguyên nhân: ChunkLoadError sau deploy + `.items` không null-guard trên cache cũ. ErrorBoundary tự reload khi lỗi chunk; vá 5 chỗ `.items` còn sót. Xem HISTORY.md.

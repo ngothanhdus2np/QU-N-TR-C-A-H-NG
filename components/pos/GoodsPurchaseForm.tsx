@@ -238,6 +238,23 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                       Thành tiền
                     </th>
                   </tr>
+                  {purchaseItems.length > 0 && (
+                    <tr className="border-b bg-indigo-50 text-xs">
+                      <td colSpan={5} className="px-3 py-1.5 border-r font-semibold text-indigo-700">
+                        Cần trả nhà cung cấp
+                      </td>
+                      <td className="px-3 py-1.5 text-center border-r font-semibold text-indigo-700">
+                        {purchaseItems.reduce((s, i) => s + i.quantity, 0).toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-3 py-1.5 border-r" />
+                      <td className="px-3 py-1.5 text-right border-r font-semibold text-slate-600">
+                        {lineDiscountTotal > 0 ? lineDiscountTotal.toLocaleString('vi-VN') : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-bold text-indigo-700">
+                        {payableAmount.toLocaleString('vi-VN')}đ
+                      </td>
+                    </tr>
+                  )}
                 </thead>
                 <tbody>
                   {purchaseItems.length === 0 ? (

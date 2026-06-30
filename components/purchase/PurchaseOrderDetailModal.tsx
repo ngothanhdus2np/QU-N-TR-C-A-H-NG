@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, X } from 'lucide-react';
 import { InventoryTransaction } from '../../types';
 
@@ -24,6 +25,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
   onExport,
   onPrint,
 }) => {
+  const navigate = useNavigate();
   const totalAmount = transaction.totalAmount || transaction.items.reduce((sum, item) => sum + getLineTotal(item), 0);
   const isPurchaseReturn = transaction.type === 'PurchaseReturn';
   const documentCode = transaction.referenceId || transaction.id;
@@ -115,7 +117,20 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
                   const discount = withPrice.discount || 0;
                   return (
                     <tr key={`${item.productId}-${item.sku}`} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-indigo-600 font-normal">{item.sku || '—'}</td>
+                      <td className="px-4 py-3">
+                        {item.productId ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/goods?edit=${item.productId}`)}
+                            className="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-normal"
+                            title="Mở chi tiết sản phẩm"
+                          >
+                            {item.sku || '—'}
+                          </button>
+                        ) : (
+                          <span className="text-indigo-600 font-normal">{item.sku || '—'}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-normal text-slate-800">{item.name || item.productId}</td>
                       <td className="px-4 py-3 text-right">{item.quantity}</td>
                       <td className="px-4 py-3 text-right">{price.toLocaleString('vi-VN')}đ</td>

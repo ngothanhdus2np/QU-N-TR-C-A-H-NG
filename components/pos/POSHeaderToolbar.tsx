@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Truck,
+  Receipt,
   Undo2,
   X,
 } from 'lucide-react';
@@ -73,6 +74,7 @@ interface POSHeaderToolbarProps {
   onShowSelectInvoice?: () => void;
   onShowReturnInvoice?: () => void;
   onManualSync?: () => void;
+  onCreateExpense?: () => void;
   onLogout?: () => void;
   activeThemeId?: AppThemeId;
   onThemeChange?: (id: AppThemeId) => void;
@@ -116,6 +118,7 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
   onShowSelectInvoice,
   onShowReturnInvoice,
   onManualSync,
+  onCreateExpense,
   onLogout,
   activeThemeId,
   onThemeChange,
@@ -729,6 +732,11 @@ const POSHeaderToolbar: React.FC<POSHeaderToolbarProps> = ({
                     icon={<LayoutGrid className="h-4.5 w-4.5" />}
                     label="Quản lý"
                     onClick={onGoToManagement}
+                  />
+                  <GridMenuItem
+                    icon={<Receipt className="h-4.5 w-4.5" />}
+                    label="Lập phiếu chi"
+                    onClick={onCreateExpense}
                   />
                   <div className="h-px bg-slate-50 my-1 mx-4" />
                   <GridMenuItem

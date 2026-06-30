@@ -335,6 +335,7 @@ tbody td span[class*="bg-"] {
 [data-theme="phuc-sang"] aside .text-blue-400,
 [data-theme="phuc-sang"] aside .text-orange-400 {
   color: #F8C21C !important;
+}
 /* ─── Theme overrides — outside @layer so they always beat Tailwind utilities ─── */
 
 html[data-theme="codex"] .bg-slate-50,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, Copy, Tag, MoreHorizontal, Ban, ExternalLink, Save, RotateCcw } from 'lucide-react';
 import { InventoryTransaction } from '../../types';
 import { supabaseAdmin as supabase } from '../../services/supabase';
@@ -50,6 +51,7 @@ const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
   onPrint,
   onOpenOrder,
 }) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'info' | 'payment'>('info');
   const [noteText, setNoteText] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
@@ -174,8 +176,19 @@ const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
                       const it = item as typeof item & { price?: number; discount?: number };
                       return (
                         <tr key={`${item.productId}-${idx}`} className="hover:bg-slate-50">
-                          <td className="px-3 py-2.5 text-indigo-600 font-normal text-xs">
-                            {item.sku || '—'}
+                          <td className="px-3 py-2.5 text-xs">
+                            {item.productId ? (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/goods?edit=${item.productId}`)}
+                                className="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-normal"
+                                title="Mở chi tiết sản phẩm"
+                              >
+                                {item.sku || '—'}
+                              </button>
+                            ) : (
+                              <span className="text-indigo-600 font-normal">{item.sku || '—'}</span>
+                            )}
                           </td>
                           <td className="px-3 py-2.5 text-slate-800 text-sm">
                             {item.name || item.productId}

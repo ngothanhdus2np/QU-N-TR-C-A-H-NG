@@ -31,7 +31,7 @@ interface SupplierListPageProps {
   isLoading?: boolean;
 }
 
-type SortKey = 'code' | 'name' | 'totalPurchase' | 'currentDebt';
+type SortKey = 'code' | 'name' | 'totalPurchase' | 'currentDebt' | 'addedOrder';
 type SortDirection = 'asc' | 'desc';
 
 const SupplierListPage: React.FC<SupplierListPageProps> = ({
@@ -55,8 +55,8 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Sorting
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortKey, setSortKey] = useState<SortKey>('addedOrder');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Selection
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
@@ -125,6 +125,12 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
   const sortedSuppliers = useMemo(() => {
     const sorted = [...filteredSuppliers];
     sorted.sort((a, b) => {
+      if (sortKey === 'addedOrder') {
+        const aIdx = suppliers.indexOf(a);
+        const bIdx = suppliers.indexOf(b);
+        return sortDirection === 'desc' ? bIdx - aIdx : aIdx - bIdx;
+      }
+
       let aVal: string | number;
       let bVal: string | number;
 
@@ -154,7 +160,7 @@ const SupplierListPage: React.FC<SupplierListPageProps> = ({
       return 0;
     });
     return sorted;
-  }, [filteredSuppliers, sortKey, sortDirection]);
+  }, [filteredSuppliers, sortKey, sortDirection, suppliers]);
 
   // Paginate
   const paginatedSuppliers = useMemo(() => {
