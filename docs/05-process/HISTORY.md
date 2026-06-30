@@ -3,6 +3,29 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-30 — Thanh tiến trình bot Shopee trong app CFO Brain ✅
+
+- **Tính năng**: Thanh cam cố định phía dưới màn hình, hiển thị tiến trình bot đang chạy (filled/total, % progress, tên SP đang xử lý)
+- **Bot side** (`bots/sync-descriptions.js`): thêm module-level `_progress` object, cập nhật trong vòng lặp `fillDescriptions`, export `getProgress()`
+- **API bot** (`src/apiServer.js`): cập nhật `GET /api/products/fill-descriptions/status` trả về progress chi tiết; thêm `GET /api/bot-status` tổng hợp cả sync + descriptions
+- **CFO Brain backend** (`routes/shopeeSync.ts`): thêm `GET /api/shopee-bot-status` proxy đến cả 2 bot (port 3001 + 3002), merge kết quả
+- **Frontend** (`components/shared/BotProgressBar.tsx` + `App.tsx`): component poll 3 giây, ẩn hoàn toàn khi không bot nào chạy, hiện progress bar khi descriptions.running hoặc sync.running
+- **Fix PM2**: xóa `shopee-bot` cũ (process ngoài ecosystem, không có API_ENABLED, giữ lock shop1), restart `shopee-shop1` → cả 2 bot đều live
+- Files: `bots/sync-descriptions.js`, `src/apiServer.js`, `routes/shopeeSync.ts`, `components/shared/BotProgressBar.tsx`, `App.tsx`
+
+### 2026-06-30 — Fix mô tả auto-fetch shop 2 (giaydepphucsang) — 34/34 sản phẩm ✅
+
+- **Vấn đề**: Pass 2 của bot shop2 (lấy description qua edit page) trả về null cho tất cả 34 sản phẩm
+- **Root cause 1**: URL Shopee đã đổi — `/portal/product/edit/{itemId}` → `/portal/product/{itemId}` (redirect 404 với URL cũ)
+- **Root cause 2**: `page.context().newPage()` chia sẻ cookies nhưng KHÔNG chia sẻ localStorage — Shopee SPA cần localStorage cho auth token → tab mới bị redirect về `/404`
+- **Fix 1**: Đổi URL navigate sang `https://banhang.shopee.vn/portal/product/${itemId}` (bỏ `/edit/`)
+- **Fix 2**: Copy localStorage + sessionStorage từ trang chính (184 entries) bằng `page.evaluate()`, inject vào tab mới bằng `newPage.addInitScript()` trước khi navigate
+- **Fix 3** (loại bỏ): Shopee buyer API `shopee.vn/api/v4/item/get` trả về 403 / errCode 90309999 (anti-bot) → không dùng, giữ cách lấy từ `.ql-editor` DOM trong seller center
+- **Kỹ thuật**: Extract description từ `.ql-editor` (Shopee dùng Quill rich-text editor) sau khi SPA render xong
+- **Kết quả**: 34/34 sản phẩm shop 2 đã có mô tả trong `shopee_products.description` ✅; tổng 810 items toàn hệ thống có description
+- **PM2 tip**: `pm2 restart` không load env mới; phải dùng `pm2 reload ecosystem.config.js --update-env`
+- Files: `/Users/apple/shopee-monitor/bots/products.js` (hàm `fetchDescriptionViaEditPage`, pass 2 loop trong `setupProductsBot`)
+
 ### 2026-06-29 — Grid view cho ShopeeProductsPage & WebsiteProductsPage + drag-drop ảnh
 
 - Bỏ hậu tố ×2/×3 sau tên shop trong ShopeeProductsPage (mỗi chip chỉ hiện 1 lần)

@@ -1,0 +1,502 @@
+=================================================================
+🎯 MASTER PROMPT - STANDALONE DEV CONSOLE
+Implement toàn bộ project trong 1 lần, không cần hỏi lại
+=================================================================
+
+## 📋 PROJECT OVERVIEW
+
+Build a Standalone Dev Console - web app to manage development with AI Multi-Agent System and auto-rotation between multiple AI API keys.
+
+CORE VALUE:
+- 10x throughput: 10 API keys = 400k tokens/min vs 40k
+- Auto-rotate between Claude/GPT-4/GPT-3.5 keys  
+- Multi-project management
+- Real-time chat with AI agents
+- Cost optimization by task type
+
+TECH STACK:
+Backend: Node.js 18+, TypeScript, Express, Socket.IO, @anthropic-ai/sdk, openai
+Frontend: React 19, TypeScript, Vite, Framer Motion, React Markdown, Socket.IO Client
+
+=================================================================
+## 📁 PROJECT STRUCTURE
+=================================================================
+
+standalone-dev-console/
+├── package.json (root with install:all, dev, build scripts)
+├── .env.local (API keys - NOT committed)
+├── .kiro-config.json (project & provider config)
+├── backend/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── server.ts
+│       ├── config/index.ts
+│       ├── services/AIProvider.ts ⭐ CORE
+│       ├── agents/Kiro.ts
+│       ├── routes/*.ts
+│       ├── websocket/index.ts
+│       └── types/index.ts
+└── frontend/
+    ├── package.json
+    ├── vite.config.ts
+    └── src/
+        ├── App.tsx
+        ├── components/*.tsx
+        ├── hooks/*.ts
+        ├── api/socket.ts
+        └── types/index.ts
+
+=================================================================
+## 🔑 CORE FEATURE 1: AI PROVIDER ROTATION
+=================================================================
+
+File: backend/src/services/AIProvider.ts
+
+REQUIREMENTS:
+1. Class AIProviderRotation with:
+   - Load providers from config
+   - Auto-rotate between available providers
+   - Track usage (tokens, requests, cost)
+   - Auto-skip rate-limited providers
+   - Auto-retry with different provider on error
+   - Support 4 strategies: round_robin, priority, cost, smart
+
+2. Provider interface:
+interface Provider {
+  id: string;
+  name: string;
+  type: 'anthropic' | 'openai';
+  model: string;
+  apiKey: string;
+  priority: number;
+  rateLimit: {
+    tokensPerMinute: number;
+    requestsPerMinute: number;
+  };
+  usage: {
+    tokensUsed: number;
+    requestsUsed: number;
+    lastReset: Date;
+  };
+  status: 'active' | 'rate_limited' | 'error';
+  cost: {
+    inputTokenCost: number;
+    outputTokenCost: number;
+    totalSpent: number;
+  };
+  client: any; // SDK instance
+}
+
+3. Main method signature:
+async callAI(
+  prompt: string,
+  options?: {
+    systemPrompt?: string;
+    maxTokens?: number;
+    taskType?: string;
+  }
+): Promise<{
+  content: string;
+  usage: { inputTokens, outputTokens, totalTokens };
+  provider: string;
+  cost: number;
+}>
+
+4. Features:
+- startResetTimer(): Reset usage counters every 60s
+- isProviderAvailable(): Check rate limits (leave 10% buffer)
+- selectProvider(): Choose based on strategy
+- callClaude(): Use @anthropic-ai/sdk
+- callOpenAI(): Use openai SDK
+- getProviderStats(): Return stats for dashboard
+
+5. Export singleton:
+export const aiProvider = new AIProviderRotation(config);
+
+IMPLEMENTATION DETAILS:
+- Use Map<string, Provider> for providers
+- currentIndex for round-robin
+- Reset counters using setInterval(60000)
+- Handle 429 errors with auto-retry
+- Calculate cost: (inputTokens * inputCost + outputTokens * outputCost) / 1M
+
+=================================================================
+## 🔧 CONFIG SYSTEM
+=================================================================
+
+File: backend/src/config/index.ts
+
+Load from 2 sources:
+1. .env.local - API keys (use dotenv)
+2. .kiro-config.json - App config
+
+Replace ${ENV_VAR} in JSON with process.env values:
+function replaceEnvVars(obj: any): any {
+  if (typeof obj === 'string') {
+    return obj.replace(/\$\{(\w+)\}/g, (_, key) => process.env[key] || '');
+  }
+  // Handle arrays, objects recursively
+}
+
+.env.local format:
+CLAUDE_KEY_1=sk-ant-api03-xxx
+CLAUDE_KEY_2=sk-ant-api03-yyy
+OPENAI_KEY_1=sk-xxx
+PORT=3000
+
+.kiro-config.json format:
+{
+  "projects": [{
+    "id": "project1",
+    "name": "CFO Brain 4.0",
+    "path": "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG",
+    "type": "react-typescript",
+    "active": true
+  }],
+  "aiProviders": {
+    "rotationEnabled": true,
+    "strategy": "smart",
+    "providers": [{
+      "id": "claude-1",
+      "name": "Claude Account 1",
+      "type": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "apiKey": "${CLAUDE_KEY_1}",
+      "priority": 1,
+      "rateLimit": {
+        "tokensPerMinute": 40000,
+        "requestsPerMinute": 50
+      },
+      "cost": {
+        "inputTokenCost": 3.0,
+        "outputTokenCost": 15.0
+      }
+    }]
+  }
+}
+
+=================================================================
+## 🌐 BACKEND SERVER
+=================================================================
+
+File: backend/src/server.ts
+
+import express from 'express';
+import cors from 'cors';
+import http from 'http';
+import { setupWebSocket } from './websocket';
+import config from './config';
+
+// Setup
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// Routes
+app.use('/api/providers', require('./routes/providers'));
+app.use('/api/agents', require('./routes/agents'));
+app.use('/api/projects', require('./routes/projects'));
+
+// HTTP + WebSocket server
+const httpServer = http.createServer(app);
+setupWebSocket(httpServer);
+
+httpServer.listen(3000, () => {
+  console.log('🚀 Backend: http://localhost:3000');
+  console.log('🔌 WebSocket: ws://localhost:3000');
+});
+
+=================================================================
+## 🔌 WEBSOCKET SERVER
+=================================================================
+
+File: backend/src/websocket/index.ts
+
+import { Server } from 'socket.io';
+import { aiProvider } from '../services/AIProvider';
+
+export function setupWebSocket(httpServer) {
+  const io = new Server(httpServer, {
+    cors: { origin: 'http://localhost:5173' }
+  });
+  
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    
+    // Chat with AI
+    socket.on('agent.chat', async (data) => {
+      try {
+        const response = await aiProvider.callAI(data.message, {
+          systemPrompt: 'You are Kiro, a helpful AI dev assistant.',
+          maxTokens: 4096
+        });
+        
+        socket.emit('agent.response', response);
+      } catch (error) {
+        socket.emit('agent.error', { error: error.message });
+      }
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
+  });
+  
+  return io;
+}
+
+=================================================================
+## 📊 API ROUTES
+=================================================================
+
+File: backend/src/routes/providers.ts
+
+import { Router } from 'express';
+import { aiProvider } from '../services/AIProvider';
+
+const router = Router();
+
+// Get provider stats
+router.get('/stats', (req, res) => {
+  const stats = aiProvider.getProviderStats();
+  res.json(stats);
+});
+
+// Test AI call
+router.post('/test', async (req, res) => {
+  try {
+    const response = await aiProvider.callAI(req.body.prompt);
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
+
+=================================================================
+## 🎨 FRONTEND SETUP
+=================================================================
+
+File: frontend/vite.config.ts
+
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/socket.io': {
+        target: 'http://localhost:3000',
+        ws: true
+      }
+    }
+  }
+});
+
+File: frontend/src/App.tsx
+
+Layout:
+┌─────────────────────────────────────┐
+│  Header: Logo | Project Selector    │
+├────┬────────────────────────────────┤
+│Side│  Main Content (React Router)   │
+│bar │  - /chat → ChatPanel           │
+│    │  - /providers → ProviderDash   │
+└────┴────────────────────────────────┘
+
+Implement with:
+- Dark theme CSS variables
+- React Router
+- WebSocket connection on mount
+- Responsive flexbox layout
+
+=================================================================
+## 💬 CHAT INTERFACE
+=================================================================
+
+File: frontend/src/components/ChatPanel.tsx
+
+Features:
+- Message list (user vs AI styling)
+- Input box with Send button
+- Typing indicator
+- Markdown rendering (react-markdown)
+- Code syntax highlighting (react-syntax-highlighter)
+- Auto-scroll to bottom
+- Token usage display
+
+Hook: frontend/src/hooks/useChat.ts
+- Connect to WebSocket
+- sendMessage(content): emit 'agent.chat'
+- Listen for 'agent.response'
+- Maintain messages array
+- isTyping state
+
+=================================================================
+## 📊 PROVIDER DASHBOARD
+=================================================================
+
+File: frontend/src/components/ProviderDashboard.tsx
+
+Display for each provider:
+- Name
+- Status badge (active/rate_limited/error)
+- Token usage progress bar
+- Requests count
+- Cost today
+- Enable/Disable toggle
+
+Fetch stats from GET /api/providers/stats every 5 seconds
+
+UI: Grid of provider cards with color-coded status
+
+=================================================================
+## 📦 DEPENDENCIES
+=================================================================
+
+Root package.json:
+{
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0"
+  }
+}
+
+Backend package.json dependencies:
+express, cors, dotenv, @anthropic-ai/sdk, openai, socket.io
+typescript, @types/node, @types/express, tsx, nodemon
+
+Frontend package.json dependencies:
+react, react-dom, react-router-dom
+vite, @vitejs/plugin-react
+framer-motion, react-markdown, react-syntax-highlighter
+socket.io-client
+
+=================================================================
+## 🎯 IMPLEMENTATION ORDER
+=================================================================
+
+1. CREATE STRUCTURE
+   - Folders: backend/, frontend/, shared/
+   - package.json for root, backend, frontend
+   - tsconfig.json for both
+   - .gitignore, .env.example
+
+2. BACKEND FOUNDATION
+   - server.ts with Express
+   - config/index.ts loader
+   - Health check endpoint
+   - Basic routes structure
+
+3. AI PROVIDER ROTATION (CORE)
+   - services/AIProvider.ts complete implementation
+   - Test with backend/src/scripts/testProviders.ts
+
+4. WEBSOCKET
+   - websocket/index.ts
+   - agent.chat event handler
+   - Test connection
+
+5. FRONTEND FOUNDATION
+   - App.tsx with layout
+   - api/socket.ts client
+   - Basic routing
+
+6. CHAT INTERFACE
+   - ChatPanel.tsx
+   - useChat.ts hook
+   - Markdown rendering
+
+7. PROVIDER DASHBOARD
+   - ProviderDashboard.tsx
+   - Fetch and display stats
+   - Auto-refresh
+
+8. TESTING
+   - Start backend: npm run dev:backend
+   - Start frontend: npm run dev:frontend
+   - Test chat flow
+   - Verify rotation working
+
+=================================================================
+## ✅ SUCCESS CRITERIA
+=================================================================
+
+When complete, user should be able to:
+1. Start app with: npm run dev
+2. Open http://localhost:5173
+3. Send chat message
+4. Receive AI response (auto-rotated provider)
+5. See provider stats updating
+6. Multiple requests use different providers
+7. Rate-limited providers auto-skipped
+
+=================================================================
+## 🚨 CRITICAL REQUIREMENTS
+=================================================================
+
+1. TypeScript strict mode for all files
+2. Error handling in all async functions
+3. Logging for all AI calls (provider used, tokens, cost)
+4. WebSocket auto-reconnect on disconnect
+5. Provider status reset every 60 seconds
+6. Leave 10% buffer before rate limits
+7. Auto-retry with different provider on 429 errors
+8. Cost tracking per provider
+9. Dark theme for UI
+10. Responsive layout
+
+=================================================================
+## 💡 IMPLEMENTATION TIPS
+=================================================================
+
+1. Start simple, test often
+2. Implement AIProvider.ts first - it's the core
+3. Test rotation with simple prompts before complex logic
+4. Use console.log liberally for debugging
+5. Test with 2-3 API keys minimum
+6. Verify WebSocket connection before implementing chat
+7. Use TypeScript interfaces for all data structures
+8. Handle all error cases explicitly
+9. Add comments for complex logic
+10. Follow DRY principle
+
+=================================================================
+## 🎯 DELIVERABLES
+=================================================================
+
+Provide complete, working code for:
+1. All config files (package.json, tsconfig.json, vite.config.ts)
+2. Backend server with AI rotation
+3. WebSocket server
+4. Frontend app with chat + dashboard
+5. Example .env.local and .kiro-config.json
+6. README with setup instructions
+
+MUST BE PRODUCTION-READY CODE:
+- No TODOs or placeholders
+- Full error handling
+- TypeScript types for everything
+- Working end-to-end
+- Can start with npm run dev and immediately use
+
+=================================================================
+END OF MASTER PROMPT
+=================================================================
+
+Implement everything above. Ask for clarification ONLY if something is truly ambiguous. Otherwise, make reasonable decisions and document them in comments.

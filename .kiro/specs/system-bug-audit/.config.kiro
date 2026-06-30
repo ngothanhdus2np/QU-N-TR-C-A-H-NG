@@ -1,0 +1,7 @@
+{
+  "specVersion": "1.0",
+  "name": "System Bug Audit",
+  "description": "Hệ thống tự động audit và phát hiện lỗi toàn bộ codebase",
+  "createdAt": "2026-06-23T00:00:00.000Z",
+  "status": "design"
+}

@@ -11,8 +11,8 @@ describe('Website admin module', () => {
   it('enforces role checks in the server-side Admin Store API', () => {
     expect(router).toContain("const CONTENT_ROLES: StoreRole[] = ['admin', 'content_manager'];");
     expect(router).toContain("const ORDER_ROLES: StoreRole[] = ['admin', 'order_staff'];");
-    expect(router).toContain("router.post('/api/admin/store/products', requireRole(CONTENT_ROLES)");
-    expect(router).toContain("router.post('/api/admin/store/orders/:id/status', requireRole(ORDER_ROLES)");
+    expect(router).toContain("router.post('/api/admin/store/products', ...requireRole(CONTENT_ROLES)");
+    expect(router).toContain("router.post('/api/admin/store/orders/:id/status', ...requireRole(ORDER_ROLES)");
   });
 
   it('records product publication, pricing/content updates and order status changes in audit logs', () => {

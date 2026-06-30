@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 import { InventoryTransaction, POSOrder, POSProduct } from '../../types';
 import { GoodsChannelLinksTab } from './GoodsChannelLinksTab';
 import { supabase } from '../../services/supabase';
@@ -653,6 +654,8 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
   const [localIp, setLocalIp] = React.useState<string | null>(null);
   const [activeImageIdx, setActiveImageIdx] = React.useState(0);
   const [imagesBeforeQR, setImagesBeforeQR] = React.useState<string[]>([]);
+  // Token ảnh sản phẩm — desktop lấy qua endpoint có requireAuth, nhúng vào QR + gửi khi xóa ảnh
+  const [mobileToken, setMobileToken] = React.useState('');
 
   const ledgerRows = React.useMemo(
     () => fillHeight ? buildStockCardRows(product, transactions, orders) : [],
@@ -720,9 +723,10 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
 
   // Khi đang trên HTTPS (tunnel), dùng origin hiện tại → phone cũng dùng HTTPS đúng URL
   // Khi trên HTTP (LAN trực tiếp), dùng local IP để phone kết nối được
+  const tokenQuery = mobileToken ? `?t=${encodeURIComponent(mobileToken)}` : '';
   const uploadUrl = (localIp && window.location.protocol === 'http:')
-    ? `http://${localIp}:${window.location.port || 3000}/upload-image/${product.id}`
-    : `${window.location.origin}/upload-image/${product.id}`;
+    ? `http://${localIp}:${window.location.port || 3000}/upload-image/${product.id}${tokenQuery}`
+    : `${window.location.origin}/upload-image/${product.id}${tokenQuery}`;
 
   const handleOpenQR = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -734,6 +738,11 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
         .then(d => setLocalIp(d.ip))
         .catch(() => {});
     }
+    if (!mobileToken) {
+      adminStoreRequest<{ token: string }>('/api/pos-mobile/token')
+        .then(d => { if (d?.token) setMobileToken(d.token); })
+        .catch(() => {});
+    }
   };
 
   const handleDeleteSessionImage = async (imgUrl: string) => {
@@ -741,7 +750,7 @@ export const GoodsProductDetailPanel: React.FC<GoodsProductDetailPanelProps> = (
     setLiveImages(newList);
     await fetch(`/api/upload-product-image/${product.id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-pos-mobile-token': mobileToken },
       body: JSON.stringify({ images: newList, deleted: [imgUrl] }),
     });
   };

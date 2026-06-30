@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import TopNav from './components/TopNav';
 import MainContent from './components/MainContent';
 import FloatingCFOChat from './components/FloatingCFOChat';
+import { BotProgressBar } from './components/shared/BotProgressBar';
 import OfflineIndicator from './components/OfflineIndicator';
 import AuthGate from './components/AuthGate';
 import { useAppData } from './hooks/useAppData';
@@ -309,6 +310,7 @@ const App: React.FC = () => {
           />
         )}
       </main>
+      <BotProgressBar />
       <FloatingCFOChat data={data} messages={chatMessages} setMessages={setChatMessages} />
     </div>
     </AuthGate>

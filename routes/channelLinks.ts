@@ -133,7 +133,7 @@ export function createChannelLinksRouter(
   router.get('/api/channel-links/shopee-catalog', requireAuth, async (_req, res) => {
     try {
       type VarRow = { id: string; pos_product_id: string; shopee_product_id: string; sku: string; size: string | null; color_name: string | null; shopee_price_override: number | null; is_published: boolean; display_order: number };
-      type SpRow = { id: string; shopee_item_id: string | null; is_published: boolean; shop_id: string | null; cover_image_url: string | null; display_order: number };
+      type SpRow = { id: string; name: string; shopee_item_id: string | null; is_published: boolean; shop_id: string | null; cover_image_url: string | null; display_order: number; description: string | null; gallery: string[] | null };
       type PosRow = { id: string; name: string; sku: string; parent_id: string | null; category_path: string | null; category_id: string | null };
 
       // Paginate để không bị giới hạn 1000 rows mặc định của Supabase
@@ -171,12 +171,12 @@ export function createChannelLinksRouter(
       };
 
       const [spData, posData] = await Promise.all([
-        allShopeeIds.length > 0 ? inBatches<SpRow>('shopee_products', 'id, shopee_item_id, is_published, shop_id, cover_image_url, display_order', allShopeeIds) : [],
+        allShopeeIds.length > 0 ? inBatches<SpRow>('shopee_products', 'id, name, shopee_item_id, is_published, shop_id, cover_image_url, display_order, description, gallery', allShopeeIds) : [],
         allPosIds.length > 0   ? inBatches<PosRow>('pos_products', 'id, name, sku, parent_id, category_path, category_id', allPosIds) : [],
       ]);
 
-      const spMap  = new Map(spData.map(p => [p.id, p]));
-      const posMap = new Map(posData.map(p => [p.id, p]));
+      const spMap  = new Map(spData.map((p): [string, SpRow] => [p.id, p]));
+      const posMap = new Map(posData.map((p): [string, PosRow] => [p.id, p]));
 
       const parentIds = [...new Set(posData.map(p => p.parent_id).filter(Boolean))] as string[];
       let parentMap = new Map<string, PosRow>();
@@ -187,8 +187,8 @@ export function createChannelLinksRouter(
 
 
       type ShopEntry = {
-        id: string; shop_id: string | null; shopee_item_id: string | null;
-        is_published: boolean; cover_image_url: string | null; display_order: number;
+        id: string; name: string; shop_id: string | null; shopee_item_id: string | null;
+        is_published: boolean; cover_image_url: string | null; display_order: number; description: string | null; gallery: string[] | null;
         shopee_product_variants: { id: string; sku: string; pos_sku: string; size: string | null; color_name: string | null; shopee_price_override: number | null; pos_product_id: string; is_published: boolean; display_order: number }[];
       };
       type ProductEntry = { pos_product_id: string; name: string; group_name: string; shopee_entries: ShopEntry[] };
@@ -218,11 +218,14 @@ export function createChannelLinksRouter(
           const sp = spMap.get(v.shopee_product_id);
           entry = {
             id: v.shopee_product_id,
+            name: sp?.name ?? '',
             shop_id: sp?.shop_id ?? null,
             shopee_item_id: sp?.shopee_item_id ?? null,
             is_published: sp?.is_published ?? false,
             cover_image_url: sp?.cover_image_url ?? null,
             display_order: sp?.display_order ?? 0,
+            description: sp?.description ?? null,
+            gallery: sp?.gallery ?? null,
             shopee_product_variants: [],
           };
           product.shopee_entries.push(entry);

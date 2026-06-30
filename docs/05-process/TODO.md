@@ -63,10 +63,19 @@
 
 ---
 
-### [x] Lấy description/weight/brand từ Shopee (detail API) *(xong 2026-06-22)*
+### [x] Lấy description/weight/brand từ Shopee (detail API) *(xong 2026-06-22; fix shop2 2026-06-30)*
 
 > Bot navigate đến `/portal/product/{item_id}`, intercept `/api/v3/product/get_product_info`. Đã lấy được: gallery (3–9 ảnh), mô tả tiếng Việt, weight, categoryId, categoryName cho 63/63 SP (shop1: 29, shop2: 34).
+> **Fix 2026-06-30**: Shop 2 description bị null do (1) Shopee đổi URL edit page từ `/portal/product/edit/{id}` → `/portal/product/{id}` và (2) tab mới không có localStorage → bị redirect. Đã fix trong `bots/products.js` → 34/34 shop2 có description ✅.
 > **Cần chạy thủ công trên Supabase dashboard**: `ALTER TABLE shopee_products ADD COLUMN IF NOT EXISTS category_name text;` (code đã comment out, chờ cột tồn tại thì bỏ comment).
+
+### [x] Thanh tiến trình bot Shopee trong app *(xong 2026-06-30)*
+
+> `BotProgressBar` component poll `/api/shopee-bot-status` mỗi 3 giây, hiển thị thanh cam cố định dưới màn hình khi bot đang chạy (progress bar %, tên SP đang xử lý). Ẩn hoàn toàn khi idle. Fix PM2 conflict shopee-bot/shopee-shop1 — cả 2 bot live.
+
+### [ ] Kiểm tra description shop 1 (phuc_sang_store) *(phát hiện 2026-06-30)*
+
+> Cùng bug URL edit page (`/portal/product/edit/{id}` → `/portal/product/{id}`) có thể ảnh hưởng shop 1. Cần xác nhận 29 SP shop1 đã có description hay còn null, nếu null thì bot sẽ tự fetch lại trong pass 2 (code đã fix). Có thể trigger thủ công bằng cách xóa tạm trường `description` trong DB rồi restart bot shop1.
 
 ### [x] Import dữ liệu KiotViet vào CFO Brain *(xong 2026-06-22)*
 

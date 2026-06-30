@@ -1,25 +1,31 @@
 import { Router, RequestHandler } from 'express';
 import axios from 'axios';
 
-// DB shops[0] slug=giaydepphucsang → pm2 shopee-shop2 port 3002
-// DB shops[1] slug=phuc-sang-store  → pm2 shopee-shop1 port 3001
-const SHOP_PORTS: Record<number, number> = { 0: 3002, 1: 3001 };
+// Slug của shop trong DB → port của bot PM2 tương ứng
+const SHOP_PORTS_BY_SLUG: Record<string, number> = {
+  'giaydepphucsang': 3002,
+  'phuc-sang-store':  3001,
+};
+
+function portFromSlug(slug: string | undefined): number {
+  return (slug && SHOP_PORTS_BY_SLUG[slug]) ?? 3001;
+}
 
 export function createShopeeSyncRouter(requireAuth: RequestHandler) {
   const router = Router();
 
   // POST /api/shopee-sync — proxy sang shopee-monitor để sync 1 sản phẩm
-  // Body: { shopIdx: 0|1, itemId: string, shopeeProductId?: string }
+  // Body: { shopSlug: string, itemId: string, shopeeProductId?: string }
   // Chờ kết quả (tối đa 35s) rồi trả về cho frontend
   router.post('/api/shopee-sync', requireAuth, async (req, res) => {
-    const { shopIdx, itemId, shopeeProductId } = req.body ?? {};
+    const { shopSlug, itemId, shopeeProductId } = req.body ?? {};
 
     if (!itemId) {
       res.status(400).json({ ok: false, error: 'Thiếu itemId' });
       return;
     }
 
-    const port = SHOP_PORTS[Number(shopIdx) ?? 0] ?? 3001;
+    const port = portFromSlug(shopSlug);
     const url  = `http://localhost:${port}/api/product/sync-wait/${itemId}`;
 
     try {
@@ -32,7 +38,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
         if (err.code === 'ECONNREFUSED') {
           res.status(503).json({
             ok: false,
-            error: `Bot shop ${Number(shopIdx ?? 0) + 1} không chạy (port ${port}). Hãy khởi động pm2.`,
+            error: `Bot shop "${shopSlug}" không chạy (port ${port}). Hãy khởi động pm2.`,
           });
           return;
         }
@@ -45,19 +51,40 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
 
   // POST /api/shopee-sync/all — trigger bot quét toàn bộ danh sách SP (không chờ)
   router.post('/api/shopee-sync/all', requireAuth, async (req, res) => {
-    const { shopIdx } = req.body ?? {};
-    const port = SHOP_PORTS[Number(shopIdx) ?? 0] ?? 3001;
+    const { shopSlug } = req.body ?? {};
+    const port = portFromSlug(shopSlug);
 
     try {
       const response = await axios.post(`http://localhost:${port}/api/products/fetch`, {}, { timeout: 5_000 });
       res.json(response.data);
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.code === 'ECONNREFUSED') {
-        res.status(503).json({ ok: false, error: `Bot shop ${Number(shopIdx ?? 0) + 1} không chạy (port ${port})` });
+        res.status(503).json({ ok: false, error: `Bot shop "${shopSlug}" không chạy (port ${port})` });
         return;
       }
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  // GET /api/shopee-bot-status — tổng hợp trạng thái bot từ cả 2 shop
+  router.get('/api/shopee-bot-status', requireAuth, async (req, res) => {
+    const shops = [
+      { slug: 'phuc-sang-store',  port: 3001 },
+      { slug: 'giaydepphucsang', port: 3002 },
+    ];
+
+    const results = await Promise.all(
+      shops.map(async ({ slug, port }) => {
+        try {
+          const r = await axios.get(`http://localhost:${port}/api/bot-status`, { timeout: 3000 });
+          return { slug, ...r.data };
+        } catch {
+          return { slug, ok: false, sync: { running: false }, descriptions: { running: false, total: 0, filled: 0, failed: 0, current: null } };
+        }
+      })
+    );
+
+    res.json({ ok: true, bots: results });
   });
 
   return router;

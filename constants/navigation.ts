@@ -123,7 +123,7 @@ export const SIDEBAR_SECTIONS = [
     items: [
       { id: 'online-orders', label: 'Đơn hàng Online', icon: ShoppingBag },
       { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
-      { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
+      { id: 'shopee-revenue', label: 'Shopee', icon: ShoppingCart },
       { id: 'website-products', label: 'Website · Sản phẩm', icon: Globe },
       { id: 'website-operations', label: 'Website · Vận hành', icon: Settings },
       { id: 'channel-connections', label: 'Liên kết kênh bán', icon: Link2 },

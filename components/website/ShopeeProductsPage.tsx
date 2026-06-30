@@ -18,11 +18,14 @@ interface ShopeeVariant {
 
 interface ShopEntry {
   id: string;
+  name: string;
   shop_id: string | null;
   shopee_item_id: string | null;
   is_published: boolean;
   cover_image_url: string | null;
   display_order: number;
+  description: string | null;
+  gallery: string[] | null;
   shopee_product_variants: ShopeeVariant[];
 }
 
@@ -46,6 +49,7 @@ interface EditForm {
   is_published: boolean; display_order: number;
   // hiển thị
   product_name: string;       // tên sản phẩm Shopee (tối đa 120 ký tự)
+  description: string;        // mô tả sản phẩm
   other_images: string[];     // tối đa 6 ảnh thường
   category: string;           // ngành hàng
   variantDrafts: VariantDraft[];
@@ -65,8 +69,9 @@ function makeEditForm(entry: ShopEntry, productName: string): EditForm {
     shop_id: entry.shop_id ?? '',
     is_published: entry.is_published,
     display_order: entry.display_order,
-    product_name: productName,
-    other_images: [],
+    product_name: entry.name || productName,
+    description: entry.description ?? '',
+    other_images: entry.gallery ?? [],
     category: '',
     variantDrafts: [...entry.shopee_product_variants]
       .sort((a, b) => a.display_order - b.display_order)
@@ -250,12 +255,13 @@ function ShopDetailPanel({
   };
 
   const handleSync = async () => {
+    const shopSlug = shops.find(s => s.id === entry.shop_id)?.slug;
     setSyncing(true);
     try {
       const res = await fetch('/api/shopee-sync/all', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopIdx: colorIdx }),
+        body: JSON.stringify({ shopSlug }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? 'Bot không phản hồi');
@@ -317,141 +323,151 @@ function ShopDetailPanel({
       <div className="p-4">
         {/* Thông tin cơ bản */}
         {tab === 'co-ban' && (
-          <div className="max-w-3xl space-y-8">
+          <div className="space-y-8">
 
-            {/* ── Hình ảnh sản phẩm ── */}
+            {/* ── Tên sản phẩm + Ngành hàng ── */}
             <section>
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Hình ảnh sản phẩm</h3>
-              <div className="flex items-start gap-4">
-
-                {/* Ảnh bìa — tối đa 1 */}
-                <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Ảnh bìa</span>
-                  <div className="relative group w-32 h-32 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:border-orange-400 hover:bg-orange-50/30 transition-colors overflow-hidden cursor-pointer"
-                    onClick={() => document.getElementById('cover-upload')?.click()}>
-                    {form.cover_image_url ? (
-                      <>
-                        <img src={form.cover_image_url} alt="ảnh bìa" className="w-full h-full object-cover" />
-                        <button
-                          onClick={e => { e.stopPropagation(); setF({ cover_image_url: '' }); }}
-                          className="absolute top-1 right-1 w-5 h-5 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        >
-                          <X size={10} />
-                        </button>
-                        <div className="absolute bottom-0 left-0 right-0 bg-orange-500/90 text-white text-[9px] text-center py-0.5 font-medium">★ Ảnh bìa</div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center w-full h-full gap-1">
-                        <ImageIcon size={22} className="text-slate-300" />
-                        <span className="text-[10px] text-slate-400 text-center px-2">Bấm để tải lên</span>
-                      </div>
-                    )}
+              <div className="flex gap-4">
+                <div className="flex-[2]">
+                  <label className="block text-sm font-semibold text-slate-800 mb-2">
+                    <span className="text-red-500 mr-1">*</span>Tên sản phẩm
+                  </label>
+                  <div className="relative">
+                    <input
+                      value={form.product_name}
+                      onChange={e => setF({ product_name: e.target.value.slice(0, 120) })}
+                      placeholder="Nhập tên sản phẩm Shopee..."
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 pr-16"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 tabular-nums">
+                      {form.product_name.length}/120
+                    </span>
                   </div>
-                  <input id="cover-upload" type="file" accept="image/*" className="sr-only"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const url = URL.createObjectURL(file);
-                      setF({ cover_image_url: url });
-                      e.target.value = '';
-                    }} />
-                  <span className="text-[10px] text-slate-400">1 ảnh</span>
                 </div>
+                <div className="flex-[1]">
+                  <label className="block text-sm font-semibold text-slate-800 mb-2">
+                    <span className="text-red-500 mr-1">*</span>Ngành hàng
+                  </label>
+                  <div className="flex items-center justify-between px-3 py-2.5 border border-slate-200 rounded-lg bg-white">
+                    <span className={`text-sm truncate ${form.category ? 'text-slate-700' : 'text-slate-300'}`}>
+                      {form.category || 'Chưa chọn'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const val = window.prompt('Nhập ngành hàng:', form.category);
+                        if (val !== null) setF({ category: val });
+                      }}
+                      className="text-slate-400 hover:text-orange-500 transition-colors ml-2 shrink-0"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-                {/* Ảnh thường — tối đa 6 */}
-                <div className="flex flex-col gap-1.5 flex-1">
-                  <span className="text-xs text-slate-500 font-medium">Hình ảnh <span className="text-slate-300">({form.other_images.length}/6)</span></span>
-                  <div className="flex flex-nowrap gap-2 p-3 h-[116px] rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:border-orange-300 transition-colors overflow-x-auto">
-                    {form.other_images.map((url, idx) => (
-                      <div key={idx} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0">
-                        <img src={url} alt="" className="w-full h-full object-cover" />
-                        <button
-                          onClick={() => setF({ other_images: form.other_images.filter((_, i) => i !== idx) })}
-                          className="absolute top-1 right-1 w-5 h-5 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        >
-                          <X size={10} />
-                        </button>
-                      </div>
-                    ))}
-                    {form.other_images.length < 6 && (
+            {/* ── 3 cột: Ảnh | Video | Mô tả ── */}
+            <div className="flex gap-5 items-stretch">
+
+              {/* CỘT 1: Ảnh sản phẩm */}
+              <div className="flex-1 flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-800">Hình ảnh</h3>
+                {/* Ảnh bìa */}
+                <div className="relative group aspect-square rounded-xl border-2 border-dashed border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/10 transition-colors overflow-hidden cursor-pointer"
+                  onClick={() => document.getElementById('cover-upload')?.click()}>
+                  {form.cover_image_url ? (
+                    <>
+                      <img src={form.cover_image_url} alt="ảnh bìa" className="w-full h-full object-contain bg-white" />
                       <button
-                        onClick={() => document.getElementById('images-upload')?.click()}
-                        className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/30 transition-colors flex flex-col items-center justify-center gap-1 shrink-0"
+                        onClick={e => { e.stopPropagation(); setF({ cover_image_url: '' }); }}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                       >
-                        <ImageIcon size={20} className="text-slate-300" />
-                        <span className="text-[10px] text-slate-400">Thêm ảnh</span>
+                        <X size={11} />
                       </button>
-                    )}
-                  </div>
-                  <input id="images-upload" type="file" accept="image/*" multiple className="sr-only"
-                    onChange={e => {
-                      const files = Array.from(e.target.files ?? []);
-                      const remaining = 6 - form.other_images.length;
-                      const urls = files.slice(0, remaining).map(f => URL.createObjectURL(f));
-                      setF({ other_images: [...form.other_images, ...urls] });
-                      e.target.value = '';
-                    }} />
-                  <span className="text-[10px] text-slate-400">Tối đa 6 ảnh</span>
+                      <div className="absolute bottom-0 left-0 right-0 bg-orange-500/90 text-white text-[9px] text-center py-0.5 font-medium">★ Ảnh bìa</div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center w-full h-full gap-2">
+                      <ImageIcon size={28} className="text-slate-300" />
+                      <span className="text-xs text-slate-400 text-center px-3">Bấm để tải lên ảnh bìa</span>
+                    </div>
+                  )}
                 </div>
-
-              </div>
-            </section>
-
-            {/* ── Video sản phẩm ── */}
-            <section>
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Video sản phẩm</h3>
-              <div className="flex items-start gap-4 p-4 border border-dashed border-slate-200 rounded-lg bg-slate-50/50 w-fit">
-                <div className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-orange-300 rounded-lg bg-white cursor-pointer hover:bg-orange-50/30 transition-colors shrink-0">
-                  <Video size={20} className="text-orange-400 mb-1" />
-                  <span className="text-[9px] text-orange-500 font-medium">Thêm video</span>
-                </div>
-                <ul className="text-xs text-slate-400 space-y-0.5 mt-1">
-                  <li>Size: Max 30MB, resolution should not less than 1x1px</li>
-                  <li>Độ dài: 10s–60s</li>
-                  <li>Định dạng: MP4</li>
-                  <li className="text-slate-300">Lưu ý: sản phẩm có thể hiển thị trong khi video đang được xử lý.</li>
-                </ul>
-              </div>
-            </section>
-
-            {/* ── Tên sản phẩm ── */}
-            <section>
-              <label className="block text-sm font-semibold text-slate-800 mb-2">
-                <span className="text-red-500 mr-1">*</span>Tên sản phẩm
-              </label>
-              <div className="relative">
+                <input id="cover-upload" type="file" accept="image/*" className="sr-only"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setF({ cover_image_url: URL.createObjectURL(file) });
+                    e.target.value = '';
+                  }} />
+                {/* Nhập URL ảnh bìa */}
                 <input
-                  value={form.product_name}
-                  onChange={e => setF({ product_name: e.target.value.slice(0, 120) })}
-                  placeholder="Nhập tên sản phẩm Shopee..."
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 pr-16"
+                  type="url"
+                  placeholder="Hoặc dán URL ảnh..."
+                  defaultValue={form.cover_image_url.startsWith('blob:') ? '' : form.cover_image_url}
+                  onBlur={e => { if (e.target.value.trim()) setF({ cover_image_url: e.target.value.trim() }); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-slate-600 placeholder:text-slate-300"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 tabular-nums">
-                  {form.product_name.length}/120
-                </span>
+                {/* Thumbnails — hàng ngang */}
+                <span className="text-[10px] text-slate-400">Ảnh phụ ({form.other_images.length}/6)</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {form.other_images.map((url, idx) => (
+                    <div key={idx} className="relative group/thumb w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-white">
+                      <img src={url} alt="" className="w-full h-full object-contain" />
+                      <button
+                        onClick={() => setF({ other_images: form.other_images.filter((_, i) => i !== idx) })}
+                        className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/50 rounded-full text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center"
+                      >
+                        <X size={8} />
+                      </button>
+                    </div>
+                  ))}
+                  {form.other_images.length < 6 && (
+                    <button
+                      onClick={() => document.getElementById('images-upload')?.click()}
+                      className="w-12 h-12 shrink-0 rounded-lg border-2 border-dashed border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/30 transition-colors flex flex-col items-center justify-center gap-0.5"
+                    >
+                      <ImageIcon size={12} className="text-slate-300" />
+                      <span className="text-[9px] text-slate-400">Thêm</span>
+                    </button>
+                  )}
+                </div>
+                <input id="images-upload" type="file" accept="image/*" multiple className="sr-only"
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? []);
+                    const remaining = 6 - form.other_images.length;
+                    const urls = files.slice(0, remaining).map(f => URL.createObjectURL(f));
+                    setF({ other_images: [...form.other_images, ...urls] });
+                    e.target.value = '';
+                  }} />
               </div>
-            </section>
 
-            {/* ── Ngành hàng ── */}
-            <section>
-              <label className="block text-sm font-semibold text-slate-800 mb-2">
-                <span className="text-red-500 mr-1">*</span>Ngành hàng
-              </label>
-              <div className="flex items-center justify-between px-3 py-2.5 border border-slate-200 rounded-lg bg-white">
-                <span className={`text-sm ${form.category ? 'text-slate-700' : 'text-slate-300'}`}>
-                  {form.category || 'Chưa chọn ngành hàng'}
-                </span>
-                <button
-                  onClick={() => {
-                    const val = window.prompt('Nhập ngành hàng:', form.category);
-                    if (val !== null) setF({ category: val });
-                  }}
-                  className="text-slate-400 hover:text-orange-500 transition-colors ml-2"
-                >
-                  <Edit2 size={14} />
-                </button>
+              {/* CỘT 2: Video sản phẩm */}
+              <div className="flex-1 flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-800">Video</h3>
+                <div className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-orange-300 rounded-xl bg-white cursor-pointer hover:bg-orange-50/30 transition-colors">
+                  <Video size={28} className="text-orange-400 mb-1.5" />
+                  <span className="text-[10px] text-orange-500 font-medium">Thêm video</span>
+                  <span className="text-[9px] text-slate-300 mt-1">Max 30MB · MP4 · 10s–60s</span>
+                </div>
               </div>
-            </section>
+
+              {/* CỘT 3: Mô tả sản phẩm */}
+              <div className="flex-1 flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-800">Mô tả sản phẩm</h3>
+                <textarea
+                  value={form.description}
+                  onChange={e => setF({ description: e.target.value.slice(0, 3000) })}
+                  placeholder="Nhập mô tả sản phẩm..."
+                  className="w-full flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                  style={{ minHeight: 0 }}
+                />
+                <span className="text-[10px] text-slate-400 text-right tabular-nums">{form.description.length}/3000</span>
+              </div>
+
+            </div>
+
 
           </div>
         )}
@@ -535,6 +551,7 @@ export default function ShopeeProductsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [skuMatching, setSkuMatching] = useState(false);
 
   // table mode
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -560,6 +577,46 @@ export default function ShopeeProductsPage() {
   }, [showToast]);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  const handleSkuMatch = async () => {
+    // Preview trước
+    try {
+      const previewRes = await fetch('/api/shopee-products/sku-match?preview=true', {
+        method: 'POST', credentials: 'include',
+      });
+      const previewJson: { ok: boolean; matches: Array<{ catalogName: string; syncedName: string; matchedSku: string }>; total: number } = await previewRes.json();
+      if (!previewJson.ok) throw new Error('Lỗi preview');
+      if (previewJson.total === 0) {
+        showToast('Không tìm thấy sản phẩm nào có SKU trùng khớp.', 'error');
+        return;
+      }
+      const confirmed = window.confirm(
+        `Tìm thấy ${previewJson.total} sản phẩm có thể ghép:\n\n` +
+        previewJson.matches.slice(0, 5).map(m => `• ${m.catalogName} ← ${m.syncedName} (SKU: ${m.matchedSku})`).join('\n') +
+        (previewJson.total > 5 ? `\n... và ${previewJson.total - 5} sản phẩm khác` : '') +
+        '\n\nXác nhận cập nhật ảnh + mô tả từ Shopee vào catalog?'
+      );
+      if (!confirmed) return;
+    } catch {
+      showToast('Lỗi khi preview SKU match', 'error');
+      return;
+    }
+
+    setSkuMatching(true);
+    try {
+      const res = await fetch('/api/shopee-products/sku-match', {
+        method: 'POST', credentials: 'include',
+      });
+      const json: { ok: boolean; updated: number; total: number; error?: string } = await res.json();
+      if (!json.ok) throw new Error(json.error ?? 'Lỗi');
+      showToast(`Đã cập nhật ${json.updated}/${json.total} sản phẩm từ Shopee!`, 'success');
+      loadProducts();
+    } catch (err: unknown) {
+      showToast('Lỗi SKU match: ' + (err instanceof Error ? err.message : String(err)), 'error');
+    } finally {
+      setSkuMatching(false);
+    }
+  };
 
   const shopMap = new Map(shops.map(s => [s.id, s]));
 
@@ -617,6 +674,15 @@ export default function ShopeeProductsPage() {
           </span>
           <button onClick={loadProducts} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Tải lại">
             <RefreshCw size={15} />
+          </button>
+          <button
+            onClick={handleSkuMatch}
+            disabled={skuMatching}
+            title="Tự động ghép ảnh + mô tả từ Shopee vào catalog theo SKU"
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors whitespace-nowrap"
+          >
+            {skuMatching ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            Auto Fill SKU
           </button>
           <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shrink-0">
             <button

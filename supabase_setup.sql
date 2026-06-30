@@ -1391,11 +1391,42 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- [C2 — 2026-06-29] audit_logs BẤT BIẾN: client KHÔNG ghi/sửa/xóa; server (service_role) ghi tự do.
+-- Trước đây policy "FOR ALL TO authenticated" + grant anon cho phép mọi user (kể cả anon) UPDATE/DELETE
+-- audit log → xóa dấu vết. Server ghi bằng service-role (bypass RLS) nên gỡ quyền GHI của client là an toàn.
+-- Giữ quyền ĐỌC cho authenticated (màn hình xem audit). anon mất sạch.
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "audit_logs_authenticated" ON audit_logs;
+DROP POLICY IF EXISTS "Public Access" ON audit_logs;
+REVOKE ALL ON audit_logs FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON audit_logs FROM authenticated;
+GRANT SELECT ON audit_logs TO authenticated;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='audit_logs' AND policyname='audit_logs_authenticated') THEN
-    CREATE POLICY "audit_logs_authenticated" ON audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='audit_logs' AND policyname='audit_logs_select') THEN
+    CREATE POLICY "audit_logs_select" ON audit_logs FOR SELECT TO authenticated USING (true);
   END IF;
+END $$;
+
+-- [C2 Phần B — 2026-06-29] Bảng tài chính/HR: client CHỈ-ĐỌC (chặn sửa/xóa trực tiếp qua /rest/v1).
+-- App chỉ .select() các bảng này; mọi GHI đi qua server service-role (bypass RLS) → không ảnh hưởng.
+-- Đồng thời gỡ các policy "Public Access"/"*_anon_all" hớ (cho anon đọc lương/doanh thu không cần đăng nhập).
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['payroll_records','revenue_records','expense_records','advance_records','shortage_records','salary_policies','employees']
+  LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "Public Access" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t||'_anon_all', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t||'_authenticated_all', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t||'_authenticated', t);
+    EXECUTE format('REVOKE ALL ON %I FROM anon', t);
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON %I FROM authenticated', t);
+    EXECUTE format('GRANT SELECT ON %I TO authenticated', t);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename=t AND policyname=t||'_select_authenticated') THEN
+      EXECUTE format('CREATE POLICY %I ON %I FOR SELECT TO authenticated USING (true)', t||'_select_authenticated', t);
+    END IF;
+  END LOOP;
 END $$;
 
 -- RLS cho các bảng channel links (shopee + website)
@@ -2253,3 +2284,22 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION pos_mobile_checkout(JSONB) TO authenticated;
 ALTER FUNCTION pos_mobile_checkout(JSONB) SET search_path = public;
+
+-- ============================================================
+-- [C2 Phần C — 2026-06-29] Đóng lỗ hổng anon đọc toàn DB (broken access control)
+-- Phát hiện: anon (anon key công khai nhúng trong frontend) có grant SELECT trên hầu hết bảng
+-- → đọc được khách hàng/đơn/công nợ/NCC/VAT/lương... mà KHÔNG cần đăng nhập.
+-- Cách đóng: REVOKE ALL FROM anon trên MỌI bảng public, TRỪ các bảng catalog storefront công khai.
+-- App nội bộ đọc bằng role authenticated (đã đăng nhập); storefront công khai đọc qua /api/store/* (service-role).
+-- service_role/authenticated giữ nguyên quyền → app không ảnh hưởng.
+-- ============================================================
+DO $$
+DECLARE r record;
+  keep text[] := ARRAY['store_products','store_product_variants','store_settings','store_collections','store_product_collections'];
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
+    IF NOT (r.tablename = ANY(keep)) THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon', r.tablename);
+    END IF;
+  END LOOP;
+END $$;

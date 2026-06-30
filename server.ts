@@ -35,6 +35,7 @@ import react from '@vitejs/plugin-react';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import { readFile, mkdir, writeFile, unlink } from 'fs/promises';
+import { timingSafeEqual } from 'node:crypto';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
 import { createChannelLinksRouter } from './routes/channelLinks';
@@ -167,6 +168,23 @@ const supabaseAdminUrl = process.env.SUPABASE_URL!;
 const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseAdminUrl, supabaseAdminKey);
 
+// Bảo vệ các endpoint ảnh sản phẩm (chụp ảnh điện thoại + desktop) bằng token chung POS_MOBILE_TOKEN.
+// Các endpoint này đăng ký TRƯỚC requireAuth và phục vụ cả điện thoại chưa đăng nhập → dùng token QR.
+const UPLOAD_TOKEN = process.env.POS_MOBILE_TOKEN || '';
+const requireUploadToken: RequestHandler = (req, res, next) => {
+  if (!UPLOAD_TOKEN) {
+    return res.status(503).json({ error: 'Chưa cấu hình POS_MOBILE_TOKEN trên server' });
+  }
+  const provided =
+    (req.headers['x-pos-mobile-token'] as string) ||
+    (typeof req.query.t === 'string' ? req.query.t : '') ||
+    '';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(UPLOAD_TOKEN);
+  if (provided && a.length === b.length && timingSafeEqual(a, b)) return next();
+  return res.status(401).json({ error: 'Unauthorized - thiếu hoặc sai token ảnh sản phẩm' });
+};
+
 // Start listening immediately to satisfy the platform's health check.
 const server = app.listen(PORT, '0.0.0.0', () => {
   if (!IS_PROD) console.error(`[STARTUP] Server is listening on port ${PORT}`);
@@ -194,6 +212,7 @@ app.get('/api/local-ip', (_req, res) => {
 
 // Upload ảnh hàng hóa — nhận raw JPEG, lưu base64 data URL thẳng vào DB (bypass Storage + RLS)
 app.post('/api/upload-product-image/:productId',
+  requireUploadToken,
   express.raw({ type: 'image/*', limit: '5mb' }),
   async (req: Request, res: Response) => {
     const { productId } = req.params;
@@ -248,7 +267,7 @@ app.post('/api/upload-product-image/:productId',
 );
 
 // Lấy thông tin cơ bản sản phẩm để hiện trên trang chụp ảnh điện thoại
-app.get('/api/product-info/:productId', async (req: Request, res: Response) => {
+app.get('/api/product-info/:productId', requireUploadToken, async (req: Request, res: Response) => {
   const { productId } = req.params;
   if (!productId) return res.status(400).json({ error: 'Thiếu productId' });
 
@@ -265,7 +284,7 @@ app.get('/api/product-info/:productId', async (req: Request, res: Response) => {
 });
 
 // Tìm sản phẩm theo mã vạch để hiện trên trang chụp ảnh điện thoại
-app.get('/api/product-info/barcode/:barcode', async (req: Request, res: Response) => {
+app.get('/api/product-info/barcode/:barcode', requireUploadToken, async (req: Request, res: Response) => {
   const { barcode } = req.params;
   if (!barcode) return res.status(400).json({ error: 'Thiếu barcode' });
 
@@ -298,6 +317,7 @@ app.get('/api/product-info/barcode/:barcode', async (req: Request, res: Response
 // Xóa ảnh hàng hóa — nhận { images: string[], deleted?: string[] }
 // images: mảng URL còn lại (ghi đè DB); deleted: URL bị xóa (để xóa file trên đĩa)
 app.delete('/api/upload-product-image/:productId',
+  requireUploadToken,
   express.json(),
   async (req: Request, res: Response) => {
     const { productId } = req.params;

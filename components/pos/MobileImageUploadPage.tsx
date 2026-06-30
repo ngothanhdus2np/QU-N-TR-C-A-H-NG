@@ -42,6 +42,8 @@ export const MobileImageUploadPage: React.FC = () => {
   const zxingControlsRef = useRef<{ stop: () => void } | null>(null);
 
   const [activeProductId, setActiveProductId] = useState(initialProductId ?? '');
+  // Token bí mật lấy từ QR (?t=...) — gửi kèm mọi call API ảnh để xác thực
+  const [mobileToken] = useState(() => new URLSearchParams(window.location.search).get('t') ?? '');
   const [product, setProduct] = useState<ProductInfo | null>(null);
   const [productError, setProductError] = useState('');
   const [count, setCount] = useState(0);
@@ -57,7 +59,7 @@ export const MobileImageUploadPage: React.FC = () => {
   useEffect(() => {
     if (!activeProductId) return;
     setProductError('');
-    fetch(`/api/product-info/${activeProductId}`)
+    fetch(`/api/product-info/${activeProductId}`, { headers: { 'x-pos-mobile-token': mobileToken } })
       .then(r => r.json())
       .then((d: ProductInfo & { error?: string }) => {
         if (d.error) { setProductError(d.error); return; }
@@ -118,7 +120,7 @@ export const MobileImageUploadPage: React.FC = () => {
 
       const raw = result.getText();
       try {
-        const resp = await fetch(`/api/product-info/barcode/${encodeURIComponent(raw)}`);
+        const resp = await fetch(`/api/product-info/barcode/${encodeURIComponent(raw)}`, { headers: { 'x-pos-mobile-token': mobileToken } });
         const data = await resp.json() as ProductInfo & { error?: string };
         if (data.error || !resp.ok) {
           setErrorMsg(`Không tìm thấy sản phẩm với mã: ${raw}`);
@@ -152,7 +154,7 @@ export const MobileImageUploadPage: React.FC = () => {
       const resp = await fetch(`/api/upload-product-image/${activeProductId}`, {
         method: 'POST',
         body: compressed,
-        headers: { 'Content-Type': 'image/jpeg' },
+        headers: { 'Content-Type': 'image/jpeg', 'x-pos-mobile-token': mobileToken },
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || `Lỗi ${resp.status}`);

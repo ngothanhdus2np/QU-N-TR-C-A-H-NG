@@ -163,7 +163,9 @@ export const POSQuickPage: React.FC = () => {
       if (last && last.barcode === barcode && now - last.time < 2000) return;
       lastScanRef.current = { barcode, time: now };
       try {
-        const res = await fetch(`/api/product-info/barcode/${encodeURIComponent(barcode)}`);
+        const res = await fetch(`/api/product-info/barcode/${encodeURIComponent(barcode)}`, {
+          headers: { 'x-pos-mobile-token': mobileToken },
+        });
         const json = await res.json();
         if (json.error || !json.id) {
           setScanError(`Không tìm thấy sản phẩm: ${barcode}`);
