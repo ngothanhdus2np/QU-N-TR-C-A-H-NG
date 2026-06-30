@@ -504,16 +504,14 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
   });
 
   router.post('/api/data/clear', requireAuth, async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-      const authHeader = req.headers.authorization;
-      const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-      if (!jwt) {
-        return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
-      }
-      const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
-      if (userError || !user || user.user_metadata?.role !== 'admin') {
-        return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
-      }
+    const authHeader = req.headers.authorization;
+    const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) {
+      return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
+    if (userError || !user || user.user_metadata?.role !== 'admin') {
+      return res.status(403).json({ error: 'Chỉ quản trị viên mới có quyền xóa toàn bộ dữ liệu' });
     }
 
     const tableName = resolveTable(req.body?.key);

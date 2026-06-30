@@ -396,7 +396,7 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     }
   });
 
-  router.get('/api/fb/pages', async (req, res) => {
+  router.get('/api/fb/pages', requireAuth, async (req, res) => {
     const accessToken = (req as FacebookSessionRequest).session.fbAccessToken || globalFbAccessToken;
 
     if (!accessToken) {
@@ -414,7 +414,11 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
           fields: 'name,access_token,id,category,picture,tasks',
         },
       });
-      res.json(response.data.data);
+      // Không trả về raw access_token của Page ra client
+      const safePages = (response.data.data as Array<Record<string, unknown>>).map(
+        ({ access_token: _token, ...rest }) => rest
+      );
+      res.json(safePages);
     } catch (error: unknown) {
       res.status(500).json({ error: getHttpErrorMessage(error) });
     }
@@ -463,7 +467,7 @@ export function createFacebookRouter({ supabase, requireAuth, configDir }: Faceb
     res.json({ success: true, config: autoPostConfig });
   });
 
-  router.get('/api/fb/auto-post/logs', (_req, res) => {
+  router.get('/api/fb/auto-post/logs', requireAuth, (_req, res) => {
     res.json(autoPostConfig.logs);
   });
 
