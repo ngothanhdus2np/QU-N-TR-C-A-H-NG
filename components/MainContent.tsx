@@ -13,6 +13,7 @@ import {
   DiagnosisRange,
   ProductLine,
   RevenueSubTab,
+  RevenueDelta,
 } from '../types';
 import { AppThemeId } from '../constants/themes';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
@@ -88,6 +89,7 @@ interface MainContentProps {
     idToRemove?: string
   ) => Promise<void>;
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
@@ -121,6 +123,7 @@ const MainContent: React.FC<MainContentProps> = ({
   breakEvenAnalysis,
   updateData,
   updateSurgical,
+  applyRevenueDelta,
   pushBatch,
   loadInventoryOut,
   isDataReady = true,
@@ -868,6 +871,7 @@ const MainContent: React.FC<MainContentProps> = ({
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   pushBatch,
                   updateSurgical,
+                  applyRevenueDelta,
                 })
               }
               onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems, updatedCustomer) =>
@@ -881,6 +885,7 @@ const MainContent: React.FC<MainContentProps> = ({
                   updatedCustomer,
                   pushBatch,
                   updateSurgical,
+                  applyRevenueDelta,
                 })
               }
               onUpdateSurgical={updateSurgical}

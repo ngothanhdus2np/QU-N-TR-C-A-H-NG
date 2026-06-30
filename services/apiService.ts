@@ -1,5 +1,5 @@
 import { supabaseAdmin as supabase } from './supabase';
-import { AppData, InventoryTransaction, POSOrder } from '../types';
+import { AppData, InventoryTransaction, POSOrder, RevenueDelta } from '../types';
 import { buildVariantProductName, isUUID } from '../src/lib';
 
 export const TABLE_MAP: Record<string, string> = {
@@ -1164,6 +1164,21 @@ export const apiService = {
   async deleteInventoryTransactionWithStock(transactionId: string) {
     await postDataRoute('/api/data/inventory/delete', { transactionId });
     return { success: true, transactionId };
+  },
+
+  // [DATA-02] Cộng dồn doanh thu theo delta atomic (thay read-modify-write ghi đè cả dòng)
+  async applyRevenueDelta(id: string, dateKey: string, delta: RevenueDelta) {
+    const rounded = {
+      totalGrossRevenue: Math.round(delta.totalGrossRevenue || 0),
+      discount: Math.round(delta.discount || 0),
+      revenueOther: Math.round(delta.revenueOther || 0),
+      returnsValue: Math.round(delta.returnsValue || 0),
+      netRevenue: Math.round(delta.netRevenue || 0),
+      totalCogs: Math.round(delta.totalCogs || 0),
+      grossProfit: Math.round(delta.grossProfit || 0),
+    };
+    await postDataRoute('/api/data/revenue/apply-delta', { id, dateKey, delta: rounded });
+    return { success: true, dateKey };
   },
 
   async upsertConfig(key: string, value: any) {

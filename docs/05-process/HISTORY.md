@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-06-30 — Audit production-readiness toàn diện + vá SEC-01 + P1 atomic revenue
+- **Audit 15 trục** (AI QA Enterprise v4) với kiểm chứng THẬT trên prod (không chỉ tĩnh). Báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-06-30.md`
+- **SEC-03 (anon đọc/ghi toàn DB): XÁC MINH ĐÓNG**. Query grants + RLS policy trên prod: bảng nặng (orders/payroll/revenue/employees/customers) đã hết grant anon; 4 bảng sót (customer_debt_history, shopee_shops, newsletter_subscribers, store_contacts) có RLS chặn anon → đã REVOKE ALL FROM anon dọn dứt điểm
+- **Auth bypass Lớp 1: XÁC MINH ĐÓNG** — NODE_ENV=production trong tiến trình live (set qua launchd plist com.cfobrain.app, KHÔNG ở .env.local → điểm giòn nếu restart bằng npm run dev)
+- **Vá SEC-01 path traversal** trong `DELETE /api/upload-product-image` (server.ts): `path.resolve` + `startsWith(productsRoot+sep)`. Proof: `../`/absolute đều BLOCK, path hợp lệ ALLOW. Verify route mount (401≠404)
+- **P1 DATA-02 — atomic revenue increment**: thay ghi doanh thu read-modify-write (race mất doanh thu nhiều máy/ngày) bằng delta cộng dồn atomic. RPC `apply_revenue_delta` (migration 020 — ĐÃ chạy prod, constraint UNIQUE(date) xác nhận khớp). Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`, local-first optimistic, truyền id tránh nhân đôi sau resync)
+- tsc sạch, 318/318 test pass (thêm assertion delta bán & trả). **Code SEC-01 + P1 chờ deploy** (migration đã ở prod, RPC nằm im chưa dùng nên không lệch)
+- Files: `server.ts`, `supabase_migrations/020_atomic_revenue_delta.sql`, `supabase_setup.sql`, `routes/data.ts`, `services/apiService.ts`, `services/posOrderService.ts`(+test), `services/posOfflineQueue.ts`, `hooks/useAppData.ts`, `hooks/useOfflineSync.ts`, `types.ts`, `App.tsx`, `components/MainContent.tsx`
+
 ### 2026-06-30 — Thanh tiến trình bot Shopee trong app CFO Brain ✅
 
 - **Tính năng**: Thanh cam cố định phía dưới màn hình, hiển thị tiến trình bot đang chạy (filled/total, % progress, tên SP đang xử lý)

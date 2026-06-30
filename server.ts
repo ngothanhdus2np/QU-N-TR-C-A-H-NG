@@ -333,11 +333,16 @@ app.delete('/api/upload-product-image/:productId',
     if (error) return res.status(500).json({ error: error.message });
 
     // Xóa file vật lý trên iMac nếu URL là đường dẫn local (không phải base64)
+    // SECURITY (SEC-01): chặn path traversal — chỉ xóa file NẰM TRONG thư mục products.
+    // path.resolve xử lý cả "../" lẫn đường dẫn tuyệt đối; startsWith chặn mọi thứ thoát ra ngoài.
     if (Array.isArray(deleted)) {
+      const productsRoot = path.join(os.homedir(), 'cfobrain-assets', 'products');
       for (const url of deleted) {
-        if (url.startsWith('/product-images/')) {
-          const filePath = path.join(os.homedir(), 'cfobrain-assets', 'products', url.replace('/product-images/', ''));
-          unlink(filePath).catch(() => {}); // bỏ qua lỗi nếu file không tồn tại
+        if (typeof url === 'string' && url.startsWith('/product-images/')) {
+          const filePath = path.resolve(productsRoot, url.replace('/product-images/', ''));
+          if (filePath.startsWith(productsRoot + path.sep)) {
+            unlink(filePath).catch(() => {}); // bỏ qua lỗi nếu file không tồn tại
+          }
         }
       }
     }

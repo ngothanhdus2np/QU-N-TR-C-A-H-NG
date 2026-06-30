@@ -13,7 +13,8 @@ export type PendingOpType =
   | 'upsertItem'
   | 'deleteItem'
   | 'inventoryApply'
-  | 'inventoryDelete';
+  | 'inventoryDelete'
+  | 'revenueDelta';
 
 export interface PendingOp {
   id: string;

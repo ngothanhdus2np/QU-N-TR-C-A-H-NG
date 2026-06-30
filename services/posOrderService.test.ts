@@ -45,6 +45,7 @@ describe('posOrderService', () => {
   it('records POS revenue with COGS and gross profit', async () => {
     const pushBatch = vi.fn().mockResolvedValue(undefined);
     const updateSurgical = vi.fn().mockResolvedValue(undefined);
+    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     const updatedProducts = [{ ...baseProduct, stock: 8 }];
 
     await processPlaceOrder({
@@ -53,18 +54,23 @@ describe('posOrderService', () => {
       updatedProducts,
       pushBatch,
       updateSurgical,
+      applyRevenueDelta,
     });
 
     expect(pushBatch).toHaveBeenCalledWith('posOrders', [baseOrder]);
-    expect(pushBatch).toHaveBeenCalledWith('revenue', [
+    // [DATA-02] Doanh thu nay cong don ATOMIC qua applyRevenueDelta (delta cua don), khong con pushBatch('revenue')
+    expect(applyRevenueDelta).toHaveBeenCalledWith(
+      expect.any(String),
       expect.objectContaining({
         totalGrossRevenue: 200000,
         discount: 30000,
+        revenueOther: 0,
+        returnsValue: 0,
         netRevenue: 170000,
         totalCogs: 120000,
         grossProfit: 50000,
-      }),
-    ]);
+      })
+    );
     // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
     expect(updateSurgical).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -89,12 +95,14 @@ describe('posOrderService', () => {
       posProducts: [{ ...baseProduct, stock: 1 }],
     } as AppData;
 
+    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     await expect(processPlaceOrder({
       data: lowStockData,
       order: baseOrder,
       updatedProducts: [{ ...baseProduct, stock: -1 }],
       pushBatch,
       updateSurgical,
+      applyRevenueDelta,
     })).rejects.toThrow('Không đủ tồn kho');
   });
 
@@ -107,6 +115,7 @@ describe('posOrderService', () => {
     } as AppData;
     const updatedProducts = [{ ...baseProduct, stock: -1 }];
 
+    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     await processPlaceOrder({
       data: lowStockData,
       order: baseOrder,
@@ -114,6 +123,7 @@ describe('posOrderService', () => {
       allowSellOutOfStock: true,
       pushBatch,
       updateSurgical,
+      applyRevenueDelta,
     });
 
     // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
@@ -137,6 +147,7 @@ describe('posOrderService', () => {
     const updatedProducts = [{ ...baseProduct, stock: 11 }];
     const returnedItems = [baseOrder.items[0]];
 
+    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     await processReturnOrder({
       data: baseData,
       returnOrder: { ...baseOrder, id: 'return-1', orderCode: 'TH-000001', isReturn: true },
@@ -145,6 +156,7 @@ describe('posOrderService', () => {
       exchangeItems: [],
       pushBatch,
       updateSurgical,
+      applyRevenueDelta,
     });
 
     expect(updateSurgical).toHaveBeenCalledWith([
@@ -158,5 +170,16 @@ describe('posOrderService', () => {
         }),
       }),
     ]);
+
+    // [DATA-02] Tra hang: delta lam GIAM net revenue & gia von, cong returnsValue
+    expect(applyRevenueDelta).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        returnsValue: 200000,
+        netRevenue: -200000,
+        totalCogs: -120000,
+        grossProfit: -80000,
+      })
+    );
   });
 });

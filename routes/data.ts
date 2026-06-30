@@ -616,6 +616,28 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // [DATA-02] Cộng dồn doanh thu theo DELTA atomic (chống race 2 máy bán cùng ngày)
+  router.post('/api/data/revenue/apply-delta', requireAuth, async (req, res) => {
+    const id = req.body?.id ? String(req.body.id) : null;
+    const dateKey = String(req.body?.dateKey || '');
+    const delta = req.body?.delta;
+    if (!dateKey || !delta || typeof delta !== 'object') {
+      return res.status(400).json({ error: 'Delta doanh thu không hợp lệ' });
+    }
+    try {
+      const { error } = await supabase.rpc('apply_revenue_delta', {
+        p_id: id,
+        p_date_key: dateKey,
+        p_delta: delta,
+      });
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      console.error(`[DataRoute] revenue apply-delta failed [${dateKey}]:`, error);
+      writeErrorResponse(res, 'Không thể cộng dồn doanh thu', error);
+    }
+  });
+
   router.post('/api/data/knowledge/upload', requireAuth, async (req, res) => {
     const path = String(req.body?.path || '');
     const fileBase64 = String(req.body?.fileBase64 || '');

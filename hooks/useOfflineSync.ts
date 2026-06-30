@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { posOfflineQueue, PendingOp } from '../services/posOfflineQueue';
 import { apiService } from '../services/apiService';
-import { AppData } from '../types';
+import { AppData, RevenueDelta } from '../types';
 
 interface UseOfflineSyncReturn {
   offlinePendingCount: number;
@@ -67,6 +67,9 @@ export function useOfflineSync(): UseOfflineSyncReturn {
           } else if (op.opType === 'inventoryDelete') {
             const payload = op.payload as { id: string };
             await apiService.deleteInventoryTransactionWithStock(payload.id);
+          } else if (op.opType === 'revenueDelta') {
+            const payload = op.payload as { id: string; dateKey: string; delta: RevenueDelta };
+            await apiService.applyRevenueDelta(payload.id, payload.dateKey, payload.delta);
           } else if (op.opType === 'upsertItem') {
             await apiService.upsertItem(key, op.payload);
           } else if (op.opType === 'deleteItem') {

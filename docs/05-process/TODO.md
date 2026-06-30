@@ -9,18 +9,28 @@
 
 ---
 
-### [ ] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện 2026-06-30)*
+### [~] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện + kiểm chứng 2026-06-30)*
 
-> **Severity: HIGH** — Security review phát hiện 2 lớp bypass liên kết:
+> **Severity: HIGH → đã hạ rủi ro (kiểm chứng thật trên prod)**. Xem `docs/06-evaluation/PRODUCTION_AUDIT_2026-06-30.md`.
 >
-> **Lớp 1** — `server.ts:548`: `requireAuth` bỏ qua JWT khi `NODE_ENV !== 'production'` + request từ IP LAN (`192.168.x.x`) + không có `X-Forwarded-*` header + `Origin` khớp `allowedOrigins`. Bất kỳ thiết bị nào trong WiFi cửa hàng đều bypass được.
+> **Lớp 1 — ✅ ĐÃ ĐÓNG**: `NODE_ENV=production` xác nhận trong tiến trình live `com.cfobrain.app` (set qua launchd plist) → `IS_PROD=true` → dev-bypass (`server.ts:548`) tắt, rate-limit bật.
 >
-> **Lớp 2** — `routes/auth.ts:21`: Sau khi bypass lớp 1, `resolveCaller()` tự cấp `{ role: 'owner', userId: 'dev-user' }` → leo quyền cao nhất mà không cần đăng nhập. Có thể gọi: đổi role, reset mật khẩu, xóa tài khoản bất kỳ ai.
+> **Lớp 2 — KHÔNG khai thác được** (vì Lớp 1 đóng, request không-JWT bị `requireAuth` chặn 401 trước khi tới `resolveCaller`). Nhưng vẫn nên vá phòng thủ.
 >
-> **Bước làm:**
-> 1. Kiểm tra ngay `NODE_ENV` trên iMac: `ssh -i ~/.ssh/imac_deploy mac@192.168.1.3 "grep NODE_ENV ~/cfobrain/.env.local"` — nếu thiếu `NODE_ENV=production` thì đang bị lộ ngay lúc này
-> 2. Sửa `auth.ts:21`: đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (trả 401)
-> 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header
+> **Việc CÒN LẠI:**
+> 1. ⚠️ **Điểm giòn**: `NODE_ENV` nằm ở plist, KHÔNG ở `.env.local` → restart bằng `npm run dev` sẽ mở lại bypass. **Thêm `NODE_ENV=production` vào `.env.local` trên iMac.**
+> 2. Vá `auth.ts:21`: đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (defense-in-depth, **CHƯA vá**).
+> 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header.
+
+---
+
+### [x] Vá SEC-01 — Path traversal xóa file tùy ý *(xong 2026-06-30, chờ deploy)*
+
+> `DELETE /api/upload-product-image` (`server.ts`): thêm `path.resolve(productsRoot, rel)` + `startsWith(productsRoot+sep)` chặn `../` thoát thư mục. Proof: `../`/absolute đều BLOCK, path hợp lệ ALLOW; tsc sạch; route mount 401≠404. **Code chờ deploy lên prod.**
+
+### [x] P1 DATA-02 — Atomic revenue increment (diệt race mất doanh thu) *(xong 2026-06-30, migration đã chạy prod, code chờ deploy)*
+
+> Web POS ghi doanh thu bằng **delta cộng dồn atomic** (RPC `apply_revenue_delta`, migration 020 — ĐÃ chạy prod, constraint `UNIQUE(date)` xác nhận khớp) thay vì read-modify-write ghi đè cả dòng. Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`). 318 test pass. **Code chờ deploy** (`npm run deploy` + chạy `recalculate-revenue-from-orders` 1 lần). DATA-01 (full transaction checkout) hoãn P2 theo quyết định phân pha.
 
 ---
 
@@ -44,9 +54,9 @@
 
 > Hóa ra 6 hàm bị gắn cờ (signUp/updatePassword/resetPassword/getUserMetadata/isAdmin/isManager) đều là code chết → đã xóa, diệt rủi ro với 0 ảnh hưởng. Xem HISTORY.md.
 
-### [ ] Dọn 7 lỗi TypeScript `routes/channelLinks.ts` + test giòn `adminStoreModule` *(phát hiện khi test 2026-06-27)*
+### [x] Dọn 7 lỗi TypeScript `routes/channelLinks.ts` + test giòn `adminStoreModule` *(xác nhận xong 2026-06-30)*
 
-> 7 lỗi type `inBatches<T>` (data thành `unknown`) — không chặn build nhưng nên fix generic. Test `tests/unit/adminStoreModule.test.ts` fail do string-match `requireRole(...)` lệch với source dùng spread `...requireRole(...)` — cập nhật test cho khớp.
+> `tsc --noEmit` nay **sạch 0 lỗi**; `npm test` **318/318 pass** (15 file). Cả 2 đã được xử lý (xác nhận lại trong audit 2026-06-30).
 
 ---
 

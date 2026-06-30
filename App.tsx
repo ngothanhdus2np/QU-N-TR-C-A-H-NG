@@ -78,6 +78,7 @@ const App: React.FC = () => {
     silentSync,
     updateData,
     updateSurgical,
+    applyRevenueDelta,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,
@@ -292,6 +293,7 @@ const App: React.FC = () => {
             isSyncing={isSyncing}
             updateData={updateData}
             updateSurgical={updateSurgical}
+            applyRevenueDelta={applyRevenueDelta}
             pushBatch={pushBatch}
             loadInventoryOut={loadInventoryOut}
             offlinePendingCount={offlinePendingCount}

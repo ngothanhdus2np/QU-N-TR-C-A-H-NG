@@ -7,6 +7,8 @@ import {
   BrandProfile,
   DiagnosisRange,
   ShopeeInventoryOutRecord,
+  RevenueRecord,
+  RevenueDelta,
 } from '../types';
 import { INITIAL_APP_DATA } from '../constants/defaultData';
 import { DEFAULT_BRAND } from '../constants/marketing';
@@ -1062,6 +1064,72 @@ export function useAppData() {
     [state.data, enqueueOp]
   );
 
+  // [DATA-02] Cộng dồn doanh thu theo DELTA atomic — thay read-modify-write ghi đè cả dòng.
+  // Local: cập nhật optimistic theo date (giữ id cũ nếu đã có; ngày mới → tạo id và truyền
+  //   chính id đó cho RPC → realtime echo khớp id, tránh nhân đôi dòng doanh thu sau resync).
+  // Cloud: RPC atomic ON CONFLICT(date) += delta; offline (retryable) → enqueue replay.
+  const applyRevenueDelta = useCallback(
+    async (dateKey: string, delta: RevenueDelta) => {
+      dispatch({ type: 'SET_SYNCING', payload: true });
+      try {
+        const cachedData = await loadCachedDataSnapshot();
+        const currentLocalData: Record<string, unknown> = { ...state.data, ...(cachedData || {}) };
+        const existingList: RevenueRecord[] = Array.isArray(currentLocalData.revenue)
+          ? (currentLocalData.revenue as RevenueRecord[])
+          : [];
+        const idx = existingList.findIndex(r => r.date === dateKey);
+
+        let recordId: string;
+        let newList: RevenueRecord[];
+        if (idx > -1) {
+          const cur = existingList[idx];
+          recordId = cur.id;
+          newList = [...existingList];
+          newList[idx] = {
+            ...cur,
+            totalGrossRevenue: (cur.totalGrossRevenue || 0) + delta.totalGrossRevenue,
+            discount: (cur.discount || 0) + delta.discount,
+            revenueOther: (cur.revenueOther || 0) + delta.revenueOther,
+            returnsValue: (cur.returnsValue || 0) + delta.returnsValue,
+            netRevenue: (cur.netRevenue || 0) + delta.netRevenue,
+            totalCogs: (cur.totalCogs || 0) + delta.totalCogs,
+            grossProfit: (cur.grossProfit || 0) + delta.grossProfit,
+          };
+        } else {
+          recordId = crypto.randomUUID();
+          newList = [...existingList, { id: recordId, date: dateKey, ...delta }];
+        }
+
+        markLocalWrite(recordId); // bỏ qua echo realtime cho record vừa ghi local
+        dispatch({ type: 'SET_DATA', payload: { revenue: newList } });
+        await saveDataSnapshot({ ...currentLocalData, revenue: newList } as Partial<AppData>);
+
+        try {
+          await apiService.applyRevenueDelta(recordId, dateKey, delta);
+          dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
+          dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
+        } catch (err: unknown) {
+          if (isRetryableSyncError(err)) {
+            await enqueueOp({
+              opType: 'revenueDelta',
+              dataKey: 'revenue',
+              payload: { id: recordId, dateKey, delta },
+            });
+            dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
+          } else {
+            // Lỗi không retry-được → hoàn local optimistic rồi ném để caller rollback các bước trước
+            dispatch({ type: 'SET_DATA', payload: { revenue: existingList } });
+            await saveDataSnapshot({ ...currentLocalData, revenue: existingList } as Partial<AppData>);
+            throw err;
+          }
+        }
+      } finally {
+        dispatch({ type: 'SET_SYNCING', payload: false });
+      }
+    },
+    [state.data, enqueueOp]
+  );
+
   const pushBatch = useCallback(
     async <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => {
       dispatch({ type: 'SET_SYNCING', payload: true });
@@ -1181,6 +1249,7 @@ export function useAppData() {
     silentSync,
     updateData,
     updateSurgical,
+    applyRevenueDelta,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,

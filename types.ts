@@ -235,6 +235,10 @@ export interface RevenueRecord {
   grossProfit: number; // Lợi nhuận gộp
 }
 
+// [DATA-02] Phần đóng góp của 1 đơn vào doanh thu ngày — cộng dồn atomic phía DB.
+// Mỗi trường là số ĐỒNG (có thể âm với trả hàng). Không chứa id/date (truyền riêng).
+export type RevenueDelta = Omit<RevenueRecord, 'id' | 'date'>;
+
 export interface ProductGroup {
   id: string;
   name: string;

@@ -6,7 +6,7 @@ import {
   POSOrder,
   POSOrderItem,
   POSProduct,
-  RevenueRecord,
+  RevenueDelta,
   AppDataSurgicalUpdate,
 } from '../types';
 import { auditService } from './auditService';
@@ -16,6 +16,8 @@ import { buildPosSalesRecordUpsertsForDate } from '../src/lib/posSalesAttributio
 type PosOrderCallbacks = {
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  // [DATA-02] Cộng dồn doanh thu ngày theo delta atomic (chống race nhiều máy cùng ngày)
+  applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
 };
 
 type PlaceOrderArgs = PosOrderCallbacks & {
@@ -148,38 +150,14 @@ function computeGrossProfit(netRevenue: number, revenueOther: number, cogs: numb
   return netRevenue + revenueOther - cogs;
 }
 
-function buildRevenueUpdate(
-  existingRevenue: RevenueRecord | undefined,
-  order: POSOrder,
-  orderCogs: number
-): RevenueRecord {
-  const revenueDate = toLocalDateKey(order.date);
+// [DATA-02] Phần đóng góp của 1 đơn BÁN vào doanh thu ngày (delta cộng dồn atomic).
+// netRevenue = totalAmount - discount; revenueOther = finalAmount - netRevenue (phụ phí ship/dịch vụ).
+function buildRevenueDelta(order: POSOrder, orderCogs: number): RevenueDelta {
   const orderTotalAmount = Number(order.totalAmount) || 0;
   const orderDiscount = Number(order.discount) || 0;
-  // [FIX B1] Tách otherFees vào revenueOther — tránh netRevenue > totalGrossRevenue
-  // netRevenue = doanh thu hàng hóa (totalAmount - discount)
-  // revenueOther = phụ phí khác (ship, dịch vụ...) = finalAmount - netRevenue
   const orderNetRevenue = Math.max(0, orderTotalAmount - orderDiscount);
   const orderOtherFees = Math.max(0, (Number(order.finalAmount) || 0) - orderNetRevenue);
-
-  if (existingRevenue) {
-    const updatedNetRevenue = (existingRevenue.netRevenue || 0) + orderNetRevenue;
-    const updatedRevenueOther = (existingRevenue.revenueOther || 0) + orderOtherFees;
-    const updatedTotalCogs = (existingRevenue.totalCogs || 0) + orderCogs;
-    return {
-      ...existingRevenue,
-      totalGrossRevenue: (existingRevenue.totalGrossRevenue || 0) + orderTotalAmount,
-      discount: (existingRevenue.discount || 0) + orderDiscount,
-      revenueOther: updatedRevenueOther,
-      netRevenue: updatedNetRevenue,
-      totalCogs: updatedTotalCogs,
-      grossProfit: computeGrossProfit(updatedNetRevenue, updatedRevenueOther, updatedTotalCogs),
-    };
-  }
-
   return {
-    id: crypto.randomUUID(),
-    date: revenueDate,
     totalGrossRevenue: orderTotalAmount,
     discount: orderDiscount,
     revenueOther: orderOtherFees,
@@ -187,6 +165,42 @@ function buildRevenueUpdate(
     netRevenue: orderNetRevenue,
     totalCogs: orderCogs,
     grossProfit: computeGrossProfit(orderNetRevenue, orderOtherFees, orderCogs),
+  };
+}
+
+// [DATA-02] Delta cho đơn TRẢ/ĐỔI: trả làm giảm doanh thu thuần & giá vốn, đổi làm tăng;
+// returnFee ghi vào revenueOther; returnsValue cộng giá trị hàng trả.
+function buildReturnRevenueDelta(
+  returnOrder: POSOrder,
+  totalReturnValue: number,
+  totalExchangeValue: number,
+  returnCogs: number,
+  exchangeCogs: number
+): RevenueDelta {
+  const orderReturnFee = Number(returnOrder.returnFee) || 0;
+  const netDelta = -totalReturnValue + totalExchangeValue;
+  const cogsDelta = -returnCogs + exchangeCogs;
+  return {
+    totalGrossRevenue: 0,
+    discount: 0,
+    revenueOther: orderReturnFee,
+    returnsValue: totalReturnValue,
+    netRevenue: netDelta,
+    totalCogs: cogsDelta,
+    grossProfit: computeGrossProfit(netDelta, orderReturnFee, cogsDelta),
+  };
+}
+
+// Đảo dấu delta để rollback (cộng dồn ngược lại đúng giá trị đã ghi).
+function negateRevenueDelta(d: RevenueDelta): RevenueDelta {
+  return {
+    totalGrossRevenue: -d.totalGrossRevenue,
+    discount: -d.discount,
+    revenueOther: -d.revenueOther,
+    returnsValue: -d.returnsValue,
+    netRevenue: -d.netRevenue,
+    totalCogs: -d.totalCogs,
+    grossProfit: -d.grossProfit,
   };
 }
 
@@ -222,6 +236,7 @@ export async function processPlaceOrder({
   allowSellOutOfStock = false,
   pushBatch,
   updateSurgical,
+  applyRevenueDelta,
 }: PlaceOrderArgs): Promise<void> {
   const currentProducts = data.posProducts || [];
   // Build Maps một lần — tránh O(items × products) khi nhiều items
@@ -243,8 +258,7 @@ export async function processPlaceOrder({
 
   const orderCogs = calculateOrderCogs(currentMap, order.items);
   const orderDate = toLocalDateKey(order.date);
-  const existingRevenue = (data.revenue || []).find(r => r.date === orderDate);
-  const revenueRecord = buildRevenueUpdate(existingRevenue, order, orderCogs);
+  const revenueDelta = buildRevenueDelta(order, orderCogs);
   const inventoryTransaction = buildSaleTransaction(
     order,
     currentMap,
@@ -308,20 +322,12 @@ export async function processPlaceOrder({
       });
     }
 
-    // Bước 4: Cập nhật revenue
-    if (existingRevenue) {
-      await updateSurgical([{ key: 'revenue', item: revenueRecord }]);
-      rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Hoàn revenue:', existingRevenue.id);
-        await updateSurgical([{ key: 'revenue', item: existingRevenue }]);
-      });
-    } else {
-      await pushBatch('revenue', [revenueRecord]);
-      rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Xóa revenue mới (ngày đầu tiên):', revenueRecord.id);
-        await updateSurgical([{ key: 'revenue', item: { id: revenueRecord.id }, isDelete: true }]);
-      });
-    }
+    // Bước 4: Cộng dồn doanh thu ATOMIC theo delta (DATA-02 — hết race nhiều máy cùng ngày)
+    await applyRevenueDelta(orderDate, revenueDelta);
+    rollbackSteps.push(async () => {
+      console.error('[ROLLBACK] Hoàn doanh thu (delta đảo dấu) ngày', orderDate);
+      await applyRevenueDelta(orderDate, negateRevenueDelta(revenueDelta));
+    });
 
   } catch (error) {
     console.error('[ERROR] Lỗi khi xử lý đơn hàng, đang rollback...', error);
@@ -376,6 +382,7 @@ export async function processReturnOrder({
   updatedCustomer,
   pushBatch,
   updateSurgical,
+  applyRevenueDelta,
 }: ReturnOrderArgs): Promise<void> {
   const currentProducts = data.posProducts || [];
   // Build Maps một lần — tránh O(items × products) khi nhiều items
@@ -399,51 +406,25 @@ export async function processReturnOrder({
 
   const totalReturnValue = returnedItems.reduce((sum, item) => sum + item.total, 0);
   const totalExchangeValue = exchangeItems.reduce((sum, item) => sum + item.total, 0);
-  // returnFee (phí trả hàng shop thu) ghi vào revenueOther để phản ánh đúng doanh thu thực
-  const orderReturnFee = Number(returnOrder.returnFee) || 0;
 
   // AUDIT-006: thiết kế có chủ đích — trả hàng ghi vào ngày trả, không điều chỉnh ngày bán gốc.
   const returnDate = toLocalDateKey(returnOrder.date);
+  const returnRevenueDelta = buildReturnRevenueDelta(
+    returnOrder,
+    totalReturnValue,
+    totalExchangeValue,
+    returnCogs,
+    exchangeCogs
+  );
 
   const rollbackSteps: Array<() => Promise<void>> = [];
 
   try {
-    // Bước 1: Ghi revenue vào ngày trả
-    const existingRevenue = (data.revenue || []).find(r => r.date === returnDate);
-    if (existingRevenue) {
-      const updatedNetRevenue = Math.max(0, existingRevenue.netRevenue - totalReturnValue + totalExchangeValue);
-      const updatedTotalCogs = existingRevenue.totalCogs - returnCogs + exchangeCogs;
-      const revenueUpdate: RevenueRecord = {
-        ...existingRevenue,
-        returnsValue: (existingRevenue.returnsValue || 0) + totalReturnValue,
-        netRevenue: updatedNetRevenue,
-        revenueOther: (existingRevenue.revenueOther || 0) + orderReturnFee,
-        totalCogs: updatedTotalCogs,
-        grossProfit: computeGrossProfit(updatedNetRevenue, (existingRevenue.revenueOther || 0) + orderReturnFee, updatedTotalCogs),
-      };
-      await updateSurgical([{ key: 'revenue', item: revenueUpdate }]);
-      rollbackSteps.push(async () => {
-        await updateSurgical([{ key: 'revenue', item: existingRevenue }]);
-      });
-    } else {
-      const netRevenue = -totalReturnValue + totalExchangeValue;
-      const totalCogs = -returnCogs + exchangeCogs;
-      const newRecord: RevenueRecord = {
-        id: crypto.randomUUID(),
-        date: returnDate,
-        totalGrossRevenue: 0,
-        discount: 0,
-        revenueOther: orderReturnFee,
-        returnsValue: totalReturnValue,
-        netRevenue,
-        totalCogs,
-        grossProfit: computeGrossProfit(netRevenue, orderReturnFee, totalCogs),
-      };
-      await pushBatch('revenue', [newRecord]);
-      rollbackSteps.push(async () => {
-        await updateSurgical([{ key: 'revenue', item: { id: newRecord.id }, isDelete: true }]);
-      });
-    }
+    // Bước 1: Cộng dồn doanh thu ngày trả ATOMIC theo delta (DATA-02)
+    await applyRevenueDelta(returnDate, returnRevenueDelta);
+    rollbackSteps.push(async () => {
+      await applyRevenueDelta(returnDate, negateRevenueDelta(returnRevenueDelta));
+    });
 
     // Bước 2: Lưu đơn trả hàng
     await pushBatch('posOrders', [returnOrder]);

@@ -2303,3 +2303,39 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- ============================================================
+-- [DATA-02 — 2026-06-30] Atomic Revenue Delta (migration 020)
+-- Cộng dồn doanh thu theo DELTA atomic phía DB → hết race "2 máy bán cùng ngày
+-- ghi đè nhau mất doanh thu". ON CONFLICT (date) khớp constraint thật trên prod.
+-- Chi tiết: supabase_migrations/020_atomic_revenue_delta.sql
+-- ============================================================
+CREATE OR REPLACE FUNCTION apply_revenue_delta(p_id UUID, p_date_key TEXT, p_delta JSONB)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO revenue_records (
+    id, date, total_gross_revenue, discount, revenue_other,
+    returns_value, net_revenue, total_cogs, gross_profit
+  ) VALUES (
+    COALESCE(p_id, gen_random_uuid()), p_date_key::DATE,
+    COALESCE((p_delta->>'totalGrossRevenue')::NUMERIC, 0),
+    COALESCE((p_delta->>'discount')::NUMERIC, 0),
+    COALESCE((p_delta->>'revenueOther')::NUMERIC, 0),
+    COALESCE((p_delta->>'returnsValue')::NUMERIC, 0),
+    COALESCE((p_delta->>'netRevenue')::NUMERIC, 0),
+    COALESCE((p_delta->>'totalCogs')::NUMERIC, 0),
+    COALESCE((p_delta->>'grossProfit')::NUMERIC, 0)
+  )
+  ON CONFLICT (date) DO UPDATE SET
+    total_gross_revenue = revenue_records.total_gross_revenue + EXCLUDED.total_gross_revenue,
+    discount            = revenue_records.discount            + EXCLUDED.discount,
+    revenue_other       = revenue_records.revenue_other       + EXCLUDED.revenue_other,
+    returns_value       = revenue_records.returns_value       + EXCLUDED.returns_value,
+    net_revenue         = revenue_records.net_revenue         + EXCLUDED.net_revenue,
+    total_cogs          = revenue_records.total_cogs          + EXCLUDED.total_cogs,
+    gross_profit        = revenue_records.gross_profit        + EXCLUDED.gross_profit;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION apply_revenue_delta(UUID, TEXT, JSONB) TO authenticated;
+ALTER FUNCTION apply_revenue_delta(UUID, TEXT, JSONB) SET search_path = public;
