@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 (tối) — Kiểm chứng data-load "máy mới" trên prod + vá RLS recurring_expenses
+
+- **Test thật qua domain public** (mint JWT authenticated từ JWT_SECRET của Supabase self-hosted, gọi curl đúng các query app phát ra): cả **31 bảng bootstrap** trả 200/206, số dòng khớp thực tế (pos_orders 69.736, pos_products 14.873). Không bảng nào bị chặn quyền sau đợt REVOKE anon.
+- **Đo tốc độ thực tế**: 14.873 sản phẩm (15 request song song) = **9,1s**; pos_orders 60 ngày (~810KB) = **0,7s** → load đầu máy mới ~10s, các lần sau có IndexedDB cache.
+- **Cơ chế chịu lỗi đã xác minh trong code**: timeout 45s + message rõ; lỗi từng bảng → `syncErrors` badge trên TopNav (không im lặng) + tắt cờ cloudConnected; máy mới không cache → dùng thẳng server data; rest/v1 KHÔNG đi qua /api rate limiter.
+- **🔴 Vá bug tiềm ẩn tìm thấy**: `recurring_expenses` có RLS bật nhưng **0 policy** → backend ghi thành công (service role) nhưng browser đọc về rỗng — user nhập xong refresh là "mất". Đã CREATE POLICY `recurring_expenses_select_authenticated` trên prod + bổ sung CREATE TABLE + policy vào `supabase_setup.sql` (bảng này trước đây hoàn toàn thiếu trong setup).
+- Đã xóa JWT test sau khi dùng (exp 15 phút).
+- Files: `supabase_setup.sql`, `docs/05-process/HISTORY.md`; prod DB: 1 CREATE POLICY
+
 ### 2026-07-02 (chiều muộn) — Audit logic tính toán + nghiệp vụ, kiểm chứng số liệu thật trên prod DB
 
 - **Đối chiếu code vs FORMULAS.md**: `calcOrderRevenue` (2.1), `calcEffectiveUnitPrice` (1.1), WAC (1.2), fixed cost (1.3) khớp từng phép tính. Phát hiện doc drift mục 8.10: code đã đổi sang CHỈ dùng `is_return` explicit (AUDIT-008) ở cả `dataMapper.ts` + `apiService.ts`, FORMULAS.md chưa cập nhật.

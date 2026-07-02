@@ -2339,3 +2339,27 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION apply_revenue_delta(UUID, TEXT, JSONB) TO authenticated;
 ALTER FUNCTION apply_revenue_delta(UUID, TEXT, JSONB) SET search_path = public;
+
+-- ============================================================
+-- RECURRING EXPENSES (bổ sung 2026-07-02 — bảng đã tồn tại trên prod
+-- nhưng thiếu trong setup + thiếu policy SELECT cho authenticated,
+-- khiến browser đọc về rỗng dù backend ghi thành công)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recurring_expenses (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  frequency TEXT NOT NULL,
+  start_date DATE,
+  end_date DATE,
+  last_generated DATE,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE recurring_expenses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS recurring_expenses_select_authenticated ON recurring_expenses;
+CREATE POLICY recurring_expenses_select_authenticated ON recurring_expenses
+  FOR SELECT TO authenticated USING (true);
+REVOKE ALL ON recurring_expenses FROM anon;
