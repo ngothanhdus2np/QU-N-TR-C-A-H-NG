@@ -26,6 +26,11 @@ rsync -az --delete \
 
 echo "✅ Copy xong"
 
+# Bước 1.6: Chạy migration SQL còn thiếu trên DB prod (sổ theo dõi: bảng schema_migrations)
+# Lỗi migration = DỪNG deploy (set -e) — code mới không lên khi schema hỏng
+echo "🗃  Kiểm tra & chạy migration trên DB prod..."
+"$(cd "$(dirname "$0")" && pwd)/apply-migrations.sh" --prod
+
 # Bước 1.5: Inject build timestamp vào Service Worker để browser phát hiện version mới
 BUILD_TIME=$(date +%Y%m%d%H%M%S)
 echo "🔖 SW version: $BUILD_TIME"
