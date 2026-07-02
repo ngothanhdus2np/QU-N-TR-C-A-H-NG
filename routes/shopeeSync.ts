@@ -1,6 +1,10 @@
 import { Router, RequestHandler } from 'express';
 import axios from 'axios';
 
+// Host chạy bot shopee-monitor. Mặc định localhost (bot cùng máy với server);
+// trên iMac prod bot chạy ở MacBook khác → set SHOPEE_BOT_HOST=<ip> trong .env.local.
+const BOT_HOST = process.env.SHOPEE_BOT_HOST || 'localhost';
+
 // Slug của shop trong DB → port của bot PM2 tương ứng
 const SHOP_PORTS_BY_SLUG: Record<string, number> = {
   'giaydepphucsang': 3002,
@@ -26,7 +30,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
     }
 
     const port = portFromSlug(shopSlug);
-    const url  = `http://localhost:${port}/api/product/sync-wait/${itemId}`;
+    const url  = `http://${BOT_HOST}:${port}/api/product/sync-wait/${itemId}`;
 
     try {
       const response = await axios.post(url, { shopeeProductId: shopeeProductId ?? null }, {
@@ -55,7 +59,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
     const port = portFromSlug(shopSlug);
 
     try {
-      const response = await axios.post(`http://localhost:${port}/api/products/fetch`, {}, { timeout: 5_000 });
+      const response = await axios.post(`http://${BOT_HOST}:${port}/api/products/fetch`, {}, { timeout: 5_000 });
       res.json(response.data);
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.code === 'ECONNREFUSED') {
@@ -79,7 +83,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
       return;
     }
     try {
-      const response = await axios.get(`http://localhost:${port}/api/orders`, {
+      const response = await axios.get(`http://${BOT_HOST}:${port}/api/orders`, {
         params: { limit: req.query.limit, offset: req.query.offset },
         timeout: 10_000,
       });
@@ -101,7 +105,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
       return;
     }
     try {
-      const response = await axios.post(`http://localhost:${port}/api/orders/refresh`, {}, { timeout: 10_000 });
+      const response = await axios.post(`http://${BOT_HOST}:${port}/api/orders/refresh`, {}, { timeout: 10_000 });
       res.json(response.data);
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.code === 'ECONNREFUSED') {
@@ -122,7 +126,7 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
     const results = await Promise.all(
       shops.map(async ({ slug, port }) => {
         try {
-          const r = await axios.get(`http://localhost:${port}/api/bot-status`, { timeout: 3000 });
+          const r = await axios.get(`http://${BOT_HOST}:${port}/api/bot-status`, { timeout: 3000 });
           return { slug, ...r.data };
         } catch {
           return { slug, ok: false, sync: { running: false }, descriptions: { running: false, total: 0, filled: 0, failed: 0, current: null } };
