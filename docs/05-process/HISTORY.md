@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 (chiều) — Deploy fix "Đơn hàng online" + SEC-01 + DATA-02 lên iMac prod
+
+- Commit `334d91f` (fix online orders) + `5bb6b48` (SHOPEE_BOT_HOST), deploy 2 lần qua `./scripts/deploy-imac.sh`, health OK.
+- **Phát sinh**: app launchd (gui domain, macOS 15.7) bị **Local Network privacy** chặn outbound tới MacBook (EHOSTUNREACH tới 192.168.88.183:3001) dù curl/node từ ssh shell chạy OK — quyền này không cấp được qua CLI.
+- **Giải pháp**: reverse SSH tunnel MacBook→iMac (`ssh -R 3001/3002:localhost` — loopback miễn trừ Local Network). Persist bằng launchd agent trên MacBook: `~/Library/LaunchAgents/com.phucsang.bot-tunnel.plist` (KeepAlive, log `/tmp/phucsang-bot-tunnel.log`). iMac `.env.local`: `SHOPEE_BOT_HOST=127.0.0.1` + bổ sung `NODE_ENV=production` (đóng điểm giòn TODO 2026-06-30).
+- **Verify trên domain public** (x-api-key): `/api/shopee-orders/1` → 236 đơn, `/api/shopee-orders/2` → 201 đơn, `/api/shopee-bot-status` → ok:true cả 2 bot, `/api/admin/store/orders` → 200 `{"data":[]}`.
+- **Hậu-deploy DATA-02**: chạy `recalculate-revenue-from-orders` cho 2026-06 (net 238.354.000đ, gross 243.845.000đ, returns 4.535.000đ) và 2026-07 (0đ — DB xác nhận chưa có đơn tháng 7).
+- Files: `routes/shopeeSync.ts`, `docs/05-process/TODO.md`; ngoài repo: `~/Library/LaunchAgents/com.phucsang.bot-tunnel.plist` (MacBook), `~/cfobrain/.env.local` (iMac)
+
 ### 2026-07-02 — Fix "Đơn hàng online" không tải được trên app.phucsang.com.vn
 
 - **Root cause 1 — Shopee hardcode localhost**: 3 component (AllOrdersPage, ShippingOrders, POSHeaderToolbar popup) fetch thẳng `http://localhost:3001/3002` → chỉ chạy trên máy có bot. Fix: thêm proxy backend `GET/POST /api/shopee-orders/:shopId[/refresh]` trong `routes/shopeeSync.ts` (requireAuth), frontend đổi sang relative path + `adminStoreRequest` (gắn JWT). WebSocket realtime chỉ bật khi hostname là localhost; truy cập qua domain fallback polling 60s (conn state cập nhật theo kết quả fetch).

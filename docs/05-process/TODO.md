@@ -18,19 +18,19 @@
 > **Lớp 2 — KHÔNG khai thác được** (vì Lớp 1 đóng, request không-JWT bị `requireAuth` chặn 401 trước khi tới `resolveCaller`). Nhưng vẫn nên vá phòng thủ.
 >
 > **Việc CÒN LẠI:**
-> 1. ⚠️ **Điểm giòn**: `NODE_ENV` nằm ở plist, KHÔNG ở `.env.local` → restart bằng `npm run dev` sẽ mở lại bypass. **Thêm `NODE_ENV=production` vào `.env.local` trên iMac.** *(cần làm khi gần iMac)*
+> 1. ~~Thêm `NODE_ENV=production` vào `.env.local` trên iMac~~ ✅ **xong 2026-07-02** (qua ssh, cùng đợt deploy).
 > 2. ~~Vá `auth.ts:21`~~ ✅ **xong 2026-06-30** — đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (defense-in-depth).
 > 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header.
 
 ---
 
-### [x] Vá SEC-01 — Path traversal xóa file tùy ý *(xong 2026-06-30, chờ deploy)*
+### [x] Vá SEC-01 — Path traversal xóa file tùy ý *(xong 2026-06-30, ✅ ĐÃ DEPLOY 2026-07-02)*
 
-> `DELETE /api/upload-product-image` (`server.ts`): thêm `path.resolve(productsRoot, rel)` + `startsWith(productsRoot+sep)` chặn `../` thoát thư mục. Proof: `../`/absolute đều BLOCK, path hợp lệ ALLOW; tsc sạch; route mount 401≠404. **Code chờ deploy lên prod.**
+> `DELETE /api/upload-product-image` (`server.ts`): thêm `path.resolve(productsRoot, rel)` + `startsWith(productsRoot+sep)` chặn `../` thoát thư mục. Proof: `../`/absolute đều BLOCK, path hợp lệ ALLOW; tsc sạch; route mount 401≠404.
 
-### [x] P1 DATA-02 — Atomic revenue increment (diệt race mất doanh thu) *(xong 2026-06-30, migration đã chạy prod, code chờ deploy)*
+### [x] P1 DATA-02 — Atomic revenue increment (diệt race mất doanh thu) *(xong 2026-06-30, ✅ ĐÃ DEPLOY + recalculate T6/T7 2026-07-02)*
 
-> Web POS ghi doanh thu bằng **delta cộng dồn atomic** (RPC `apply_revenue_delta`, migration 020 — ĐÃ chạy prod, constraint `UNIQUE(date)` xác nhận khớp) thay vì read-modify-write ghi đè cả dòng. Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`). 318 test pass. **Code chờ deploy** (`npm run deploy` + chạy `recalculate-revenue-from-orders` 1 lần). DATA-01 (full transaction checkout) hoãn P2 theo quyết định phân pha.
+> Web POS ghi doanh thu bằng **delta cộng dồn atomic** (RPC `apply_revenue_delta`, migration 020 — ĐÃ chạy prod, constraint `UNIQUE(date)` xác nhận khớp) thay vì read-modify-write ghi đè cả dòng. Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`). 318 test pass. Đã chạy `recalculate-revenue-from-orders` cho 2026-06 (net 238.354.000đ) và 2026-07 (0đ — chưa có đơn). DATA-01 (full transaction checkout) hoãn P2 theo quyết định phân pha.
 
 ---
 
@@ -52,9 +52,11 @@
 >
 > **2026-07-02 đã vá phần store module trên prod DB**: migration 017 (shipments cols + `upsert_website_shipment` + `update_website_order_status` 3 tham số), 4 cột `pos_orders` (`shipping_fee`/`note`/`customer_phone`/`customer_email`), `create_store_order` bản canonical. ⚠️ Phát hiện: 3 cột `pos_orders` (note/customer_phone/customer_email) không nằm trong migration nào — cần bổ sung vào `supabase_setup.sql`/migration mới. Migration 014 chứa bản CŨ `update_website_order_status(UUID,TEXT)` — KHÔNG chạy nguyên file, sẽ tạo overload trùng.
 
-### [ ] Deploy fix "Đơn hàng online" lên prod *(code xong + verify 2026-07-02)*
+### [x] Deploy fix "Đơn hàng online" lên prod *(✅ deploy + verify 2026-07-02)*
 
-> Proxy `/api/shopee-orders/:shopId`, rate limit 1000 + miễn trừ bot-status, BotProgressBar poll 15s + JWT, 3 component bỏ hardcode localhost. Schema DB đã vá trực tiếp trên prod (hiệu lực ngay); phần code cần `npm run deploy` (gộp chung với SEC-01 + DATA-02 đang chờ).
+> Proxy `/api/shopee-orders/:shopId`, rate limit 1000 + miễn trừ bot-status, BotProgressBar poll 15s + JWT, 3 component bỏ hardcode localhost. Đã deploy kèm SEC-01 + DATA-02. **Phát sinh khi deploy**: app launchd trên iMac (macOS 15) bị chặn Local Network → không gọi được bot trên MacBook qua LAN IP. Giải pháp: reverse SSH tunnel MacBook→iMac (launchd agent `com.phucsang.bot-tunnel` trên MacBook, KeepAlive) + `SHOPEE_BOT_HOST=127.0.0.1` trong `.env.local` iMac. Verify qua domain public: đơn 2 shop (236+201) + bot-status đều ok.
+>
+> ⚠️ **Điểm giòn cần biết**: (1) Tunnel chạy từ MacBook — MacBook tắt/ngủ = prod mất dữ liệu đơn Shopee (bot vốn cũng chạy trên MacBook nên không tệ hơn hiện trạng). (2) Có thể bỏ tunnel nếu cấp quyền Local Network cho `tsx`/`node` trong System Settings > Privacy trên iMac rồi đổi `SHOPEE_BOT_HOST` về IP MacBook (IP DHCP có thể đổi).
 
 ### [x] Làm cứng auth `services/auth.ts` *(xong 2026-06-27)*
 
