@@ -18,8 +18,8 @@
 > **Lớp 2 — KHÔNG khai thác được** (vì Lớp 1 đóng, request không-JWT bị `requireAuth` chặn 401 trước khi tới `resolveCaller`). Nhưng vẫn nên vá phòng thủ.
 >
 > **Việc CÒN LẠI:**
-> 1. ⚠️ **Điểm giòn**: `NODE_ENV` nằm ở plist, KHÔNG ở `.env.local` → restart bằng `npm run dev` sẽ mở lại bypass. **Thêm `NODE_ENV=production` vào `.env.local` trên iMac.**
-> 2. Vá `auth.ts:21`: đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (defense-in-depth, **CHƯA vá**).
+> 1. ⚠️ **Điểm giòn**: `NODE_ENV` nằm ở plist, KHÔNG ở `.env.local` → restart bằng `npm run dev` sẽ mở lại bypass. **Thêm `NODE_ENV=production` vào `.env.local` trên iMac.** *(cần làm khi gần iMac)*
+> 2. ~~Vá `auth.ts:21`~~ ✅ **xong 2026-06-30** — đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (defense-in-depth).
 > 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header.
 
 ---
@@ -46,9 +46,15 @@
 
 > Gói toàn bộ checkout vào RPC `pos_mobile_checkout` (1 transaction DB): insert đơn + trừ tồn inline atomic + cộng dồn revenue atomic + KH/nợ + audit. Verify trên prod (rollback test). Xem HISTORY.md.
 
-### [ ] Đồng bộ schema production với migrations *(phát hiện khi làm #2 — 2026-06-27)*
+### [~] Đồng bộ schema production với migrations *(phát hiện khi làm #2 — 2026-06-27; vá thêm 1 phần 2026-07-02)*
 
 > Production self-hosted (iMac, container `supabase-db`) **chưa chạy** một số migration: RPC `*_v2` (013) và cột `branch_id`/constraint `(date,branch_id)` của `revenue_records`. Hệ thống vẫn chạy nhờ fallback legacy, nhưng `supabase_setup.sql`/migrations đang **lệch** với DB thật. Nên rà soát & chạy bù các migration còn thiếu (hoặc cập nhật setup cho khớp) để tránh bẫy cho lần sau.
+>
+> **2026-07-02 đã vá phần store module trên prod DB**: migration 017 (shipments cols + `upsert_website_shipment` + `update_website_order_status` 3 tham số), 4 cột `pos_orders` (`shipping_fee`/`note`/`customer_phone`/`customer_email`), `create_store_order` bản canonical. ⚠️ Phát hiện: 3 cột `pos_orders` (note/customer_phone/customer_email) không nằm trong migration nào — cần bổ sung vào `supabase_setup.sql`/migration mới. Migration 014 chứa bản CŨ `update_website_order_status(UUID,TEXT)` — KHÔNG chạy nguyên file, sẽ tạo overload trùng.
+
+### [ ] Deploy fix "Đơn hàng online" lên prod *(code xong + verify 2026-07-02)*
+
+> Proxy `/api/shopee-orders/:shopId`, rate limit 1000 + miễn trừ bot-status, BotProgressBar poll 15s + JWT, 3 component bỏ hardcode localhost. Schema DB đã vá trực tiếp trên prod (hiệu lực ngay); phần code cần `npm run deploy` (gộp chung với SEC-01 + DATA-02 đang chờ).
 
 ### [x] Làm cứng auth `services/auth.ts` *(xong 2026-06-27)*
 

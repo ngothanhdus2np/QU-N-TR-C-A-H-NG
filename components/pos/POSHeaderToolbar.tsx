@@ -999,10 +999,28 @@ interface WebsiteOrderRaw {
   items: { productName: string; sku: string }[];
 }
 
+// Đi qua proxy backend (routes/shopeeSync.ts) — bot monitor chỉ nghe localhost
+// trên server, gọi thẳng localhost:3001/3002 chỉ chạy được trên chính máy đó.
 const ONLINE_SHOPS = [
-  { id: 1, api: 'http://localhost:3001/api/orders', label: 'Giày Dép Da Phúc Sang',      badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
-  { id: 2, api: 'http://localhost:3002/api/orders', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
+  { id: 1, api: '/api/shopee-orders/1', label: 'Giày Dép Da Phúc Sang',      badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
+  { id: 2, api: '/api/shopee-orders/2', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
 ];
+
+interface ShopeeOrderRawPop {
+  order_sn?: string;
+  status?: string;
+  first_delivered_at?: string | null;
+  buyer_name?: string;
+  buyer_phone?: string;
+  product_name?: string;
+  product_sku?: string;
+  variation?: string;
+  buyer_paid?: number;
+  province?: string;
+  shipping_carrier?: string;
+  create_time_unix?: number;
+  order_date?: string;
+}
 
 const SHOPEE_STATUS_MAP_POP: Record<string, OnlineDisplayStatus> = {
   UNPAID: 'other', PROCESSED: 'other',
@@ -1089,8 +1107,9 @@ const OnlineOrdersMiniPopup = ({ onClose }: { onClose: () => void }) => {
       try {
         let offset = 0;
         while (true) {
-          const res = await fetch(`${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`);
-          const json = await res.json();
+          const json = await adminStoreRequest<{ ok: boolean; data?: ShopeeOrderRawPop[]; total?: number }>(
+            `${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`
+          );
           if (!json.ok || !Array.isArray(json.data) || json.data.length === 0) break;
           for (const o of json.data) {
             const hasExact = !!(o.create_time_unix && o.create_time_unix > 0);

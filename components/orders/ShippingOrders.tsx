@@ -13,13 +13,18 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 
+// HTTP đi qua proxy backend (routes/shopeeSync.ts) — bot monitor chỉ nghe
+// localhost trên server nên gọi thẳng chỉ chạy được trên chính máy đó.
+// WebSocket không có proxy: chỉ kết nối trực tiếp khi mở app trên máy chạy bot
+// (localhost); truy cập qua domain sẽ dùng polling định kỳ thay thế.
 const SHOPS = [
   {
     id: 1,
     label: 'Giày Dép Da Phúc Sang',
-    api: 'http://localhost:3001/api/orders',
-    refreshApi: 'http://localhost:3001/api/orders/refresh',
+    api: '/api/shopee-orders/1',
+    refreshApi: '/api/shopee-orders/1/refresh',
     ws: 'ws://localhost:3001/ws',
     badgeClass: 'bg-indigo-50 text-indigo-700',
     dotClass: 'bg-indigo-400',
@@ -28,8 +33,8 @@ const SHOPS = [
   {
     id: 2,
     label: 'Phúc Sang_Đồ Da Cao Cấp 93',
-    api: 'http://localhost:3002/api/orders',
-    refreshApi: 'http://localhost:3002/api/orders/refresh',
+    api: '/api/shopee-orders/2',
+    refreshApi: '/api/shopee-orders/2/refresh',
     ws: 'ws://localhost:3002/ws',
     badgeClass: 'bg-violet-50 text-violet-700',
     dotClass: 'bg-violet-400',
@@ -37,7 +42,12 @@ const SHOPS = [
   },
 ];
 
+const WS_DIRECT =
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
 const RECONNECT_MS = 5000;
+const POLL_MS = 60_000;
 const NUM_SHOPS = SHOPS.length;
 
 interface ShopeeOrder {
@@ -199,9 +209,14 @@ export default function ShippingOrders({ navigationSlot }: Props) {
       while (true) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`, { signal: controller.signal });
-        clearTimeout(timeout);
-        const json = await res.json();
+        let json: { ok: boolean; data?: Omit<ShopeeOrder, 'shopIdx'>[]; total?: number };
+        try {
+          json = await adminStoreRequest(`${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`, {
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
         if (!json.ok || !Array.isArray(json.data) || json.data.length === 0) break;
         allData.push(...json.data);
         // Nếu trang trả về ít hơn PAGE_SIZE hoặc đã lấy đủ total → dừng
@@ -220,8 +235,23 @@ export default function ShippingOrders({ navigationSlot }: Props) {
           return next;
         });
       }
+      // Chế độ polling (không có WS): fetch thành công = server + bot đang sống
+      if (!WS_DIRECT) {
+        setConnStates(prev => {
+          const next = [...prev];
+          next[shopIdx] = 'connected';
+          return next;
+        });
+      }
     } catch {
       // monitor chưa chạy hoặc timeout
+      if (!WS_DIRECT) {
+        setConnStates(prev => {
+          const next = [...prev];
+          next[shopIdx] = 'disconnected';
+          return next;
+        });
+      }
     } finally {
       setLoadings(prev => {
         const next = [...prev];
@@ -373,9 +403,16 @@ export default function ShippingOrders({ navigationSlot }: Props) {
   useEffect(() => {
     for (let i = 0; i < NUM_SHOPS; i++) {
       fetchOrders(i);
-      connect(i);
+      if (WS_DIRECT) connect(i);
     }
+    // Không có WS trực tiếp (truy cập qua domain) → polling định kỳ thay realtime
+    const pollId = WS_DIRECT
+      ? null
+      : setInterval(() => {
+          for (let i = 0; i < NUM_SHOPS; i++) fetchOrders(i);
+        }, POLL_MS);
     return () => {
+      if (pollId) clearInterval(pollId);
       for (let i = 0; i < NUM_SHOPS; i++) {
         const ws = wsRefs.current[i];
         if (ws) {
@@ -570,7 +607,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                       onClick={async () => {
                         // Trigger bot quét đơn ngay, sau 3 giây fetch lại
                         try {
-                          await fetch(shop.refreshApi, { method: 'POST' });
+                          await adminStoreRequest(shop.refreshApi, { method: 'POST' });
                         } catch {
                           // bot chưa chạy → chỉ fetchOrders thông thường
                         }

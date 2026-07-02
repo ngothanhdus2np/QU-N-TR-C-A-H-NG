@@ -16,10 +16,27 @@ import { adminStoreRequest } from '../../services/adminStoreApi';
 
 // ─── Shopee ───────────────────────────────────────────────────────────────────
 
+// Đi qua proxy backend (routes/shopeeSync.ts) — bot monitor chỉ nghe localhost
+// trên server, gọi thẳng localhost:3001/3002 chỉ chạy được trên chính máy đó.
 const SHOPS = [
-  { id: 1, api: 'http://localhost:3001/api/orders', label: 'Giày Dép Da Phúc Sang',      badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
-  { id: 2, api: 'http://localhost:3002/api/orders', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
+  { id: 1, api: '/api/shopee-orders/1', label: 'Giày Dép Da Phúc Sang',      badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
+  { id: 2, api: '/api/shopee-orders/2', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
 ];
+
+interface ShopeeOrderRaw {
+  order_sn?: string;
+  status?: string;
+  created_at?: string;
+  first_delivered_at?: string | null;
+  buyer_name?: string;
+  buyer_phone?: string;
+  product_name?: string;
+  product_sku?: string;
+  variation?: string;
+  buyer_paid?: number;
+  province?: string;
+  shipping_carrier?: string;
+}
 
 const SHOPEE_STATUS_MAP: Record<string, DisplayStatus> = {
   UNPAID: 'other', PROCESSED: 'other',
@@ -135,8 +152,9 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
       try {
         let offset = 0;
         while (true) {
-          const res = await fetch(`${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`);
-          const json = await res.json();
+          const json = await adminStoreRequest<{ ok: boolean; data?: ShopeeOrderRaw[]; total?: number }>(
+            `${shop.api}?limit=${PAGE_SIZE}&offset=${offset}`
+          );
           if (!json.ok || !Array.isArray(json.data) || json.data.length === 0) break;
           for (const o of json.data) {
             const ts = snToTimestamp(o.order_sn ?? '', o.created_at ?? '');

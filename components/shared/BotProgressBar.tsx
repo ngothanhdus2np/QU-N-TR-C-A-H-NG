@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 
 interface BotDescProgress {
     running: boolean;
@@ -39,13 +40,11 @@ export function BotProgressBar() {
         async function poll() {
             if (cancelled) return;
             try {
-                const r = await fetch('/api/shopee-bot-status');
-                if (r.ok) {
-                    const data = await r.json();
-                    if (!cancelled) setBots(data.bots ?? []);
-                }
+                // adminStoreRequest gắn JWT — fetch trần bị 401 trên prod (requireAuth)
+                const data = await adminStoreRequest<{ bots?: BotStatus[] }>('/api/shopee-bot-status');
+                if (!cancelled) setBots(data.bots ?? []);
             } catch {}
-            if (!cancelled) timerId = setTimeout(poll, 3000);
+            if (!cancelled) timerId = setTimeout(poll, 15000);
         }
 
         poll();

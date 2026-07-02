@@ -420,11 +420,14 @@ async function startServer() {
     // Security: Rate limiting (production only — dev mode has no real limit)
     const apiLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
-      max: IS_PROD ? 300 : 0,
+      // 300 quá thấp: app data-heavy, riêng polling bot-status đã ~90 req/15ph.
+      max: IS_PROD ? 1000 : 0,
       message: 'Too many requests from this IP, please try again later.',
       standardHeaders: true,
       legacyHeaders: false,
-      skip: () => !IS_PROD,
+      // Endpoint polling nhẹ (chỉ đọc status in-memory) — miễn trừ khỏi limiter
+      // để không ăn hết quota của các request dữ liệu thật.
+      skip: (req) => !IS_PROD || req.originalUrl.startsWith('/api/shopee-bot-status'),
     });
 
     const authLimiter = rateLimit({

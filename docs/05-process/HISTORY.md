@@ -3,6 +3,23 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 — Fix "Đơn hàng online" không tải được trên app.phucsang.com.vn
+
+- **Root cause 1 — Shopee hardcode localhost**: 3 component (AllOrdersPage, ShippingOrders, POSHeaderToolbar popup) fetch thẳng `http://localhost:3001/3002` → chỉ chạy trên máy có bot. Fix: thêm proxy backend `GET/POST /api/shopee-orders/:shopId[/refresh]` trong `routes/shopeeSync.ts` (requireAuth), frontend đổi sang relative path + `adminStoreRequest` (gắn JWT). WebSocket realtime chỉ bật khi hostname là localhost; truy cập qua domain fallback polling 60s (conn state cập nhật theo kết quả fetch).
+- **Root cause 2 — Rate limit prod tự ăn hết quota**: limiter 300 req/15ph/IP trong khi BotProgressBar poll 3s (~300 req/15ph) → mọi API sau đó 429. Fix: nâng max 300→1000, miễn trừ `/api/shopee-bot-status` khỏi limiter, giãn poll 3s→15s, BotProgressBar dùng `adminStoreRequest` (fetch trần bị 401 trên prod).
+- **Root cause 3 — Schema prod lệch migrations**: `/api/admin/store/orders` 500 vì `shipments` thiếu `shipping_fee`/`cod_amount`/`updated_at`, `pos_orders` thiếu `shipping_fee`/`note`/`customer_phone`/`customer_email`, RPC `upsert_website_shipment` không tồn tại, `update_website_order_status` là bản cũ 2 tham số. Đã chạy trên prod DB: migration 017 đầy đủ + 4 ALTER pos_orders + CREATE OR REPLACE `create_store_order` (bản canonical từ supabase_setup.sql). KHÔNG chạy nguyên file migration 014 vì chứa bản cũ `update_website_order_status(UUID,TEXT)` sẽ tạo overload trùng với bản 3 tham số của 017.
+- Verify: proxy trả 236+201 đơn 2 shop, `/api/admin/store/orders` → `{"data":[]}` 200, popup Đơn hàng online hiện 40 đơn trên browser. tsc sạch, 318/318 test pass.
+- Kill server nohup cũ (chạy từ 23/06, nguồn file `nohup.out`).
+- **Lưu ý**: schema DB đã vá trực tiếp trên prod (hiệu lực ngay); code (proxy + rate limit + frontend) CHỜ DEPLOY mới hết lỗi trên app.phucsang.com.vn.
+- Files: `routes/shopeeSync.ts`, `server.ts`, `components/shared/BotProgressBar.tsx`, `components/online/AllOrdersPage.tsx`, `components/orders/ShippingOrders.tsx`, `components/pos/POSHeaderToolbar.tsx`
+
+### 2026-06-30 — Vá auth bypass Lớp 2 (defense-in-depth)
+
+- Vá `routes/auth.ts:21`: đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` — loại bỏ dev-bypass trong `resolveCaller` (các route phân quyền: đổi role, tạo tài khoản). Lớp 1 (`requireAuth` chặn 401 trước) đã bảo vệ prod; đây là tầng phòng thủ thứ hai.
+- tsc sạch, 318/318 test pass.
+- Còn lại: thêm `NODE_ENV=production` vào `.env.local` trên iMac (cần làm khi gần iMac) + deploy SEC-01/DATA-02.
+- Files: `routes/auth.ts`
+
 ### 2026-06-30 — Audit production-readiness toàn diện + vá SEC-01 + P1 atomic revenue
 - **Audit 15 trục** (AI QA Enterprise v4) với kiểm chứng THẬT trên prod (không chỉ tĩnh). Báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-06-30.md`
 - **SEC-03 (anon đọc/ghi toàn DB): XÁC MINH ĐÓNG**. Query grants + RLS policy trên prod: bảng nặng (orders/payroll/revenue/employees/customers) đã hết grant anon; 4 bảng sót (customer_debt_history, shopee_shops, newsletter_subscribers, store_contacts) có RLS chặn anon → đã REVOKE ALL FROM anon dọn dứt điểm

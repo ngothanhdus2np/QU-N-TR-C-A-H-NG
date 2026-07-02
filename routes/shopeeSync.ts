@@ -66,6 +66,52 @@ export function createShopeeSyncRouter(requireAuth: RequestHandler) {
     }
   });
 
+  // Shop ID (1/2 theo thứ tự trên UI) → port bot monitor
+  const SHOP_PORTS_BY_ID: Record<string, number> = { '1': 3001, '2': 3002 };
+
+  // GET /api/shopee-orders/:shopId — proxy danh sách đơn từ bot monitor
+  // Query: limit, offset (pass-through). Bot chỉ nghe localhost trên server,
+  // frontend từ thiết bị khác phải đi qua proxy này.
+  router.get('/api/shopee-orders/:shopId', requireAuth, async (req, res) => {
+    const port = SHOP_PORTS_BY_ID[String(req.params.shopId)];
+    if (!port) {
+      res.status(400).json({ ok: false, error: 'shopId không hợp lệ (1 hoặc 2)' });
+      return;
+    }
+    try {
+      const response = await axios.get(`http://localhost:${port}/api/orders`, {
+        params: { limit: req.query.limit, offset: req.query.offset },
+        timeout: 10_000,
+      });
+      res.json(response.data);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.code === 'ECONNREFUSED') {
+        res.status(503).json({ ok: false, error: `Bot monitor không chạy (port ${port})` });
+        return;
+      }
+      res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // POST /api/shopee-orders/:shopId/refresh — trigger bot quét đơn ngay
+  router.post('/api/shopee-orders/:shopId/refresh', requireAuth, async (req, res) => {
+    const port = SHOP_PORTS_BY_ID[String(req.params.shopId)];
+    if (!port) {
+      res.status(400).json({ ok: false, error: 'shopId không hợp lệ (1 hoặc 2)' });
+      return;
+    }
+    try {
+      const response = await axios.post(`http://localhost:${port}/api/orders/refresh`, {}, { timeout: 10_000 });
+      res.json(response.data);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.code === 'ECONNREFUSED') {
+        res.status(503).json({ ok: false, error: `Bot monitor không chạy (port ${port})` });
+        return;
+      }
+      res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // GET /api/shopee-bot-status — tổng hợp trạng thái bot từ cả 2 shop
   router.get('/api/shopee-bot-status', requireAuth, async (req, res) => {
     const shops = [

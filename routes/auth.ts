@@ -18,7 +18,7 @@ export function createAuthRouter(supabase: SupabaseClient, requireAuth: RequestH
   const resolveCaller = async (req: Request): Promise<CallerInfo | null> => {
     const authHeader = req.headers.authorization;
     const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!jwt) return { role: 'owner', userId: 'dev-user' }; // dev-bypass trên LAN
+    if (!jwt) return null; // defense-in-depth: requireAuth (Lớp 1) đã chặn LAN-bypass trước
     const { data: { user }, error } = await supabase.auth.getUser(jwt);
     if (error || !user) return null;
     return {
