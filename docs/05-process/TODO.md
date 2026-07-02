@@ -42,6 +42,23 @@
 
 ---
 
+### [x] Migration tự động khi deploy *(xong 2026-07-02 khuya)*
+
+> `apply-migrations.sh` + sổ `schema_migrations` (baseline 20 file trên prod+dev). Deploy tự chạy migration mới trước build, lỗi = dừng deploy. Sync prod→dev tự áp lại migration chưa deploy. **Quy trình mới**: schema mới → viết file `021_xxx.sql` vào `supabase_migrations/` → test dev → deploy. LƯU Ý: task "Đồng bộ schema production với migrations" (bên dưới) về cơ bản được giải bằng baseline — drift lịch sử coi như mốc 0, từ giờ không lệch nữa.
+
+### [x] Tách môi trường dev — Supabase local MacBook + fix proxy dev trỏ prod *(xong 2026-07-02 đêm muộn)*
+
+> Supabase local Docker trên MacBook (`~/supabase-dev/docker`, clone config iMac). Script `scripts/sync-prod-to-dev.sh` đồng bộ dữ liệu prod→dev + backup nén về `~/backups/cfobrain/` (giải một phần DEVOPS-01). Fix 3 hardcode `192.168.1.3:8000` trong `server.ts` → đọc `SUPABASE_URL`. Verify login + load data từ DB local trên browser. Chi tiết HISTORY.md.
+>
+> ⚠️ **server.ts chờ deploy** (hành vi prod không đổi, không gấp — deploy cùng đợt sau).
+> 💡 Nên chạy `sync-prod-to-dev.sh` định kỳ (vd mỗi sáng) để dev có data mới + có backup.
+
+### [x] Fix đăng nhập chập chờn app.phucsang.com.vn — tunnel Supabase phụ thuộc MacBook *(xong 2026-07-02 đêm)*
+
+> `supabase.phucsang.com.vn` (auth + data của mọi browser) từng đi qua tunnel cloudflared trên **MacBook** → MacBook ngủ/tắt = không đăng nhập được. Đã chuyển hostname vào tunnel `cfobrain` trên iMac (ingress → localhost:8000 + DNS CNAME), xóa hẳn tunnel `supabase-tunnel` trên MacBook. Verify login flow qua domain public khi MacBook không còn tunnel. Chi tiết HISTORY.md.
+
+---
+
 ### [~] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện + kiểm chứng 2026-06-30)*
 
 > **Severity: HIGH → đã hạ rủi ro (kiểm chứng thật trên prod)**. Xem `docs/06-evaluation/PRODUCTION_AUDIT_2026-06-30.md`.

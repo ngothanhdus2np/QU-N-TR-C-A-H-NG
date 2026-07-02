@@ -3,6 +3,35 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 (khuya) — Migration tự động khi deploy (schema đi cùng code)
+
+- **Script mới `scripts/apply-migrations.sh`**: chạy các file `supabase_migrations/*.sql` CHƯA có trong sổ `schema_migrations` (bảng mới trên DB, theo dõi theo TÊN FILE — số trùng 005/019 không sao). Mỗi file = 1 transaction (`ON_ERROR_STOP` + `--single-transaction`), lỗi = rollback file + exit 1. Hỗ trợ `--prod` (SSH iMac) / `--baseline` (đánh dấu không thực thi).
+- **`deploy-imac.sh`**: thêm bước chạy `apply-migrations.sh --prod` SAU rsync, TRƯỚC build — migration lỗi thì deploy dừng, code mới không lên.
+- **`sync-prod-to-dev.sh`**: sau restore tự gọi `apply-migrations.sh` local — vì sync ghi đè DB dev bằng prod (kèm sổ), migration chưa deploy được áp lại tự động.
+- **Baseline 20 file hiện có trên cả prod lẫn dev** (không thực thi lại — prod đã được vá tay tương đương; tránh bẫy 014 tạo overload trùng). Từ giờ chỉ file MỚI tự chạy.
+- **Test trên dev**: migration giả chạy đúng 1 lần, lần 2 bỏ qua; file SQL lỗi → dừng + không ghi sổ. Đã dọn sạch dấu vết test. Fix bug word-split path có dấu cách (dùng glob thay `$(ls)`).
+- **Quy trình mới cho schema**: tính năng cần bảng/cột/RPC mới → viết file `021_xxx.sql` (số kế tiếp) vào `supabase_migrations/` → test dev bằng `./scripts/apply-migrations.sh` → bấm deploy là prod tự có.
+- Files: `scripts/apply-migrations.sh` (mới), `scripts/deploy-imac.sh`, `scripts/sync-prod-to-dev.sh`, `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`; DB prod+dev: bảng `schema_migrations` (20 dòng baseline)
+
+### 2026-07-02 (đêm muộn) — Tách môi trường dev: Supabase local trên MacBook, dev không còn đụng DB prod
+
+- **Bối cảnh**: audit "còn gì phụ thuộc MacBook" xác nhận prod đã sạch (chỉ còn điểm giòn `pm2 startup` chưa cài trên iMac — nằm trong task P0). Nhưng phát hiện ngược: dev MacBook trỏ thẳng DB prod → dựng môi trường dev riêng.
+- **Supabase local MacBook**: nhân bản config từ iMac (`~/supabase-dev/docker`, cùng version images + JWT secret/keys → app không cần đổi key), 11 container healthy, port 8000/5432/6543.
+- **Script mới `scripts/sync-prod-to-dev.sh`**: pg_dump prod (iMac, không downtime) → restore vào local + rsync storage + backup nén vào `~/backups/cfobrain/` (giữ 14 bản — kiêm backup ngoài iMac cho DEVOPS-01). Lần chạy đầu: 69.736 pos_orders, 14.873 pos_products, 4 auth users, RPC (`apply_revenue_delta`, `pos_mobile_checkout`) đầy đủ.
+- **🔴 Fix 3 chỗ hardcode `192.168.1.3:8000` trong `server.ts`** (syncLocalSchema:59, proxy SUPABASE_INTERNAL:462, auto-detect:600) → đọc `process.env.SUPABASE_URL` (fallback IP cũ). Trước fix, dev proxy `/auth/v1`+`/rest/v1` LUÔN forward về prod bất kể .env.local. Trên prod iMac `SUPABASE_URL=localhost:8000` nên hành vi không đổi (còn bỏ được vòng LAN IP). **Code chờ deploy** (không gấp — prod không ảnh hưởng).
+- `.env.local` MacBook → `http://localhost:8000` (backup `.env.local.bak-prod-20260702`).
+- **Verify end-to-end trên browser dev**: đăng nhập admin bằng mật khẩu test chỉ có ở DB local → thành công (role Quản lý), vào /overview 38/38 REST request OK từ DB local; sai mật khẩu hiện đúng "Tên đăng nhập hoặc mật khẩu không đúng".
+- tsc sạch, 318/318 test pass.
+- Files: `server.ts`, `scripts/sync-prod-to-dev.sh` (mới), `.env.local` (ngoài git), `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`; ngoài repo: `~/supabase-dev/docker`, `~/backups/cfobrain/`
+
+### 2026-07-02 (đêm) — Fix đăng nhập chập chờn trên app.phucsang.com.vn (tunnel Supabase phụ thuộc MacBook)
+
+- **Triệu chứng**: login hay báo "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại" ([LoginPage.tsx:55](../../components/LoginPage.tsx)) dù mạng người dùng bình thường.
+- **Root cause**: domain `supabase.phucsang.com.vn` (VITE_SUPABASE_URL nướng trong bundle prod — mọi browser gọi auth + data qua đây) được serve bởi tunnel cloudflared `supabase-tunnel` chạy **trên MacBook** (process rời, không launchd, từ 24/06) → forward LAN về iMac:8000. MacBook ngủ/tắt/rời mạng = toàn bộ login chết. Sót lại từ trước đợt "kiến trúc 1 máy" — đã gỡ tunnel bot nhưng bỏ sót tunnel Supabase.
+- **Fix (chỉ hạ tầng, 0 dòng code, không rebuild)**: (1) thêm ingress `supabase.phucsang.com.vn → http://localhost:8000` vào `~/.cloudflared/config.yml` trên iMac (backup `config.yml.bak-20260702`), validate OK; (2) restart cloudflared iMac (launchctl kickstart); (3) chuyển DNS CNAME sang tunnel `cfobrain` (`cloudflared tunnel route dns --overwrite-dns`); (4) kill + **xóa hẳn** tunnel `supabase-tunnel` trên MacBook.
+- **Verify sau khi MacBook không còn tunnel**: auth health 200, rest 200, login sai mật khẩu trả đúng 400 `invalid_credentials` từ GoTrue qua domain public; app 200, cfobrain 401 (đúng — cần auth). Prod giờ chỉ phụ thuộc iMac đúng như mục tiêu.
+- Files: `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`; ngoài repo: `~/.cloudflared/config.yml` (iMac), xóa tunnel `supabase-tunnel` (Cloudflare + MacBook)
+
 ### 2026-07-02 (tối muộn) — Di chuyển bot Shopee từ MacBook lên iMac (kiến trúc 1 máy)
 
 - **Mục tiêu**: prod chỉ phụ thuộc iMac, MacBook tắt không ảnh hưởng gì.
