@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 (chiều muộn) — Audit logic tính toán + nghiệp vụ, kiểm chứng số liệu thật trên prod DB
+
+- **Đối chiếu code vs FORMULAS.md**: `calcOrderRevenue` (2.1), `calcEffectiveUnitPrice` (1.1), WAC (1.2), fixed cost (1.3) khớp từng phép tính. Phát hiện doc drift mục 8.10: code đã đổi sang CHỈ dùng `is_return` explicit (AUDIT-008) ở cả `dataMapper.ts` + `apiService.ts`, FORMULAS.md chưa cập nhật.
+- **Kiểm chứng chéo trên prod DB** (SQL độc lập vs công thức app): net T6 từ `pos_orders` = 238.354.000đ khớp chính xác; `revenue_records` không trùng ngày; `cash_received` phủ 100% (69.723/69.736 đơn); 0 đơn trùng mã; 0 đơn bán final>total; 0 payroll net âm; ngày sạch ở pos_orders/expense_records.
+- **🔴 Phát hiện + sửa sự cố do chính phiên sáng gây ra**: endpoint `recalculate-revenue-from-orders` ghi tổng CẢ THÁNG vào 1 dòng ngày cuối tháng (mô hình cũ) → lần chạy sáng nay làm T6 đếm đôi (476M thay vì 238M). Đã xóa 2 dòng lỗi (30/06 + 31/07, xác minh created_at 02/07), T6 về 238.009.000đ/25 ngày. Ghi task LOGIC-02 sửa endpoint.
+- **Phát hiện tồn đọng lịch sử**: (1) 3 dòng ngày rác revenue_records (năm 92401/77063/137519, net 109,9M, từ 06/06) → task DATA-04; (2) drift T6 revenue_records vs orders −345K (0,14%) — di chứng race DATA-02 trước khi vá; (3) 534/14.873 SP tồn kho âm (legacy KiotViet); (4) LOGIC-01 (COGS=0) tác động không đáng kể: 3/2.184 dòng T6 ≈ 100K; (5) payroll mới nhất 2026-04 (thiếu T5/T6 — vận hành); (6) `shopee_revenue_records` rỗng hoàn toàn.
+- **Verdict**: logic tính toán lõi ĐÚNG (kiểm chứng chéo dữ liệu thật + 318 test); app đang dùng thực tế được; rủi ro chính là vận hành (backup DEVOPS-01) + dọn dữ liệu lịch sử.
+- Files: `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md` (không sửa code — audit only; sửa dữ liệu: xóa 2 dòng revenue_records lỗi trên prod)
+
 ### 2026-07-02 (chiều) — Deploy fix "Đơn hàng online" + SEC-01 + DATA-02 lên iMac prod
 
 - Commit `334d91f` (fix online orders) + `5bb6b48` (SHOPEE_BOT_HOST), deploy 2 lần qua `./scripts/deploy-imac.sh`, health OK.

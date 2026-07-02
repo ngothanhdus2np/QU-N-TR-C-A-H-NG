@@ -28,9 +28,19 @@
 
 > `DELETE /api/upload-product-image` (`server.ts`): thêm `path.resolve(productsRoot, rel)` + `startsWith(productsRoot+sep)` chặn `../` thoát thư mục. Proof: `../`/absolute đều BLOCK, path hợp lệ ALLOW; tsc sạch; route mount 401≠404.
 
-### [x] P1 DATA-02 — Atomic revenue increment (diệt race mất doanh thu) *(xong 2026-06-30, ✅ ĐÃ DEPLOY + recalculate T6/T7 2026-07-02)*
+### [x] P1 DATA-02 — Atomic revenue increment (diệt race mất doanh thu) *(xong 2026-06-30, ✅ ĐÃ DEPLOY 2026-07-02)*
 
-> Web POS ghi doanh thu bằng **delta cộng dồn atomic** (RPC `apply_revenue_delta`, migration 020 — ĐÃ chạy prod, constraint `UNIQUE(date)` xác nhận khớp) thay vì read-modify-write ghi đè cả dòng. Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`). 318 test pass. Đã chạy `recalculate-revenue-from-orders` cho 2026-06 (net 238.354.000đ) và 2026-07 (0đ — chưa có đơn). DATA-01 (full transaction checkout) hoãn P2 theo quyết định phân pha.
+> Web POS ghi doanh thu bằng **delta cộng dồn atomic** (RPC `apply_revenue_delta`, migration 020 — ĐÃ chạy prod, constraint `UNIQUE(date)` xác nhận khớp) thay vì read-modify-write ghi đè cả dòng. Áp dụng cả bán & trả/đổi. Giữ offline-first (queue opType `revenueDelta`). 318 test pass. DATA-01 (full transaction checkout) hoãn P2 theo quyết định phân pha.
+>
+> ⚠️ **ĐÍNH CHÍNH bước hậu-deploy**: đã chạy `recalculate-revenue-from-orders` cho T6/T7 nhưng audit chiều 02/07 phát hiện **endpoint này có bug** (xem task LOGIC-02 bên dưới) — nó ghi tổng CẢ THÁNG vào 1 dòng ngày cuối tháng, làm T6 bị đếm đôi. **Đã khôi phục sạch** (xóa 2 dòng 30/06 + 31/07 do lần chạy tạo, xác minh bằng created_at). KHÔNG chạy lại endpoint này cho đến khi sửa LOGIC-02.
+
+### [ ] 🔴 LOGIC-02 — Endpoint `recalculate-revenue-from-orders` sai mô hình dữ liệu *(phát hiện audit 2026-07-02)*
+
+> `routes/data.ts:994`: endpoint tính tổng doanh thu CẢ THÁNG rồi upsert vào **1 dòng** `revenue_records` với `date = ngày cuối tháng` — đúng với mô hình cũ (1 dòng/tháng) nhưng **sai với mô hình hiện tại (1 dòng/ngày)**: chạy lên tháng có dòng ngày → cộng trùng gấp đôi doanh thu tháng đó. Cần viết lại: tính và upsert **theo từng ngày** (group by date), dùng cùng công thức `calcOrderRevenue`. Đây cũng là tool duy nhất để dọn drift lịch sử của DATA-02 (T6 đang lệch ~345K so với đơn hàng).
+
+### [ ] 🟠 DATA-04 — 3 dòng ngày rác trong `revenue_records` *(phát hiện audit 2026-07-02)*
+
+> 3 dòng có `date` hỏng: `92401-07-06`, `77063-10-04`, `137519-06-26` (created_at 2026-06-06, từ bug import cũ) — tổng **net 109.933.000đ** đang nằm ngoài mọi báo cáo theo range chuẩn nhưng có thể lọt vào tổng all-time. Cần đối chiếu số liệu gốc để sửa ngày đúng (không đoán tự động được), hoặc user xác nhận xóa.
 
 ---
 
