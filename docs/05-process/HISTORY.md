@@ -3,6 +3,16 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-02 (tối muộn) — Di chuyển bot Shopee từ MacBook lên iMac (kiến trúc 1 máy)
+
+- **Mục tiêu**: prod chỉ phụ thuộc iMac, MacBook tắt không ảnh hưởng gì.
+- Cài PM2 7.0.3 trên iMac (npm prefix `~/.npm-global` vì /usr/local không có quyền ghi); rsync 2.4GB `shopee-monitor` (2 pass: pass 1 khi bot còn chạy, pass 2 delta sau khi dừng bot để profile Chromium nhất quán); `npm install` + Playwright Chromium (1.59.1 khớp MacBook).
+- Đổi `SUPABASE_URL` của bot → `http://localhost:8000` (trước là 192.168.1.3:8000 — giờ cùng máy, tránh cả vấn đề Local Network TCC).
+- Bot chạy OK trên iMac (2 process online, API 3001/3002 trả 200, app prod đọc đơn bình thường qua `SHOPEE_BOT_HOST=127.0.0.1`).
+- **Session Shopee cả 2 shop hết hạn** khi profile sang máy mới (rủi ro đã lường) → cần user đăng nhập lại 1 lần bằng `login.js` trực tiếp trên iMac — hướng dẫn từng bước đã ghi vào TODO.md (P0). Đơn cũ vẫn hiển thị; đơn mới chưa cập nhật cho đến khi login.
+- Đã tắt bot MacBook + gỡ launchd tunnel `com.phucsang.bot-tunnel` (không cần nữa); `pm2 save` trên iMac; lệnh `pm2 startup` (cần sudo) nằm trong hướng dẫn TODO.
+- Files: `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`; ngoài repo: `~/shopee-monitor` (iMac), gỡ `~/Library/LaunchAgents/com.phucsang.bot-tunnel.plist` (MacBook)
+
 ### 2026-07-02 (tối) — Kiểm chứng data-load "máy mới" trên prod + vá RLS recurring_expenses
 
 - **Test thật qua domain public** (mint JWT authenticated từ JWT_SECRET của Supabase self-hosted, gọi curl đúng các query app phát ra): cả **31 bảng bootstrap** trả 200/206, số dòng khớp thực tế (pos_orders 69.736, pos_products 14.873). Không bảng nào bị chặn quyền sau đợt REVOKE anon.

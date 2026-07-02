@@ -7,6 +7,39 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [ ] 🔴 Đăng nhập lại Shopee cho bot trên iMac — USER làm trực tiếp trên iMac *(2026-07-02)*
+
+> **Bối cảnh**: Bot Shopee đã chuyển từ MacBook lên iMac (xong 02/07 — phụ thuộc 1 máy duy nhất). Nhưng Shopee phát hiện "thiết bị mới" → **session cả 2 shop hết hạn**. Đơn Shopee CŨ vẫn hiển thị trên app; đơn MỚI sẽ không cập nhật cho đến khi đăng nhập lại. Bot MacBook đã tắt, tunnel đã gỡ — KHÔNG bật lại bot trên MacBook (2 bot chạy song song sẽ đá session nhau).
+>
+> **Các bước làm trên iMac** (mở Terminal, copy từng dòng):
+>
+> ```bash
+> export PATH=~/.npm-global/bin:/usr/local/bin:$PATH
+> pm2 stop all
+> cd ~/shopee-monitor
+> node login.js --shop 1
+> ```
+> → Cửa sổ Chrome mở ra → đăng nhập Shopee Seller Center (quét QR bằng app Shopee trên điện thoại) → khi thấy trang **quản lý đơn hàng** hiện ra → quay lại Terminal **nhấn ENTER** để lưu session.
+>
+> ```bash
+> node login.js --shop 2
+> ```
+> → Lặp lại y như trên cho shop 2 (Phúc Sang_Đồ Da Cao Cấp 93).
+>
+> ```bash
+> pm2 start ecosystem.config.js
+> pm2 logs --lines 30
+> ```
+> → Nhìn log ~2 phút: **KHÔNG còn** dòng `SESSION HẾT HẠN` là thành công (nhấn `Ctrl+C` để thoát log).
+>
+> **Bước cuối — cho bot tự chạy khi iMac khởi động lại** (nhập mật khẩu admin khi hỏi):
+> ```bash
+> sudo env PATH=$PATH:/usr/local/bin /Users/mac/.npm-global/lib/node_modules/pm2/bin/pm2 startup launchd -u mac --hp /Users/mac
+> pm2 save
+> ```
+>
+> Xong thì mở app → Đơn hàng online → bấm "Tải lại" kiểm tra đơn mới. Nếu trục trặc: nhắn Claude verify từ xa.
+
 ---
 
 ### [~] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện + kiểm chứng 2026-06-30)*
