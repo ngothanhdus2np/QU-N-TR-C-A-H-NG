@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R13) — Deploy lên production: migration 021-024 + code POS mới
+
+- Theo yêu cầu user ("deploy"): chạy `scripts/deploy-imac.sh` — đồng bộ code, áp migration còn chờ lên DB prod, build, restart app trên iMac.
+- **Lần 1 dừng ở migration `023_revoke_anon_storefront_tables.sql`**: bảng `store_settings` trên prod thuộc sở hữu role `supabase_admin` (không phải `postgres` — role chạy migration) → `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` bị từ chối quyền owner, lỗi làm rollback cả file (transaction), dừng deploy theo đúng thiết kế `set -e`. Code đã rsync lên iMac nhưng **chưa build/restart** — app cũ vẫn chạy bình thường, không có downtime hay trạng thái nửa vời.
+- **Chẩn đoán**: user xác nhận rõ ràng cho phép SSH đọc DB production (yêu cầu 2 lần do lớp kiểm soát an toàn auto-mode chặn đọc prod không tên đích tường minh) → xác nhận `tableowner = supabase_admin` cho `store_settings`.
+- **Fix**: sửa `supabase_migrations/023_revoke_anon_storefront_tables.sql` — bọc từng bảng trong `BEGIN...EXCEPTION WHEN insufficient_privilege` (tái dùng đúng pattern đã có ở migration `024`), bảng nào thiếu quyền owner thì bỏ qua + `RAISE NOTICE`, không chặn cả migration.
+- **Deploy lại thành công**: `023` áp xong (6/7 bảng khóa, riêng `store_settings` bị bỏ qua an toàn — ghi nhận vào TODO SEC-RLS-01 cần chạy tay dưới `supabase_admin`), `024` áp xong (khóa 33 bảng nội bộ), build 17.48s, restart OK, health check `200 OK` xác nhận riêng (lệnh health-check trong script tự chạy sớm 3s bị `curl: (7) connection refused` do app chưa kịp lên — không phải lỗi thật), log runtime sạch (chỉ có job auto-sync định kỳ + 1 warning MemoryStore đã có từ trước, không liên quan lần deploy này).
+- Files: `supabase_migrations/023_revoke_anon_storefront_tables.sql`, `docs/05-process/TODO.md`; prod: migration 021-024 áp đủ (021/022 áp từ lần deploy trước đó), code POS R6-R12 đã live
+
 ### 2026-07-03 (R12) — Bảng danh sách hóa đơn: bỏ in đậm tiêu đề cột + nội dung dữ liệu
 
 - Theo yêu cầu user: bảng chính ở trang Hóa đơn ([OrderInvoices.tsx](../../components/orders/OrderInvoices.tsx)) đang dùng `font-semibold` cho 10 cột tiêu đề và `font-medium` cho các ô dữ liệu (mã hóa đơn, thời gian, khách hàng, số tiền, dòng tổng cộng) — đổi hết về `font-normal`. **Giữ nguyên** đậm cho badge/chip trạng thái nhỏ (nhãn đỏ "TH" đánh dấu đơn có phiếu trả) vì đó là chỉ báo trực quan, không phải nội dung dữ liệu.

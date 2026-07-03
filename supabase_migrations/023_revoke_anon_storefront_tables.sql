@@ -30,17 +30,24 @@ BEGIN
       SELECT 1 FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name = t
     ) THEN
-      -- 1) Gỡ quyền anon (đóng lỗ dùng anon key công khai)
-      EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
-      -- 2) Bật RLS (defense-in-depth: nếu sau này lỡ cấp lại anon, vẫn bị RLS chặn)
-      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
-      -- 3) Policy cho authenticated (app đăng nhập đọc/ghi bằng JWT = role authenticated);
-      --    service role bypass RLS nên storefront công khai không ảnh hưởng.
-      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_authenticated_all', t);
-      EXECUTE format(
-        'CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)',
-        t || '_authenticated_all', t
-      );
+      -- Bọc exception theo từng bảng: 1 bảng do role khác sở hữu (vd store_settings
+      -- có thể được Supabase Studio tạo dưới supabase_admin thay vì postgres) không
+      -- được chặn cả migration — bỏ qua bảng đó + log NOTICE để xử lý tay riêng.
+      BEGIN
+        -- 1) Gỡ quyền anon (đóng lỗ dùng anon key công khai)
+        EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
+        -- 2) Bật RLS (defense-in-depth: nếu sau này lỡ cấp lại anon, vẫn bị RLS chặn)
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+        -- 3) Policy cho authenticated (app đăng nhập đọc/ghi bằng JWT = role authenticated);
+        --    service role bypass RLS nên storefront công khai không ảnh hưởng.
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_authenticated_all', t);
+        EXECUTE format(
+          'CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)',
+          t || '_authenticated_all', t
+        );
+      EXCEPTION WHEN insufficient_privilege THEN
+        RAISE NOTICE '[023] Bỏ qua bảng % (thiếu quyền owner, cần chạy tay dưới role đủ quyền): %', t, SQLERRM;
+      END;
     END IF;
   END LOOP;
 END $$;

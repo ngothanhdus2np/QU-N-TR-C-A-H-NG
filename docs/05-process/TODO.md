@@ -40,7 +40,16 @@
 > 2. Nếu repo share (GitHub/nhiều máy) → scrub history (`git filter-repo`/BFG) + force-push. Nếu repo chỉ ở máy cá nhân → rủi ro thấp hơn nhưng vẫn nên rotate.
 > 3. Gỡ nốt ref khỏi `.kiro/*.md`.
 
-### [~] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(fix + test xong trên clone 2026-07-03, ⏳ CHỜ DEPLOY + 3 bước tay trên prod — audit R3 bổ sung 2 mảnh còn hở)*
+### [~] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(fix + test xong trên clone 2026-07-03, ✅ ĐÃ DEPLOY LÊN PROD 2026-07-03 — còn 3 bước tay dưới role supabase_admin)*
+
+> **✅ DEPLOY 2026-07-03**: migration `023`+`024` đã áp thành công lên prod qua `deploy-imac.sh` (021/022 áp từ trước). `024` khóa **33 bảng nội bộ** (drop policy anon/public → `FOR ALL TO authenticated`, REVOKE anon, gỡ default-privileges grantor `postgres`). App build + restart thành công, health check `200 OK`, log sạch (không lỗi runtime mới).
+>
+> **🟡 Phát hiện khi deploy**: bảng `store_settings` do role **`supabase_admin`** sở hữu (không phải `postgres` — role chạy migration) → `023` không khóa được bảng này (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY` bị từ chối quyền owner). Đã sửa `023` bọc exception theo từng bảng (giống pattern `024`) để không chặn cả migration — 6/7 bảng khác trong `023` đã khóa thành công, riêng `store_settings` **vẫn đang hở anon** (REVOKE/RLS/policy chưa áp). Cần chạy tay dưới `supabase_admin` (Supabase Studio → SQL Editor, hoặc SSH+psql với role đó):
+> ```sql
+> REVOKE ALL ON public.store_settings FROM anon;
+> ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
+> CREATE POLICY store_settings_authenticated_all ON public.store_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+> ```
 
 > **AUDIT R3 (2026-07-03) — TỰ KIỂM CHỨNG 024 CHẶN THẬT trên clone** (bắn anon key: `pos_products/pos_orders/sales_records/suppliers` → `42501` cả đọc lẫn ghi; HR/tài chính → `[]`; catalog `store_products` → 200). **NHƯNG phát hiện 3 mảnh gốc rễ CHƯA đóng — bổ sung vào "CÒN LẠI" bên dưới**:
 > - 🟡-B: `pg_default_acl` grantor **`supabase_admin` vẫn còn `anon=arwdDxt`** cho bảng tương lai (024 chỉ gỡ được grantor `postgres`). Bảng mới tạo qua Studio (dưới supabase_admin) sẽ TỰ mở anon full CRUD → MAINT-01 chưa đóng hẳn.
@@ -53,9 +62,10 @@
 > **✅ ĐÃ SỬA** bằng migration `024_lock_down_anon_rls.sql`: DROP policy anon/public trên **33 bảng nội bộ** → thay bằng `FOR ALL TO authenticated` + `REVOKE ALL FROM anon` + gỡ default-privileges anon. Giữ ngoại lệ `store_products`/`store_product_variants` (public-read `is_published` cho catalog website). **Kiểm chứng trên clone**: anon giờ `42501 permission denied` (đọc+ghi đều chặn); user đăng nhập thật (authenticated) VẪN full quyền — bán 1 đơn qua UI OK (tồn 49→48, sales_records ghi, console sạch); catalog công khai vẫn đọc được. LoginPage không đọc bảng nào pre-auth nên không vỡ trang login.
 >
 > **⏳ CÒN LẠI**:
-> 1. **Deploy**: migration 024 tự áp lên prod ở lần deploy kế (`apply-migrations.sh --prod`). Sau deploy, verify: `curl 'https://supabase.phucsang.com.vn/rest/v1/pos_orders?select=id&limit=1' -H 'apikey: <ANON>' -H 'Authorization: Bearer <ANON>'` → phải trả `42501`/`[]`.
+> 1. ~~Deploy migration 024 lên prod~~ ✅ xong 2026-07-03. **Chưa verify bằng curl anon key thật** trên `https://supabase.phucsang.com.vn` (chỉ mới verify trên clone trước đó) — nên chạy `curl 'https://supabase.phucsang.com.vn/rest/v1/pos_orders?select=id&limit=1' -H 'apikey: <ANON>' -H 'Authorization: Bearer <ANON>'` → phải trả `42501`/`[]` để xác nhận chắc chắn.
 > 1b. **(R3) Khoá `schema_migrations`** (dưới role bất kỳ đủ quyền): `ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY; REVOKE ALL ON schema_migrations FROM anon;`
 > 1c. **(R3) Đóng default-priv `supabase_admin`** (dưới `supabase_admin`/superuser — migration `postgres` KHÔNG đủ quyền): `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;` — đây là mảnh còn thiếu để 024 thật sự đóng gốc rễ MAINT-01.
+> 1d. **(phát hiện khi deploy 2026-07-03) Bảng `store_settings`** do `supabase_admin` sở hữu, `023` bỏ qua an toàn (không khóa được) — vẫn hở anon. Chạy tay 3 lệnh dưới `supabase_admin` (xem chi tiết ngay phía trên).
 > 2. **1 bước TAY trên prod** (chạy DƯỚI role `supabase_admin` hoặc superuser — migration chạy bằng `postgres` KHÔNG đủ quyền nên đã skip): `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;` — để bảng MỚI do supabase tạo không tự cấp anon. Rủi ro tồn dư THẤP vì migration bảng mới đã theo mẫu tạo RLS+policy authenticated (023/024).
 
 ### [x] 🔴 POS-SALES-01 — Ghi doanh số NV lỗi mọi đơn → hiện lỗi giả "mất đồng bộ", nguy cơ đơn trùng *(fix xong 2026-07-02 khuya, ✅ VÁ + XÁC NHẬN LIVE 2026-07-03, ⏳ CHỜ DEPLOY)*
