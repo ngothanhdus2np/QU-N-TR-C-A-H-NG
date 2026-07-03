@@ -28,7 +28,7 @@
 
 ### Option A: Backup qua Supabase Dashboard (Khuyến nghị)
 
-1. Mở: https://supabase.com/dashboard/project/tqouzxlnihfjdyxqlbqs
+1. Mở: https://supabase.com/dashboard/project/[PROJECT-REF-DA-GO-DO-RO-RI-XEM-SEC-SECRET-01]
 2. Vào: **Settings** (góc trái dưới) → **Database**
 3. Scroll xuống section **Backups**
 4. Click: **Create Backup**
@@ -41,7 +41,7 @@
 # Lấy connection string từ Supabase Dashboard
 # Settings → Database → Connection string → URI
 
-pg_dump "postgresql://postgres:[YOUR-PASSWORD]@db.tqouzxlnihfjdyxqlbqs.supabase.co:5432/postgres" \
+pg_dump "postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF-DA-GO-DO-RO-RI-XEM-SEC-SECRET-01].supabase.co:5432/postgres" \
   > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Verify backup file
@@ -54,7 +54,7 @@ ls -lh backup_*.sql
 
 ### 2.1. Open Supabase SQL Editor
 
-1. Mở: https://supabase.com/dashboard/project/tqouzxlnihfjdyxqlbqs
+1. Mở: https://supabase.com/dashboard/project/[PROJECT-REF-DA-GO-DO-RO-RI-XEM-SEC-SECRET-01]
 2. Click: **SQL Editor** (menu bên trái)
 3. Click: **New Query**
 

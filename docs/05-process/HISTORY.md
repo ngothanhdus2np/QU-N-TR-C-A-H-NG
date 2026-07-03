@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R17) — Điều tra SEC-SECRET-01: xác nhận rò rỉ đã lên GitHub 6 branch + dọn HEAD
+
+- Theo yêu cầu user xử lý SEC-SECRET-01: điều tra sâu hơn audit R3 trước đó.
+- **Xác nhận git history**: decode trực tiếp JWT tìm được — service_role key thật cho project `tqouzxlnihfjdyxqlbqs`, exp năm 2036, bypass toàn bộ RLS. Không chỉ nằm local — `git merge-base --is-ancestor 66ecc7a origin/main` xác nhận **đã push lên GitHub**, và kiểm tra thêm cả 5 branch remote khác (`claude/*`) đều chứa commit rò rỉ này. Không xác định được public/private repo (thiếu `gh` CLI trong môi trường agent).
+- **Đã dọn an toàn**: gỡ ref `tqouzxlnihfjdyxqlbqs` khỏi 2 file `.kiro/DEPLOY_NOW.md`/`.kiro/QUICK_START.md` (thay bằng placeholder rõ ràng) — HEAD hiện không còn tham chiếu nào tới project cũ.
+- **KHÔNG tự thực hiện** 2 việc còn lại: (1) kiểm tra/rotate key trên Supabase dashboard — agent không có quyền truy cập tài khoản Supabase của user; (2) scrub git history + force-push 6 branch — thao tác lớn khó đảo ngược, ảnh hưởng toàn bộ repo GitHub, tách riêng xin xác nhận thay vì gộp vào "xử lý luôn" chung chung. Ghi rõ cả 2 vào TODO.md kèm hướng dẫn cụ thể, nhấn mạnh rotate key mới là bước có tác dụng thật (vô hiệu hoá key bất kể history còn hay sạch).
+- Files: `.kiro/DEPLOY_NOW.md`, `.kiro/QUICK_START.md`, `docs/05-process/TODO.md`
+
 ### 2026-07-03 (R16) — SEC-RLS-01 hoàn tất toàn bộ: verify default-privileges supabase_admin trên prod
 
 - User tự chạy 2 lệnh `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin ... REVOKE ALL ... FROM anon` (tables + sequences) trên Supabase Studio.

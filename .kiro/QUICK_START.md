@@ -10,7 +10,7 @@
 ### 1️⃣ BACKUP DATABASE (5 phút)
 
 ```
-1. Mở: https://supabase.com/dashboard/project/tqouzxlnihfjdyxqlbqs
+1. Mở: https://supabase.com/dashboard/project/[PROJECT-REF-DA-GO-DO-RO-RI-XEM-SEC-SECRET-01]
 2. Settings → Database → Backups
 3. Click "Create Backup"
 4. Đợi hoàn thành
