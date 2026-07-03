@@ -1,28 +1,26 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import { AppDataSurgicalUpdate, Employee, POSCustomer, POSOrder, POSProduct, RevenueRecord } from '../../types';
+import { AppDataSurgicalUpdate, Employee, POSCustomer, POSOrder } from '../../types';
 import OrderInvoices from '../orders/OrderInvoices';
 
 interface ProcessOrdersModalProps {
   orders: POSOrder[];
   customers: POSCustomer[];
-  products: POSProduct[];
-  revenue: RevenueRecord[];
   employees?: Employee[];
   storeName?: string;
   onClose: () => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  onReturnInPOS?: (order: POSOrder) => void;
 }
 
 export default function ProcessOrdersModal({
   orders,
   customers,
-  products,
-  revenue,
   employees,
   storeName,
   onClose,
   onUpdateSurgical,
+  onReturnInPOS,
 }: ProcessOrdersModalProps) {
   return (
     <div className="fixed inset-0 bg-black/40 z-modal flex items-center justify-center p-6">
@@ -43,11 +41,10 @@ export default function ProcessOrdersModal({
           <OrderInvoices
             orders={orders}
             customers={customers}
-            products={products}
-            revenue={revenue}
             employees={employees}
             storeName={storeName ?? ''}
             onUpdateSurgical={onUpdateSurgical}
+            onReturnInPOS={onReturnInPOS}
           />
         </div>
       </div>

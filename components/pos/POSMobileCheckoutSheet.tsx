@@ -24,6 +24,7 @@ interface POSMobileCheckoutSheetProps {
   onClearCustomer: () => void;
   onConfirm: () => void;
   isCheckoutLocked: boolean;
+  isEditMode?: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
@@ -54,6 +55,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
   onClearCustomer,
   onConfirm,
   isCheckoutLocked,
+  isEditMode = false,
 }) => {
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
 
@@ -81,7 +83,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
-          <h2 className="font-semibold text-slate-800 text-lg">Thanh toán</h2>
+          <h2 className="font-semibold text-slate-800 text-lg">{isEditMode ? 'Lưu thay đổi' : 'Thanh toán'}</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-xl hover:bg-slate-100 active:bg-slate-200"
@@ -270,7 +272,7 @@ const POSMobileCheckoutSheet: React.FC<POSMobileCheckoutSheetProps> = ({
             disabled={isCheckoutLocked || cart.length === 0}
             className="w-full py-4 bg-indigo-600 text-white font-semibold text-base rounded-2xl disabled:opacity-50 active:bg-indigo-700 transition-colors"
           >
-            {isCheckoutLocked ? 'Đang xử lý...' : `Xác nhận · ${fmt(netPayable)}`}
+            {isCheckoutLocked ? 'Đang xử lý...' : `${isEditMode ? 'Lưu' : 'Xác nhận'} · ${fmt(netPayable)}`}
           </button>
         </div>
       </div>

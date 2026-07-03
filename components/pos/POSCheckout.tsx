@@ -364,6 +364,7 @@ interface POSCheckoutProps {
   onBillDiscountClick: (rect: DOMRect) => void;
   onCheckout: () => void;
   isCheckoutLocked?: boolean;
+  isEditMode?: boolean;
 }
 
 const POSCheckout: React.FC<POSCheckoutProps> = ({
@@ -407,6 +408,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
   onBillDiscountClick,
   onCheckout,
   isCheckoutLocked = false,
+  isEditMode = false,
 }) => {
   const [showPaymentMore, setShowPaymentMore] = React.useState(false);
   const [showStaffDropdown, setShowStaffDropdown] = React.useState(false);
@@ -1072,7 +1074,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-indigo-400 group-hover:scale-110 transition-transform" />
             <span className="text-lg tracking-widest uppercase">
-              {isCheckoutLocked ? 'ĐANG XỬ LÝ' : 'THANH TOÁN (F9)'}
+              {isCheckoutLocked ? 'ĐANG XỬ LÝ' : isEditMode ? 'LƯU (F9)' : 'THANH TOÁN (F9)'}
             </span>
           </div>
           {shouldShowPoints && (

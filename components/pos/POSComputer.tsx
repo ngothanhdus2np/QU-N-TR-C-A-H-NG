@@ -37,6 +37,7 @@ import { AppThemeId } from '../../constants/themes';
 import { InvoiceTab } from './types';
 import { usePOSKeyboard } from './usePOSKeyboard';
 import { usePOSReturnFlow } from './usePOSReturnFlow';
+import { useEditOrderFlow } from './useEditOrderFlow';
 import { usePOSTabs } from './usePOSTabs';
 import { usePOSState } from '../../hooks/usePOSState';
 import POSMobileView from './POSMobileView';
@@ -91,6 +92,7 @@ interface POSComputerProps {
   customers: POSCustomer[];
   employees?: Employee[];
   orders: POSOrder[];
+  customerDebtHistory?: CustomerDebtRecord[];
   onPlaceOrder: (
     order: POSOrder,
     updatedProducts: POSProduct[],
@@ -104,6 +106,18 @@ interface POSComputerProps {
     exchangeItems: POSOrderItem[],
     updatedCustomer?: POSCustomer
   ) => Promise<void>;
+  onEditOrder?: (
+    originalOrder: POSOrder,
+    updatedOrder: POSOrder,
+    updatedCustomer?: POSCustomer,
+    debtRecord?: CustomerDebtRecord
+  ) => Promise<void>;
+  // Đơn cần mở lại để sửa (từ trang Hóa đơn) — set 1 lần rồi cha xóa qua onOrderEditLoaded
+  orderToEdit?: POSOrder | null;
+  onOrderEditLoaded?: () => void;
+  // Đơn cần mở phiếu trả (từ trang Hóa đơn) — set 1 lần rồi cha xóa qua onOrderReturnLoaded
+  orderToReturn?: POSOrder | null;
+  onOrderReturnLoaded?: () => void;
   onAddCustomer: (customer: POSCustomer) => void;
   onGoToManagement?: () => void;
   requireManagerAuth?: boolean;
@@ -132,8 +146,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
   customers,
   employees = [],
   orders,
+  customerDebtHistory = [],
   onPlaceOrder,
   onReturnOrder,
+  onEditOrder,
+  orderToEdit,
+  onOrderEditLoaded,
+  orderToReturn,
+  onOrderReturnLoaded,
   onAddCustomer,
   onGoToManagement,
   requireManagerAuth,
@@ -704,6 +724,39 @@ const POSComputer: React.FC<POSComputerProps> = ({
     customers, // [FIX M4] auto-fill customer khi load đơn trả
   });
 
+  const { handleSelectOrderToEdit } = useEditOrderFlow({
+    tabs,
+    setTabs,
+    setActiveTabId,
+    customers,
+    customerDebtHistory,
+  });
+
+  // Mở đơn để sửa khi nhận orderToEdit từ trang Hóa đơn (điều hướng qua tab BÁN HÀNG) —
+  // chỉ chạy đúng 1 lần cho mỗi order. Cần ref chặn trùng vì React.StrictMode (index.tsx) tự
+  // gọi effect 2 lần liên tiếp ở dev mode — không có ref sẽ tạo 2 tab giống hệt nhau.
+  const loadedEditOrderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (orderToEdit && loadedEditOrderIdRef.current !== orderToEdit.id) {
+      loadedEditOrderIdRef.current = orderToEdit.id;
+      handleSelectOrderToEdit(orderToEdit);
+      onOrderEditLoaded?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderToEdit]);
+
+  // Mở tab "Trả hàng N" khi nhận orderToReturn từ trang Hóa đơn (điều hướng qua tab BÁN HÀNG) —
+  // cùng pattern + cùng lý do cần ref chặn trùng như orderToEdit ở trên (React.StrictMode).
+  const loadedReturnOrderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (orderToReturn && loadedReturnOrderIdRef.current !== orderToReturn.id) {
+      loadedReturnOrderIdRef.current = orderToReturn.id;
+      handleSelectOrderReturn(orderToReturn);
+      onOrderReturnLoaded?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderToReturn]);
+
   // Dynamic Cash Suggestions based on Vietnamese Currency
   const cashSuggestions = useMemo(() => {
     if (netPayable <= 0) return [0, 0, 0, 0, 0, 0];
@@ -812,9 +865,21 @@ const POSComputer: React.FC<POSComputerProps> = ({
     }
     localStorage.setItem(LOCK_KEY, String(Date.now()));
 
+    // Chế độ sửa đơn (mở lại từ trang Hóa đơn) — giữ nguyên id/orderCode/date của đơn gốc
+    // thay vì tạo đơn mới, để không nhân đôi lịch sử hóa đơn.
+    const originalOrderForEdit = activeTab.editingOrderId
+      ? orders.find(o => o.id === activeTab.editingOrderId)
+      : undefined;
+    if (activeTab.editingOrderId && !originalOrderForEdit) {
+      showStockWarning('Không tìm thấy đơn gốc để sửa — có thể đơn đã bị xóa. Vui lòng tải lại dữ liệu.');
+      return;
+    }
+
     setIsCheckoutLocked(true);
-    const orderId = generateId();
-    const orderCode = `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+    const orderId = originalOrderForEdit?.id ?? generateId();
+    const orderCode =
+      originalOrderForEdit?.orderCode ??
+      `${mode === 'return' ? 'TH' : 'HD'}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
     const cartWithSalesperson = withDefaultSalesperson(cart, mode === 'return' ? 'exchange' : 'sale');
 
     if (mode === 'return') {
@@ -895,7 +960,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
     const newOrder: POSOrder = {
       id: orderId,
       orderCode,
-      date: new Date().toISOString(),
+      // Sửa đơn: giữ nguyên ngày bán gốc — không cho đổi ngày khi sửa
+      date: originalOrderForEdit?.date ?? new Date().toISOString(),
       customerId: selectedCustomer?.id,
       customerName: selectedCustomer?.name,
       items: cartWithSalesperson,
@@ -925,6 +991,8 @@ const POSComputer: React.FC<POSComputerProps> = ({
     };
 
     const cartItemMap = new Map(cartWithSalesperson.map(item => [item.productId, item]));
+    // updatedProducts CHỈ dùng cho luồng bán mới (onPlaceOrder) — luồng sửa đơn (editPosOrder)
+    // tự tính lại tồn kho ròng (hoàn đơn cũ + trừ đơn mới) bên trong service, không cần truyền vào.
     const updatedProducts = products.map(p => {
       const cartItem = cartItemMap.get(p.id);
       if (cartItem) {
@@ -937,31 +1005,68 @@ const POSComputer: React.FC<POSComputerProps> = ({
     let debtRecord: CustomerDebtRecord | undefined;
 
     if (selectedCustomer) {
-      const debtAdded = isDebtMode ? netPayable : 0;
-      const newTotalSpent = selectedCustomer.totalSpent + netPayable;
-      updatedCustomer = {
-        ...selectedCustomer,
-        points: selectedCustomer.points + pointsEarned,
-        totalSpent: newTotalSpent,
-        tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
-        lastVisit: new Date().toISOString(),
-        debtAmount: (selectedCustomer.debtAmount ?? 0) + debtAdded,
-      };
-      if (debtAdded > 0) {
-        debtRecord = {
-          id: generateId(),
-          customerId: selectedCustomer.id,
-          date: new Date().toISOString(),
-          orderId: orderId,
-          type: 'debt',
-          amount: debtAdded,
-          note: `Đơn hàng ${orderCode}`,
+      if (originalOrderForEdit) {
+        // Sửa đơn: chỉ áp dụng CHÊNH LỆCH so với đơn gốc — đơn gốc đã cộng vào totalSpent/điểm/nợ
+        // từ lúc tạo, không được cộng lại toàn bộ netPayable mới (sẽ tính trùng phần cũ).
+        const oldDebtRecord = customerDebtHistory.find(
+          d => d.orderId === originalOrderForEdit.id && d.type === 'debt'
+        );
+        const oldDebtAmount = oldDebtRecord?.amount || 0;
+        const newDebtAmount = isDebtMode ? netPayable : 0;
+        const totalSpentDelta = netPayable - (originalOrderForEdit.finalAmount || 0);
+        const pointsDelta = pointsEarned - (originalOrderForEdit.pointsEarned || 0);
+        const newTotalSpent = Math.max(0, selectedCustomer.totalSpent + totalSpentDelta);
+        updatedCustomer = {
+          ...selectedCustomer,
+          points: Math.max(0, selectedCustomer.points + pointsDelta),
+          totalSpent: newTotalSpent,
+          tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
+          lastVisit: new Date().toISOString(),
+          debtAmount: Math.max(0, (selectedCustomer.debtAmount ?? 0) + newDebtAmount - oldDebtAmount),
         };
+        if (newDebtAmount > 0) {
+          debtRecord = {
+            id: generateId(),
+            customerId: selectedCustomer.id,
+            date: new Date().toISOString(),
+            orderId,
+            type: 'debt',
+            amount: newDebtAmount,
+            note: `Đơn hàng ${orderCode} (đã sửa)`,
+          };
+        }
+      } else {
+        const debtAdded = isDebtMode ? netPayable : 0;
+        const newTotalSpent = selectedCustomer.totalSpent + netPayable;
+        updatedCustomer = {
+          ...selectedCustomer,
+          points: selectedCustomer.points + pointsEarned,
+          totalSpent: newTotalSpent,
+          tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
+          lastVisit: new Date().toISOString(),
+          debtAmount: (selectedCustomer.debtAmount ?? 0) + debtAdded,
+        };
+        if (debtAdded > 0) {
+          debtRecord = {
+            id: generateId(),
+            customerId: selectedCustomer.id,
+            date: new Date().toISOString(),
+            orderId: orderId,
+            type: 'debt',
+            amount: debtAdded,
+            note: `Đơn hàng ${orderCode}`,
+          };
+        }
       }
     }
 
     try {
-      await onPlaceOrder(newOrder, updatedProducts, updatedCustomer, debtRecord);
+      if (originalOrderForEdit) {
+        if (!onEditOrder) throw new Error('Chức năng sửa đơn chưa sẵn sàng');
+        await onEditOrder(originalOrderForEdit, newOrder, updatedCustomer, debtRecord);
+      } else {
+        await onPlaceOrder(newOrder, updatedProducts, updatedCustomer, debtRecord);
+      }
       // [FIX m1] Giải phóng lock ngay sau khi order confirmed — không chờ modal đóng
       localStorage.removeItem('pos_checkout_lock');
 
@@ -1172,6 +1277,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           onOpenCheckout={() => setShowCheckoutSheet(true)}
           products={products}
           allowSellOutOfStock={allowSellOutOfStock}
+          isEditMode={!!activeTab.editingOrderId}
         />
         <POSMobileCheckoutSheet
           isOpen={showCheckoutSheet}
@@ -1196,6 +1302,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           onClearCustomer={() => updateActiveTab({ selectedCustomer: null })}
           onConfirm={handleCheckout}
           isCheckoutLocked={isCheckoutLocked}
+          isEditMode={!!activeTab.editingOrderId}
         />
         {showReceiptModal && lastOrder && (
           <POSReceiptModal
@@ -1373,6 +1480,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
           }}
           onCheckout={handleCheckout}
           isCheckoutLocked={isCheckoutLocked}
+          isEditMode={!!activeTab.editingOrderId}
         />
       </div>
 
@@ -1440,12 +1548,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
         <ProcessOrdersModal
           orders={orders}
           customers={customers}
-          products={products}
-          revenue={revenue}
           employees={employees}
           storeName={brandProfile?.name}
           onClose={() => setShowProcessOrdersModal(false)}
           onUpdateSurgical={onUpdateSurgical}
+          onReturnInPOS={order => {
+            setShowProcessOrdersModal(false);
+            handleSelectOrderReturn(order);
+          }}
         />
       )}
 

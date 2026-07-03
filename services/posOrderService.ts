@@ -29,6 +29,21 @@ type PlaceOrderArgs = PosOrderCallbacks & {
   allowSellOutOfStock?: boolean;
 };
 
+type DeleteOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+  data: AppData;
+  order: POSOrder;
+};
+
+type EditOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+  data: AppData;
+  originalOrder: POSOrder;
+  // Giữ NGUYÊN id/orderCode/date so với originalOrder — chỉ đổi items/khách/PTTT/giảm giá...
+  updatedOrder: POSOrder;
+  updatedCustomer?: POSCustomer;
+  debtRecord?: CustomerDebtRecord; // nợ MỚI nếu đơn sửa bật bán nợ (nợ CŨ tự xóa)
+  allowSellOutOfStock?: boolean;
+};
+
 type ReturnOrderArgs = PosOrderCallbacks & {
   data: AppData;
   returnOrder: POSOrder;
@@ -201,6 +216,20 @@ function negateRevenueDelta(d: RevenueDelta): RevenueDelta {
     netRevenue: -d.netRevenue,
     totalCogs: -d.totalCogs,
     grossProfit: -d.grossProfit,
+  };
+}
+
+// Gộp 2 delta thành 1 delta ròng (cộng từng field) — dùng khi sửa đơn để chỉ gọi
+// applyRevenueDelta 1 lần thay vì 2 lần (đảo dấu đơn cũ + đơn mới).
+function mergeRevenueDeltas(a: RevenueDelta, b: RevenueDelta): RevenueDelta {
+  return {
+    totalGrossRevenue: a.totalGrossRevenue + b.totalGrossRevenue,
+    discount: a.discount + b.discount,
+    revenueOther: a.revenueOther + b.revenueOther,
+    returnsValue: a.returnsValue + b.returnsValue,
+    netRevenue: a.netRevenue + b.netRevenue,
+    totalCogs: a.totalCogs + b.totalCogs,
+    grossProfit: a.grossProfit + b.grossProfit,
   };
 }
 
@@ -526,4 +555,248 @@ export async function processReturnOrder({
       auditError
     );
   }
+}
+
+// Xóa 1 đơn BÁN (không hỗ trợ đơn trả/đổi — logic đảo ngược khác, xem gọi nơi dùng hàm này):
+// hoàn tồn kho qua RPC delete_inventory_transaction_with_stock_v2 (dựa vào inventory_transactions
+// đã ghi khi bán, referenceId = order.id — chính xác hơn tính lại từ order.items), trừ khỏi
+// revenue_records bằng delta đảo dấu của buildRevenueDelta, xóa lịch sử công nợ liên quan,
+// tính lại sales_records ngày đó, ghi audit log.
+export async function deletePosOrder({
+  data,
+  order,
+  updateSurgical,
+  applyRevenueDelta,
+}: DeleteOrderArgs): Promise<void> {
+  if (order.isReturn) {
+    throw new Error('Chưa hỗ trợ xóa đơn trả/đổi hàng qua chức năng này');
+  }
+
+  const currentProducts = data.posProducts || [];
+  const currentMap = buildProductMap(currentProducts);
+
+  // Bước 1: Hoàn tồn kho — xóa inventory transaction gắn với đơn (RPC tự cộng lại đúng stock
+  // theo dữ liệu ĐÃ LƯU, không suy luận lại từ order.items để tránh lệch nếu có drift).
+  const relatedTransactionIds = (data.inventoryTransactions || [])
+    .filter(t => t.referenceId === order.id)
+    .map(t => t.id);
+
+  if (relatedTransactionIds.length > 0) {
+    const stockUpdates = order.items
+      .map(item => {
+        const product = findProduct(currentMap, item.productId);
+        if (!product) return null;
+        return { key: 'posProducts' as const, item: { ...product, stock: product.stock + item.quantity } };
+      })
+      .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u);
+
+    const inventoryDeletions = relatedTransactionIds.map(id => ({
+      key: 'inventoryTransactions' as const,
+      item: { id } as { id: string },
+      isDelete: true,
+    }));
+
+    // Gộp chung 1 lần gọi → updateSurgical phát hiện có cả inventoryTransactions + posProducts
+    // → kích hoạt RPC atomic (giống processPlaceOrder/processReturnOrder).
+    await updateSurgical([...inventoryDeletions, ...stockUpdates]);
+  } else {
+    console.warn(`[deletePosOrder] Không tìm thấy inventory transaction cho đơn ${order.orderCode} — bỏ qua hoàn tồn kho`);
+  }
+
+  // Bước 2: Xóa lịch sử công nợ liên quan (nếu đơn bán nợ)
+  const relatedDebtRecords = (data.customerDebtHistory || []).filter(d => d.orderId === order.id);
+  for (const debt of relatedDebtRecords) {
+    await updateSurgical([{ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }]);
+  }
+
+  // Bước 3: Xóa order
+  await updateSurgical([{ key: 'posOrders', item: { id: order.id }, isDelete: true }]);
+
+  // Bước 4: Trừ khỏi doanh thu ngày bán (delta đảo dấu của buildRevenueDelta lúc tạo đơn)
+  const orderCogs = calculateOrderCogs(currentMap, order.items);
+  const orderDate = toLocalDateKey(order.date);
+  const revenueDelta = negateRevenueDelta(buildRevenueDelta(order, orderCogs));
+  await applyRevenueDelta(orderDate, revenueDelta);
+
+  // Bước 5: Ghi audit log
+  try {
+    auditService.logOrderCancel(order.id, order.orderCode, 'Xóa đơn hàng', getCurrentStaffId());
+  } catch (auditError) {
+    console.error('[AUDIT] Không ghi được audit log khi xóa đơn:', order.orderCode, auditError);
+  }
+}
+
+// Sửa 1 đơn BÁN đã tồn tại — mở lại trong POS, đổi sản phẩm/số lượng/giá/khách/PTTT..., lưu
+// đè lên đúng order.id cũ (không tạo đơn mới). Coi sửa đơn = hoàn tác đơn CŨ (giống
+// deletePosOrder) + áp dụng đơn MỚI (giống processPlaceOrder), nhưng gộp doanh thu thành 1
+// delta ròng và tính sales_records đúng 1 lần — tránh gọi 2 lần dư thừa vì ngày bán không đổi.
+// Không hỗ trợ đơn trả/đổi hàng (isReturn) — logic đảo ngược khác hẳn, và không xử lý trường
+// hợp đơn đã có phiếu trả hàng liên kết (originalOrderId trỏ tới order này) — sửa sản phẩm/số
+// lượng trong trường hợp đó có thể làm lệch số liệu đã trả, cần xử lý riêng nếu phát sinh.
+export async function editPosOrder({
+  data,
+  originalOrder,
+  updatedOrder,
+  updatedCustomer,
+  debtRecord,
+  allowSellOutOfStock = false,
+  updateSurgical,
+  applyRevenueDelta,
+}: EditOrderArgs): Promise<void> {
+  if (originalOrder.isReturn || updatedOrder.isReturn) {
+    throw new Error('Chưa hỗ trợ sửa đơn trả/đổi hàng qua chức năng này');
+  }
+  if (updatedOrder.id !== originalOrder.id) {
+    throw new Error('editPosOrder yêu cầu updatedOrder giữ nguyên id với originalOrder');
+  }
+
+  const currentProducts = data.posProducts || [];
+  const currentMap = buildProductMap(currentProducts);
+
+  // Tồn kho cuối = tồn hiện tại + số lượng đơn CŨ (hoàn lại) − số lượng đơn MỚI (trừ lại),
+  // gộp theo từng sản phẩm trong 1 bước — tránh sai nếu 1 SP xuất hiện ở cả 2 đơn.
+  const oldQtyByProduct = new Map<string, number>();
+  for (const item of originalOrder.items) {
+    oldQtyByProduct.set(item.productId, (oldQtyByProduct.get(item.productId) || 0) + item.quantity);
+  }
+  const newQtyByProduct = new Map<string, number>();
+  for (const item of updatedOrder.items) {
+    newQtyByProduct.set(item.productId, (newQtyByProduct.get(item.productId) || 0) + item.quantity);
+  }
+  const allProductIds = new Set([...oldQtyByProduct.keys(), ...newQtyByProduct.keys()]);
+
+  if (!allowSellOutOfStock) {
+    for (const productId of allProductIds) {
+      const product = findProduct(currentMap, productId);
+      const net = (oldQtyByProduct.get(productId) || 0) - (newQtyByProduct.get(productId) || 0);
+      if (product && product.stock + net < 0) {
+        throw new Error(`Không đủ tồn kho: ${product.name} (còn ${product.stock}, cần thêm ${-net})`);
+      }
+    }
+  }
+
+  const updatedProductsMap = new Map<string, POSProduct>();
+  for (const productId of allProductIds) {
+    const product = findProduct(currentMap, productId);
+    if (!product) continue;
+    const net = (oldQtyByProduct.get(productId) || 0) - (newQtyByProduct.get(productId) || 0);
+    updatedProductsMap.set(productId, { ...product, stock: product.stock + net });
+  }
+
+  // Bước 1: hoàn tồn kho đơn CŨ (xóa inventory transaction gắn referenceId=originalOrder.id)
+  // + ghi transaction MỚI cho đơn đã sửa — gộp 1 lần gọi, xóa đứng TRƯỚC áp mới trong mảng để
+  // RPC chạy tuần tự đúng thứ tự trên stock LIVE trên server (không phụ thuộc `data` cũ/mới).
+  const oldTransactionIds = (data.inventoryTransactions || [])
+    .filter(t => t.referenceId === originalOrder.id)
+    .map(t => t.id);
+  const newTransaction = buildSaleTransaction(
+    updatedOrder,
+    currentMap,
+    updatedProductsMap,
+    allowSellOutOfStock
+  );
+  const stockUpdates = [...updatedProductsMap.values()].map(item => ({
+    key: 'posProducts' as const,
+    item,
+  }));
+
+  await updateSurgical([
+    ...oldTransactionIds.map(id => ({
+      key: 'inventoryTransactions' as const,
+      item: { id } as { id: string },
+      isDelete: true,
+    })),
+    { key: 'inventoryTransactions' as const, item: newTransaction },
+    ...stockUpdates,
+  ]);
+
+  // Bước 2: Xóa nợ CŨ gắn với đơn (nếu có) — nợ MỚI (nếu có) ghi lại ở bước 4
+  const oldDebtRecords = (data.customerDebtHistory || []).filter(d => d.orderId === originalOrder.id);
+  for (const debt of oldDebtRecords) {
+    await updateSurgical([{ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }]);
+  }
+
+  // Bước 3: Ghi đè order (giữ nguyên id/orderCode/date, đổi items/khách/PTTT/giảm giá...)
+  await updateSurgical([{ key: 'posOrders', item: updatedOrder }]);
+
+  // Bước 4: Ghi nợ MỚI nếu đơn sửa bật bán nợ
+  if (debtRecord) {
+    await updateSurgical([{ key: 'customerDebtHistory', item: debtRecord }]);
+  }
+
+  // Bước 5: Cập nhật khách hàng (điểm/tổng chi tiêu) nếu có
+  if (updatedCustomer) {
+    await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+  }
+
+  // Bước 6: Gộp delta đảo dấu đơn CŨ + delta đơn MỚI thành 1 delta ròng, gọi applyRevenueDelta
+  // ĐÚNG 1 LẦN (ngày bán giữ nguyên khi sửa, không cho đổi ngày).
+  const oldCogs = calculateOrderCogs(currentMap, originalOrder.items);
+  const newCogs = calculateOrderCogs(currentMap, updatedOrder.items);
+  const netRevenueDelta = mergeRevenueDeltas(
+    negateRevenueDelta(buildRevenueDelta(originalOrder, oldCogs)),
+    buildRevenueDelta(updatedOrder, newCogs)
+  );
+  const orderDate = toLocalDateKey(originalOrder.date);
+  await applyRevenueDelta(orderDate, netRevenueDelta);
+
+  // Bước 7: Tính lại sales_records ngày đó (ngày không đổi khi sửa) — dùng snapshot data đã
+  // thay order cũ bằng order mới để tính đúng phân bổ doanh số theo item/salesperson mới.
+  const recalculationOrders = (data.posOrders || []).map(o =>
+    o.id === updatedOrder.id ? updatedOrder : o
+  );
+  await recalcSalesRecordsForDate(
+    { ...data, posOrders: recalculationOrders },
+    orderDate,
+    new Set(),
+    updateSurgical
+  );
+
+  // Bước 8: Ghi audit log
+  try {
+    auditService.logOrderEdit(
+      originalOrder.id,
+      originalOrder.orderCode,
+      { finalAmountBefore: originalOrder.finalAmount, finalAmountAfter: updatedOrder.finalAmount },
+      getCurrentStaffId()
+    );
+  } catch (auditError) {
+    console.error('[AUDIT] Không ghi được audit log khi sửa đơn:', originalOrder.orderCode, auditError);
+  }
+}
+
+// Tính lại sales_records (doanh số NV) cho 1 ngày, loại trừ TOÀN BỘ orderId đã xóa trong batch.
+// Gọi 1 LẦN sau khi xóa xong cả loạt đơn (không gọi trong deletePosOrder từng đơn) — vì `data`
+// truyền vào các lệnh gọi trong 1 batch là snapshot cũ chưa cập nhật giữa các lần xóa, nếu tính
+// lại theo từng đơn sẽ vô tình đếm lại các đơn đã xóa ở bước trước đó trong cùng batch.
+export async function recalcSalesRecordsForDate(
+  data: AppData,
+  dateKey: string,
+  excludedOrderIds: Set<string>,
+  updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>
+): Promise<void> {
+  const remainingOrders = (data.posOrders || []).filter(o => !excludedOrderIds.has(o.id));
+  const salesRecords = buildPosSalesRecordUpsertsForDate(remainingOrders, dateKey, data.employees || []);
+  const newIds = new Set(salesRecords.map(r => r.id));
+
+  // buildPosSalesRecordUpsertsForDate chỉ trả về NV còn > 0đ đóng góp — NV nào về hẳn 0 (không
+  // còn đơn nào trong ngày sau khi xóa) sẽ KHÔNG có trong danh sách trên, cần xóa dòng cũ tay
+  // (nếu không sẽ để lại sales_amount cũ dù đơn gốc đã xóa hết).
+  const stalePrefix = `pos-sales-${dateKey}-`;
+  const staleRecords = (data.sales || []).filter(
+    r => r.id.startsWith(stalePrefix) && !newIds.has(r.id)
+  );
+
+  const updates: AppDataSurgicalUpdate[] = [
+    ...salesRecords.map(record => ({ key: 'sales' as const, item: record })),
+    ...staleRecords.map(record => ({ key: 'sales' as const, item: { id: record.id }, isDelete: true })),
+  ];
+  if (updates.length > 0) {
+    await updateSurgical(updates);
+  }
+}
+
+// Local date key (sv-SE = YYYY-MM-DD) của 1 đơn — dùng để gom nhóm ngày bị ảnh hưởng khi xóa batch.
+export function getOrderLocalDateKey(order: POSOrder): string {
+  return toLocalDateKey(order.date);
 }

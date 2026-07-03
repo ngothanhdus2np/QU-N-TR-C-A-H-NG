@@ -167,6 +167,28 @@ class AuditService {
   }
 
   /**
+   * Ghi log sửa đơn hàng (mở lại trong POS, ghi đè lên đơn cũ cùng id)
+   */
+  logOrderEdit(
+    orderId: string,
+    orderCode: string,
+    changeData: Record<string, unknown>,
+    userId?: string
+  ): void {
+    this.addLog({
+      tableName: 'pos_orders',
+      recordId: orderId,
+      action: 'update',
+      userId,
+      snapshot: {
+        orderCode,
+        ...changeData,
+      },
+      reason: 'Sửa hóa đơn qua POS',
+    });
+  }
+
+  /**
    * Ghi log trả hàng
    */
   logOrderReturn(

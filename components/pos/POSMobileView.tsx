@@ -16,6 +16,7 @@ interface POSMobileViewProps {
   onOpenCheckout: () => void;
   products: POSProduct[];
   allowSellOutOfStock: boolean;
+  isEditMode?: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
@@ -34,6 +35,7 @@ const POSMobileView: React.FC<POSMobileViewProps> = ({
   onOpenCheckout,
   products,
   allowSellOutOfStock,
+  isEditMode = false,
 }) => {
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -177,7 +179,7 @@ const POSMobileView: React.FC<POSMobileViewProps> = ({
           disabled={cart.length === 0}
           className="w-full py-4 bg-indigo-600 text-white font-semibold text-base rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:bg-indigo-700 transition-colors"
         >
-          Thanh toán
+          {isEditMode ? 'Lưu' : 'Thanh toán'}
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>

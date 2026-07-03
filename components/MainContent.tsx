@@ -18,7 +18,14 @@ import {
 import { AppThemeId } from '../constants/themes';
 import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
-import { processPlaceOrder, processReturnOrder } from '../services/posOrderService';
+import {
+  processPlaceOrder,
+  processReturnOrder,
+  deletePosOrder,
+  editPosOrder,
+  recalcSalesRecordsForDate,
+  getOrderLocalDateKey,
+} from '../services/posOrderService';
 import { supabaseAdmin as supabase } from '../services/supabase';
 import { apiService } from '../services/apiService';
 
@@ -141,6 +148,8 @@ const MainContent: React.FC<MainContentProps> = ({
   const location = useLocation();
   const editProductId = new URLSearchParams(location.search).get('edit') ?? undefined;
 
+  const [orderToEdit, setOrderToEdit] = useState<AppData['posOrders'][number] | null>(null);
+  const [orderToReturn, setOrderToReturn] = useState<AppData['posOrders'][number] | null>(null);
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
   const [eodDismissed, setEodDismissed] = useState(false);
   const [onlineShopeeSubTab, setOnlineShopeeSubTab] = useState<RevenueSubTab>('source');
@@ -601,13 +610,51 @@ const MainContent: React.FC<MainContentProps> = ({
           <OrderInvoices
             orders={data.posOrders || []}
             customers={data.posCustomers || []}
-            products={data.posProducts || []}
-            revenue={data.revenue || []}
             employees={data.employees || []}
             storeName={brandProfile.name}
             storeAddress={brandProfile.address}
             storePhone={brandProfile.phone}
             onUpdateSurgical={updateSurgical}
+            onEditInPOS={order => {
+              setOrderToEdit(order);
+              handleSetActiveTab('pos');
+            }}
+            onReturnInPOS={order => {
+              setOrderToReturn(order);
+              handleSetActiveTab('pos');
+            }}
+            onDeleteOrders={async (orderIds: string[]) => {
+              const failures: { orderCode: string; error: string }[] = [];
+              const deletedOrderIds = new Set<string>();
+              const affectedDates = new Set<string>();
+              for (const orderId of orderIds) {
+                const order = (data.posOrders || []).find(o => o.id === orderId);
+                if (!order) {
+                  failures.push({ orderCode: orderId, error: 'Không tìm thấy đơn' });
+                  continue;
+                }
+                try {
+                  await deletePosOrder({ data, order, updateSurgical, applyRevenueDelta });
+                  deletedOrderIds.add(order.id);
+                  affectedDates.add(getOrderLocalDateKey(order));
+                } catch (err) {
+                  failures.push({
+                    orderCode: order.orderCode,
+                    error: err instanceof Error ? err.message : 'Lỗi không xác định',
+                  });
+                }
+              }
+              // Tính lại sales_records 1 lần cho mỗi ngày bị ảnh hưởng, loại trừ TOÀN BỘ đơn
+              // đã xóa trong batch (không chỉ đơn cuối) — tránh đếm lại đơn đã xóa ở bước trước.
+              for (const dateKey of affectedDates) {
+                try {
+                  await recalcSalesRecordsForDate(data, dateKey, deletedOrderIds, updateSurgical);
+                } catch (staffErr) {
+                  console.error('[onDeleteOrders] Cập nhật lại doanh số NV thất bại (non-critical):', dateKey, staffErr);
+                }
+              }
+              return { successCount: deletedOrderIds.size, failures };
+            }}
           />
         );
       case 'order-returns':
@@ -847,6 +894,11 @@ const MainContent: React.FC<MainContentProps> = ({
               customers={data.posCustomers || []}
               employees={data.employees || []}
               orders={data.posOrders || []}
+              customerDebtHistory={data.customerDebtHistory || []}
+              orderToEdit={orderToEdit}
+              onOrderEditLoaded={() => setOrderToEdit(null)}
+              orderToReturn={orderToReturn}
+              onOrderReturnLoaded={() => setOrderToReturn(null)}
               paymentSettings={data.posPaymentSettings}
               inventorySettings={data.posInventorySettings}
               brandProfile={brandProfile}
@@ -884,6 +936,18 @@ const MainContent: React.FC<MainContentProps> = ({
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   updatedCustomer,
                   pushBatch,
+                  updateSurgical,
+                  applyRevenueDelta,
+                })
+              }
+              onEditOrder={(originalOrder, updatedOrder, updatedCustomer, debtRecord) =>
+                editPosOrder({
+                  data,
+                  originalOrder,
+                  updatedOrder,
+                  updatedCustomer,
+                  debtRecord,
+                  allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   updateSurgical,
                   applyRevenueDelta,
                 })

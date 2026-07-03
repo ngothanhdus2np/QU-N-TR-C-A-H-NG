@@ -5,20 +5,19 @@ import {
   Download,
   Eye,
   Copy,
-  Edit3,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   MoreHorizontal,
   Settings,
-  Save,
   RotateCcw,
   Printer,
   Trash2,
   Star,
   Plus,
   Upload,
+  ShoppingCart,
 } from 'lucide-react';
 import { AppData, AppDataSurgicalUpdate, Employee } from '../../types';
 import { apiService } from '../../services/apiService';
@@ -28,13 +27,16 @@ import { openPrintInvoice } from '../pos/printInvoiceFromTemplate';
 interface OrderInvoicesProps {
   orders: AppData['posOrders'];
   customers: AppData['posCustomers'];
-  products: AppData['posProducts'];
-  revenue: AppData['revenue'];
   employees?: Employee[];
   storeName: string;
   storeAddress?: string;
   storePhone?: string;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  onDeleteOrders?: (
+    orderIds: string[]
+  ) => Promise<{ successCount: number; failures: { orderCode: string; error: string }[] }>;
+  onEditInPOS?: (order: AppData['posOrders'][number]) => void;
+  onReturnInPOS?: (order: AppData['posOrders'][number]) => void;
 }
 
 const PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
@@ -65,7 +67,7 @@ function formatOrderDateTime(value: string) {
   });
 }
 
-export default function OrderInvoices({ orders, customers, products, revenue, storeName, storeAddress, storePhone, employees = [], onUpdateSurgical }: OrderInvoicesProps) {
+export default function OrderInvoices({ orders, customers, storeName, storeAddress, storePhone, employees = [], onUpdateSurgical, onDeleteOrders, onEditInPOS, onReturnInPOS }: OrderInvoicesProps) {
   const getStaffName = (staffId?: string) => {
     if (!staffId) return undefined;
     return employees.find(e => e.id === staffId)?.name;
@@ -88,7 +90,6 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<15 | 30 | 50>(15);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isCreatingReturn, setIsCreatingReturn] = useState(false);
   const [pageOrders, setPageOrders] = useState<AppData['posOrders']>([]);
   const [totalOrders, setTotalOrders] = useState(orders.length);
   const [filterSummary, setFilterSummary] = useState({ totalAmount: 0, discount: 0, finalAmount: 0 });
@@ -96,13 +97,6 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<'info' | 'payments'>('info');
-  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
-  const [draftOrder, setDraftOrder] = useState({
-    createdBy: '',
-    channelName: '',
-    priceBookName: '',
-    notes: '',
-  });
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showPaymentColumn, setShowPaymentColumn] = useState(true);
@@ -163,18 +157,21 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const allChecked = paginated.length > 0 && paginated.every(o => selectedIds.has(o.id));
+  // Đơn trả/đổi hàng chưa hỗ trợ xóa đúng chuẩn (xem deletePosOrder) → loại khỏi chọn hàng loạt.
+  const selectablePaginated = paginated.filter(o => !o.isReturn);
+  const allChecked =
+    selectablePaginated.length > 0 && selectablePaginated.every(o => selectedIds.has(o.id));
   const toggleAll = () => {
     if (allChecked) {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        paginated.forEach(o => next.delete(o.id));
+        selectablePaginated.forEach(o => next.delete(o.id));
         return next;
       });
     } else {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        paginated.forEach(o => next.add(o.id));
+        selectablePaginated.forEach(o => next.add(o.id));
         return next;
       });
     }
@@ -186,6 +183,37 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
       else next.add(id);
       return next;
     });
+  };
+
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const handleBulkDelete = async () => {
+    if (!onDeleteOrders || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (
+      !window.confirm(
+        `Xóa ${count} đơn hàng đã chọn?\n\nSẽ tự động hoàn lại tồn kho, trừ khỏi doanh thu ngày bán và tính lại doanh số nhân viên. KHÔNG thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+    setIsBulkDeleting(true);
+    try {
+      const { successCount, failures } = await onDeleteOrders(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      if (failures.length === 0) {
+        alert(`Đã xóa ${successCount} đơn hàng.`);
+      } else {
+        alert(
+          `Đã xóa ${successCount}/${count} đơn.\nLỗi ${failures.length} đơn:\n` +
+            failures.map(f => `- ${f.orderCode}: ${f.error}`).join('\n')
+        );
+      }
+    } catch (err) {
+      console.error('[OrderInvoices] handleBulkDelete failed', err);
+      alert('Xóa đơn hàng thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
   };
 
   const toggleExpanded = (id: string) => {
@@ -375,38 +403,6 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
     exportOrders([order], `hoa-don-${order.orderCode}-${todayStr}.csv`);
   };
 
-  const handleStartEdit = (order: AppData['posOrders'][number]) => {
-    setEditingOrderId(order.id);
-    setDraftOrder({
-      createdBy: order.createdBy || order.staffId || '',
-      channelName: order.channelName || 'Bán trực tiếp',
-      priceBookName: order.priceBookName || 'Bảng giá chung',
-      notes: order.notes || '',
-    });
-  };
-
-  const handleSaveOrder = async (order: AppData['posOrders'][number]) => {
-    if (editingOrderId !== order.id) {
-      alert('Bấm Chỉnh sửa trước khi lưu thay đổi.');
-      return;
-    }
-    const updatedOrder: AppData['posOrders'][number] = {
-      ...order,
-      createdBy: draftOrder.createdBy,
-      staffId: draftOrder.createdBy || order.staffId,
-      channelName: draftOrder.channelName,
-      priceBookName: draftOrder.priceBookName,
-      notes: draftOrder.notes,
-    };
-    try {
-      await persistOrder(updatedOrder);
-      setEditingOrderId(null);
-    } catch (err) {
-      console.error('[OrderInvoices] handleSaveOrder failed', err);
-      alert('Lưu thất bại. Vui lòng thử lại.');
-    }
-  };
-
   const handleCancelInvoice = async (order: AppData['posOrders'][number]) => {
     if (order.status === 'cancelled') {
       alert('Hóa đơn này đã hủy.');
@@ -437,8 +433,8 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
     }
   };
 
-  const handleCreateReturn = async (order: AppData['posOrders'][number]) => {
-    if (isCreatingReturn) return;
+  const handleGoToReturnInPOS = (order: AppData['posOrders'][number]) => {
+    if (!onReturnInPOS) return;
     if (order.isReturn) {
       alert('Đây đã là phiếu trả hàng.');
       return;
@@ -452,126 +448,12 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
       alert(`Hóa đơn ${order.orderCode} đã có phiếu trả hàng. Vui lòng kiểm tra tab trả hàng trước khi tạo thêm.`);
       return;
     }
-    if (!window.confirm(`Tạo phiếu trả hàng từ hóa đơn ${order.orderCode}?`)) return;
-    setIsCreatingReturn(true);
-    const suffix = order.orderCode.replace(/\D/g, '').slice(-6) || Date.now().toString().slice(-6);
-    const returnOrder: AppData['posOrders'][number] = {
-      ...order,
-      id: crypto.randomUUID(),
-      orderCode: `TH${suffix}`,
-      date: new Date().toISOString(),
-      status: 'completed',
-      isReturn: true,
-      notes: `Trả hàng từ hóa đơn ${order.orderCode}${order.notes ? `. ${order.notes}` : ''}`,
-    };
-
-    // Cập nhật tồn kho: cộng lại số lượng từng sản phẩm
-    const stockUpdates: AppDataSurgicalUpdate[] = order.items
-      .map(item => {
-        const product = products.find(p => p.id === item.productId);
-        if (!product) return null;
-        return {
-          key: 'posProducts' as const,
-          item: { ...product, stock: (product.stock || 0) + item.quantity },
-          isDelete: false,
-        };
-      })
-      .filter((u): u is Exclude<typeof u, null> => u !== null);
-
-    // Ghi inventory transaction kiểu Return
-    const inventoryTransaction: AppDataSurgicalUpdate = {
-      key: 'inventoryTransactions',
-      item: {
-        id: crypto.randomUUID(),
-        date: returnOrder.date,
-        type: 'Return' as const,
-        staffId: order.staffId,
-        items: (order.items || []).map(item => {
-          const product = products.find(p => p.id === item.productId);
-          return {
-            productId: item.productId,
-            sku: item.sku,
-            name: item.name,
-            quantity: item.quantity,
-            previousStock: product?.stock || 0,
-            newStock: (product?.stock || 0) + item.quantity,
-          };
-        }),
-        note: `Trả hàng ${returnOrder.orderCode} (từ ${order.orderCode})`,
-        referenceId: returnOrder.id,
-      },
-      isDelete: false,
-    };
-
-    // Cập nhật revenue: trừ doanh thu, trừ COGS (hàng trả về kho)
-    const returnDateKey = new Date(returnOrder.date).toLocaleDateString('en-CA');
-    const existingRevenue = (revenue || []).find(r => r.date === returnDateKey);
-    const returnCogs = (order.items || []).reduce((sum, item) => {
-      const product = products.find(p => p.id === item.productId);
-      return sum + (product?.importPrice || 0) * item.quantity;
-    }, 0);
-    const revenueUpdates: AppDataSurgicalUpdate[] = [];
-    // returnsValue = giá trị hàng thực tế trả (totalAmount)
-    // netRevenue giảm = totalAmount - discount (chuẩn KiotViet, không trừ điểm)
-    const returnTotalValue = order.totalAmount;
-    const orderRevenue = Number(order.totalAmount) - Math.abs(Number(order.discount) || 0);
-    if (existingRevenue) {
-      const updatedNetRevenue = existingRevenue.netRevenue - orderRevenue;
-      const updatedTotalCogs = (existingRevenue.totalCogs || 0) - returnCogs;
-      const updatedRev = {
-        ...existingRevenue,
-        returnsValue: (existingRevenue.returnsValue || 0) + returnTotalValue,
-        netRevenue: updatedNetRevenue,
-        totalCogs: updatedTotalCogs,
-        grossProfit: updatedNetRevenue - updatedTotalCogs,
-      };
-      revenueUpdates.push({ key: 'revenue', item: updatedRev });
-    } else {
-      const netRevenue = -orderRevenue;
-      const totalCogs = -returnCogs;
-      revenueUpdates.push({
-        key: 'revenue',
-        item: {
-          id: crypto.randomUUID(),
-          date: returnDateKey,
-          totalGrossRevenue: 0,
-          discount: 0,
-          revenueOther: 0,
-          returnsValue: returnTotalValue,
-          netRevenue,
-          totalCogs,
-          grossProfit: netRevenue - totalCogs,
-        },
-      });
-    }
-
-    if (!onUpdateSurgical) {
-      alert('Không thể lưu phiếu trả hàng: thiếu kết nối dữ liệu.');
-      return;
-    }
-    try {
-      await onUpdateSurgical([
-        { key: 'posOrders', item: returnOrder, isDelete: false },
-        ...stockUpdates,
-        inventoryTransaction,
-        ...revenueUpdates,
-      ]);
-      setPageOrders(prev => [returnOrder, ...prev]);
-      setTotalOrders(prev => prev + 1);
-      setExpandedOrderId(returnOrder.id);
-      setDetailTab('info');
-    } catch (err) {
-      console.error('[OrderInvoices] handleCreateReturn failed', err);
-      alert('Tạo phiếu trả hàng thất bại. Vui lòng thử lại.');
-    } finally {
-      setIsCreatingReturn(false);
-    }
+    onReturnInPOS(order);
   };
 
   const renderOrderDetail = (order: AppData['posOrders'][number]) => {
     const customer = getOrderCustomer(order);
     const totalQuantity = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-    const isEditing = editingOrderId === order.id;
     return (
       <tr>
         <td colSpan={tableColumnCount} className="bg-white p-0">
@@ -666,24 +548,11 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
               <div className="mt-5 grid grid-cols-3 gap-x-8 gap-y-3 text-sm">
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Người tạo:</span>
-                  {isEditing ? (
-                    <input
-                      value={draftOrder.createdBy}
-                      onChange={event => setDraftOrder(prev => ({ ...prev, createdBy: event.target.value }))}
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
-                    />
-                  ) : (
-                    <span className="font-normal text-slate-700">{order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}</span>
-                  )}
+                  <span className="font-normal text-slate-700">{order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}</span>
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Người bán:</span>
-                  <input
-                    readOnly={!isEditing}
-                    value={isEditing ? draftOrder.createdBy : order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}
-                    onChange={event => setDraftOrder(prev => ({ ...prev, createdBy: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
-                  />
+                  <span className="font-normal text-slate-700">{order.staffName || getStaffName(order.staffId) || order.createdBy || order.staffId || '—'}</span>
                 </div>
                 <div className="grid grid-cols-[80px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Ngày bán:</span>
@@ -693,26 +562,11 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Kênh bán:</span>
-                  <select
-                    disabled={!isEditing}
-                    value={isEditing ? draftOrder.channelName : order.channelName || 'Bán trực tiếp'}
-                    onChange={event => setDraftOrder(prev => ({ ...prev, channelName: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50"
-                  >
-                    <option>Bán trực tiếp</option>
-                    <option>Online</option>
-                    <option>Sàn TMĐT</option>
-                    <option>Khác</option>
-                  </select>
+                  <span className="font-normal text-slate-700">{order.channelName || 'Bán trực tiếp'}</span>
                 </div>
                 <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Bảng giá:</span>
-                  <input
-                    readOnly={!isEditing}
-                    value={isEditing ? draftOrder.priceBookName : order.priceBookName || 'Bảng giá chung'}
-                    onChange={event => setDraftOrder(prev => ({ ...prev, priceBookName: event.target.value }))}
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-400 read-only:bg-slate-50"
-                  />
+                  <span className="font-normal text-slate-700">{order.priceBookName || 'Bảng giá chung'}</span>
                 </div>
                 <div className="grid grid-cols-[80px_1fr] items-center gap-2">
                   <span className="font-normal text-slate-400">Thanh toán:</span>
@@ -755,11 +609,10 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
 
               <div className="mt-5 grid grid-cols-[1fr_280px] gap-6">
                 <textarea
-                  readOnly={!isEditing}
+                  readOnly
                   placeholder="Ghi chú..."
-                  value={isEditing ? draftOrder.notes : order.notes || ''}
-                  onChange={event => setDraftOrder(prev => ({ ...prev, notes: event.target.value }))}
-                  className="min-h-28 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-blue-400 read-only:bg-white"
+                  value={order.notes || ''}
+                  className="min-h-28 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none read-only:bg-white"
                 />
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between">
@@ -808,27 +661,31 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                 </button>
               </div>
               <div className="flex items-center gap-2">
+                {onEditInPOS && !order.isReturn ? (
+                  <button
+                    onClick={() => onEditInPOS(order)}
+                    title="Mở lại đơn này trong máy tính tiền để sửa sản phẩm, số lượng, giá..."
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-bold text-white hover:bg-indigo-700"
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Chỉnh sửa
+                  </button>
+                ) : (
+                  <span
+                    title="Chưa hỗ trợ sửa đơn trả/đổi hàng qua máy tính tiền"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-4 text-sm font-bold text-slate-400 cursor-not-allowed"
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Chỉnh sửa
+                  </span>
+                )}
                 <button
-                  onClick={() => handleStartEdit(order)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-bold text-white hover:bg-indigo-700"
-                >
-                  <Edit3 className="h-4 w-4" />
-                  Chỉnh sửa
-                </button>
-                <button
-                  onClick={() => handleSaveOrder(order)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  <Save className="h-4 w-4" />
-                  Lưu
-                </button>
-                <button
-                  onClick={() => handleCreateReturn(order)}
-                  disabled={isCreatingReturn}
+                  onClick={() => handleGoToReturnInPOS(order)}
+                  title="Mở đơn này trong máy tính tiền để chọn sản phẩm/số lượng cần trả"
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  {isCreatingReturn ? 'Đang xử lý...' : 'Trả hàng'}
+                  Trả hàng
                 </button>
                 <button
                   onClick={() => handlePrintInvoice(order.id)}
@@ -997,6 +854,16 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
               <Download className="w-3.5 h-3.5" />
               {selectedIds.size > 0 ? `Xuất ${selectedIds.size} dòng` : 'Xuất file'}
             </button>
+            {onDeleteOrders && selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isBulkDeleting ? 'Đang xóa...' : `Xóa ${selectedIds.size} đơn`}
+              </button>
+            )}
             <button
               onClick={() => {
                 setShowToolbarMenu(prev => !prev);
@@ -1068,35 +935,35 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                   />
                 </th>
                 <th className="px-2 py-2.5 text-center" />
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã hóa đơn
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Thời gian
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã trả hàng
                 </th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-center text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Mã KH
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-left text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Khách hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Tổng tiền hàng
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Giảm giá
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Tổng sau giảm giá
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   Khách đã trả
                 </th>
                 {showPaymentColumn && (
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  <th className="px-3 py-2.5 text-center text-xs font-normal text-slate-500 uppercase tracking-wide whitespace-nowrap">
                     Thanh toán
                   </th>
                 )}
@@ -1114,16 +981,16 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
-                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
+                  <td className="px-3 py-2 text-right text-xs font-normal text-slate-800">
                     {fmt(summary.totalAmount)}
                   </td>
-                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
+                  <td className="px-3 py-2 text-right text-xs font-normal text-slate-800">
                     {fmt(summary.discount)}
                   </td>
-                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
+                  <td className="px-3 py-2 text-right text-xs font-normal text-slate-800">
                     {fmt(summary.finalAmount)}
                   </td>
-                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-800">
+                  <td className="px-3 py-2 text-right text-xs font-normal text-slate-800">
                     {fmt(summary.finalAmount)}
                   </td>
                   {showPaymentColumn && <td className="px-3 py-2" />}
@@ -1159,7 +1026,9 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                           type="checkbox"
                           checked={selectedIds.has(order.id)}
                           onChange={() => toggleRow(order.id)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          disabled={order.isReturn}
+                          title={order.isReturn ? 'Chưa hỗ trợ xóa đơn trả/đổi hàng' : undefined}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-30"
                         />
                       </td>
                       {/* Star */}
@@ -1174,7 +1043,7 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                       </td>
                       {/* Mã hóa đơn */}
                       <td className="px-3 py-2.5 text-center">
-                        <span className="font-medium text-indigo-600 text-xs">{order.orderCode}</span>
+                        <span className="font-normal text-indigo-600 text-xs">{order.orderCode}</span>
                         {order.isReturn && (
                           <span className="ml-1.5 px-1.5 py-0.5 bg-red-50 text-red-500 text-[9px] font-semibold rounded">
                             TH
@@ -1182,19 +1051,19 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                         )}
                       </td>
                       {/* Thời gian */}
-                      <td className="px-3 py-2.5 text-center text-xs text-slate-600 font-medium">
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-600 font-normal">
                         {formatOrderDateTime(order.date)}
                       </td>
                       {/* Mã trả hàng */}
-                      <td className="px-3 py-2.5 text-center text-xs text-slate-400 font-medium">
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-400 font-normal">
                         {order.isReturn ? order.orderCode : '—'}
                       </td>
                       {/* Mã KH */}
-                      <td className="px-3 py-2.5 text-center text-xs text-slate-500 font-medium">
+                      <td className="px-3 py-2.5 text-center text-xs text-slate-500 font-normal">
                         {getCustomerCode(order)}
                       </td>
                       {/* Khách hàng */}
-                      <td className="px-3 py-2.5 text-xs text-slate-800 font-medium truncate">
+                      <td className="px-3 py-2.5 text-xs text-slate-800 font-normal truncate">
                         {order.customerName || 'Khách lẻ'}
                       </td>
                       {/* Tổng tiền hàng */}
@@ -1202,20 +1071,20 @@ export default function OrderInvoices({ orders, customers, products, revenue, st
                         {fmt(order.totalAmount)}
                       </td>
                       {/* Giảm giá */}
-                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-500">
+                      <td className="px-3 py-2.5 text-right text-xs font-normal text-slate-500">
                         {order.discount > 0 ? fmt(order.discount) : '0'}
                       </td>
                       {/* Tổng sau giảm giá */}
-                      <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-900">
+                      <td className="px-3 py-2.5 text-right text-xs font-normal text-slate-900">
                         {fmt(order.finalAmount)}
                       </td>
                       {/* Khách đã trả */}
-                      <td className="px-3 py-2.5 text-right text-xs font-medium text-emerald-700">
+                      <td className="px-3 py-2.5 text-right text-xs font-normal text-emerald-700">
                         {fmt((order as any).cashReceived > 0 ? (order as any).cashReceived : order.finalAmount)}
                       </td>
                       {showPaymentColumn && (
                         <td className="px-3 py-2.5 text-center">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-normal rounded-full">
                             {PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}
                           </span>
                         </td>
