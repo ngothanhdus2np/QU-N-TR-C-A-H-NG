@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R18) — SEC-SECRET-01: user vô hiệu hóa key project Supabase cũ trên dashboard
+
+- User tự xác nhận đúng project ref `tqouzxlnihfjdyxqlbqs` trên Supabase dashboard (Settings → General → Reference ID khớp), rồi bấm **"Disable JWT-based API keys"** (Settings → API Keys → tab "Legacy anon, service_role API keys") — vô hiệu hóa vĩnh viễn cả 2 key cũ, kể cả service_role key đã lộ trong git history.
+- Đây là bước quan trọng nhất của SEC-SECRET-01: rotate/disable key làm cho việc key còn nằm trong git history không còn là rủi ro bảo mật thật sự (dù text vẫn còn trong history, không dùng được nữa).
+- Chỉ còn lại việc scrub git history (6 branch trên GitHub) — hạ xuống mức "tùy chọn vệ sinh", không còn khẩn cấp. Cập nhật TODO.md phản ánh đúng trạng thái.
+- Files: không đổi code, chỉ cập nhật `docs/05-process/TODO.md`
+
 ### 2026-07-03 (R17) — Điều tra SEC-SECRET-01: xác nhận rò rỉ đã lên GitHub 6 branch + dọn HEAD
 
 - Theo yêu cầu user xử lý SEC-SECRET-01: điều tra sâu hơn audit R3 trước đó.

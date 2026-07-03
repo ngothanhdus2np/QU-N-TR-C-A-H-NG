@@ -27,7 +27,7 @@
 
 > Phiếu trả thuần (không đổi hàng) tạo từ flow trả hàng lưu `finalAmount = +60000` (dương, bằng giá trị hàng trả) thay vì 0/âm như comment trong code mô tả (`POSComputer lưu finalAmount = -Math.max(0, totalReturn-totalExchange)`). Hệ quả: nhánh fallback KiotViet trong `calculateOrderStaffSales` ([src/lib/posSalesAttribution.ts:75](../../src/lib/posSalesAttribution.ts)) tính `extraPaid = max(0, finalAmount) = 60000` → **trả hàng làm TĂNG doanh số NV** thay vì không đổi. Tái hiện thực tế: phiếu TH065947 (trả 1×60k, không đổi hàng) đẩy `sales_records` NV +60.000. Cần xác định nơi set `finalAmount` khi tạo phiếu trả từ chi tiết hóa đơn (usePOSReturnFlow / POSComputer handleCheckout nhánh return) và sửa cho khớp công thức, hoặc siết fallback chỉ áp dụng cho đơn import KiotViet.
 
-### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(phát hiện audit R3 2026-07-03, điều tra sâu + dọn HEAD xong 2026-07-03 — CÒN 2 VIỆC user tự quyết)*
+### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
 
 > **Severity: 🔴 XÁC NHẬN CAO HƠN ban đầu tưởng**: commit rò rỉ `66ecc7a` **đã push lên GitHub** (`origin/main` chứa nó — không chỉ nằm local như audit R3 nghi ngờ) **VÀ có mặt ở cả 5 branch remote khác** (`claude/category-tree-accordion-*`, `claude/code-review-feedback-*`, `claude/pos-ui-design-system-audit-*`, `claude/review-remaining-tasks-*`, `claude/sales-app-logic-audit-*`). Repo: `github.com/ngothanhdus2np/QU-N-TR-C-A-H-NG` — chưa xác định public/private (không có `gh` CLI trong môi trường agent để kiểm, user tự xem trên GitHub Settings).
 >
@@ -35,10 +35,9 @@
 >
 > **✅ ĐÃ DỌN 2026-07-03**: gỡ sạch ref `tqouzxlnihfjdyxqlbqs` khỏi `.kiro/DEPLOY_NOW.md` + `.kiro/QUICK_START.md` (HEAD hiện tại không còn ref/URL nào trỏ tới project cũ). Chỉ dọn HEAD — **KHÔNG động vào git history** (xem việc còn lại #2).
 >
-> **⏳ CÒN LẠI — cần user tự quyết, agent không có quyền/công cụ làm thay**:
-> 1. **QUAN TRỌNG NHẤT, làm trước**: Dashboard `supabase.com/dashboard/project/tqouzxlnihfjdyxqlbqs` → kiểm project còn tồn tại không. Nếu còn → **Settings → API → Reset cả anon lẫn service_role key ngay** (rotate làm key cũ trong git history vô dụng ngay lập tức, bất kể history còn hay sạch — đây là bước có tác dụng thật, quan trọng hơn scrub history). Nếu đã ngừng dùng (đã chuyển hẳn sang self-hosted iMac) → xoá hẳn project.
-> 2. **Scrub git history + force-push 6 branch** (`main` + 5 branch `claude/*` liệt kê trên) bằng `git filter-repo`/BFG — thao tác lớn, khó đảo ngược, ảnh hưởng toàn bộ repo GitHub kể cả collaborator khác đang có clone cũ (họ sẽ cần re-clone hoặc hard-reset). Chỉ nên làm SAU khi đã rotate key ở bước 1 (rotate mới là cái vô hiệu hoá rò rỉ thật sự; scrub chỉ là vệ sinh phòng thủ thêm). Cân nhắc: nếu repo private + ít người clone → rủi ro residual thấp, có thể bỏ qua bước này nếu đã rotate.
-> 3. Gỡ nốt ref khỏi `.kiro/*.md`.
+> **✅ ĐÃ RESET/VÔ HIỆU HÓA KEY 2026-07-03**: user xác nhận đúng project ref `tqouzxlnihfjdyxqlbqs` trên dashboard, bấm **"Disable JWT-based API keys"** (Settings → API Keys → Legacy anon, service_role API keys) — vô hiệu hóa vĩnh viễn cả `anon` lẫn `service_role` cũ, kể cả key đã lộ trong git history. **Đây là bước có tác dụng thật** — key trong git history giờ vô dụng bất kể history còn hay sạch.
+>
+> **⏳ CÒN LẠI (tùy chọn, không còn khẩn cấp vì key đã chết)**: Scrub git history + force-push 6 branch (`main` + 5 branch `claude/*`: `category-tree-accordion`, `code-review-feedback`, `pos-ui-design-system-audit`, `review-remaining-tasks`, `sales-app-logic-audit`) bằng `git filter-repo`/BFG — thao tác lớn, khó đảo ngược, ảnh hưởng toàn bộ repo GitHub kể cả collaborator khác đang có clone cũ (họ sẽ cần re-clone hoặc hard-reset). Chỉ còn ý nghĩa vệ sinh (key cũ vẫn hiện diện dạng text trong history, có thể gây nhầm lẫn/audit sau này) chứ không còn là rủi ro bảo mật thật sự. User quyết định có cần làm hay bỏ qua.
 
 ### [x] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(✅ HOÀN TẤT TOÀN BỘ 2026-07-03 — đã deploy + verify trực tiếp trên prod)*
 
