@@ -7,6 +7,73 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟡 ORDERS-EDIT-01 — Sửa hóa đơn trong POS (mở đơn cũ để đổi sản phẩm/số lượng/giá) *(xong 2026-07-03)*
+
+> Nút "Sửa trong POS" ở trang Hóa đơn — mở lại đơn vào máy tính tiền, sửa xong lưu đè đúng id cũ (hoàn tồn kho + trừ/cộng doanh thu + tính lại doanh số NV, không nhân đôi lịch sử). Theo quyết định user: không giới hạn quyền/ngày, chưa xử lý riêng đơn có phiếu trả hàng liên kết (rủi ro đã ghi). Chưa hỗ trợ sửa đơn trả/đổi hàng. Chi tiết HISTORY.md.
+
+### [ ] 🟡 ORDERS-EDIT-02 — Xử lý sửa đơn đã có phiếu trả hàng liên kết
+
+> `editPosOrder()` hiện không kiểm tra/cảnh báo khi đơn đang sửa đã có phiếu trả hàng trỏ tới nó (`originalOrderId`) — sửa số lượng/sản phẩm trong trường hợp này có thể làm lệch số liệu đã trả. User đã chọn "vẫn cho sửa bình thường" ở bản đầu — cần theo dõi thực tế phát sinh, bổ sung cảnh báo/chặn nếu cần.
+
+### [x] 🟡 ORDERS-DEL-01 — Xóa hàng loạt hóa đơn đúng chuẩn (hoàn tồn kho + trừ doanh thu) *(xong 2026-07-03)*
+
+> Nút "Xóa N đơn" ở trang Hóa đơn. Tái dùng RPC/pattern có sẵn từ `processReturnOrder`. Chưa hỗ trợ đơn trả/đổi hàng (`isReturn`). Fix 2 bug phát sinh khi test multi-delete (sales_records tính sai do dùng data cũ giữa vòng lặp + không xóa dòng cũ khi NV về 0). Chi tiết HISTORY.md.
+
+### [x] 🔴 BRAND-01 — Mất SĐT/địa chỉ cửa hàng tái diễn (khác lỗi 401 đã vá 06-28) *(fix xong 2026-07-03)*
+
+> **ĐÃ SỬA**: prod DB `brand_profile.phone/address` bị ghi đè bằng placeholder `DEFAULT_BRAND` do race — thiết bị/browser chưa có cache + fetch đầu lỗi/chậm, user gõ field khác trong tab Hồ sơ thương hiệu → auto-save mang theo placeholder đè DB. Khôi phục dữ liệu thật trên prod (phone `033.571.3423 – 096.886.7411`, address `Số nhà 14, đường NC2, tổ 11, khu phố 3, phường Bến Cát, TP.HCM`) + vá gốc rễ [hooks/useAppData.ts](../../hooks/useAppData.ts) (`brandLoadedRef` chặn auto-save cho tới khi có dữ liệu thật xác nhận). Chi tiết HISTORY.md.
+
+### [ ] 🟡 POS-RETURN-01 — Phiếu trả thuần cộng NHẦM +giá trị trả vào doanh số NV *(phát hiện 2026-07-03 khi hoàn tác phiếu trả bấm nhầm)*
+
+> Phiếu trả thuần (không đổi hàng) tạo từ flow trả hàng lưu `finalAmount = +60000` (dương, bằng giá trị hàng trả) thay vì 0/âm như comment trong code mô tả (`POSComputer lưu finalAmount = -Math.max(0, totalReturn-totalExchange)`). Hệ quả: nhánh fallback KiotViet trong `calculateOrderStaffSales` ([src/lib/posSalesAttribution.ts:75](../../src/lib/posSalesAttribution.ts)) tính `extraPaid = max(0, finalAmount) = 60000` → **trả hàng làm TĂNG doanh số NV** thay vì không đổi. Tái hiện thực tế: phiếu TH065947 (trả 1×60k, không đổi hàng) đẩy `sales_records` NV +60.000. Cần xác định nơi set `finalAmount` khi tạo phiếu trả từ chi tiết hóa đơn (usePOSReturnFlow / POSComputer handleCheckout nhánh return) và sửa cho khớp công thức, hoặc siết fallback chỉ áp dụng cho đơn import KiotViet.
+
+### [ ] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(phát hiện audit R3 2026-07-03)*
+
+> **Severity: 🔴 (nếu project còn sống hoặc repo được chia sẻ)**. Chi tiết: `docs/06-evaluation/QA_SECURITY_AUDIT_2026-07-03_R3.md` mục 🔴-A.
+>
+> **Vấn đề**: Từ commit đầu `66ecc7a` (2026-05-05, `server.ts`+`services/supabase.ts`) và các script Python, cả anon key lẫn **service_role key** của project Supabase hosted `tqouzxlnihfjdyxqlbqs.supabase.co` bị hardcode. Đã gỡ khỏi code (`2a241ab`/`81675ad`) nhưng **vẫn còn trong git history** — `git log --all -p | grep` trích được JWT `role":"service_role"...ref":"tqouzxlnihfjdyxqlbqs"` (exp năm 2036). service_role bypass TOÀN BỘ RLS. HEAD chỉ còn ref/URL trong `.kiro/DEPLOY_NOW.md`+`.kiro/QUICK_START.md` (không có JWT thật).
+>
+> **Chưa xác minh được**: rào chắn cấm thử key vào project Supabase thật. USER tự kiểm.
+>
+> **Việc cần làm**:
+> 1. Dashboard → kiểm project `tqouzxlnihfjdyxqlbqs` **còn tồn tại không**. Nếu còn/không chắc → **rotate service_role + anon key ngay** (Settings→API→Reset) hoặc **xoá project** nếu đã migrate self-hosted.
+> 2. Nếu repo share (GitHub/nhiều máy) → scrub history (`git filter-repo`/BFG) + force-push. Nếu repo chỉ ở máy cá nhân → rủi ro thấp hơn nhưng vẫn nên rotate.
+> 3. Gỡ nốt ref khỏi `.kiro/*.md`.
+
+### [~] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(fix + test xong trên clone 2026-07-03, ⏳ CHỜ DEPLOY + 3 bước tay trên prod — audit R3 bổ sung 2 mảnh còn hở)*
+
+> **AUDIT R3 (2026-07-03) — TỰ KIỂM CHỨNG 024 CHẶN THẬT trên clone** (bắn anon key: `pos_products/pos_orders/sales_records/suppliers` → `42501` cả đọc lẫn ghi; HR/tài chính → `[]`; catalog `store_products` → 200). **NHƯNG phát hiện 3 mảnh gốc rễ CHƯA đóng — bổ sung vào "CÒN LẠI" bên dưới**:
+> - 🟡-B: `pg_default_acl` grantor **`supabase_admin` vẫn còn `anon=arwdDxt`** cho bảng tương lai (024 chỉ gỡ được grantor `postgres`). Bảng mới tạo qua Studio (dưới supabase_admin) sẽ TỰ mở anon full CRUD → MAINT-01 chưa đóng hẳn.
+> - 🟡-C: `schema_migrations` **RLS OFF + anon full grant** — kiểm chứng live `curl` anon → 200 + dữ liệu; anon có thể TRUNCATE sổ migration → lần deploy kế chạy lại toàn bộ.
+
+> **Severity: 🔴**. Chi tiết: `docs/06-evaluation/QA_SECURITY_AUDIT_2026-07-03.md` mục 🔴-1.
+>
+> **Vấn đề**: anon key (nhúng công khai trong bundle) ĐỌC+GHI+XÓA được thật trên `pos_products/pos_orders/sales_records/suppliers/vat_documents/attendance_records` — do (1) `DEFAULT PRIVILEGES` tự cấp anon full CRUD mọi bảng mới (MAINT-01), (2) RLS policy `TO anon`/`TO public USING(true)`, (3) proxy `/rest/v1` mở.
+>
+> **✅ ĐÃ SỬA** bằng migration `024_lock_down_anon_rls.sql`: DROP policy anon/public trên **33 bảng nội bộ** → thay bằng `FOR ALL TO authenticated` + `REVOKE ALL FROM anon` + gỡ default-privileges anon. Giữ ngoại lệ `store_products`/`store_product_variants` (public-read `is_published` cho catalog website). **Kiểm chứng trên clone**: anon giờ `42501 permission denied` (đọc+ghi đều chặn); user đăng nhập thật (authenticated) VẪN full quyền — bán 1 đơn qua UI OK (tồn 49→48, sales_records ghi, console sạch); catalog công khai vẫn đọc được. LoginPage không đọc bảng nào pre-auth nên không vỡ trang login.
+>
+> **⏳ CÒN LẠI**:
+> 1. **Deploy**: migration 024 tự áp lên prod ở lần deploy kế (`apply-migrations.sh --prod`). Sau deploy, verify: `curl 'https://supabase.phucsang.com.vn/rest/v1/pos_orders?select=id&limit=1' -H 'apikey: <ANON>' -H 'Authorization: Bearer <ANON>'` → phải trả `42501`/`[]`.
+> 1b. **(R3) Khoá `schema_migrations`** (dưới role bất kỳ đủ quyền): `ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY; REVOKE ALL ON schema_migrations FROM anon;`
+> 1c. **(R3) Đóng default-priv `supabase_admin`** (dưới `supabase_admin`/superuser — migration `postgres` KHÔNG đủ quyền): `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;` — đây là mảnh còn thiếu để 024 thật sự đóng gốc rễ MAINT-01.
+> 2. **1 bước TAY trên prod** (chạy DƯỚI role `supabase_admin` hoặc superuser — migration chạy bằng `postgres` KHÔNG đủ quyền nên đã skip): `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;` — để bảng MỚI do supabase tạo không tự cấp anon. Rủi ro tồn dư THẤP vì migration bảng mới đã theo mẫu tạo RLS+policy authenticated (023/024).
+
+### [x] 🔴 POS-SALES-01 — Ghi doanh số NV lỗi mọi đơn → hiện lỗi giả "mất đồng bộ", nguy cơ đơn trùng *(fix xong 2026-07-02 khuya, ✅ VÁ + XÁC NHẬN LIVE 2026-07-03, ⏳ CHỜ DEPLOY)*
+
+> **ĐÃ SỬA** bằng migration `021_fix_sales_records_schema.sql`: `sales_records.id` UUID→TEXT + gỡ FK `employee_id` (khớp `pos_orders.staff_id` vốn text tự do). Chọn cách này thay vì randomUUID vì code đã thiết kế id chuỗi tất định `pos-sales-<date>-<emp>` (idempotent upsert theo ngày+NV) VÀ người bán có thể ngoài roster nhân viên (admin/chủ) — đổi randomUUID vẫn vướng FK. Verify browser: bán 1 đơn → `sales_records` ghi OK, console sạch, hết lỗi giả. ⏳ Migration đã áp local + ghi sổ, tự áp prod khi deploy.
+
+### [x] 🟡 INV-RPC-01 — Schema drift RPC tồn kho (`_v2` thiếu + legacy thiếu nhánh Sale/Return) *(fix xong 2026-07-02 khuya, ⏳ CHỜ DEPLOY)*
+
+> **ĐÃ SỬA** bằng migration `022_apply_inventory_rpc_v2.sql` (= nội dung 013): áp `apply/delete_inventory_transaction_with_stock_v2` lên DB. Nay mọi đơn dùng RPC atomic 1-transaction đủ nhánh Sale/Return (thay fallback nhiều-bước) → giải luôn 🟡 fallback không atomic. Legacy thiếu nhánh hết là landmine (Sale/Return không còn chạm legacy). Verify RPC: bán 5 khi tồn 1 → EXCEPTION, tồn giữ 1. ⏳ CHỜ DEPLOY. Ghi chú: đây cũng là phần chính của task "Đồng bộ schema production với migrations".
+
+### [x] 🟡 IMPORT-01 — Import Excel không validate từng dòng, 1 dòng lỗi hỏng cả chunk *(fix xong 2026-07-02 khuya, ⏳ CHỜ DEPLOY)*
+
+> **ĐÃ SỬA** [routes/import.ts](../../routes/import.ts): vệ sinh field số NaN→0 trước khi build parent + khi batch upsert lỗi → retry từng dòng để cô lập dòng hỏng (dòng đúng vẫn ghi), trả `rowErrors[]` chi tiết. tsc sạch, 318 test pass. ⏳ CHỜ DEPLOY (code backend).
+
+### [x] 🟡 SEC-ANON-01 — Đóng lỗ anon truy cập bảng storefront/misc (RLS off) *(fix xong 2026-07-02 khuya, ⏳ CHỜ DEPLOY)*
+
+> **ĐÃ SỬA** bằng migration `023_revoke_anon_storefront_tables.sql`: REVOKE ALL FROM anon + bật RLS + policy authenticated cho 7 bảng RLS-off (`expense_categories`, `shipments`, `store_collections`, `store_order_addresses`, `store_preorder_requests`, `store_product_collections`, `store_settings`). App không đọc các bảng này qua anon (đã kiểm), storefront dùng service-role bypass RLS → không phá luồng nào. Cũng là bước xử lý gốc rễ MAINT-01 (bảng mới tự nhận grant anon). ⏳ CHỜ DEPLOY.
+
 ### [ ] 🔴 Đăng nhập lại Shopee cho bot trên iMac — USER làm trực tiếp trên iMac *(2026-07-02)*
 
 > **Bối cảnh**: Bot Shopee đã chuyển từ MacBook lên iMac (xong 02/07 — phụ thuộc 1 máy duy nhất). Nhưng Shopee phát hiện "thiết bị mới" → **session cả 2 shop hết hạn**. Đơn Shopee CŨ vẫn hiển thị trên app; đơn MỚI sẽ không cập nhật cho đến khi đăng nhập lại. Bot MacBook đã tắt, tunnel đã gỡ — KHÔNG bật lại bot trên MacBook (2 bot chạy song song sẽ đá session nhau).
@@ -84,13 +151,25 @@
 >
 > ⚠️ **ĐÍNH CHÍNH bước hậu-deploy**: đã chạy `recalculate-revenue-from-orders` cho T6/T7 nhưng audit chiều 02/07 phát hiện **endpoint này có bug** (xem task LOGIC-02 bên dưới) — nó ghi tổng CẢ THÁNG vào 1 dòng ngày cuối tháng, làm T6 bị đếm đôi. **Đã khôi phục sạch** (xóa 2 dòng 30/06 + 31/07 do lần chạy tạo, xác minh bằng created_at). KHÔNG chạy lại endpoint này cho đến khi sửa LOGIC-02.
 
-### [ ] 🔴 LOGIC-02 — Endpoint `recalculate-revenue-from-orders` sai mô hình dữ liệu *(phát hiện audit 2026-07-02)*
+### [x] 🔴 LOGIC-02 — Endpoint `recalculate-revenue-from-orders` sai mô hình dữ liệu *(fix xong 2026-07-02 khuya, ⏳ CHỜ DEPLOY)*
 
-> `routes/data.ts:994`: endpoint tính tổng doanh thu CẢ THÁNG rồi upsert vào **1 dòng** `revenue_records` với `date = ngày cuối tháng` — đúng với mô hình cũ (1 dòng/tháng) nhưng **sai với mô hình hiện tại (1 dòng/ngày)**: chạy lên tháng có dòng ngày → cộng trùng gấp đôi doanh thu tháng đó. Cần viết lại: tính và upsert **theo từng ngày** (group by date), dùng cùng công thức `calcOrderRevenue`. Đây cũng là tool duy nhất để dọn drift lịch sử của DATA-02 (T6 đang lệch ~345K so với đơn hàng).
+> **ĐÃ SỬA** [routes/data.ts](../../routes/data.ts): viết lại group by NGÀY, upsert từng ngày `onConflict(date)` theo công thức `calcOrderRevenue` (khớp `reportCalculations.ts`) + thêm `revenue_other` từ final_amount; giữ nguyên total_cogs/gross_profit (recalculate-cogs lo riêng). Hết bug dồn cả tháng vào 1 dòng cuối tháng. Verify: recalc 2026-07 → ghi đúng dòng ngày 2026-07-02, không tạo dòng 07-31. ⏳ CHỜ DEPLOY.
+>
+> 💡 **Sau khi deploy**: endpoint này nay AN TOÀN để chạy lại → dùng để dọn drift T6 (~4,88M lệch giữa orders vs revenue_records) và có thể hỗ trợ đối soát DATA-04.
 
 ### [ ] 🟠 DATA-04 — 3 dòng ngày rác trong `revenue_records` *(phát hiện audit 2026-07-02)*
 
 > 3 dòng có `date` hỏng: `92401-07-06`, `77063-10-04`, `137519-06-26` (created_at 2026-06-06, từ bug import cũ) — tổng **net 109.933.000đ** đang nằm ngoài mọi báo cáo theo range chuẩn nhưng có thể lọt vào tổng all-time. Cần đối chiếu số liệu gốc để sửa ngày đúng (không đoán tự động được), hoặc user xác nhận xóa.
+>
+> ✅ **Audit R3 (2026-07-03) tái hiện chính xác trên clone**: 3 dòng net 49.449.000 + 33.031.000 + 27.453.000 = **109.933.000**; tổng net all-time = 15.042.976.804 vs trong-range (2020..2027) = 14.933.043.804 → lệch **đúng 109,933M lọt vào all-time**. Vẫn tồn tại trên clone (và presumably prod).
+
+### [ ] 🟡 SEC-RATELIMIT-01 — Login `/auth/v1` không rate-limit ở tầng app *(phát hiện audit R3 2026-07-03)*
+
+> `apiLimiter` mount `/api/` ([server.ts:442](../../server.ts)), `authLimiter` (20/15ph) CHỈ mount `/api/auth/register` ([server.ts:443](../../server.ts)). Proxy Supabase `/auth/v1`+`/rest/v1`+`/storage/v1` ([server.ts:464](../../server.ts)) không qua limiter nào → đường login thật GoTrue `/auth/v1/token` không bị app chặn brute-force (chỉ dựa giới hạn nội bộ GoTrue). Đề xuất: thêm limiter `/auth/v1/token` (~10–20/15ph/IP) hoặc siết cấu hình GoTrue.
+
+### [ ] 🟡 DATA-01 — Checkout web POS chưa gói vào 1 transaction DB (saga bù trừ) *(P2 — audit R3 ghi rõ rủi ro)*
+
+> `processPlaceOrder` ([services/posOrderService.ts:270-345](../../services/posOrderService.ts)) ghi đơn qua 4–5 lời gọi riêng (insert order → RPC tồn kho → customer/nợ → RPC revenue → staff/audit), mỗi cái atomic riêng nhưng nối bằng rollback bù trừ tầng app (`rollbackSteps[]`). Rollback tự nó là chuỗi network call có thể tự fail → cửa sổ lệch (đơn xoá nhưng tồn không hoàn, hoặc ngược lại). Offline-first che phần lớn case mạng rớt → rủi ro hiếm/biên. Đề xuất P2: gộp vào 1 RPC transaction theo mẫu `pos_mobile_checkout`.
 
 ---
 
