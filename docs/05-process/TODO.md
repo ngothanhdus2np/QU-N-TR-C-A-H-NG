@@ -40,7 +40,7 @@
 > 2. Nếu repo share (GitHub/nhiều máy) → scrub history (`git filter-repo`/BFG) + force-push. Nếu repo chỉ ở máy cá nhân → rủi ro thấp hơn nhưng vẫn nên rotate.
 > 3. Gỡ nốt ref khỏi `.kiro/*.md`.
 
-### [~] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(fix + test xong trên clone 2026-07-03, ✅ ĐÃ DEPLOY LÊN PROD 2026-07-03 — còn 1 bước tay trên Supabase Studio: mục 1c)*
+### [x] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(✅ HOÀN TẤT TOÀN BỘ 2026-07-03 — đã deploy + verify trực tiếp trên prod)*
 
 > **✅ DEPLOY 2026-07-03**: migration `023`+`024` đã áp thành công lên prod qua `deploy-imac.sh` (021/022 áp từ trước). `024` khóa **33 bảng nội bộ** (drop policy anon/public → `FOR ALL TO authenticated`, REVOKE anon, gỡ default-privileges grantor `postgres`). App build + restart thành công, health check `200 OK`, log sạch (không lỗi runtime mới).
 >
@@ -59,12 +59,7 @@
 > **⏳ CÒN LẠI**:
 > 1. ~~Deploy migration 024 lên prod~~ ✅ xong 2026-07-03. **Chưa verify bằng curl anon key thật** trên `https://supabase.phucsang.com.vn` (chỉ mới verify trên clone trước đó) — nên chạy `curl 'https://supabase.phucsang.com.vn/rest/v1/pos_orders?select=id&limit=1' -H 'apikey: <ANON>' -H 'Authorization: Bearer <ANON>'` → phải trả `42501`/`[]` để xác nhận chắc chắn.
 > 1b. ~~Khoá `schema_migrations`~~ ✅ xong 2026-07-03, chạy qua SSH+psql role `postgres` (bảng `public.schema_migrations` do `postgres` sở hữu nên đủ quyền) — verify trực tiếp trên prod: `rowsecurity=true`, 0 grant `anon`.
-> 1c. **(R3) Đóng default-priv `supabase_admin`** — **CÒN THIẾU, đã thử 2026-07-03 qua SSH+psql role `postgres` → lỗi `must be member of role "supabase_admin"`** (đúng như dự đoán, role `postgres` không phải thành viên `supabase_admin`). Cần user tự chạy trên **Supabase Studio → SQL Editor** (giống cách đã khóa `store_settings`):
-> ```sql
-> ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
-> ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon;
-> ```
-> Đây là mảnh cuối để đóng hẳn gốc rễ MAINT-01 (bảng mới tạo qua Studio dưới `supabase_admin` không còn tự mở anon full CRUD).
+> 1c. ~~Đóng default-priv `supabase_admin`~~ ✅ xong 2026-07-03 — user tự chạy trên Supabase Studio (SSH+psql role `postgres` không đủ quyền, đã thử và lỗi `must be member of role`). **Verify trực tiếp trên prod** qua `pg_default_acl` (lọc schema `public`, grantor `supabase_admin`): bảng (`r`) và sequence (`S`) đều còn `{postgres, authenticated, service_role}`, **anon đã biến mất**. Gốc rễ MAINT-01 (bảng mới tạo qua Studio dưới `supabase_admin` tự mở anon full CRUD) đã đóng hoàn toàn.
 > 1d. ~~Bảng `store_settings` (do `supabase_admin` sở hữu, `023` bỏ qua an toàn)~~ ✅ user tự chạy 3 lệnh dưới `supabase_admin` trên Supabase Studio 2026-07-03 — **đã verify trực tiếp trên prod**: `rowsecurity=true`, 0 grant cho `anon`, policy `store_settings_authenticated_all FOR ALL TO authenticated` đúng.
 > 2. **1 bước TAY trên prod** (chạy DƯỚI role `supabase_admin` hoặc superuser — migration chạy bằng `postgres` KHÔNG đủ quyền nên đã skip): `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;` — để bảng MỚI do supabase tạo không tự cấp anon. Rủi ro tồn dư THẤP vì migration bảng mới đã theo mẫu tạo RLS+policy authenticated (023/024).
 

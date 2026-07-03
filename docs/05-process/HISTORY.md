@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R16) — SEC-RLS-01 hoàn tất toàn bộ: verify default-privileges supabase_admin trên prod
+
+- User tự chạy 2 lệnh `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin ... REVOKE ALL ... FROM anon` (tables + sequences) trên Supabase Studio.
+- Verify trực tiếp trên prod (SSH, chỉ SELECT, user xác nhận rõ đích production): `pg_default_acl` lọc theo `defaclnamespace` = schema `public` và grantor `supabase_admin` — bảng (`defaclobjtype='r'`) và sequence (`'S'`) đều còn đúng `{postgres, authenticated, service_role}`, **anon đã biến mất**. (Function `'f'` vẫn còn anon nhưng không nằm trong 2 lệnh yêu cầu — không phải thiếu sót của lần fix này.)
+- **SEC-RLS-01 đánh dấu hoàn tất toàn bộ 4 mục** (deploy 024 + store_settings + schema_migrations + default-priv supabase_admin) — đóng hẳn gốc rễ MAINT-01 (bảng mới tạo qua Studio dưới supabase_admin không còn tự mở anon full CRUD).
+- Files: không đổi code, chỉ cập nhật `docs/05-process/TODO.md`
+
 ### 2026-07-03 (R15) — Khóa schema_migrations trên prod (SEC-RLS-01 mục 1b xong, 1c cần Studio)
 
 - Theo yêu cầu user ("chạy luôn"): thử chạy 2 việc còn lại của SEC-RLS-01 qua SSH+psql (role `postgres`) trên DB production, sau khi user xác nhận rõ ràng đích production cho thao tác GHI.
