@@ -6,6 +6,7 @@ import MainContent from './components/MainContent';
 import FloatingCFOChat from './components/FloatingCFOChat';
 import { BotProgressBar } from './components/shared/BotProgressBar';
 import OfflineIndicator from './components/OfflineIndicator';
+import DevUpdateBanner from './components/DevUpdateBanner';
 import AuthGate from './components/AuthGate';
 import { useAppData } from './hooks/useAppData';
 import { useRealtimeSync } from './hooks/useRealtimeSync';
@@ -194,6 +195,7 @@ const App: React.FC = () => {
     <AuthGate>
     <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--app-bg)' }}>
       <OfflineIndicator />
+      {import.meta.env.DEV && <DevUpdateBanner />}
       <AnimatePresence initial={false}>
         {activeTab !== 'pos' && (
           <motion.div

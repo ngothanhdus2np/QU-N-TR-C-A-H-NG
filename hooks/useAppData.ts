@@ -513,6 +513,7 @@ export function useAppData() {
         };
         const mappedBrand = dataMapper.mapBrandProfile(serverRaw);
         brandFromServerRef.current = true;
+        brandLoadedRef.current = true;
         dispatch({ type: 'SET_BRAND_PROFILE', payload: mappedBrand });
         localStorage.setItem('cfo_brain_brand_profile', JSON.stringify(mappedBrand));
         await appDataCache.saveBrandProfile(mappedBrand);
@@ -521,11 +522,15 @@ export function useAppData() {
         const cachedBrand = await appDataCache.getBrandProfile();
         if (cachedBrand) {
           brandFromServerRef.current = true;
+          brandLoadedRef.current = true;
           dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
         } else if (localBrand) {
           brandFromServerRef.current = true;
+          brandLoadedRef.current = true;
           dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
         }
+        // Không có gì ở cả server lẫn cache — KHÔNG set brandLoadedRef, chặn autosave
+        // bên dưới ghi đè brand_profile bằng DEFAULT_BRAND placeholder khi user gõ sớm.
       }
 
       const newState = sanitizeAppDataSnapshot(dataMapper.mapAllData(results, localData));
@@ -729,11 +734,13 @@ export function useAppData() {
 
       if (cachedBrand) {
         brandFromServerRef.current = true;
+        brandLoadedRef.current = true;
         dispatch({ type: 'SET_BRAND_PROFILE', payload: cachedBrand });
       } else {
         const localBrand = localStorage.getItem('cfo_brain_brand_profile');
         if (localBrand) {
           brandFromServerRef.current = true;
+          brandLoadedRef.current = true;
           dispatch({ type: 'SET_BRAND_PROFILE', payload: JSON.parse(localBrand) });
         }
       }
@@ -750,6 +757,10 @@ export function useAppData() {
 
   const brandSaveReadyRef = useRef(false);
   const brandFromServerRef = useRef(false);
+  // true chỉ sau khi brandProfile đã được xác nhận từ cache/localStorage/server thật
+  // (không phải DEFAULT_BRAND placeholder) — chặn autosave ghi placeholder đè DB
+  // khi user gõ sớm lúc app còn đang tải mà mọi nguồn dữ liệu đều rỗng.
+  const brandLoadedRef = useRef(false);
   useEffect(() => {
     if (!brandSaveReadyRef.current) {
       brandSaveReadyRef.current = true;
@@ -757,6 +768,9 @@ export function useAppData() {
     }
     if (brandFromServerRef.current) {
       brandFromServerRef.current = false;
+      return;
+    }
+    if (!brandLoadedRef.current) {
       return;
     }
     const timer = setTimeout(async () => {

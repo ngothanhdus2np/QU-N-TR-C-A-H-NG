@@ -35,7 +35,7 @@ import react from '@vitejs/plugin-react';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import { readFile, mkdir, writeFile, unlink } from 'fs/promises';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
 import { createChannelLinksRouter } from './routes/channelLinks';
@@ -194,6 +194,11 @@ const healthHandler: RequestHandler = (_req, res) => res.send('OK');
 
 app.get('/health', healthHandler);
 app.head('/health', healthHandler);
+
+// ID ngẫu nhiên sinh lại mỗi lần process khởi động — client dev poll để phát hiện
+// server đã restart (đổi code) và hiện banner nhắc tải lại trang.
+const BOOT_ID = randomUUID();
+app.get('/api/server-boot-id', (_req, res) => res.json({ bootId: BOOT_ID }));
 
 app.get('/api/local-ip', (_req, res) => {
   const nets = os.networkInterfaces();
