@@ -991,32 +991,58 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
   });
 
   // Tính lại revenue_records cho 1 tháng từ pos_orders (fix khi data bị sai)
+  // [LOGIC-02 — sửa 2026-07-02] Dựng lại doanh thu từ đơn hàng THEO TỪNG NGÀY.
+  // BUG cũ: gộp tổng CẢ THÁNG vào 1 dòng ngày cuối tháng (mô hình cũ 1 dòng/tháng) →
+  // chạy trên tháng đã có dòng theo ngày sẽ CỘNG TRÙNG gấp đôi. Nay group by date,
+  // upsert từng ngày onConflict(date) — khớp mô hình hiện tại (1 dòng/ngày) và công
+  // thức calcOrderRevenue (src/lib/reportCalculations.ts): sale = total - discount
+  // (discount fallback max(0,total-final)); return = -|total|. revenue_other = phụ phí
+  // (final - net) của đơn bán. KHÔNG đụng total_cogs/gross_profit (recalculate-cogs lo riêng).
   router.post('/api/analytics/recalculate-revenue-from-orders', requireAuth, async (req, res) => {
     try {
       const { month } = req.body as { month?: string }; // "YYYY-MM", mặc định tháng hiện tại
       const targetMonth = month || new Date().toLocaleDateString('sv-SE').slice(0, 7);
       const [y, m] = targetMonth.split('-').map(Number);
       const lastDayNum = new Date(y, m, 0).getDate();
-      const date = `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}`;
+      const lastDay = `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}`;
 
-      let grossRev = 0, returnsGross = 0, discountSum = 0;
+      // Cộng dồn theo NGÀY (khóa = 'YYYY-MM-DD' lấy từ 10 ký tự đầu của date)
+      type DayAgg = { gross: number; discount: number; returns: number; other: number };
+      const byDay = new Map<string, DayAgg>();
+      const bump = (day: string): DayAgg => {
+        let agg = byDay.get(day);
+        if (!agg) { agg = { gross: 0, discount: 0, returns: 0, other: 0 }; byDay.set(day, agg); }
+        return agg;
+      };
+
       let offset = 0;
       while (true) {
         const { data: orders, error } = await supabase
           .from('pos_orders')
-          .select('total_amount, discount, is_return')
+          .select('total_amount, discount, final_amount, is_return, date')
           .gte('date', `${targetMonth}-01`)
-          .lte('date', `${targetMonth}-${lastDayNum.toString().padStart(2, '0')}T23:59:59`)
+          .lte('date', `${lastDay}T23:59:59`)
           .range(offset, offset + 999);
         if (error) throw new Error(error.message);
         if (!orders?.length) break;
 
         for (const o of orders) {
-          if (!o.is_return) {
-            grossRev    += Number(o.total_amount || 0);
-            discountSum += Math.abs(Number(o.discount || 0));
+          const day = String(o.date || '').slice(0, 10);
+          if (!day) continue;
+          const agg = bump(day);
+          const total = Math.abs(Number(o.total_amount || 0));
+          if (o.is_return) {
+            agg.returns += total;
           } else {
-            returnsGross += Math.abs(Number(o.total_amount || 0));
+            const final = Number(o.final_amount || 0);
+            const discount = o.discount != null
+              ? Math.abs(Number(o.discount))
+              : Math.max(0, total - final);
+            const net = total - discount;
+            agg.gross    += total;
+            agg.discount += discount;
+            // Phụ phí (ship/dịch vụ) = phần khách trả thêm ngoài doanh thu thuần
+            agg.other    += Math.max(0, final - net);
           }
         }
 
@@ -1024,25 +1050,51 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         offset += 1000;
       }
 
-      const netRev = Math.round(grossRev - discountSum - returnsGross);
-      const disc   = Math.round(discountSum);
-      const gross  = Math.round(grossRev);
-      const ret    = Math.round(returnsGross);
+      // Lấy id hiện có theo ngày để upsert giữ nguyên id (tránh đổi id gây nhân đôi realtime)
+      const days = [...byDay.keys()];
+      const idByDate = new Map<string, string>();
+      if (days.length > 0) {
+        const { data: existing } = await supabase
+          .from('revenue_records')
+          .select('id, date')
+          .in('date', days);
+        for (const r of (existing || []) as Array<{ id: string; date: string }>) {
+          idByDate.set(String(r.date).slice(0, 10), r.id);
+        }
+      }
 
-      const { data: existing } = await supabase.from('revenue_records').select('id').eq('date', date).maybeSingle();
-      const id = (existing as { id: string } | null)?.id ?? crypto.randomUUID();
+      const rows = days.map(day => {
+        const a = byDay.get(day)!;
+        const gross = Math.round(a.gross);
+        const disc  = Math.round(a.discount);
+        const ret   = Math.round(a.returns);
+        const other = Math.round(a.other);
+        const net   = gross - disc - ret;
+        return {
+          id: idByDate.get(day) ?? crypto.randomUUID(),
+          date: day,
+          total_gross_revenue: gross,
+          discount: disc,
+          net_revenue: net,
+          returns_value: ret,
+          revenue_other: other,
+        };
+      });
 
-      const { error } = await supabase.from('revenue_records').upsert({
-        id, date,
-        total_gross_revenue: gross,
-        discount: disc,
-        net_revenue: netRev,
-        returns_value: ret,
-        revenue_other: 0,
-      }, { onConflict: 'id' });
-      if (error) throw new Error(error.message);
+      if (rows.length > 0) {
+        const { error } = await supabase
+          .from('revenue_records')
+          .upsert(rows, { onConflict: 'date' });
+        if (error) throw new Error(error.message);
+      }
 
-      res.json({ success: true, date, net_revenue: netRev, discount: disc, total_gross_revenue: gross, returns_value: ret });
+      const monthNet = rows.reduce((s, r) => s + r.net_revenue, 0);
+      res.json({
+        success: true,
+        month: targetMonth,
+        daysRebuilt: rows.length,
+        month_net_revenue: monthNet,
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: msg });

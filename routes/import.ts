@@ -484,6 +484,20 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         return record;
       });
 
+      // [IMPORT-01] Vệ sinh số từng dòng TRƯỚC khi build parent — ô Excel sai định dạng
+      // (vd "abc", "1.2.3") khiến Number() = NaN; NaN lọt vào upsert làm hỏng cả batch
+      // và làm tổng tồn kho của parent thành NaN. Ép mọi field số về hữu hạn (NaN → 0).
+      const NUMERIC_PRODUCT_FIELDS: (keyof ImportedProductRecord)[] = [
+        'sale_price', 'import_price', 'stock', 'min_stock', 'max_stock',
+        'conversion_value', 'weight', 'customer_orders',
+      ];
+      for (const rec of records) {
+        for (const field of NUMERIC_PRODUCT_FIELDS) {
+          const v = Number((rec as Record<string, unknown>)[field]);
+          (rec as Record<string, unknown>)[field] = Number.isFinite(v) ? v : 0;
+        }
+      }
+
       // Build parent-child từ related_sku (cột 16 KiotViet).
       // KiotViet dùng 1 SKU thật làm "mã liên quan", nhưng trong CFO Brain parent phải là
       // record logic riêng; toàn bộ SKU thật trong group, kể cả related_sku gốc, đều là child.
@@ -561,17 +575,37 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       let importedCount = 0;
       let errorCount = 0;
       let firstError: string | null = null;
+      // [IMPORT-01] Chi tiết dòng lỗi (sku + lý do) để trả về cho user thay vì chỉ
+      // báo "cả batch fail". Giới hạn 50 dòng để response không phình.
+      const rowErrors: { sku: string; reason: string }[] = [];
+      const addRowError = (sku: string, reason: string) => {
+        if (rowErrors.length < 50) rowErrors.push({ sku: sku || '(không mã)', reason });
+      };
       for (let i = 0; i < recordsToUpsert.length; i += BATCH) {
         const batch = recordsToUpsert.slice(i, i + BATCH);
         const { error: upsertErr } = await supabase
           .from('pos_products')
           .upsert(batch, { onConflict: 'id' });
-        if (upsertErr) {
-          console.error(`[Import] Batch ${i / BATCH + 1} lỗi:`, upsertErr.message);
-          if (!firstError) firstError = upsertErr.message;
-          errorCount += batch.length;
-        } else {
+        if (!upsertErr) {
           importedCount += batch.length;
+          continue;
+        }
+        // [IMPORT-01] Batch lỗi → KHÔNG bỏ cả 300 dòng. Upsert lại TỪNG dòng để
+        // cô lập đúng dòng hỏng; các dòng hợp lệ trong batch vẫn được ghi.
+        console.warn(
+          `[Import] Batch ${i / BATCH + 1} lỗi (${upsertErr.message}); thử lại từng dòng để cô lập.`
+        );
+        for (const rec of batch) {
+          const { error: rowErr } = await supabase
+            .from('pos_products')
+            .upsert(rec, { onConflict: 'id' });
+          if (rowErr) {
+            errorCount += 1;
+            if (!firstError) firstError = rowErr.message;
+            addRowError(String(rec.sku || ''), rowErr.message);
+          } else {
+            importedCount += 1;
+          }
         }
       }
 
@@ -582,6 +616,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         imported: importedCount,
         errors: errorCount,
         firstError,
+        rowErrors,
       });
     } catch (err: unknown) {
       const message = getErrorMessage(err);
