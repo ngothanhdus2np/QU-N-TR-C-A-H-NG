@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R14) — Verify user tự khóa store_settings dưới supabase_admin trên prod
+
+- User tự chạy 3 lệnh SQL (REVOKE anon, ENABLE RLS, tạo policy authenticated) cho bảng `store_settings` trên Supabase Studio (role `supabase_admin` — vượt qua giới hạn owner mà migration `023` không tự làm được, xem R13).
+- Verify trực tiếp trên prod (SSH, chỉ SELECT, user xác nhận rõ đích production trước khi đọc): `rowsecurity = true`, `information_schema.role_table_grants` cho `anon` trên `store_settings` = 0 dòng, `pg_policies` có đúng `store_settings_authenticated_all` (`FOR ALL TO authenticated`). Khớp hoàn toàn với 33 bảng đã khóa tự động bởi migration `024`.
+- SEC-RLS-01 giờ chỉ còn 2 việc tồn đọng (mục 1b/1c từ audit R3 — khóa `schema_migrations` + default-privileges grantor `supabase_admin`), không liên quan đến `store_settings` nữa.
+- Files: không đổi code, chỉ cập nhật `docs/05-process/TODO.md`
+
 ### 2026-07-03 (R13) — Deploy lên production: migration 021-024 + code POS mới
 
 - Theo yêu cầu user ("deploy"): chạy `scripts/deploy-imac.sh` — đồng bộ code, áp migration còn chờ lên DB prod, build, restart app trên iMac.
