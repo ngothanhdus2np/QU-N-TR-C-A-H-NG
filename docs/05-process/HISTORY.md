@@ -3,6 +3,13 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-03 (R15) — Khóa schema_migrations trên prod (SEC-RLS-01 mục 1b xong, 1c cần Studio)
+
+- Theo yêu cầu user ("chạy luôn"): thử chạy 2 việc còn lại của SEC-RLS-01 qua SSH+psql (role `postgres`) trên DB production, sau khi user xác nhận rõ ràng đích production cho thao tác GHI.
+- **`public.schema_migrations`** (bảng sổ theo dõi migration của app, phân biệt với `auth.schema_migrations`/`realtime.schema_migrations` — 3 bảng trùng tên khác schema) thuộc sở hữu `postgres` → `ALTER TABLE ENABLE ROW LEVEL SECURITY` + `REVOKE ALL FROM anon` chạy thành công. Verify trực tiếp: `rowsecurity=true`, 0 grant `anon`.
+- **`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`**: lỗi `must be member of role "supabase_admin"` — đúng như dự đoán từ log migration `024` trước đó (role `postgres` không phải thành viên `supabase_admin` trên instance này). Không thử cách khác lách qua — báo lại user cần tự chạy trên Supabase Studio (nơi trước đó user đã tự khóa `store_settings` thành công với đúng vấn đề quyền tương tự).
+- Files: không đổi code; prod: `public.schema_migrations` đã khóa RLS/anon
+
 ### 2026-07-03 (R14) — Verify user tự khóa store_settings dưới supabase_admin trên prod
 
 - User tự chạy 3 lệnh SQL (REVOKE anon, ENABLE RLS, tạo policy authenticated) cho bảng `store_settings` trên Supabase Studio (role `supabase_admin` — vượt qua giới hạn owner mà migration `023` không tự làm được, xem R13).
