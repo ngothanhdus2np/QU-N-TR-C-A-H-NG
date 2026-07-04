@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-04 (R26) — Dọn nợ kỹ thuật P1/P2: rate-limit login, bỏ LAN bypass, xác nhận SEC-RLS-01 mục 2 đã xong
+
+- **SEC-RATELIMIT-01**: thêm `app.use('/auth/v1/token', authLimiter)` trong [server.ts](../../server.ts) — đường login thật (GoTrue qua proxy `/auth/v1`) trước đây không nằm dưới `apiLimiter` (chỉ mount `/api/`) nên brute-force chỉ dựa giới hạn nội bộ GoTrue. Dùng lại `authLimiter` có sẵn (20 req/15 phút/IP, chỉ áp khi `IS_PROD`). Verify: tsc sạch, server restart không lỗi, session vẫn refresh bình thường qua `/auth/v1/token?grant_type=refresh_token` (dev mode `skip` luôn true nên không tự test được hành vi chặn — logic dùng lại y hệt pattern `authLimiter` đã kiểm chứng ở chỗ khác).
+- **Auth Bypass lớp 2 (dài hạn)**: gỡ hẳn nhánh bypass dựa vào IP nguồn thuộc LAN (`isPrivateLanAddress`/`isTrustedDevBrowserRequest` trong `requireAuth`, `server.ts`) — trước khi xóa đã xác minh: (1) IP nguồn có thể giả mạo qua proxy/tunnel cấu hình sai, (2) không có script/route nội bộ nào gọi API qua bypass này (`grep` không thấy caller nào dùng), (3) frontend luôn đính JWT thật qua session Supabase (`apiService.ts` → `supabase.auth.getSession()`) nên luồng dev bình thường không phụ thuộc bypass. Giữ lại đường `x-api-key` khớp `INTERNAL_API_KEY` cho caller nội bộ không có JWT (đã có sẵn, không đổi). Xóa luôn 2 hàm chết `isPrivateLanAddress`/`normalizeRemoteAddress`. Verify: tsc sạch, restart server, toàn bộ API call (`/api/data/*`, `/api/eod-report`, `/api/alerts`...) vẫn 200 OK bình thường sau khi đăng nhập thật — không có 401 phát sinh.
+- **SEC-RLS-01 mục 2**: xác nhận lại bằng SQL trực tiếp trên prod (`pg_default_acl`, grantor `supabase_admin`, `defaclobjtype` `r`/`S`) — đã KHÔNG còn `anon` trong ACL, nghĩa là việc này trùng với mục 1c đã làm xong từ 2026-07-03, không phải việc mới. Sửa `TODO.md` xóa trùng lặp.
+- Cập nhật `TODO.md`: dọn hàng loạt ghi chú "⏳ CHỜ DEPLOY" đã lỗi thời (POS-SALES-01, INV-RPC-01, IMPORT-01, SEC-ANON-01, LOGIC-02) — xác nhận lại bằng SQL trực tiếp (`schema_migrations` trên prod đã có 021-024) rằng các fix này đã lên production từ lâu, tài liệu ghi sai trạng thái. Đóng DATA-01 (giải quyết thực chất bởi TXN-RPC-01/migration 029).
+- Files: `server.ts`, `docs/05-process/TODO.md`
+
 ### 2026-07-04 (R25) — TXN-RPC-01: gộp processPlaceOrder thành RPC 1 transaction — HOÀN TẤT toàn bộ TXN-RPC-01
 
 - **Migration `029_place_pos_order_tx.sql`**: RPC `place_pos_order_tx()` gộp insert order + ghi inventory transaction & trừ tồn kho + ghi nợ (nếu bán nợ) + cộng dồn doanh thu atomic vào 1 transaction DB, mô phỏng theo `pos_mobile_checkout` (migration 019, dành riêng POS mobile — không sửa để tránh phá ràng buộc riêng: staff cố định `mobile-cashier`, tier tính cứng trong SQL).

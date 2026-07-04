@@ -141,22 +141,6 @@ function getLocalIPs(): string[] {
   return ips;
 }
 
-function normalizeRemoteAddress(address?: string): string {
-  if (!address) return '';
-  return address.startsWith('::ffff:') ? address.slice('::ffff:'.length) : address;
-}
-
-function isPrivateLanAddress(address: string): boolean {
-  const ip = normalizeRemoteAddress(address);
-  if (ip === '127.0.0.1' || ip === '::1') return true;
-  if (ip.startsWith('10.')) return true;
-  if (ip.startsWith('192.168.')) return true;
-
-  const parts = ip.split('.').map(part => Number(part));
-  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part))) return false;
-  return parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
-}
-
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 let viteReady = false;
@@ -446,6 +430,10 @@ async function startServer() {
 
     app.use('/api/', apiLimiter);
     app.use('/api/auth/register', authLimiter);
+    // [SEC-RATELIMIT-01] Đường login thật đi qua proxy /auth/v1/token (GoTrue) — không nằm
+    // dưới /api/ nên apiLimiter không chạm tới, brute-force chỉ bị chặn bởi giới hạn nội bộ
+    // GoTrue (nếu có). Áp cùng ngưỡng với authLimiter, mount TRƯỚC proxy để chặn sớm.
+    app.use('/auth/v1/token', authLimiter);
 
     app.use(
       cors({
@@ -535,42 +523,14 @@ async function startServer() {
     const requireAuth: RequestHandler = async (req, res, next) => {
       const apiKey = req.headers['x-api-key'] as string;
       const internalKey = process.env.INTERNAL_API_KEY;
-      const requestOrigin = req.headers.origin;
-      const requestReferer = req.headers.referer;
-      const refererOrigin = (() => {
-        if (!requestReferer) return null;
-        try {
-          return new URL(requestReferer).origin;
-        } catch {
-          return null;
-        }
-      })();
 
-      // SECURITY FIX (2026-05-20): Fix spoofable browser bypass in dev mode
-      // Checking req.socket.remoteAddress to ensure the connection originates from localhost (direct local connection).
-      // Also ensuring no proxy forwarding headers (X-Forwarded-For, X-Forwarded-Host) are present, which prevents
-      // bypassing auth when accessed through external tunnels like Cloudflare Tunnel or ngrok.
-      const remoteIp = req.socket.remoteAddress;
-      const isTrustedDevNetwork = isPrivateLanAddress(remoteIp);
-
-      const hasForwardedHeader = !!(
-        req.headers['x-forwarded-for'] ||
-        req.headers['x-forwarded-host'] ||
-        req.headers['x-forwarded-proto']
-      );
-
-      const isTrustedDevBrowserRequest =
-        !IS_PROD &&
-        isTrustedDevNetwork &&
-        !hasForwardedHeader &&
-        ((typeof requestOrigin === 'string' && allowedOrigins.includes(requestOrigin)) ||
-          (typeof refererOrigin === 'string' && allowedOrigins.includes(refererOrigin)));
-
-      if (isTrustedDevBrowserRequest) {
-        return next();
-      }
-
-      if (apiKey && apiKey === internalKey) {
+      // [Auth Bypass lớp 2] Trước đây có nhánh bypass dựa vào IP nguồn thuộc mạng LAN
+      // (req.socket.remoteAddress) + Origin/Referer khớp allowedOrigins — bỏ hẳn vì IP
+      // nguồn có thể bị giả mạo qua proxy/tunnel cấu hình sai, và không có gì trong
+      // codebase thực sự phụ thuộc vào nó (frontend luôn đính JWT thật qua session
+      // Supabase — xem services/apiService.ts). Máy chủ nội bộ cần gọi mà không có JWT
+      // (nếu có) phải dùng header x-api-key khớp INTERNAL_API_KEY như dưới đây.
+      if (apiKey && internalKey && apiKey === internalKey) {
         return next();
       }
 
