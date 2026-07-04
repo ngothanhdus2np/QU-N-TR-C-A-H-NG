@@ -23,19 +23,19 @@
 
 > **ĐÃ SỬA**: prod DB `brand_profile.phone/address` bị ghi đè bằng placeholder `DEFAULT_BRAND` do race — thiết bị/browser chưa có cache + fetch đầu lỗi/chậm, user gõ field khác trong tab Hồ sơ thương hiệu → auto-save mang theo placeholder đè DB. Khôi phục dữ liệu thật trên prod (phone `033.571.3423 – 096.886.7411`, address `Số nhà 14, đường NC2, tổ 11, khu phố 3, phường Bến Cát, TP.HCM`) + vá gốc rễ [hooks/useAppData.ts](../../hooks/useAppData.ts) (`brandLoadedRef` chặn auto-save cho tới khi có dữ liệu thật xác nhận). Chi tiết HISTORY.md.
 
-### [x] 🟡 POS-RETURN-01 — Phiếu trả thuần cộng NHẦM +giá trị trả vào doanh số NV *(fix xong 2026-07-04, verify live, ⏳ CHỜ DEPLOY)*
+### [x] 🟡 POS-RETURN-01 — Phiếu trả thuần cộng NHẦM +giá trị trả vào doanh số NV *(fix xong 2026-07-04, ✅ ĐÃ DEPLOY 2026-07-04)*
 
 > **ĐÃ SỬA** theo hướng "siết fallback chỉ áp dụng cho đơn import KiotViet": [posSalesAttribution.ts](../../src/lib/posSalesAttribution.ts) — phiếu POS native (items có `lineType`) trả thuần → doanh số NV = 0; fallback `max(0, finalAmount)` chỉ còn cho đơn import (không có lineType). +3 unit test. Verify live trên dev: bán 65k → doanh số NV +65k → trả thuần → doanh số GIỮ NGUYÊN 65k (trước fix sẽ nhảy 130k). ⏳ Sau deploy cần recalc `sales_records` các ngày có phiếu trả POS cũ (xem DATA-CLEANUP-01). Chi tiết HISTORY.md R19.
 
-### [x] 🔴 RETURNS-CANCEL-01 — Trang Trả hàng: hủy phiếu/tạo phiếu tự chế phá tồn kho + doanh thu *(phát hiện audit + fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+### [x] 🔴 RETURNS-CANCEL-01 — Trang Trả hàng: hủy phiếu/tạo phiếu tự chế phá tồn kho + doanh thu *(phát hiện audit + fix xong 2026-07-04, ✅ ĐÃ DEPLOY 2026-07-04)*
 
 > **Phát hiện audit 2026-07-04**: `OrderReturns.tsx` có luồng song song tự chế — hủy phiếu trả trừ kho cả HÀNG ĐỔI (trừ kép), ghi stock đọc-rồi-ghi không qua RPC, ghi đè cả dòng `revenue_records` (race DATA-02 tái xuất), không khôi phục điểm khách/doanh số NV. **ĐÃ SỬA**: viết `processCancelReturn()` + `processCancelLegacyReturnTransaction()` chuẩn trong posOrderService (đảo tồn qua RPC theo tx.type, doanh thu delta atomic, khôi phục khách, recalc doanh số, phiếu → cancelled, giữ bản sao tx làm lịch sử); trang Trả hàng chỉ còn điều hướng sang POS để tạo phiếu (pattern R11) + gọi service chuẩn để hủy. Verify live đủ vòng đời trên dev. Chi tiết HISTORY.md R19.
 
-### [x] 🟠 RETURNS-GUARD-01 — Chặn trả trùng/quá số lượng xuyên luồng *(fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+### [x] 🟠 RETURNS-GUARD-01 — Chặn trả trùng/quá số lượng xuyên luồng *(fix xong 2026-07-04, ✅ ĐÃ DEPLOY 2026-07-04)*
 
 > Migration `025` persist `original_order_id`/`return_fee`/`return_other_refund` (trước chỉ sống trong RAM). `src/lib/returnGuards.ts` mới + `usePOSReturnFlow` trừ số đã trả vào `maxQuantity`, đơn trả đủ → chặn mở tab. Verify live: trả đủ 1/1 → mở lần 2 bị chặn đúng thông báo. Chi tiết HISTORY.md R19.
 
-### [x] 🟠 ORDERS-DEL-02 — Soft-delete xóa đơn + đảo thống kê khách hàng *(fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+### [x] 🟠 ORDERS-DEL-02 — Soft-delete xóa đơn + đảo thống kê khách hàng *(fix xong 2026-07-04, ✅ ĐÃ DEPLOY 2026-07-04)*
 
 > Xóa đơn giờ chuyển `status='cancelled'` (xem lại được qua lọc "Đã hủy" ở trang Hóa đơn, khôi phục được về sau) thay vì DELETE; bổ sung đảo `totalSpent`/điểm/`debtAmount` khách (trước bỏ sót → nợ "ảo"). Lọc tập trung `activeData` tại MainContent + backend/AI/agent loại đơn cancelled. Sửa đơn cũng đảo đúng khách khi đổi/bỏ khách (`revertedCustomer`). Fix rollback `updateSurgical` lưu snapshot đầy đủ (hết phá dữ liệu khi lỗi giữa batch). Verify live đủ vòng đời. Chi tiết HISTORY.md R19.
 
