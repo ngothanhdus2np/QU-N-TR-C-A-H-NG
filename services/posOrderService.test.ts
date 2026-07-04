@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AppData, InventoryTransaction, POSOrder, POSProduct } from '../types';
-import { processPlaceOrder, processReturnOrder, deletePosOrder } from './posOrderService';
+import { processPlaceOrder, processReturnOrder, deletePosOrder, editPosOrder } from './posOrderService';
 
 const baseProduct: POSProduct = {
   id: 'product-1',
@@ -291,6 +291,61 @@ describe('posOrderService', () => {
         })
       ).rejects.toThrow('Chưa hỗ trợ xóa đơn trả/đổi');
       expect(deletePosOrderTx).not.toHaveBeenCalled();
+    });
+  });
+
+  // [ORDERS-EDIT-02]
+  describe('editPosOrder — chặn sửa số lượng thấp hơn số đã trả', () => {
+    const returnOrder: POSOrder = {
+      ...baseOrder,
+      id: 'return-1',
+      orderCode: 'TH-000001',
+      isReturn: true,
+      originalOrderId: 'order-1',
+      items: [
+        {
+          productId: 'product-1',
+          sku: 'SKU-1',
+          name: 'Giày test',
+          quantity: 1,
+          price: 100000,
+          discount: 0,
+          total: 100000,
+        },
+      ],
+    };
+    const dataWithReturn = { ...baseData, posOrders: [baseOrder, returnOrder] } as AppData;
+
+    it('rejects reducing quantity below the amount already returned', async () => {
+      const updateSurgical = vi.fn().mockResolvedValue(undefined);
+      const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        editPosOrder({
+          data: dataWithReturn,
+          originalOrder: baseOrder,
+          updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 0 }] },
+          updateSurgical,
+          applyRevenueDelta,
+        })
+      ).rejects.toThrow('đã có 1 sản phẩm được trả hàng');
+      expect(updateSurgical).not.toHaveBeenCalled();
+    });
+
+    it('allows editing quantity down to (but not below) the amount already returned', async () => {
+      const updateSurgical = vi.fn().mockResolvedValue(undefined);
+      const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        editPosOrder({
+          data: dataWithReturn,
+          originalOrder: baseOrder,
+          updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 1 }] },
+          updateSurgical,
+          applyRevenueDelta,
+        })
+      ).resolves.not.toThrow();
+      expect(updateSurgical).toHaveBeenCalled();
     });
   });
 });

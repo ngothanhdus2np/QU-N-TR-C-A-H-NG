@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-04 (R22) — ORDERS-EDIT-02: chặn sửa đơn giảm dưới số đã trả
+
+- **Fix ORDERS-EDIT-02**: `editPosOrder()` ([services/posOrderService.ts](../../services/posOrderService.ts)) tự tính lại tồn kho theo delta (SL cũ vs mới) độc lập với phiếu trả hàng đã xử lý — sửa SL xuống thấp hơn số đã trả sẽ cộng trùng tồn kho với phần phiếu trả đã cộng lại. Thêm guard tái dùng `getReturnedQuantitiesForOrder()` (đã có từ RETURNS-GUARD-01): chặn lưu nếu SL mới < SL đã trả của sản phẩm đó, cho phép nếu vẫn ≥. Lỗi tự hiện qua cơ chế cảnh báo có sẵn (`showStockWarning`), không cần sửa UI.
+- +2 unit test (chặn/cho phép). 646/646 test pass, tsc sạch.
+- **Verify live đầy đủ trên dev**: bán 3× SP012439 (HD-6MX45) → trả 2/3 (TH-6TYUO, `original_order_id` khớp) → sửa đơn gốc xuống 1 (< 2 đã trả) → **bị chặn đúng** với thông báo `Không thể sửa: "..." đã có 2 sản phẩm được trả hàng — số lượng mới phải từ 2 trở lên.` (xác nhận DB không đổi) → sửa lên 2 (= 2 đã trả) → **cho phép**, xác nhận bằng SQL: tồn kho về đúng 5 (khớp thực tế vật lý), `revenue_records` đảo đúng delta xuống 0 tuyệt đối theo từng đồng (tính tay khớp DB). Dọn sạch dữ liệu test trên dev sau khi verify.
+- Cập nhật `FORMULAS.md` section 11.5 (công thức guard).
+- Files: `services/posOrderService.ts`, `services/posOrderService.test.ts`, `docs/business-knowledge/FORMULAS.md`
+
 ### 2026-07-04 (R21) — Wire migration 026 (TXN-RPC-01 luồng xóa đơn) + xử lý DATA-04
 
 - **DATA-04**: xóa 3 dòng rác trong `revenue_records` trên production (tổng 109.933.000đ, `gross=0`/`date` không hợp lệ, xác nhận lại bằng SQL trực tiếp trước khi xóa) — user chọn phương án xóa. Kèm audit log ghi lý do trước khi xóa.

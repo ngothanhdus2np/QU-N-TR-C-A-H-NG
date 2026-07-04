@@ -784,3 +784,19 @@ SL còn được trả (mỗi SP) = SL mua gốc − Σ SL đã trả ở các p
 Nguồn "đã trả": phiếu TH có `original_order_id` = đơn gốc (migration 025; phiếu cũ
 match qua notes chứa mã đơn) + inventory transaction 'Return' kiểu cũ có
 `referenceId` = đơn gốc. Đơn trả đủ toàn bộ → chặn mở tab trả hàng.
+
+### 11.5 Guard sửa đơn đã có phiếu trả liên kết (ORDERS-EDIT-02)
+
+> Source: `services/posOrderService.ts` → `editPosOrder()`, dùng chung
+> `getReturnedQuantitiesForOrder()` ở 11.4
+
+`editPosOrder()` tính lại tồn kho theo delta (SL CŨ vs SL MỚI của đơn đang sửa),
+độc lập với phiếu trả đã xử lý trước đó. Sửa SL xuống THẤP HƠN số đã trả sẽ làm
+tồn kho bị cộng trùng phần phiếu trả đã cộng lại rồi:
+```
+Chặn khi: SL mới (mỗi SP) < SL đã trả của SP đó (tính theo 11.4)
+Cho phép: SL mới ≥ SL đã trả — vẫn đúng vì 2 phép tính (sửa đơn + phiếu trả) độc lập
+          nhưng không chồng lấn phần đã trả
+```
+Vi phạm → throw lỗi chặn lưu, không đụng tới tồn kho/doanh thu (guard chạy trước
+mọi bước ghi dữ liệu).

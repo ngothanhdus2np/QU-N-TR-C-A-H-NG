@@ -12,6 +12,7 @@ import {
 import { auditService } from './auditService';
 import { getCurrentStaffId } from '../components/shared/staff';
 import { buildPosSalesRecordUpsertsForDate } from '../src/lib/posSalesAttribution';
+import { getReturnedQuantitiesForOrder } from '../src/lib/returnGuards';
 
 type PosOrderCallbacks = {
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
@@ -996,6 +997,26 @@ export async function editPosOrder({
     newQtyByProduct.set(item.productId, (newQtyByProduct.get(item.productId) || 0) + item.quantity);
   }
   const allProductIds = new Set([...oldQtyByProduct.keys(), ...newQtyByProduct.keys()]);
+
+  // [ORDERS-EDIT-02] Chặn giảm số lượng xuống dưới mức đã trả — editPosOrder tự tính lại tồn
+  // kho theo delta (cũ vs mới) độc lập với phiếu trả hàng đã xử lý trước đó; nếu số lượng mới
+  // < số lượng đã trả, tồn kho sẽ bị cộng trùng phần phiếu trả đã cộng lại rồi (xem phân tích
+  // trong TODO.md ORDERS-EDIT-02). Sửa xuống mức vẫn >= số đã trả thì toán học vẫn đúng.
+  const returnedQuantities = getReturnedQuantitiesForOrder(
+    originalOrder,
+    data.posOrders || [],
+    data.inventoryTransactions || []
+  );
+  for (const [productId, returnedQty] of returnedQuantities) {
+    const newQty = newQtyByProduct.get(productId) || 0;
+    if (newQty < returnedQty) {
+      const product = findProduct(currentMap, productId);
+      const name = product?.name || productId;
+      throw new Error(
+        `Không thể sửa: "${name}" đã có ${returnedQty} sản phẩm được trả hàng — số lượng mới phải từ ${returnedQty} trở lên.`
+      );
+    }
+  }
 
   if (!allowSellOutOfStock) {
     for (const productId of allProductIds) {

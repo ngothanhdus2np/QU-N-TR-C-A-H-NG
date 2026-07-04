@@ -11,9 +11,11 @@
 
 > Nút "Sửa trong POS" ở trang Hóa đơn — mở lại đơn vào máy tính tiền, sửa xong lưu đè đúng id cũ (hoàn tồn kho + trừ/cộng doanh thu + tính lại doanh số NV, không nhân đôi lịch sử). Theo quyết định user: không giới hạn quyền/ngày, chưa xử lý riêng đơn có phiếu trả hàng liên kết (rủi ro đã ghi). Chưa hỗ trợ sửa đơn trả/đổi hàng. Chi tiết HISTORY.md.
 
-### [ ] 🟡 ORDERS-EDIT-02 — Xử lý sửa đơn đã có phiếu trả hàng liên kết
+### [x] 🟡 ORDERS-EDIT-02 — Xử lý sửa đơn đã có phiếu trả hàng liên kết *(fix xong 2026-07-04)*
 
-> `editPosOrder()` hiện không kiểm tra/cảnh báo khi đơn đang sửa đã có phiếu trả hàng trỏ tới nó (`originalOrderId`) — sửa số lượng/sản phẩm trong trường hợp này có thể làm lệch số liệu đã trả. User đã chọn "vẫn cho sửa bình thường" ở bản đầu — cần theo dõi thực tế phát sinh, bổ sung cảnh báo/chặn nếu cần.
+> **Rủi ro gốc**: `editPosOrder()` tự tính lại tồn kho theo delta (số lượng CŨ vs MỚI của đơn đang sửa) hoàn toàn độc lập với phiếu trả hàng đã xử lý trước đó. Nếu sửa số lượng xuống THẤP HƠN số đã trả (vd: bán 5, đã trả 3, sửa xuống còn 2) → tồn kho bị cộng trùng phần phiếu trả đã cộng lại rồi (double-count). Sửa xuống mức vẫn ≥ số đã trả thì toán học vẫn đúng (đã kiểm chứng bằng tay từng bước).
+>
+> **✅ ĐÃ SỬA** [services/posOrderService.ts](../../services/posOrderService.ts): thêm guard trong `editPosOrder()` — tái dùng `getReturnedQuantitiesForOrder()` ([src/lib/returnGuards.ts](../../src/lib/returnGuards.ts), đã có sẵn từ RETURNS-GUARD-01) để tính số đã trả theo từng sản phẩm; nếu số lượng mới < số đã trả → chặn lưu với lỗi rõ ràng (vd: `"Dép ABC" đã có 3 sản phẩm được trả hàng — số lượng mới phải từ 3 trở lên`). Lỗi tự hiện lên UI qua đúng cơ chế cảnh báo có sẵn cho "Không đủ tồn kho" (POSComputer.tsx), không cần sửa UI. +2 unit test (chặn khi giảm dưới ngưỡng, cho phép khi vẫn đủ). 646/646 test pass, tsc sạch.
 
 ### [x] 🟡 ORDERS-DEL-01 — Xóa hàng loạt hóa đơn đúng chuẩn (hoàn tồn kho + trừ doanh thu) *(xong 2026-07-03)*
 
@@ -197,11 +199,13 @@
 >
 > 💡 **Sau khi deploy**: endpoint này nay AN TOÀN để chạy lại → dùng để dọn drift T6 (~4,88M lệch giữa orders vs revenue_records) và có thể hỗ trợ đối soát DATA-04.
 
-### [ ] 🟠 DATA-04 — 3 dòng ngày rác trong `revenue_records` *(phát hiện audit 2026-07-02)*
+### [x] 🟠 DATA-04 — 3 dòng ngày rác trong `revenue_records` *(phát hiện audit 2026-07-02, xóa xong trên prod 2026-07-04)*
 
-> 3 dòng có `date` hỏng: `92401-07-06`, `77063-10-04`, `137519-06-26` (created_at 2026-06-06, từ bug import cũ) — tổng **net 109.933.000đ** đang nằm ngoài mọi báo cáo theo range chuẩn nhưng có thể lọt vào tổng all-time. Cần đối chiếu số liệu gốc để sửa ngày đúng (không đoán tự động được), hoặc user xác nhận xóa.
+> 3 dòng có `date` hỏng: `92401-07-06`, `77063-10-04`, `137519-06-26` (created_at 2026-06-06, từ bug import cũ) — tổng **net 109.933.000đ** đang nằm ngoài mọi báo cáo theo range chuẩn nhưng có thể lọt vào tổng all-time.
 >
-> ✅ **Audit R3 (2026-07-03) tái hiện chính xác trên clone**: 3 dòng net 49.449.000 + 33.031.000 + 27.453.000 = **109.933.000**; tổng net all-time = 15.042.976.804 vs trong-range (2020..2027) = 14.933.043.804 → lệch **đúng 109,933M lọt vào all-time**. Vẫn tồn tại trên clone (và presumably prod).
+> ✅ **Audit R3 (2026-07-03) tái hiện chính xác trên clone**: 3 dòng net 49.449.000 + 33.031.000 + 27.453.000 = **109.933.000**; tổng net all-time = 15.042.976.804 vs trong-range (2020..2027) = 14.933.043.804 → lệch **đúng 109,933M lọt vào all-time**.
+>
+> ✅ **Đã xử lý 2026-07-04**: xác nhận lại y hệt trên production qua SQL trực tiếp (giá trị khớp 100% với audit R3), user chọn phương án **xóa** (gross=0 + date rác → gần chắc chắn không phải doanh thu thật). Đã `DELETE` cả 3 dòng trên prod kèm `audit_logs` ghi lý do trước khi xóa.
 
 ### [ ] 🟡 SEC-RATELIMIT-01 — Login `/auth/v1` không rate-limit ở tầng app *(phát hiện audit R3 2026-07-03)*
 
