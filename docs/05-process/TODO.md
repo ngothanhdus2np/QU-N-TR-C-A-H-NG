@@ -23,9 +23,39 @@
 
 > **ĐÃ SỬA**: prod DB `brand_profile.phone/address` bị ghi đè bằng placeholder `DEFAULT_BRAND` do race — thiết bị/browser chưa có cache + fetch đầu lỗi/chậm, user gõ field khác trong tab Hồ sơ thương hiệu → auto-save mang theo placeholder đè DB. Khôi phục dữ liệu thật trên prod (phone `033.571.3423 – 096.886.7411`, address `Số nhà 14, đường NC2, tổ 11, khu phố 3, phường Bến Cát, TP.HCM`) + vá gốc rễ [hooks/useAppData.ts](../../hooks/useAppData.ts) (`brandLoadedRef` chặn auto-save cho tới khi có dữ liệu thật xác nhận). Chi tiết HISTORY.md.
 
-### [ ] 🟡 POS-RETURN-01 — Phiếu trả thuần cộng NHẦM +giá trị trả vào doanh số NV *(phát hiện 2026-07-03 khi hoàn tác phiếu trả bấm nhầm)*
+### [x] 🟡 POS-RETURN-01 — Phiếu trả thuần cộng NHẦM +giá trị trả vào doanh số NV *(fix xong 2026-07-04, verify live, ⏳ CHỜ DEPLOY)*
 
-> Phiếu trả thuần (không đổi hàng) tạo từ flow trả hàng lưu `finalAmount = +60000` (dương, bằng giá trị hàng trả) thay vì 0/âm như comment trong code mô tả (`POSComputer lưu finalAmount = -Math.max(0, totalReturn-totalExchange)`). Hệ quả: nhánh fallback KiotViet trong `calculateOrderStaffSales` ([src/lib/posSalesAttribution.ts:75](../../src/lib/posSalesAttribution.ts)) tính `extraPaid = max(0, finalAmount) = 60000` → **trả hàng làm TĂNG doanh số NV** thay vì không đổi. Tái hiện thực tế: phiếu TH065947 (trả 1×60k, không đổi hàng) đẩy `sales_records` NV +60.000. Cần xác định nơi set `finalAmount` khi tạo phiếu trả từ chi tiết hóa đơn (usePOSReturnFlow / POSComputer handleCheckout nhánh return) và sửa cho khớp công thức, hoặc siết fallback chỉ áp dụng cho đơn import KiotViet.
+> **ĐÃ SỬA** theo hướng "siết fallback chỉ áp dụng cho đơn import KiotViet": [posSalesAttribution.ts](../../src/lib/posSalesAttribution.ts) — phiếu POS native (items có `lineType`) trả thuần → doanh số NV = 0; fallback `max(0, finalAmount)` chỉ còn cho đơn import (không có lineType). +3 unit test. Verify live trên dev: bán 65k → doanh số NV +65k → trả thuần → doanh số GIỮ NGUYÊN 65k (trước fix sẽ nhảy 130k). ⏳ Sau deploy cần recalc `sales_records` các ngày có phiếu trả POS cũ (xem DATA-CLEANUP-01). Chi tiết HISTORY.md R19.
+
+### [x] 🔴 RETURNS-CANCEL-01 — Trang Trả hàng: hủy phiếu/tạo phiếu tự chế phá tồn kho + doanh thu *(phát hiện audit + fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+
+> **Phát hiện audit 2026-07-04**: `OrderReturns.tsx` có luồng song song tự chế — hủy phiếu trả trừ kho cả HÀNG ĐỔI (trừ kép), ghi stock đọc-rồi-ghi không qua RPC, ghi đè cả dòng `revenue_records` (race DATA-02 tái xuất), không khôi phục điểm khách/doanh số NV. **ĐÃ SỬA**: viết `processCancelReturn()` + `processCancelLegacyReturnTransaction()` chuẩn trong posOrderService (đảo tồn qua RPC theo tx.type, doanh thu delta atomic, khôi phục khách, recalc doanh số, phiếu → cancelled, giữ bản sao tx làm lịch sử); trang Trả hàng chỉ còn điều hướng sang POS để tạo phiếu (pattern R11) + gọi service chuẩn để hủy. Verify live đủ vòng đời trên dev. Chi tiết HISTORY.md R19.
+
+### [x] 🟠 RETURNS-GUARD-01 — Chặn trả trùng/quá số lượng xuyên luồng *(fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+
+> Migration `025` persist `original_order_id`/`return_fee`/`return_other_refund` (trước chỉ sống trong RAM). `src/lib/returnGuards.ts` mới + `usePOSReturnFlow` trừ số đã trả vào `maxQuantity`, đơn trả đủ → chặn mở tab. Verify live: trả đủ 1/1 → mở lần 2 bị chặn đúng thông báo. Chi tiết HISTORY.md R19.
+
+### [x] 🟠 ORDERS-DEL-02 — Soft-delete xóa đơn + đảo thống kê khách hàng *(fix xong 2026-07-04, ⏳ CHỜ DEPLOY)*
+
+> Xóa đơn giờ chuyển `status='cancelled'` (xem lại được qua lọc "Đã hủy" ở trang Hóa đơn, khôi phục được về sau) thay vì DELETE; bổ sung đảo `totalSpent`/điểm/`debtAmount` khách (trước bỏ sót → nợ "ảo"). Lọc tập trung `activeData` tại MainContent + backend/AI/agent loại đơn cancelled. Sửa đơn cũng đảo đúng khách khi đổi/bỏ khách (`revertedCustomer`). Fix rollback `updateSurgical` lưu snapshot đầy đủ (hết phá dữ liệu khi lỗi giữa batch). Verify live đủ vòng đời. Chi tiết HISTORY.md R19.
+
+### [x] 🟠 DATA-CLEANUP-01 — Đối soát dữ liệu cũ sau deploy 2026-07-04 *(xong 2026-07-04 trên prod, trừ DATA-04 chờ user)*
+
+> **Kết quả trên prod (deploy Giai đoạn 1 xong)**:
+> 1. ✅ **Recalc revenue T6/2026 xong** qua endpoint canonical (gọi trên iMac bằng `INTERNAL_API_KEY`, key không lộ). Drift về **0 tuyệt đối**: gross/returns/net khớp 100% pos_orders (net 238.009.000 → **238.354.000**, returns 570.000 → **4.535.000**). T7 rỗng (prod dữ liệu thật đến 2026-06-25, không có đơn tháng 7 → bỏ qua).
+> 2. ✅ **Không cần recalc sales_records**: prod CHỈ có phiếu trả import KiotViet (2009 cái), **0 phiếu trả POS native** → POS-RETURN-01 chưa từng kích hoạt trên prod (fix không đổi hành vi đơn import). Doanh số NV không bị ảnh hưởng.
+> 3. ✅ **Không có tồn kho hỏng**: 0 `inventory_transactions` type Return trên prod → nút trả hàng/hủy cũ ở trang Trả hàng chưa từng dùng thật. Các fix RETURNS-* là phòng ngừa (cửa hàng chưa dùng luồng trả hàng trong app).
+> 4. ⏳ **DATA-04 — CHỜ USER QUYẾT ĐỊNH**: 3 dòng ngày rác trong `revenue_records` (created 2026-06-06, `total_gross_revenue=0` nhưng `net_revenue>0` — mâu thuẫn, rác từ bug import cũ), tổng net **109.933.000** lọt vào tổng all-time:
+>    - `77063-10-04` → net 27.453.000 (id `e69c5c67-e1c1-4ffe-b5b0-c95390c0bb34`)
+>    - `92401-07-06` → net 33.031.000 (id `24a63f64-e6f5-4df5-a352-8d6d45f84f0b`)
+>    - `137519-06-26` → net 49.449.000 (id `6356bd21-90b8-4ea4-8b87-13ebfbd381e3`)
+>    - Gross=0 nên gần như chắc chắn nên **XÓA** (không phải doanh thu thật). User xác nhận xóa hoặc cho ngày đúng để sửa.
+
+### [ ] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction *(kế hoạch đã chốt với user 2026-07-04)*
+
+> Giai đoạn 2 của lộ trình A→B: thay ruột các hàm service (`deletePosOrder`, `processCancelReturn`, `editPosOrder`, `processPlaceOrder`) từ chuỗi nhiều lời gọi mạng thành 1 RPC transaction DB theo mẫu `pos_mobile_checkout` — đóng nốt cửa sổ lệch khi rớt mạng giữa chừng. Gộp chung với DATA-01. UI/props không phải sửa lại (Giai đoạn 1 đã dồn mọi nút về service layer).
+>
+> **Tiến độ**: migration `026_delete_pos_order_tx.sql` đã viết RPC `delete_pos_order_tx()` (gộp hoàn tồn kho + đảo doanh thu + đảo khách/nợ + soft-delete đơn bán vào 1 transaction) — **CHƯA wire vào `deletePosOrder()` trong `posOrderService.ts`** (service vẫn dùng chuỗi nhiều lời gọi cũ) và **chưa có test**. Migration đã lên prod (an toàn — chỉ tạo function, không đổi hành vi hiện tại) nhưng còn việc: sửa `deletePosOrder()` gọi RPC này qua `supabase.rpc('delete_pos_order_tx', { p_order_id })`, viết test, verify live trước khi coi Giai đoạn 2 cho luồng xóa đơn là xong.
 
 ### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
 

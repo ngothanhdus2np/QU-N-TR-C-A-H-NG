@@ -30,6 +30,8 @@ export async function generateEODReport(supabase: SupabaseClient, date: string):
     .select('order_code, date, customer_name, items, final_amount, payment_method, is_return')
     .gte('date', `${date}T00:00:00`)
     .lte('date', `${date}T23:59:59`)
+    // Soft-delete: loại đơn đã hủy (status NULL ở dòng cũ vẫn phải giữ)
+    .or('status.is.null,status.neq.cancelled')
     .order('date', { ascending: true });
 
   if (error) throw new Error(`Lỗi truy vấn POS orders: ${error.message}`);

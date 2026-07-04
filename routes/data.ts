@@ -775,6 +775,8 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         const { data: orders, error } = await supabase
           .from('pos_orders')
           .select('date, is_return, items')
+          // Soft-delete: loại đơn đã hủy (status NULL ở dòng cũ vẫn phải giữ)
+          .or('status.is.null,status.neq.cancelled')
           .order('date', { ascending: false })
           .range(offset, offset + 999);
         if (error) throw new Error(error.message);
@@ -922,6 +924,8 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         const { data: orders, error } = await supabase
           .from('pos_orders')
           .select('date, total_amount, discount, final_amount, is_return, items')
+          // Soft-delete: loại đơn đã hủy (status NULL ở dòng cũ vẫn phải giữ)
+          .or('status.is.null,status.neq.cancelled')
           .order('date', { ascending: false })
           .range(offset, offset + 999);
         if (error) throw new Error(error.message);
@@ -1022,6 +1026,8 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
           .select('total_amount, discount, final_amount, is_return, date')
           .gte('date', `${targetMonth}-01`)
           .lte('date', `${lastDay}T23:59:59`)
+          // Soft-delete: loại đơn đã hủy (status NULL ở dòng cũ vẫn phải giữ)
+          .or('status.is.null,status.neq.cancelled')
           .range(offset, offset + 999);
         if (error) throw new Error(error.message);
         if (!orders?.length) break;

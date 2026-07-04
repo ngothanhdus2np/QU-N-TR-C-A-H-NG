@@ -23,6 +23,7 @@ import {
   POSOrderItem,
   CustomerDebtRecord,
   Employee,
+  InventoryTransaction,
   BrandProfile,
   POSInventorySettings,
   POSKeyboardSettings,
@@ -92,6 +93,8 @@ interface POSComputerProps {
   customers: POSCustomer[];
   employees?: Employee[];
   orders: POSOrder[];
+  // Guard chống trả trùng cần cả phiếu trả kiểu cũ (inventory transaction 'Return')
+  inventoryTransactions?: InventoryTransaction[];
   customerDebtHistory?: CustomerDebtRecord[];
   onPlaceOrder: (
     order: POSOrder,
@@ -110,7 +113,8 @@ interface POSComputerProps {
     originalOrder: POSOrder,
     updatedOrder: POSOrder,
     updatedCustomer?: POSCustomer,
-    debtRecord?: CustomerDebtRecord
+    debtRecord?: CustomerDebtRecord,
+    revertedCustomer?: POSCustomer // khách gốc bị đổi/bỏ — đã đảo phần đơn gốc từng cộng
   ) => Promise<void>;
   // Đơn cần mở lại để sửa (từ trang Hóa đơn) — set 1 lần rồi cha xóa qua onOrderEditLoaded
   orderToEdit?: POSOrder | null;
@@ -146,6 +150,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
   customers,
   employees = [],
   orders,
+  inventoryTransactions = [],
   customerDebtHistory = [],
   onPlaceOrder,
   onReturnOrder,
@@ -722,6 +727,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
     setActiveTabId,
     setShowReturnModal,
     customers, // [FIX M4] auto-fill customer khi load đơn trả
+    // Guard chống trả trùng: trừ số đã trả từ phiếu POS + phiếu kiểu cũ
+    orders,
+    inventoryTransactions,
+    onBlocked: showStockWarning,
   });
 
   const { handleSelectOrderToEdit } = useEditOrderFlow({
@@ -1002,12 +1011,31 @@ const POSComputer: React.FC<POSComputerProps> = ({
     });
 
     let updatedCustomer: POSCustomer | undefined;
+    let revertedCustomer: POSCustomer | undefined;
     let debtRecord: CustomerDebtRecord | undefined;
 
+    // Sửa đơn mà khách gốc bị ĐỔI sang khách khác hoặc BỎ chọn → phải đảo toàn bộ phần
+    // totalSpent/điểm/nợ mà đơn gốc từng cộng cho khách CŨ (trước đây delta bị áp nhầm
+    // lên khách đang chọn, hoặc không đảo gì khi bỏ chọn khách)
+    if (originalOrderForEdit?.customerId && originalOrderForEdit.customerId !== selectedCustomer?.id) {
+      const oldCustomer = customers.find(c => c.id === originalOrderForEdit.customerId);
+      if (oldCustomer) {
+        const oldDebtRecord = customerDebtHistory.find(
+          d => d.orderId === originalOrderForEdit.id && d.type === 'debt'
+        );
+        revertedCustomer = {
+          ...oldCustomer,
+          points: Math.max(0, (oldCustomer.points || 0) - (originalOrderForEdit.pointsEarned || 0)),
+          totalSpent: Math.max(0, (oldCustomer.totalSpent || 0) - (originalOrderForEdit.finalAmount || 0)),
+          debtAmount: Math.max(0, (oldCustomer.debtAmount ?? 0) - (oldDebtRecord?.amount || 0)),
+        };
+      }
+    }
+
     if (selectedCustomer) {
-      if (originalOrderForEdit) {
-        // Sửa đơn: chỉ áp dụng CHÊNH LỆCH so với đơn gốc — đơn gốc đã cộng vào totalSpent/điểm/nợ
-        // từ lúc tạo, không được cộng lại toàn bộ netPayable mới (sẽ tính trùng phần cũ).
+      if (originalOrderForEdit && originalOrderForEdit.customerId === selectedCustomer.id) {
+        // Sửa đơn CÙNG khách: chỉ áp dụng CHÊNH LỆCH so với đơn gốc — đơn gốc đã cộng vào
+        // totalSpent/điểm/nợ từ lúc tạo, không được cộng lại toàn bộ netPayable mới.
         const oldDebtRecord = customerDebtHistory.find(
           d => d.orderId === originalOrderForEdit.id && d.type === 'debt'
         );
@@ -1023,6 +1051,30 @@ const POSComputer: React.FC<POSComputerProps> = ({
           tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
           lastVisit: new Date().toISOString(),
           debtAmount: Math.max(0, (selectedCustomer.debtAmount ?? 0) + newDebtAmount - oldDebtAmount),
+        };
+        if (newDebtAmount > 0) {
+          debtRecord = {
+            id: generateId(),
+            customerId: selectedCustomer.id,
+            date: new Date().toISOString(),
+            orderId,
+            type: 'debt',
+            amount: newDebtAmount,
+            note: `Đơn hàng ${orderCode} (đã sửa)`,
+          };
+        }
+      } else if (originalOrderForEdit) {
+        // Sửa đơn nhưng khách hiện tại KHÁC khách gốc (đổi khách / đơn gốc không có khách):
+        // cộng đủ toàn bộ đơn cho khách mới như một đơn mới (khách cũ đã đảo ở trên)
+        const newDebtAmount = isDebtMode ? netPayable : 0;
+        const newTotalSpent = selectedCustomer.totalSpent + netPayable;
+        updatedCustomer = {
+          ...selectedCustomer,
+          points: selectedCustomer.points + pointsEarned,
+          totalSpent: newTotalSpent,
+          tier: computeNewTier(newTotalSpent, selectedCustomer.tier),
+          lastVisit: new Date().toISOString(),
+          debtAmount: (selectedCustomer.debtAmount ?? 0) + newDebtAmount,
         };
         if (newDebtAmount > 0) {
           debtRecord = {
@@ -1063,7 +1115,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
     try {
       if (originalOrderForEdit) {
         if (!onEditOrder) throw new Error('Chức năng sửa đơn chưa sẵn sàng');
-        await onEditOrder(originalOrderForEdit, newOrder, updatedCustomer, debtRecord);
+        await onEditOrder(originalOrderForEdit, newOrder, updatedCustomer, debtRecord, revertedCustomer);
       } else {
         await onPlaceOrder(newOrder, updatedProducts, updatedCustomer, debtRecord);
       }

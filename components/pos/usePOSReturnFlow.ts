@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { generateId } from '../../src/lib';
-import { POSProduct, POSOrder, POSCustomer } from '../../types';
+import { getReturnedQuantitiesForOrder } from '../../src/lib/returnGuards';
+import { InventoryTransaction, POSProduct, POSOrder, POSCustomer } from '../../types';
 import type { InvoiceTab } from './types';
 
 interface UsePOSReturnFlowParams {
@@ -15,6 +16,10 @@ interface UsePOSReturnFlowParams {
   setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
   setShowReturnModal: React.Dispatch<React.SetStateAction<boolean>>;
   customers?: POSCustomer[]; // [FIX M4] để auto-fill khách khi load đơn trả
+  // Guard chống trả trùng: trừ số lượng đã trả ở các phiếu trước vào maxQuantity
+  orders?: POSOrder[];
+  inventoryTransactions?: InventoryTransaction[];
+  onBlocked?: (message: string) => void; // báo khi đơn đã trả đủ, không mở tab
 }
 
 export const usePOSReturnFlow = ({
@@ -29,6 +34,9 @@ export const usePOSReturnFlow = ({
   setActiveTabId,
   setShowReturnModal,
   customers = [],
+  orders = [],
+  inventoryTransactions = [],
+  onBlocked,
 }: UsePOSReturnFlowParams) => {
   const addToReturnCart = React.useCallback(
     (product: POSProduct) => {
@@ -118,6 +126,24 @@ export const usePOSReturnFlow = ({
 
   const handleSelectOrderReturn = React.useCallback(
     (order: POSOrder) => {
+      // Guard chống trả trùng: trừ số lượng đã trả ở các phiếu trước (POS + kiểu cũ),
+      // đơn đã trả đủ toàn bộ → chặn, không mở tab
+      const alreadyReturned = getReturnedQuantitiesForOrder(order, orders, inventoryTransactions);
+      const saleItems = order.items.filter(item => !item.lineType || item.lineType === 'sale');
+      const remainingByProduct = new Map(
+        saleItems.map(item => [
+          item.productId,
+          Math.max(0, (Number(item.quantity) || 0) - (alreadyReturned.get(item.productId) || 0)),
+        ])
+      );
+      if (saleItems.length > 0 && [...remainingByProduct.values()].every(qty => qty === 0)) {
+        onBlocked?.(
+          `Đơn ${order.orderCode} đã được trả đủ toàn bộ sản phẩm — không thể tạo thêm phiếu trả.`
+        );
+        setShowReturnModal(false);
+        return;
+      }
+
       const nextNum =
         Math.max(
           0,
@@ -141,9 +167,7 @@ export const usePOSReturnFlow = ({
           cart: [],
           // [FIX C1-POS] Chỉ load items gốc (sale), loại trừ exchange items
           // Tránh cho phép "trả ngược" hàng đã xuất đổi → trừ kép tồn kho
-          returnCart: order.items
-            .filter(item => !item.lineType || item.lineType === 'sale')
-            .map(item => ({
+          returnCart: saleItems.map(item => ({
               productId: item.productId,
               sku: item.sku,
               name: item.name,
@@ -151,7 +175,8 @@ export const usePOSReturnFlow = ({
               price: item.price,
               discount: item.discount,
               total: 0,
-              maxQuantity: item.quantity,
+              // Trừ số đã trả ở các phiếu trước — không cho trả quá phần còn lại
+              maxQuantity: remainingByProduct.get(item.productId) ?? item.quantity,
             })),
           selectedCustomer: orderCustomer,
           discountValue: 0,
@@ -172,7 +197,7 @@ export const usePOSReturnFlow = ({
       setShowReturnModal(false);
     },
     // [FIX F2] Thêm customers vào deps — tránh stale closure bỏ sót khách mới thêm trong phiên
-    [customers, setActiveTabId, setShowReturnModal, setTabs, tabs]
+    [customers, orders, inventoryTransactions, onBlocked, setActiveTabId, setShowReturnModal, setTabs, tabs]
   );
 
   const handleReturnFast = React.useCallback(() => {

@@ -350,10 +350,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       case 'get_pos_session_summary': {
         const sessionDate = args?.date || new Date().toISOString().split('T')[0];
         const orders = (data.posOrders || []).filter(
-          o => o.date.startsWith(sessionDate) && !o.isReturn
+          o => o.date.startsWith(sessionDate) && !o.isReturn && o.status !== 'cancelled'
         );
         const returns = (data.posOrders || []).filter(
-          o => o.date.startsWith(sessionDate) && o.isReturn
+          o => o.date.startsWith(sessionDate) && o.isReturn && o.status !== 'cancelled'
         );
         const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
         for (const o of orders) {
@@ -388,7 +388,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           o => !o.isReturn && o.status !== 'cancelled' && o.date >= s && o.date <= e
         );
         const returns = (data.posOrders || []).filter(
-          o => o.isReturn && o.date >= s && o.date <= e
+          o => o.isReturn && o.status !== 'cancelled' && o.date >= s && o.date <= e
         );
         const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
         for (const o of orders) {

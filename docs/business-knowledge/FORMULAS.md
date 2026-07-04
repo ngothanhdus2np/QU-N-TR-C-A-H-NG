@@ -716,3 +716,71 @@ Quy tắc đặc biệt:
 - Đơn huỷ (`status === 'CANCEL'`): **tất cả cột từ "Khách Thanh Toán" đến "Lợi Nhuận" đều = 0**, kể cả Số lượng = 0 (để không sai tồn kho)
 - Nếu SKU không tìm thấy trong `shopeeSourceData` → Giá gốc = 0 (không lỗi)
 - Lợi Nhuận âm → hiển thị màu đỏ (`text-rose-600`); dương → màu xanh (`text-emerald-700`)
+
+---
+
+## 11. HỦY PHIẾU TRẢ & XÓA ĐƠN (SOFT-DELETE) — thêm 2026-07-04
+
+### 11.1 Xóa đơn bán = soft-delete (không xóa khỏi DB)
+
+> Source: `services/posOrderService.ts` → `deletePosOrder()`
+
+Đơn bị "xóa" chuyển `status = 'cancelled'`, vẫn xem lại được ở trang Hóa đơn qua lọc
+"Đã hủy". **Đơn cancelled bị loại khỏi TOÀN BỘ tính toán**: doanh thu, doanh số NV,
+thống kê khách hàng, báo cáo, POS (chọn đơn sửa/trả), AI agent, recalculate backend.
+
+Phép đảo khi hủy đơn bán:
+```
+tồn kho          += quantity từng item        (qua RPC delete_inventory_transaction_with_stock_v2)
+revenue_records  -= buildRevenueDelta(đơn)    (delta đảo dấu, atomic theo ngày bán)
+customer.totalSpent -= finalAmount            (clamp ≥ 0)
+customer.points     -= pointsEarned           (clamp ≥ 0)
+customer.debtAmount -= Σ(debt) − Σ(payment)   (các dòng customer_debt_history có orderId, bị xóa kèm)
+sales_records    = tính lại cả ngày, loại đơn đã hủy
+```
+
+Điểm lọc tập trung: `components/MainContent.tsx` → `activeData`/`activePosOrders`
+(mọi trang tính toán nhận orders đã lọc cancelled — trừ trang Hóa đơn/Trả hàng cần
+hiển thị lịch sử). Backend: các query `pos_orders` thêm
+`.or('status.is.null,status.neq.cancelled')`.
+
+### 11.2 Hủy phiếu trả hàng
+
+> Source: `services/posOrderService.ts` → `processCancelReturn()` (phiếu TH chuẩn)
+> và `processCancelLegacyReturnTransaction()` (phiếu kiểu cũ chỉ có inventory transaction)
+
+Phiếu trả chuyển `status = 'cancelled'`. Phép đảo (nghịch đảo đúng của `processReturnOrder`):
+```
+tồn kho:  hàng TRẢ (lineType ≠ 'exchange')  → TRỪ lại kho (khách lấy lại hàng)
+          hàng ĐỔI (lineType = 'exchange')  → CỘNG lại kho (hàng đổi quay về)
+          — cả 2 qua RPC delete theo tx.type đã lưu; hàng trả đã bán tiếp → RPC chặn (exception)
+revenue_records += negate(buildReturnRevenueDelta)   (atomic theo ngày phiếu)
+customer.points     += floor(Σ item trả có allowPoints / pointsRate)
+customer.totalSpent += totalReturnValue − totalExchangeValue   (clamp ≥ 0)
+sales_records = tính lại cả ngày (phiếu cancelled đóng góp 0)
+```
+Bản sao inventory transaction `status='cancelled'` được giữ lại làm lịch sử kho.
+
+### 11.3 Doanh số NV với phiếu trả (fix POS-RETURN-01)
+
+> Source: `src/lib/posSalesAttribution.ts` → `calculateOrderStaffSales()`
+
+```
+Phiếu POS native (items có lineType):
+  extraPaid = max(0, Σ total hàng đổi − Σ total hàng trả)   — trả thuần → 0
+Đơn import KiotViet (không lineType):
+  extraPaid = max(0, finalAmount)                            — fallback duy nhất
+```
+Phiếu trả thuần POS lưu `finalAmount` DƯƠNG = tiền hoàn khách (FIX C2) — **không**
+được đọc là "khách bù thêm". Doanh số NV chỉ tăng khi khách thật sự bù tiền đổi hàng.
+
+### 11.4 Guard chống trả trùng
+
+> Source: `src/lib/returnGuards.ts` → `getReturnedQuantitiesForOrder()`
+
+```
+SL còn được trả (mỗi SP) = SL mua gốc − Σ SL đã trả ở các phiếu trước (chưa hủy)
+```
+Nguồn "đã trả": phiếu TH có `original_order_id` = đơn gốc (migration 025; phiếu cũ
+match qua notes chứa mã đơn) + inventory transaction 'Return' kiểu cũ có
+`referenceId` = đơn gốc. Đơn trả đủ toàn bộ → chặn mở tab trả hàng.

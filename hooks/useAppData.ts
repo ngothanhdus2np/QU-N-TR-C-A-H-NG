@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useCallback, useReducer, useState, useRef } from 'react';
 import {
   AppData,
-  AppDataItem,
   AppDataSurgicalUpdate,
   ChatMessage,
   BrandProfile,
@@ -949,12 +948,31 @@ export function useAppData() {
       const hasStockUpdates = updates.some(u => u.key === 'posProducts');
       const shouldUseInventoryRpc = inventoryUpdates.length > 0 && hasStockUpdates;
 
+      // Snapshot bản ghi TRƯỚC khi ghi (từ state trước dispatch) — rollback server phải
+      // KHÔI PHỤC giá trị cũ, không được xóa bản ghi bị update hay upsert dòng chỉ có {id}
+      // (trước đây làm mất dữ liệu khi lỗi giữa batch nhiều thao tác).
+      const previousItemsByKey = new Map<string, IdentifiableItem | undefined>();
+      for (const u of updates) {
+        if (!isIdentifiableItem(u.item)) continue;
+        const list = Array.isArray(state.data[u.key])
+          ? (state.data[u.key] as unknown as IdentifiableItem[])
+          : [];
+        previousItemsByKey.set(
+          `${u.key}:${u.item.id}`,
+          list.find(item => isIdentifiableItem(item) && item.id === u.item.id)
+        );
+      }
+      const getPreviousItem = (key: keyof AppData, id: string) =>
+        previousItemsByKey.get(`${key}:${id}`);
+
       // Track successful operations for rollback
       const completedOperations: Array<{
         key: keyof AppData;
         id: string;
         isDelete: boolean;
-        previousData?: AppDataItem<keyof AppData> | { id: string };
+        // Thao tác chạy qua RPC inventory (đã kèm chỉnh tồn kho) — rollback cũng phải qua RPC
+        wasRpc?: boolean;
+        previousData?: IdentifiableItem;
       }> = [];
 
       try {
@@ -966,7 +984,8 @@ export function useAppData() {
                 key: inventoryUpdate.key,
                 id: inventoryUpdate.item.id,
                 isDelete: true,
-                previousData: inventoryUpdate.item,
+                wasRpc: true,
+                previousData: getPreviousItem(inventoryUpdate.key, inventoryUpdate.item.id),
               });
             } else {
               await apiService.applyInventoryTransactionWithStock(
@@ -976,6 +995,7 @@ export function useAppData() {
                 key: inventoryUpdate.key,
                 id: inventoryUpdate.item.id,
                 isDelete: false,
+                wasRpc: true,
               });
             }
           }
@@ -994,7 +1014,7 @@ export function useAppData() {
               key: u.key,
               id: u.item.id,
               isDelete: true,
-              previousData: u.item,
+              previousData: getPreviousItem(u.key, u.item.id),
             });
           } else {
             await apiService.upsertItem(u.key, u.item);
@@ -1002,6 +1022,7 @@ export function useAppData() {
               key: u.key,
               id: u.item.id,
               isDelete: false,
+              previousData: getPreviousItem(u.key, u.item.id),
             });
           }
         }
@@ -1016,11 +1037,36 @@ export function useAppData() {
           console.warn(`Đang rollback ${completedOperations.length} operations đã hoàn thành...`);
           for (const op of completedOperations.reverse()) {
             try {
-              if (op.isDelete && op.previousData) {
-                // Restore deleted item
+              if (op.wasRpc) {
+                // Thao tác RPC đã kèm chỉnh tồn kho — rollback phải qua RPC để đảo cả tồn kho
+                if (op.isDelete) {
+                  if (op.previousData) {
+                    // Xóa RPC đã đảo tồn — apply lại transaction đầy đủ khôi phục cả row lẫn tồn
+                    await apiService.applyInventoryTransactionWithStock(
+                      op.previousData as AppData['inventoryTransactions'][number]
+                    );
+                  } else {
+                    console.error(
+                      `[Rollback] Thiếu snapshot transaction ${op.id} — không thể khôi phục tự động`
+                    );
+                  }
+                } else {
+                  await apiService.deleteInventoryTransactionWithStock(op.id);
+                }
+              } else if (op.isDelete) {
+                if (op.previousData) {
+                  // Restore deleted item với dữ liệu đầy đủ trước khi xóa
+                  await apiService.upsertItem(op.key, op.previousData);
+                } else {
+                  console.error(
+                    `[Rollback] Thiếu snapshot bản ghi đã xóa ${op.key}:${op.id} — không thể khôi phục tự động`
+                  );
+                }
+              } else if (op.previousData) {
+                // Bản ghi tồn tại trước đó và bị UPDATE — khôi phục giá trị cũ, KHÔNG xóa
                 await apiService.upsertItem(op.key, op.previousData);
-              } else if (!op.isDelete) {
-                // Delete newly created/updated item
+              } else {
+                // Bản ghi mới tạo trong batch này — xóa đi là đảo đúng
                 await apiService.deleteItem(op.key, op.id);
               }
             } catch (rollbackErr) {

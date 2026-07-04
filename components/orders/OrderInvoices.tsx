@@ -158,7 +158,8 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
   }, [page, totalPages]);
 
   // Đơn trả/đổi hàng chưa hỗ trợ xóa đúng chuẩn (xem deletePosOrder) → loại khỏi chọn hàng loạt.
-  const selectablePaginated = paginated.filter(o => !o.isReturn);
+  // Đơn đã hủy (soft-delete) cũng loại — không thể hủy 2 lần.
+  const selectablePaginated = paginated.filter(o => !o.isReturn && o.status !== 'cancelled');
   const allChecked =
     selectablePaginated.length > 0 && selectablePaginated.every(o => selectedIds.has(o.id));
   const toggleAll = () => {
@@ -439,14 +440,23 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
       alert('Đây đã là phiếu trả hàng.');
       return;
     }
+    if (order.status === 'cancelled') {
+      alert('Đơn đã hủy — không thể trả hàng.');
+      return;
+    }
+    // Trả nhiều lần từng phần là hợp lệ — số lượng còn được trả đã có guard chặn trong POS
+    // (usePOSReturnFlow trừ số đã trả vào maxQuantity). Ở đây chỉ nhắc để người dùng biết.
     const hasExistingReturn = [...orders, ...pageOrders].some(candidate =>
       candidate.isReturn &&
       candidate.id !== order.id &&
-      candidate.notes?.includes(order.orderCode)
+      candidate.status !== 'cancelled' &&
+      (candidate.originalOrderId === order.id || (!candidate.originalOrderId && candidate.notes?.includes(order.orderCode)))
     );
     if (hasExistingReturn) {
-      alert(`Hóa đơn ${order.orderCode} đã có phiếu trả hàng. Vui lòng kiểm tra tab trả hàng trước khi tạo thêm.`);
-      return;
+      const proceed = window.confirm(
+        `Hóa đơn ${order.orderCode} đã có phiếu trả hàng trước đó. Số lượng còn được trả sẽ tự trừ phần đã trả. Tiếp tục?`
+      );
+      if (!proceed) return;
     }
     onReturnInPOS(order);
   };
@@ -661,7 +671,7 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                {onEditInPOS && !order.isReturn ? (
+                {onEditInPOS && !order.isReturn && order.status !== 'cancelled' ? (
                   <button
                     onClick={() => onEditInPOS(order)}
                     title="Mở lại đơn này trong máy tính tiền để sửa sản phẩm, số lượng, giá..."
@@ -672,7 +682,11 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
                   </button>
                 ) : (
                   <span
-                    title="Chưa hỗ trợ sửa đơn trả/đổi hàng qua máy tính tiền"
+                    title={
+                      order.status === 'cancelled'
+                        ? 'Đơn đã hủy — không thể sửa'
+                        : 'Chưa hỗ trợ sửa đơn trả/đổi hàng qua máy tính tiền'
+                    }
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-4 text-sm font-bold text-slate-400 cursor-not-allowed"
                   >
                     <ShoppingCart className="h-4 w-4" />
@@ -1026,8 +1040,14 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
                           type="checkbox"
                           checked={selectedIds.has(order.id)}
                           onChange={() => toggleRow(order.id)}
-                          disabled={order.isReturn}
-                          title={order.isReturn ? 'Chưa hỗ trợ xóa đơn trả/đổi hàng' : undefined}
+                          disabled={order.isReturn || order.status === 'cancelled'}
+                          title={
+                            order.isReturn
+                              ? 'Chưa hỗ trợ xóa đơn trả/đổi hàng'
+                              : order.status === 'cancelled'
+                                ? 'Đơn đã hủy'
+                                : undefined
+                          }
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-30"
                         />
                       </td>
@@ -1047,6 +1067,11 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
                         {order.isReturn && (
                           <span className="ml-1.5 px-1.5 py-0.5 bg-red-50 text-red-500 text-[9px] font-semibold rounded">
                             TH
+                          </span>
+                        )}
+                        {order.status === 'cancelled' && (
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-semibold rounded">
+                            Đã hủy
                           </span>
                         )}
                       </td>

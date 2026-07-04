@@ -603,6 +603,9 @@ export const dataMapper = {
           refundAmount: Number(o.refund_amount || 0),
           cashReceived: (o.cash_received != null) ? Number(o.cash_received) : (o.cashReceived != null ? Number(o.cashReceived) : undefined),
           splitPayments: o.split_payments || o.splitPayments || undefined,
+          originalOrderId: o.original_order_id || o.originalOrderId || undefined,
+          returnFee: (o.return_fee != null) ? Number(o.return_fee) : (o.returnFee != null ? Number(o.returnFee) : undefined),
+          returnOtherRefund: (o.return_other_refund != null) ? Number(o.return_other_refund) : (o.returnOtherRefund != null ? Number(o.returnOtherRefund) : undefined),
         })),
         localData?.posOrders || []
       ),

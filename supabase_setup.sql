@@ -2363,3 +2363,15 @@ DROP POLICY IF EXISTS recurring_expenses_select_authenticated ON recurring_expen
 CREATE POLICY recurring_expenses_select_authenticated ON recurring_expenses
   FOR SELECT TO authenticated USING (true);
 REVOKE ALL ON recurring_expenses FROM anon;
+
+-- ============================================================
+-- POS ORDERS — LIÊN KẾT PHIẾU TRẢ → ĐƠN GỐC (migration 025, 2026-07-04)
+-- original_order_id: guard chống trả trùng + đảo dữ liệu khi hủy phiếu trả
+-- return_fee / return_other_refund: phí trả hàng & hoàn khác của phiếu trả
+-- ============================================================
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS original_order_id TEXT;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS return_fee NUMERIC;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS return_other_refund NUMERIC;
+CREATE INDEX IF NOT EXISTS idx_pos_orders_original_order_id
+  ON pos_orders (original_order_id)
+  WHERE original_order_id IS NOT NULL;

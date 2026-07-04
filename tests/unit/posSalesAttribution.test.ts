@@ -106,6 +106,79 @@ describe('pos sales attribution', () => {
     expect(result[0]).toMatchObject({ employeeId: 'e2', salesAmount: 20000, quantity: 2 });
   });
 
+  it('phiếu trả thuần POS (finalAmount dương = tiền hoàn) KHÔNG cộng doanh số NV', () => {
+    // POS-RETURN-01: phiếu trả thuần từ POS lưu finalAmount = +giá trị hàng trả (FIX C2).
+    // Trước đây fallback coi số dương này là "khách bù thêm" → cộng nhầm doanh số.
+    const orders: POSOrder[] = [
+      {
+        id: 'r2',
+        orderCode: 'TH-2',
+        date: '2024-05-01T10:00:00.000Z',
+        items: [
+          { productId: 'p1', sku: 'A', name: 'A', quantity: 1, price: 60000, discount: 0, total: 60000, lineType: 'return' },
+        ],
+        totalAmount: 60000,
+        discount: 0,
+        finalAmount: 60000,
+        paymentMethod: 'Cash',
+        staffId: 'e1',
+        pointsEarned: 0,
+        isReturn: true,
+      },
+    ];
+
+    expect(calculateStaffSalesForDate(orders, '2024-05-01', employees)).toHaveLength(0);
+  });
+
+  it('đơn trả import KiotViet (không lineType) vẫn dùng fallback finalAmount', () => {
+    const orders: POSOrder[] = [
+      {
+        id: 'r3',
+        orderCode: 'TH065000',
+        date: '2024-05-01T10:00:00.000Z',
+        // Đơn import: items không có lineType
+        items: [
+          { productId: 'p1', sku: 'A', name: 'A', quantity: 1, price: 50000, discount: 0, total: 50000 },
+        ],
+        totalAmount: 50000,
+        discount: 0,
+        finalAmount: 30000, // khách bù thêm 30k khi đổi (net dương theo dữ liệu KiotViet)
+        paymentMethod: 'Cash',
+        staffId: 'e1',
+        pointsEarned: 0,
+        isReturn: true,
+      },
+    ];
+
+    const result = calculateStaffSalesForDate(orders, '2024-05-01', employees);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].salesAmount).toBe(30000);
+  });
+
+  it('phiếu đổi hàng rẻ hơn (exchange < return) không cộng doanh số NV', () => {
+    const orders: POSOrder[] = [
+      {
+        id: 'r4',
+        orderCode: 'TH-4',
+        date: '2024-05-01T10:00:00.000Z',
+        items: [
+          { productId: 'old', sku: 'OLD', name: 'Old', quantity: 1, price: 100000, discount: 0, total: 100000, lineType: 'return' },
+          { productId: 'new', sku: 'NEW', name: 'New', quantity: 1, price: 40000, discount: 0, total: 40000, lineType: 'exchange', salespersonId: 'e2' },
+        ],
+        totalAmount: 100000,
+        discount: 0,
+        finalAmount: 60000, // hoàn khách 60k
+        paymentMethod: 'Cash',
+        staffId: 'e1',
+        pointsEarned: 0,
+        isReturn: true,
+      },
+    ];
+
+    expect(calculateStaffSalesForDate(orders, '2024-05-01', employees)).toHaveLength(0);
+  });
+
   it('ghi nhận sales record idempotent theo ngày và nhân viên', () => {
     const existing: SalesRecord[] = [
       { id: 'manual', employeeId: 'e1', date: '2024-05-01', salesAmount: 5000 },

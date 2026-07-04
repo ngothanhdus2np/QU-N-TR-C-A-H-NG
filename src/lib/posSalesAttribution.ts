@@ -64,15 +64,21 @@ export const calculateOrderStaffSales = (
   if (order.isReturn) {
     const exchangeItems = order.items.filter(item => item.lineType === 'exchange');
     // Tính extraPaid từ item totals: tiền khách bù thêm khi đổi hàng đắt hơn
-    // Dùng item.total thay vì finalAmount vì finalAmount của đơn trả native POS = 0
-    // khi tổng đổi > tổng trả (POSComputer lưu finalAmount = -Math.max(0, totalReturn-totalExchange))
     const exchangeTotal = exchangeItems.reduce((s, i) => s + (Number(i.total) || 0), 0);
     const returnTotal = order.items
       .filter(i => i.lineType !== 'exchange')
       .reduce((s, i) => s + (Number(i.total) || 0), 0);
+    // POS-RETURN-01: phiếu POS native luôn gắn lineType từng dòng và lưu finalAmount DƯƠNG
+    // = tiền hoàn khách (FIX C2) — không phải "khách bù thêm". Fallback finalAmount chỉ
+    // dành cho đơn import KiotViet (items không có lineType).
+    const isNativePosReturn = order.items.some(
+      i => i.lineType === 'return' || i.lineType === 'exchange'
+    );
     const extraPaid = exchangeTotal > 0
       ? Math.max(0, exchangeTotal - returnTotal)
-      : Math.max(0, Number(order.finalAmount) || 0); // fallback KiotViet imports
+      : isNativePosReturn
+        ? 0
+        : Math.max(0, Number(order.finalAmount) || 0); // fallback KiotViet imports
     if (extraPaid <= 0) return [];
 
     if (exchangeItems.length === 0) {
@@ -143,7 +149,8 @@ export const calculateStaffSalesForDate = (
   const defaultEmployee = employees.length > 0 ? employees[0] : null;
 
   orders
-    .filter(order => normalizeDate(order.date) === date)
+    // Đơn/phiếu đã hủy (soft-delete hoặc hủy phiếu trả) không đóng góp doanh số
+    .filter(order => order.status !== 'cancelled' && normalizeDate(order.date) === date)
     .flatMap(order => calculateOrderStaffSales(order, employees))
     .forEach(row => {
       let key: string;

@@ -40,6 +40,9 @@ type EditOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDel
   // Giữ NGUYÊN id/orderCode/date so với originalOrder — chỉ đổi items/khách/PTTT/giảm giá...
   updatedOrder: POSOrder;
   updatedCustomer?: POSCustomer;
+  // Khách của ĐƠN GỐC khi bị đổi sang khách khác / bỏ chọn — bản ghi đã đảo hết phần
+  // totalSpent/điểm/nợ mà đơn gốc từng cộng (caller tính, service chỉ ghi)
+  revertedCustomer?: POSCustomer;
   debtRecord?: CustomerDebtRecord; // nợ MỚI nếu đơn sửa bật bán nợ (nợ CŨ tự xóa)
   allowSellOutOfStock?: boolean;
 };
@@ -557,11 +560,13 @@ export async function processReturnOrder({
   }
 }
 
-// Xóa 1 đơn BÁN (không hỗ trợ đơn trả/đổi — logic đảo ngược khác, xem gọi nơi dùng hàm này):
+// Hủy 1 đơn BÁN (soft-delete — không hỗ trợ đơn trả/đổi, logic đảo ngược khác):
 // hoàn tồn kho qua RPC delete_inventory_transaction_with_stock_v2 (dựa vào inventory_transactions
 // đã ghi khi bán, referenceId = order.id — chính xác hơn tính lại từ order.items), trừ khỏi
 // revenue_records bằng delta đảo dấu của buildRevenueDelta, xóa lịch sử công nợ liên quan,
-// tính lại sales_records ngày đó, ghi audit log.
+// đảo totalSpent/điểm/nợ của khách, tính lại sales_records ngày đó, ghi audit log.
+// Đơn KHÔNG bị xóa khỏi DB — chuyển status='cancelled', vẫn xem lại được ở trang Hóa đơn
+// (lọc "Đã hủy") và bị loại khỏi mọi tính toán/báo cáo.
 export async function deletePosOrder({
   data,
   order,
@@ -570,6 +575,9 @@ export async function deletePosOrder({
 }: DeleteOrderArgs): Promise<void> {
   if (order.isReturn) {
     throw new Error('Chưa hỗ trợ xóa đơn trả/đổi hàng qua chức năng này');
+  }
+  if (order.status === 'cancelled') {
+    throw new Error(`Đơn ${order.orderCode} đã hủy trước đó`);
   }
 
   const currentProducts = data.posProducts || [];
@@ -609,8 +617,8 @@ export async function deletePosOrder({
     await updateSurgical([{ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }]);
   }
 
-  // Bước 3: Xóa order
-  await updateSurgical([{ key: 'posOrders', item: { id: order.id }, isDelete: true }]);
+  // Bước 3: Soft-delete — chuyển đơn sang 'cancelled', giữ lại để xem/audit
+  await updateSurgical([{ key: 'posOrders', item: { ...order, status: 'cancelled' } }]);
 
   // Bước 4: Trừ khỏi doanh thu ngày bán (delta đảo dấu của buildRevenueDelta lúc tạo đơn)
   const orderCogs = calculateOrderCogs(currentMap, order.items);
@@ -618,11 +626,307 @@ export async function deletePosOrder({
   const revenueDelta = negateRevenueDelta(buildRevenueDelta(order, orderCogs));
   await applyRevenueDelta(orderDate, revenueDelta);
 
+  // Bước 4b (best-effort): đảo thống kê khách hàng — đơn gốc từng cộng totalSpent/điểm khi
+  // tạo (POSComputer) và cộng debtAmount nếu bán nợ; hủy đơn phải trừ lại tương ứng
+  // (trước đây bỏ sót → khách giữ nợ "ảo" không chứng từ + điểm/hạng như chưa hủy)
+  try {
+    if (order.customerId) {
+      const customer = (data.posCustomers || []).find(c => c.id === order.customerId);
+      if (customer) {
+        const debtDelta = relatedDebtRecords.reduce(
+          (sum, d) => sum + (d.type === 'debt' ? d.amount : -d.amount),
+          0
+        );
+        await updateSurgical([
+          {
+            key: 'posCustomers',
+            item: {
+              ...customer,
+              points: Math.max(0, (customer.points || 0) - (order.pointsEarned || 0)),
+              totalSpent: Math.max(0, (customer.totalSpent || 0) - (Number(order.finalAmount) || 0)),
+              debtAmount: Math.max(0, (customer.debtAmount ?? 0) - debtDelta),
+            },
+          },
+        ]);
+      }
+    }
+  } catch (e) {
+    console.error('[deletePosOrder] Đảo thống kê khách hàng thất bại (non-critical):', e);
+  }
+
   // Bước 5: Ghi audit log
   try {
     auditService.logOrderCancel(order.id, order.orderCode, 'Xóa đơn hàng', getCurrentStaffId());
   } catch (auditError) {
     console.error('[AUDIT] Không ghi được audit log khi xóa đơn:', order.orderCode, auditError);
+  }
+}
+
+type CancelReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+  data: AppData;
+  returnOrder: POSOrder;
+};
+
+type CancelLegacyReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+  data: AppData;
+  transaction: InventoryTransaction;
+};
+
+// Hủy 1 phiếu trả hàng (TH receipt trong pos_orders) — phép đảo ngược của processReturnOrder.
+// Tồn kho đảo bằng cách xóa inventory transactions của phiếu qua RPC
+// delete_inventory_transaction_with_stock_v2: server tự đảo đúng chiều theo tx.type đã lưu
+// (xóa 'Return' → trừ kho lại có guard không âm, xóa 'Sale' hàng đổi → cộng kho lại) — hàng
+// trả đã bị bán tiếp thì RPC raise exception, chặn hủy (đúng nghiệp vụ). Phiếu chuyển
+// status='cancelled' (giữ lịch sử, chặn hủy lần 2), doanh thu đảo bằng delta atomic.
+// COGS đảo dùng importPrice hiện tại khi item không lưu importPrice — drift chấp nhận được,
+// cùng bản chất deletePosOrder. Giai đoạn 2 sẽ gộp toàn bộ vào 1 RPC transaction.
+export async function processCancelReturn({
+  data,
+  returnOrder,
+  updateSurgical,
+  applyRevenueDelta,
+}: CancelReturnArgs): Promise<void> {
+  if (!returnOrder.isReturn) {
+    throw new Error('Chỉ hủy được phiếu trả hàng');
+  }
+  if (returnOrder.status === 'cancelled') {
+    throw new Error('Phiếu trả này đã hủy rồi');
+  }
+
+  const currentMap = buildProductMap(data.posProducts || []);
+  const returnedItems = returnOrder.items.filter(i => i.lineType !== 'exchange');
+  const exchangeItems = returnOrder.items.filter(i => i.lineType === 'exchange');
+
+  // Bước 1: đảo tồn kho — xóa transactions gắn với phiếu qua RPC atomic
+  const relatedTransactions = (data.inventoryTransactions || []).filter(
+    t => t.referenceId === returnOrder.id && t.status !== 'cancelled'
+  );
+  if (relatedTransactions.length > 0) {
+    // Delta cho cache local (server tự tính từ transaction đã lưu): hàng trả −, hàng đổi +
+    const stockDelta = new Map<string, number>();
+    returnedItems.forEach(i =>
+      stockDelta.set(i.productId, (stockDelta.get(i.productId) || 0) - i.quantity)
+    );
+    exchangeItems.forEach(i =>
+      stockDelta.set(i.productId, (stockDelta.get(i.productId) || 0) + i.quantity)
+    );
+    const stockUpdates = [...stockDelta.entries()]
+      .map(([productId, delta]) => {
+        const product = findProduct(currentMap, productId);
+        if (!product || delta === 0) return null;
+        return { key: 'posProducts' as const, item: { ...product, stock: product.stock + delta } };
+      })
+      .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u);
+
+    await updateSurgical([
+      ...relatedTransactions.map(t => ({
+        key: 'inventoryTransactions' as const,
+        item: { id: t.id } as { id: string },
+        isDelete: true,
+      })),
+      ...stockUpdates,
+    ]);
+  } else {
+    console.warn(
+      `[processCancelReturn] Không tìm thấy inventory transaction cho phiếu ${returnOrder.orderCode} — bỏ qua đảo tồn kho`
+    );
+  }
+
+  // Bước 2: chuyển phiếu sang 'cancelled' — không xóa, giữ lịch sử + chặn hủy lần 2
+  const cancelledOrder: POSOrder = { ...returnOrder, status: 'cancelled' };
+  await updateSurgical([{ key: 'posOrders', item: cancelledOrder }]);
+
+  // Bước 3: đảo doanh thu ngày phiếu bằng delta đảo dấu (atomic — không ghi đè cả dòng)
+  const totalReturnValue = returnedItems.reduce((sum, item) => sum + item.total, 0);
+  const totalExchangeValue = exchangeItems.reduce((sum, item) => sum + item.total, 0);
+  const returnCogs = calculateOrderCogs(currentMap, returnedItems);
+  const exchangeCogs = calculateOrderCogs(currentMap, exchangeItems);
+  await applyRevenueDelta(
+    toLocalDateKey(returnOrder.date),
+    negateRevenueDelta(
+      buildReturnRevenueDelta(returnOrder, totalReturnValue, totalExchangeValue, returnCogs, exchangeCogs)
+    )
+  );
+
+  // Bước 4 (best-effort): giữ bản sao transaction status='cancelled' làm lịch sử kho
+  if (relatedTransactions.length > 0) {
+    try {
+      await updateSurgical(
+        relatedTransactions.map(t => ({
+          key: 'inventoryTransactions' as const,
+          item: { ...t, status: 'cancelled' },
+        }))
+      );
+    } catch (e) {
+      console.error('[processCancelReturn] Không giữ được bản sao transaction đã hủy (non-critical):', e);
+    }
+  }
+
+  // Bước 5 (best-effort): khôi phục điểm + tổng chi tiêu khách — nghịch đảo công thức lúc tạo
+  try {
+    if (returnOrder.customerId) {
+      const customer = (data.posCustomers || []).find(c => c.id === returnOrder.customerId);
+      if (customer) {
+        const pointsRate = Math.max(1, data.posPaymentSettings?.pointsRate ?? 10000);
+        const pointsRestored = Math.floor(
+          returnedItems.reduce((sum, item) => {
+            const product = findProduct(currentMap, item.productId);
+            if (product?.allowPoints === false) return sum;
+            return sum + item.total;
+          }, 0) / pointsRate
+        );
+        await updateSurgical([
+          {
+            key: 'posCustomers',
+            item: {
+              ...customer,
+              points: Math.max(0, (customer.points || 0) + pointsRestored),
+              totalSpent: Math.max(0, (customer.totalSpent || 0) + totalReturnValue - totalExchangeValue),
+            },
+          },
+        ]);
+      }
+    }
+  } catch (e) {
+    console.error('[processCancelReturn] Khôi phục khách hàng thất bại (non-critical):', e);
+  }
+
+  // Bước 6 (best-effort): tính lại doanh số NV ngày phiếu — snapshot thay phiếu bằng bản cancelled
+  try {
+    const recalculationOrders = (data.posOrders || []).map(o =>
+      o.id === returnOrder.id ? cancelledOrder : o
+    );
+    await recalcSalesRecordsForDate(
+      { ...data, posOrders: recalculationOrders },
+      toLocalDateKey(returnOrder.date),
+      new Set(),
+      updateSurgical
+    );
+  } catch (e) {
+    console.error('[processCancelReturn] Tính lại doanh số NV thất bại (non-critical):', e);
+  }
+
+  // Bước 7: audit log
+  try {
+    auditService.logOrderCancel(
+      returnOrder.id,
+      returnOrder.orderCode,
+      'Hủy phiếu trả hàng',
+      getCurrentStaffId()
+    );
+  } catch (auditError) {
+    console.error('[AUDIT] Không ghi được audit log khi hủy phiếu trả:', returnOrder.orderCode, auditError);
+  }
+}
+
+// Hủy phiếu trả kiểu CŨ — chỉ có inventory transaction 'Return' (không có TH receipt trong
+// pos_orders), tạo bởi luồng trả hàng tại trang Trả hàng trước 2026-07-04. Đảo đúng những gì
+// luồng cũ đã ghi: xóa transaction qua RPC (trừ kho lại, có guard không âm), giữ bản sao
+// status='cancelled', đảo revenue delta ngày xử lý, hoàn điểm/chi tiêu khách theo đơn gốc.
+export async function processCancelLegacyReturnTransaction({
+  data,
+  transaction,
+  updateSurgical,
+  applyRevenueDelta,
+}: CancelLegacyReturnArgs): Promise<void> {
+  if (transaction.type !== 'Return' && transaction.type !== 'return') {
+    throw new Error('Chỉ hủy được phiếu trả hàng');
+  }
+  if (transaction.status === 'cancelled') {
+    throw new Error('Phiếu trả này đã hủy rồi');
+  }
+
+  const currentMap = buildProductMap(data.posProducts || []);
+  const items = transaction.items || [];
+  const refund =
+    Number(transaction.totalAmount) ||
+    items.reduce(
+      (sum, item) =>
+        sum +
+        Math.max(
+          0,
+          Math.abs(Number(item.quantity) || 0) * (Number(item.price) || 0) -
+            (Number(item.discount) || 0)
+        ),
+      0
+    );
+
+  // Bước 1: xóa transaction qua RPC — server trừ kho lại atomic (guard không cho âm)
+  const stockUpdates = items
+    .map(item => {
+      const product = findProduct(currentMap, item.productId);
+      if (!product) return null;
+      return {
+        key: 'posProducts' as const,
+        item: { ...product, stock: product.stock - Math.abs(Number(item.quantity) || 0) },
+      };
+    })
+    .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u);
+
+  await updateSurgical([
+    { key: 'inventoryTransactions', item: { id: transaction.id } as { id: string }, isDelete: true },
+    ...stockUpdates,
+  ]);
+
+  // Bước 2 (best-effort): giữ bản sao transaction đã hủy làm lịch sử
+  try {
+    await updateSurgical([
+      { key: 'inventoryTransactions', item: { ...transaction, status: 'cancelled' } },
+    ]);
+  } catch (e) {
+    console.error('[processCancelLegacyReturnTransaction] Không giữ được bản sao đã hủy (non-critical):', e);
+  }
+
+  // Bước 3: đảo doanh thu — luồng cũ đã trừ netRevenue/totalCogs + cộng returnsValue ngày xử lý
+  const cogs = items.reduce((sum, item) => {
+    const product = findProduct(currentMap, item.productId);
+    return sum + (product?.importPrice || 0) * Math.abs(Number(item.quantity) || 0);
+  }, 0);
+  await applyRevenueDelta(toLocalDateKey(transaction.date), {
+    totalGrossRevenue: 0,
+    discount: 0,
+    revenueOther: 0,
+    returnsValue: -refund,
+    netRevenue: refund,
+    totalCogs: cogs,
+    grossProfit: computeGrossProfit(refund, 0, cogs),
+  });
+
+  // Bước 4 (best-effort): hoàn điểm + chi tiêu khách theo đơn gốc (nghịch đảo công thức cũ)
+  try {
+    const originalOrder = (data.posOrders || []).find(o => o.id === transaction.referenceId);
+    if (originalOrder?.customerId && originalOrder.pointsEarned) {
+      const customer = (data.posCustomers || []).find(c => c.id === originalOrder.customerId);
+      if (customer) {
+        const finalAmt = Number(originalOrder.finalAmount) || 0;
+        const pts =
+          finalAmt > 0 ? Math.floor((refund / finalAmt) * (originalOrder.pointsEarned || 0)) : 0;
+        await updateSurgical([
+          {
+            key: 'posCustomers',
+            item: {
+              ...customer,
+              points: Math.max(0, (customer.points || 0) + pts),
+              totalSpent: Math.max(0, (customer.totalSpent || 0) + refund),
+            },
+          },
+        ]);
+      }
+    }
+  } catch (e) {
+    console.error('[processCancelLegacyReturnTransaction] Khôi phục khách hàng thất bại (non-critical):', e);
+  }
+
+  // Bước 5: audit log
+  try {
+    auditService.logOrderCancel(
+      transaction.id,
+      transaction.note || transaction.id,
+      'Hủy phiếu trả hàng (kiểu cũ)',
+      getCurrentStaffId()
+    );
+  } catch (auditError) {
+    console.error('[AUDIT] Không ghi được audit log khi hủy phiếu trả kiểu cũ:', transaction.id, auditError);
   }
 }
 
@@ -638,6 +942,7 @@ export async function editPosOrder({
   originalOrder,
   updatedOrder,
   updatedCustomer,
+  revertedCustomer,
   debtRecord,
   allowSellOutOfStock = false,
   updateSurgical,
@@ -645,6 +950,9 @@ export async function editPosOrder({
 }: EditOrderArgs): Promise<void> {
   if (originalOrder.isReturn || updatedOrder.isReturn) {
     throw new Error('Chưa hỗ trợ sửa đơn trả/đổi hàng qua chức năng này');
+  }
+  if (originalOrder.status === 'cancelled') {
+    throw new Error(`Đơn ${originalOrder.orderCode} đã hủy — không thể sửa`);
   }
   if (updatedOrder.id !== originalOrder.id) {
     throw new Error('editPosOrder yêu cầu updatedOrder giữ nguyên id với originalOrder');
@@ -724,9 +1032,17 @@ export async function editPosOrder({
     await updateSurgical([{ key: 'customerDebtHistory', item: debtRecord }]);
   }
 
-  // Bước 5: Cập nhật khách hàng (điểm/tổng chi tiêu) nếu có
+  // Bước 5: Cập nhật khách hàng (điểm/tổng chi tiêu) nếu có — gồm cả khách CŨ bị đổi/bỏ
+  // (đảo phần đơn gốc từng cộng) lẫn khách hiện tại của đơn sửa
+  const customerUpdates: AppDataSurgicalUpdate[] = [];
+  if (revertedCustomer && revertedCustomer.id !== updatedCustomer?.id) {
+    customerUpdates.push({ key: 'posCustomers', item: revertedCustomer });
+  }
   if (updatedCustomer) {
-    await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+    customerUpdates.push({ key: 'posCustomers', item: updatedCustomer });
+  }
+  if (customerUpdates.length > 0) {
+    await updateSurgical(customerUpdates);
   }
 
   // Bước 6: Gộp delta đảo dấu đơn CŨ + delta đơn MỚI thành 1 delta ròng, gọi applyRevenueDelta

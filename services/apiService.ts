@@ -115,6 +115,9 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       refund_amount: n(item.refundAmount),
       split_payments: item.splitPayments || null,
       cash_received: item.cashReceived != null ? n(item.cashReceived) : null,
+      original_order_id: item.originalOrderId || null,
+      return_fee: item.returnFee != null ? n(item.returnFee) : null,
+      return_other_refund: item.returnOtherRefund != null ? n(item.returnOtherRefund) : null,
     };
   }
   if (key === 'posCustomers') {
@@ -486,6 +489,8 @@ const POS_ORDER_BOOTSTRAP_COLUMNS = [
   'staff_id', 'staff_name', 'created_by', 'channel', 'channel_name',
   'price_book_id', 'price_book_name', 'status', 'notes',
   'points_earned', 'is_return', 'refund_amount', 'split_payments', 'cash_received',
+  // Liên kết phiếu trả → đơn gốc (migration 025) — guard chống trả trùng cần sau reload
+  'original_order_id', 'return_fee', 'return_other_refund',
 ].join(',');
 const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'id',
@@ -667,6 +672,9 @@ const mapPosOrderRow = (o: any): POSOrder => ({
     : undefined,
   splitPayments: o.split_payments || o.splitPayments || undefined,
   staffName: o.staff_name || o.staffName || undefined,
+  originalOrderId: o.original_order_id || o.originalOrderId || undefined,
+  returnFee: (o.return_fee != null) ? Number(o.return_fee) : (o.returnFee != null ? Number(o.returnFee) : undefined),
+  returnOtherRefund: (o.return_other_refund != null) ? Number(o.return_other_refund) : (o.returnOtherRefund != null ? Number(o.returnOtherRefund) : undefined),
 });
 
 const MISSING_POS_ORDER_COLUMN_RE =
@@ -700,6 +708,11 @@ const applyPosOrderFilters = (
   }
   if (filters.statusFilter && filters.statusFilter.length > 0 && !ignoredColumns.has('status')) {
     query = query.in('status', filters.statusFilter);
+  } else {
+    // Soft-delete: mặc định ẨN đơn đã hủy — chỉ hiện khi người dùng chọn lọc "Đã hủy".
+    // Dùng neq (không dùng or) vì query summary dùng aggregate sum() — PostgREST trả 400
+    // khi kết hợp or với aggregate. Mọi dòng pos_orders đều có status (write path luôn set).
+    query = query.neq('status', 'cancelled');
   }
   return query;
 };
@@ -769,6 +782,8 @@ export const apiService = {
         .select(POS_ORDER_BOOTSTRAP_COLUMNS)
         .gte('date', `${startDate}T00:00:00+07:00`)
         .lte('date', `${endDate}T23:59:59+07:00`)
+        // Soft-delete: báo cáo không tính đơn đã hủy
+        .or('status.is.null,status.neq.cancelled')
         .order('date', { ascending: false })
         .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
       if (error) return { data: allRows.map(mapPosOrderRow), error };
@@ -787,6 +802,8 @@ export const apiService = {
       const { data, error } = await supabase
         .from('pos_orders')
         .select(CUSTOMER_STAT_COLUMNS)
+        // Soft-delete: thống kê khách hàng không tính đơn đã hủy
+        .or('status.is.null,status.neq.cancelled')
         .order('id', { ascending: true })
         .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
       if (error) return allRows.map(mapCustomerStatRow);

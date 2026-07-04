@@ -21,6 +21,8 @@ import ErrorBoundary from './ui/ErrorBoundary';
 import {
   processPlaceOrder,
   processReturnOrder,
+  processCancelReturn,
+  processCancelLegacyReturnTransaction,
   deletePosOrder,
   editPosOrder,
   recalcSalesRecordsForDate,
@@ -148,6 +150,18 @@ const MainContent: React.FC<MainContentProps> = ({
   const location = useLocation();
   const editProductId = new URLSearchParams(location.search).get('edit') ?? undefined;
 
+  // Soft-delete: đơn 'cancelled' chỉ hiển thị ở trang Hóa đơn/Trả hàng (xem lại lịch sử).
+  // Mọi trang tính toán/báo cáo/POS dùng activeData — hành vi y như thời xóa cứng, không
+  // consumer nào phải tự nhớ lọc. Handler service (xóa/hủy/sửa) vẫn dùng `data` đầy đủ.
+  const activePosOrders = React.useMemo(
+    () => (data.posOrders || []).filter(o => o.status !== 'cancelled'),
+    [data.posOrders]
+  );
+  const activeData = React.useMemo(
+    () => ({ ...data, posOrders: activePosOrders }),
+    [data, activePosOrders]
+  );
+
   const [orderToEdit, setOrderToEdit] = useState<AppData['posOrders'][number] | null>(null);
   const [orderToReturn, setOrderToReturn] = useState<AppData['posOrders'][number] | null>(null);
   const [eodReport, setEodReport] = useState<{ date: string; summary: string } | null>(null);
@@ -237,7 +251,7 @@ const MainContent: React.FC<MainContentProps> = ({
           </div>
         }
       >
-        <KnowledgeManager data={data} onUpdateData={updateData} initialMainTab={initialMainTab} />
+        <KnowledgeManager data={activeData} onUpdateData={updateData} initialMainTab={initialMainTab} />
       </React.Suspense>
     );
 
@@ -308,14 +322,14 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'help':
         return <HelpCenter />;
       case 'overview':
-        return <OverviewPage data={data} isLoading={!isDataReady} />;
+        return <OverviewPage data={activeData} isLoading={!isDataReady} />;
       case 'orders':
-        return <PendingOrdersPage orders={data.posOrders || []} />;
+        return <PendingOrdersPage orders={activePosOrders} />;
       case 'customers':
         return (
           <CustomerListPage
             customers={data.posCustomers || []}
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             customerDebtHistory={data.customerDebtHistory || []}
             onUpdateCustomers={newList => updateData('posCustomers', newList)}
             onUpdateSurgical={updateSurgical}
@@ -325,7 +339,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'suppliers':
         return (
           <SupplierContainer
-            data={data}
+            data={activeData}
             onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
             isLoading={!isDataReady}
@@ -528,7 +542,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'cash-ledger':
         return (
           <CashLedgerPage
-            data={data}
+            data={activeData}
             onAddExpense={expense => updateData('expenses', [...(data.expenses || []), expense])}
             onAddPosOrder={order => pushBatch('posOrders', [order])}
           />
@@ -588,7 +602,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'purchase-returns':
         return (
           <PurchaseOrdersContainer
-            data={data}
+            data={activeData}
             onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
             onPushBatch={pushBatch}
@@ -599,7 +613,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'goods-audit':
         return (
           <AuditContainer
-            data={data}
+            data={activeData}
             onUpdateData={updateData}
             onUpdateSurgical={updateSurgical}
             onPushBatch={pushBatch}
@@ -608,6 +622,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'order-invoices':
         return (
           <OrderInvoices
+            // Trang Hóa đơn nhận CẢ đơn đã hủy (soft-delete) để xem lại qua lọc "Đã hủy"
             orders={data.posOrders || []}
             customers={data.posCustomers || []}
             employees={data.employees || []}
@@ -660,12 +675,31 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'order-returns':
         return (
           <OrderReturns
+            // Trang Trả hàng nhận CẢ phiếu đã hủy để hiển thị trạng thái "Đã hủy"
             orders={data.posOrders || []}
             products={data.posProducts || []}
             customers={data.posCustomers || []}
-            revenue={data.revenue || []}
             transactions={data.inventoryTransactions || []}
             onUpdateSurgical={updateSurgical}
+            onCancelReturn={async (orderId: string) => {
+              const returnOrder = (data.posOrders || []).find(o => o.id === orderId);
+              if (!returnOrder) throw new Error('Không tìm thấy phiếu trả hàng');
+              await processCancelReturn({ data, returnOrder, updateSurgical, applyRevenueDelta });
+            }}
+            onCancelLegacyReturn={async (transactionId: string) => {
+              const transaction = (data.inventoryTransactions || []).find(t => t.id === transactionId);
+              if (!transaction) throw new Error('Không tìm thấy phiếu trả hàng');
+              await processCancelLegacyReturnTransaction({
+                data,
+                transaction,
+                updateSurgical,
+                applyRevenueDelta,
+              });
+            }}
+            onReturnInPOS={order => {
+              setOrderToReturn(order);
+              handleSetActiveTab('pos');
+            }}
           />
         );
       case 'order-repairs':
@@ -693,7 +727,7 @@ const MainContent: React.FC<MainContentProps> = ({
         return (
           <GoodsInternalUse
             products={data.posProducts || []}
-            data={data}
+            data={activeData}
             onUpdateSurgical={updateSurgical}
           />
         );
@@ -701,14 +735,14 @@ const MainContent: React.FC<MainContentProps> = ({
         return (
           <GoodsDisposal
             products={data.posProducts || []}
-            data={data}
+            data={activeData}
             onUpdateSurgical={updateSurgical}
           />
         );
       case 'analysis-business':
         return (
           <AnalysisContainer
-            data={data}
+            data={activeData}
             initialSection="business"
             breakEvenAnalysis={breakEvenAnalysis}
             onUpdateData={updateData}
@@ -726,20 +760,20 @@ const MainContent: React.FC<MainContentProps> = ({
           diagnosisLabel: 'Bán Online',
         });
       case 'analysis-goods':
-        return <AnalysisContainer data={data} initialSection="goods" onUpdate={updateData} />;
+        return <AnalysisContainer data={activeData} initialSection="goods" onUpdate={updateData} />;
       case 'analysis-customers':
-        return <AnalysisContainer data={data} initialSection="customers" />;
+        return <AnalysisContainer data={activeData} initialSection="customers" />;
       case 'analysis-staff':
-        return <AnalysisContainer data={data} initialSection="staff" />;
+        return <AnalysisContainer data={activeData} initialSection="staff" />;
       case 'analysis-expenses':
-        return <AnalysisContainer data={data} initialSection="expenses" onUpdate={updateData} />;
+        return <AnalysisContainer data={activeData} initialSection="expenses" onUpdate={updateData} />;
       case 'analysis-efficiency':
-        return <AnalysisContainer data={data} initialSection="efficiency" />;
+        return <AnalysisContainer data={activeData} initialSection="efficiency" />;
       case 'analysis-placeholder':
       case 'report-eod':
         return (
           <EndOfDayReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             employees={data.employees || []}
             sales={data.sales || []}
             onUpdateSales={records => updateData('sales', records)}
@@ -749,7 +783,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-sales':
         return (
           <SalesReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             products={data.posProducts || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
             employees={data.employees || []}
@@ -759,7 +793,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-orders':
         return (
           <OrderReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             products={data.posProducts || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
@@ -767,7 +801,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-goods':
         return (
           <GoodsReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             products={data.posProducts || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
@@ -775,7 +809,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-customers':
         return (
           <CustomerReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             customers={data.posCustomers || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
@@ -791,7 +825,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-staff':
         return (
           <StaffReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             employees={data.employees || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
@@ -799,7 +833,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-channels':
         return (
           <ChannelReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             employees={data.employees || []}
             storeName={brandProfile.name || 'Chi nhánh trung tâm'}
           />
@@ -807,7 +841,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'report-finance':
         return (
           <FinanceReportPage
-            orders={data.posOrders || []}
+            orders={activePosOrders}
             products={data.posProducts || []}
             expenses={data.expenses || []}
             payroll={data.payroll || []}
@@ -893,7 +927,8 @@ const MainContent: React.FC<MainContentProps> = ({
               productGroups={data.productGroups || []}
               customers={data.posCustomers || []}
               employees={data.employees || []}
-              orders={data.posOrders || []}
+              orders={activePosOrders}
+              inventoryTransactions={data.inventoryTransactions || []}
               customerDebtHistory={data.customerDebtHistory || []}
               orderToEdit={orderToEdit}
               onOrderEditLoaded={() => setOrderToEdit(null)}
@@ -940,12 +975,13 @@ const MainContent: React.FC<MainContentProps> = ({
                   applyRevenueDelta,
                 })
               }
-              onEditOrder={(originalOrder, updatedOrder, updatedCustomer, debtRecord) =>
+              onEditOrder={(originalOrder, updatedOrder, updatedCustomer, debtRecord, revertedCustomer) =>
                 editPosOrder({
                   data,
                   originalOrder,
                   updatedOrder,
                   updatedCustomer,
+                  revertedCustomer,
                   debtRecord,
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
                   updateSurgical,
@@ -972,7 +1008,7 @@ const MainContent: React.FC<MainContentProps> = ({
             <GoodsInventory
               products={data.posProducts || []}
               transactions={data.inventoryTransactions || []}
-              orders={data.posOrders || []}
+              orders={activePosOrders}
               productGroups={data.productGroups || []}
               suppliers={data.suppliers || []}
               inventoryCostMethod={data.posInventorySettings?.costMethod}
@@ -1022,7 +1058,7 @@ const MainContent: React.FC<MainContentProps> = ({
           <ErrorBoundary key="payroll" moduleName="payroll">
             <React.Suspense fallback={<TableSkeleton />}>
             <PayrollManager
-              data={data}
+              data={activeData}
               onUpdateData={updateData}
               onUpdateSurgical={updateSurgical}
               showResigned={showResigned}
