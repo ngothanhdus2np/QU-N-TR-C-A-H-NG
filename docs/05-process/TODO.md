@@ -73,7 +73,7 @@
 >
 > **TXN-RPC-01 đã hoàn tất cả 4 luồng**: xóa đơn, hủy phiếu trả, sửa đơn, tạo đơn — đều chạy qua RPC 1 transaction DB, không còn rollback thủ công nhiều bước phía client.
 
-### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
+### [x] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — ĐÃ QUYẾT ĐỊNH bỏ qua scrub git history 2026-07-04)*
 
 > **Severity: 🔴 XÁC NHẬN CAO HƠN ban đầu tưởng**: commit rò rỉ `66ecc7a` **đã push lên GitHub** (`origin/main` chứa nó — không chỉ nằm local như audit R3 nghi ngờ) **VÀ có mặt ở cả 5 branch remote khác** (`claude/category-tree-accordion-*`, `claude/code-review-feedback-*`, `claude/pos-ui-design-system-audit-*`, `claude/review-remaining-tasks-*`, `claude/sales-app-logic-audit-*`). Repo: `github.com/ngothanhdus2np/QU-N-TR-C-A-H-NG` — chưa xác định public/private (không có `gh` CLI trong môi trường agent để kiểm, user tự xem trên GitHub Settings).
 >
@@ -83,7 +83,7 @@
 >
 > **✅ ĐÃ RESET/VÔ HIỆU HÓA KEY 2026-07-03**: user xác nhận đúng project ref `tqouzxlnihfjdyxqlbqs` trên dashboard, bấm **"Disable JWT-based API keys"** (Settings → API Keys → Legacy anon, service_role API keys) — vô hiệu hóa vĩnh viễn cả `anon` lẫn `service_role` cũ, kể cả key đã lộ trong git history. **Đây là bước có tác dụng thật** — key trong git history giờ vô dụng bất kể history còn hay sạch.
 >
-> **⏳ CÒN LẠI (tùy chọn, không còn khẩn cấp vì key đã chết)**: Scrub git history + force-push 6 branch (`main` + 5 branch `claude/*`: `category-tree-accordion`, `code-review-feedback`, `pos-ui-design-system-audit`, `review-remaining-tasks`, `sales-app-logic-audit`) bằng `git filter-repo`/BFG — thao tác lớn, khó đảo ngược, ảnh hưởng toàn bộ repo GitHub kể cả collaborator khác đang có clone cũ (họ sẽ cần re-clone hoặc hard-reset). Chỉ còn ý nghĩa vệ sinh (key cũ vẫn hiện diện dạng text trong history, có thể gây nhầm lẫn/audit sau này) chứ không còn là rủi ro bảo mật thật sự. User quyết định có cần làm hay bỏ qua.
+> **✅ QUYẾT ĐỊNH 2026-07-04 — KHÔNG scrub git history**: đã hỏi lại user có muốn scrub git history + force-push 6 branch (`main` + 5 branch `claude/*`) bằng `git filter-repo`/BFG hay không — user chọn **"Không làm"** vì thao tác lớn, khó đảo ngược, ảnh hưởng toàn bộ repo GitHub kể cả collaborator khác đang có clone cũ (phải re-clone/hard-reset), trong khi key đã chết nên đánh đổi không xứng đáng với lợi ích vệ sinh thuần túy. Coi như đã đóng — chỉ mở lại nếu phát sinh lý do mới (vd audit bên ngoài yêu cầu, hoặc tạo repo mới thay vì scrub repo cũ).
 
 ### [x] 🔴 SEC-RLS-01 — Vá lỗ hổng anon RLS/grant *(✅ HOÀN TẤT TOÀN BỘ 2026-07-03 — đã deploy + verify trực tiếp trên prod)*
 
