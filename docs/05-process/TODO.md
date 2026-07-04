@@ -53,7 +53,7 @@
 >    - `137519-06-26` → net 49.449.000 (id `6356bd21-90b8-4ea4-8b87-13ebfbd381e3`)
 >    - Gross=0 nên gần như chắc chắn nên **XÓA** (không phải doanh thu thật). User xác nhận xóa hoặc cho ngày đúng để sửa.
 
-### [x] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction — HOÀN TẤT 2026-07-04
+### [x] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction — HOÀN TẤT + ĐÃ DEPLOY 2026-07-04
 
 > Giai đoạn 2 của lộ trình A→B: thay ruột các hàm service (`deletePosOrder`, `processCancelReturn`, `editPosOrder`, `processPlaceOrder`) từ chuỗi nhiều lời gọi mạng thành 1 RPC transaction DB theo mẫu `pos_mobile_checkout` — đóng nốt cửa sổ lệch khi rớt mạng giữa chừng. Gộp chung với DATA-01. UI/props không phải sửa lại (Giai đoạn 1 đã dồn mọi nút về service layer).
 >
