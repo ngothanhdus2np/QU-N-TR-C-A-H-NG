@@ -11,7 +11,7 @@
 
 > Nút "Sửa trong POS" ở trang Hóa đơn — mở lại đơn vào máy tính tiền, sửa xong lưu đè đúng id cũ (hoàn tồn kho + trừ/cộng doanh thu + tính lại doanh số NV, không nhân đôi lịch sử). Theo quyết định user: không giới hạn quyền/ngày, chưa xử lý riêng đơn có phiếu trả hàng liên kết (rủi ro đã ghi). Chưa hỗ trợ sửa đơn trả/đổi hàng. Chi tiết HISTORY.md.
 
-### [x] 🟡 ORDERS-EDIT-02 — Xử lý sửa đơn đã có phiếu trả hàng liên kết *(fix xong 2026-07-04)*
+### [x] 🟡 ORDERS-EDIT-02 — Xử lý sửa đơn đã có phiếu trả hàng liên kết *(fix xong + ĐÃ DEPLOY 2026-07-04)*
 
 > **Rủi ro gốc**: `editPosOrder()` tự tính lại tồn kho theo delta (số lượng CŨ vs MỚI của đơn đang sửa) hoàn toàn độc lập với phiếu trả hàng đã xử lý trước đó. Nếu sửa số lượng xuống THẤP HƠN số đã trả (vd: bán 5, đã trả 3, sửa xuống còn 2) → tồn kho bị cộng trùng phần phiếu trả đã cộng lại rồi (double-count). Sửa xuống mức vẫn ≥ số đã trả thì toán học vẫn đúng (đã kiểm chứng bằng tay từng bước).
 >
