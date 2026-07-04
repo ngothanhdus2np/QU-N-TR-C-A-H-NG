@@ -84,6 +84,7 @@ const App: React.FC = () => {
     applyRevenueDeltaLocal,
     deletePosOrderTx,
     cancelPosReturnTx,
+    editPosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,
@@ -304,6 +305,7 @@ const App: React.FC = () => {
             applyRevenueDeltaLocal={applyRevenueDeltaLocal}
             deletePosOrderTx={deletePosOrderTx}
             cancelPosReturnTx={cancelPosReturnTx}
+            editPosOrderTx={editPosOrderTx}
             pushBatch={pushBatch}
             loadInventoryOut={loadInventoryOut}
             offlinePendingCount={offlinePendingCount}

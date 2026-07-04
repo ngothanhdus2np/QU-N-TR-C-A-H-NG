@@ -4,7 +4,9 @@ import {
   AppDataSurgicalUpdate,
   ChatMessage,
   BrandProfile,
+  CustomerDebtRecord,
   DiagnosisRange,
+  POSOrder,
   ShopeeInventoryOutRecord,
   RevenueRecord,
   RevenueDelta,
@@ -1295,6 +1297,30 @@ export function useAppData() {
     }
   }, []);
 
+  // [TXN-RPC-01] Sửa đơn bán qua RPC edit_pos_order_tx (1 transaction DB) — cùng ranh giới
+  // deletePosOrderTx/cancelPosReturnTx: không hỗ trợ offline queue, lỗi mạng = thất bại rõ ràng.
+  const editPosOrderTx = useCallback(
+    async (
+      orderId: string,
+      updatedOrder: POSOrder,
+      debtRecord: CustomerDebtRecord | null,
+      allowSellOutOfStock: boolean
+    ) => {
+      dispatch({ type: 'SET_SYNCING', payload: true });
+      try {
+        await apiService.editPosOrderTx(orderId, updatedOrder, debtRecord, allowSellOutOfStock);
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
+        dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
+      } catch (err: unknown) {
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
+        throw err;
+      } finally {
+        dispatch({ type: 'SET_SYNCING', payload: false });
+      }
+    },
+    []
+  );
+
   const pushBatch = useCallback(
     async <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => {
       dispatch({ type: 'SET_SYNCING', payload: true });
@@ -1419,6 +1445,7 @@ export function useAppData() {
     applyRevenueDeltaLocal,
     deletePosOrderTx,
     cancelPosReturnTx,
+    editPosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,

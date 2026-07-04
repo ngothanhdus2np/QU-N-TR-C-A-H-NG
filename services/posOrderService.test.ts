@@ -443,58 +443,197 @@ describe('posOrderService', () => {
     });
   });
 
-  // [ORDERS-EDIT-02]
-  describe('editPosOrder — chặn sửa số lượng thấp hơn số đã trả', () => {
-    const returnOrder: POSOrder = {
-      ...baseOrder,
-      id: 'return-1',
-      orderCode: 'TH-000001',
-      isReturn: true,
-      originalOrderId: 'order-1',
+  // [TXN-RPC-01]
+  describe('editPosOrder', () => {
+    const saleTransaction: InventoryTransaction = {
+      id: 'tx-sale-1',
+      date: baseOrder.date,
+      type: 'Sale',
+      staffId: 'Admin',
+      referenceId: 'order-1',
       items: [
         {
           productId: 'product-1',
           sku: 'SKU-1',
           name: 'Giày test',
-          quantity: 1,
-          price: 100000,
-          discount: 0,
-          total: 100000,
+          quantity: -2,
+          previousStock: 10,
+          newStock: 8,
         },
       ],
     };
-    const dataWithReturn = { ...baseData, posOrders: [baseOrder, returnOrder] } as AppData;
 
-    it('rejects reducing quantity below the amount already returned', async () => {
+    it('calls the RPC then syncs local state with matching net deltas', async () => {
+      const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+      const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+      const editPosOrderTx = vi.fn().mockResolvedValue(undefined);
       const updateSurgical = vi.fn().mockResolvedValue(undefined);
-      const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
+      const dataWithTx = {
+        ...baseData,
+        posProducts: [{ ...baseProduct, stock: 8 }],
+        posOrders: [baseOrder],
+        inventoryTransactions: [saleTransaction],
+      } as AppData;
 
-      await expect(
-        editPosOrder({
-          data: dataWithReturn,
-          originalOrder: baseOrder,
-          updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 0 }] },
-          updateSurgical,
-          applyRevenueDelta,
+      // Sửa từ SL 2 lên SL 3 — tăng 1 đơn vị
+      const updatedOrder: POSOrder = {
+        ...baseOrder,
+        items: [{ ...baseOrder.items[0], quantity: 3, total: 300000 }],
+        totalAmount: 300000,
+        finalAmount: 270000,
+      };
+
+      await editPosOrder({
+        data: dataWithTx,
+        originalOrder: baseOrder,
+        updatedOrder,
+        applyLocalOnly,
+        applyRevenueDeltaLocal,
+        editPosOrderTx,
+        updateSurgical,
+      });
+
+      // RPC (edit_pos_order_tx) phải được gọi TRƯỚC — nếu lỗi, không có local update nào chạy
+      expect(editPosOrderTx).toHaveBeenCalledWith('order-1', updatedOrder, null, false);
+
+      // Tồn kho local: net = SL cũ(2) - SL mới(3) = -1 → stock 8 - 1 = 7, tx cũ xóa + tx mới ghi
+      expect(applyLocalOnly).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: 'inventoryTransactions',
+            item: { id: 'tx-sale-1' },
+            isDelete: true,
+          }),
+          expect.objectContaining({
+            key: 'inventoryTransactions',
+            item: expect.objectContaining({ referenceId: 'order-1', type: 'Sale' }),
+          }),
+          expect.objectContaining({
+            key: 'posProducts',
+            item: expect.objectContaining({ id: 'product-1', stock: 7 }),
+          }),
+        ])
+      );
+
+      // Ghi đè order local (giữ nguyên id, đổi items/totalAmount/finalAmount)
+      expect(applyLocalOnly).toHaveBeenCalledWith([
+        { key: 'posOrders', item: updatedOrder },
+      ]);
+
+      // Đảo doanh thu ròng — âm delta đơn CŨ (SL2) cộng delta đơn MỚI (SL3)
+      expect(applyRevenueDeltaLocal).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          totalGrossRevenue: 100000,
+          discount: 0,
+          netRevenue: 100000,
+          totalCogs: 60000,
+          grossProfit: 40000,
         })
-      ).rejects.toThrow('đã có 1 sản phẩm được trả hàng');
-      expect(updateSurgical).not.toHaveBeenCalled();
+      );
     });
 
-    it('allows editing quantity down to (but not below) the amount already returned', async () => {
-      const updateSurgical = vi.fn().mockResolvedValue(undefined);
-      const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
+    it('rejects editing a return/exchange order (not supported by this function)', async () => {
+      const applyLocalOnly = vi.fn();
+      const applyRevenueDeltaLocal = vi.fn();
+      const editPosOrderTx = vi.fn();
+      const updateSurgical = vi.fn();
 
       await expect(
         editPosOrder({
-          data: dataWithReturn,
-          originalOrder: baseOrder,
-          updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 1 }] },
+          data: baseData,
+          originalOrder: { ...baseOrder, isReturn: true },
+          updatedOrder: { ...baseOrder, isReturn: true },
+          applyLocalOnly,
+          applyRevenueDeltaLocal,
+          editPosOrderTx,
           updateSurgical,
-          applyRevenueDelta,
         })
-      ).resolves.not.toThrow();
-      expect(updateSurgical).toHaveBeenCalled();
+      ).rejects.toThrow('Chưa hỗ trợ sửa đơn trả/đổi hàng');
+      expect(editPosOrderTx).not.toHaveBeenCalled();
+    });
+
+    it('rejects editing an already-cancelled order', async () => {
+      const applyLocalOnly = vi.fn();
+      const applyRevenueDeltaLocal = vi.fn();
+      const editPosOrderTx = vi.fn();
+      const updateSurgical = vi.fn();
+
+      await expect(
+        editPosOrder({
+          data: baseData,
+          originalOrder: { ...baseOrder, status: 'cancelled' },
+          updatedOrder: baseOrder,
+          applyLocalOnly,
+          applyRevenueDeltaLocal,
+          editPosOrderTx,
+          updateSurgical,
+        })
+      ).rejects.toThrow('đã hủy — không thể sửa');
+      expect(editPosOrderTx).not.toHaveBeenCalled();
+    });
+
+    // [ORDERS-EDIT-02]
+    describe('chặn sửa số lượng thấp hơn số đã trả', () => {
+      const returnOrder: POSOrder = {
+        ...baseOrder,
+        id: 'return-1',
+        orderCode: 'TH-000001',
+        isReturn: true,
+        originalOrderId: 'order-1',
+        items: [
+          {
+            productId: 'product-1',
+            sku: 'SKU-1',
+            name: 'Giày test',
+            quantity: 1,
+            price: 100000,
+            discount: 0,
+            total: 100000,
+          },
+        ],
+      };
+      const dataWithReturn = { ...baseData, posOrders: [baseOrder, returnOrder] } as AppData;
+
+      it('rejects reducing quantity below the amount already returned', async () => {
+        const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+        const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+        const editPosOrderTx = vi.fn().mockResolvedValue(undefined);
+        const updateSurgical = vi.fn().mockResolvedValue(undefined);
+
+        await expect(
+          editPosOrder({
+            data: dataWithReturn,
+            originalOrder: baseOrder,
+            updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 0 }] },
+            applyLocalOnly,
+            applyRevenueDeltaLocal,
+            editPosOrderTx,
+            updateSurgical,
+          })
+        ).rejects.toThrow('đã có 1 sản phẩm được trả hàng');
+        expect(editPosOrderTx).not.toHaveBeenCalled();
+      });
+
+      it('allows editing quantity down to (but not below) the amount already returned', async () => {
+        const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+        const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+        const editPosOrderTx = vi.fn().mockResolvedValue(undefined);
+        const updateSurgical = vi.fn().mockResolvedValue(undefined);
+
+        await expect(
+          editPosOrder({
+            data: dataWithReturn,
+            originalOrder: baseOrder,
+            updatedOrder: { ...baseOrder, items: [{ ...baseOrder.items[0], quantity: 1 }] },
+            applyLocalOnly,
+            applyRevenueDeltaLocal,
+            editPosOrderTx,
+            updateSurgical,
+          })
+        ).resolves.not.toThrow();
+        expect(editPosOrderTx).toHaveBeenCalled();
+      });
     });
   });
 });

@@ -9,8 +9,10 @@ import {
   AppData,
   AppDataSurgicalUpdate,
   BrandProfile,
+  CustomerDebtRecord,
   DashboardBreakEvenAnalysis,
   DiagnosisRange,
+  POSOrder,
   ProductLine,
   RevenueSubTab,
   RevenueDelta,
@@ -104,6 +106,12 @@ interface MainContentProps {
   applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
   deletePosOrderTx: (orderId: string) => Promise<void>;
   cancelPosReturnTx: (returnOrderId: string) => Promise<void>;
+  editPosOrderTx: (
+    orderId: string,
+    updatedOrder: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
@@ -142,6 +150,7 @@ const MainContent: React.FC<MainContentProps> = ({
   applyRevenueDeltaLocal,
   deletePosOrderTx,
   cancelPosReturnTx,
+  editPosOrderTx,
   pushBatch,
   loadInventoryOut,
   isDataReady = true,
@@ -1006,8 +1015,10 @@ const MainContent: React.FC<MainContentProps> = ({
                   revertedCustomer,
                   debtRecord,
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
+                  applyLocalOnly,
+                  applyRevenueDeltaLocal,
+                  editPosOrderTx,
                   updateSurgical,
-                  applyRevenueDelta,
                 })
               }
               onUpdateSurgical={updateSurgical}

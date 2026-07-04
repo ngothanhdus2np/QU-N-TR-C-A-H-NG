@@ -1,5 +1,5 @@
 import { supabaseAdmin as supabase } from './supabase';
-import { AppData, InventoryTransaction, POSOrder, RevenueDelta } from '../types';
+import { AppData, CustomerDebtRecord, InventoryTransaction, POSOrder, RevenueDelta } from '../types';
 import { buildVariantProductName, isUUID } from '../src/lib';
 
 export const TABLE_MAP: Record<string, string> = {
@@ -1193,6 +1193,22 @@ export const apiService = {
   async cancelPosReturnTx(returnOrderId: string) {
     await postDataRoute('/api/data/pos-orders/cancel-return-tx', { returnOrderId });
     return { success: true, returnOrderId };
+  },
+
+  // [TXN-RPC-01] Sửa đơn bán qua RPC edit_pos_order_tx (1 transaction DB)
+  async editPosOrderTx(
+    orderId: string,
+    updatedOrder: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) {
+    await postDataRoute('/api/data/pos-orders/edit-tx', {
+      orderId,
+      updatedOrder,
+      debtRecord,
+      allowSellOutOfStock,
+    });
+    return { success: true, orderId };
   },
 
   // [DATA-02] Cộng dồn doanh thu theo delta atomic (thay read-modify-write ghi đè cả dòng)

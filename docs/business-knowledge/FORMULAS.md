@@ -787,7 +787,9 @@ match qua notes chứa mã đơn) + inventory transaction 'Return' kiểu cũ c�
 
 ### 11.5 Guard sửa đơn đã có phiếu trả liên kết (ORDERS-EDIT-02)
 
-> Source: `services/posOrderService.ts` → `editPosOrder()`, dùng chung
+> Source: `services/posOrderService.ts` → `editPosOrder()` (check nhanh phía client)
+> **+ `edit_pos_order_tx()` SQL** (`supabase_migrations/028_edit_pos_order_tx.sql`,
+> nguồn sự thật — verify độc lập, không tin dữ liệu client gửi lên), dùng chung
 > `getReturnedQuantitiesForOrder()` ở 11.4
 
 `editPosOrder()` tính lại tồn kho theo delta (SL CŨ vs SL MỚI của đơn đang sửa),
@@ -799,4 +801,24 @@ Cho phép: SL mới ≥ SL đã trả — vẫn đúng vì 2 phép tính (sửa 
           nhưng không chồng lấn phần đã trả
 ```
 Vi phạm → throw lỗi chặn lưu, không đụng tới tồn kho/doanh thu (guard chạy trước
-mọi bước ghi dữ liệu).
+mọi bước ghi dữ liệu — cả ở JS lẫn RPC SQL đều chặn độc lập).
+
+### 11.6 Sửa đơn (`editPosOrder`) — RPC `edit_pos_order_tx` [TXN-RPC-01]
+
+> Source: `services/posOrderService.ts` → `editPosOrder()` +
+> `supabase_migrations/028_edit_pos_order_tx.sql`
+
+Toàn bộ hoàn/áp tồn kho + xóa/ghi nợ + ghi đè đơn + đảo doanh thu chạy trong 1
+transaction DB (RPC), thay vì chuỗi nhiều lời gọi mạng cũ:
+```
+Tồn kho mới (mỗi SP) = Tồn hiện tại + SL đơn CŨ (hoàn lại) − SL đơn MỚI (trừ lại)
+Delta doanh thu ròng = −buildRevenueDelta(đơn CŨ, cogsCũ) + buildRevenueDelta(đơn MỚI, cogsMới)
+                        (gộp 1 delta duy nhất — ngày bán giữ nguyên, không tính 2 lần)
+```
+`inventory_transactions` của đơn CŨ bị **xóa hẳn** (không đánh dấu cancelled) và
+ghi transaction Sale MỚI theo items đã sửa — khác cơ chế "cancelled" của xóa/hủy
+trả vì sửa đơn là ghi đè, không phải hoàn tác.
+
+**Ngoài phạm vi RPC** (vẫn 2 lời gọi mạng thật riêng qua `updateSurgical` sau khi
+RPC xong): cập nhật điểm/hạng khách hàng (`computeNewTier()` đọc cấu hình
+localStorage, server không truy cập được) và tính lại `sales_records` ngày đó.

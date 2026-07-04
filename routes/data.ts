@@ -648,6 +648,33 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // [TXN-RPC-01] Sửa 1 đơn bán (hoàn/áp tồn kho + xóa/ghi nợ + ghi đè đơn + đảo doanh thu)
+  // trong 1 transaction DB — thay chuỗi nhiều lời gọi mạng cũ.
+  router.post('/api/data/pos-orders/edit-tx', requireAuth, async (req, res) => {
+    const orderId = String(req.body?.orderId || '');
+    const updatedOrder = req.body?.updatedOrder;
+    const debtRecord = req.body?.debtRecord ?? null;
+    const allowSellOutOfStock = Boolean(req.body?.allowSellOutOfStock);
+    if (!orderId) return res.status(400).json({ error: 'ID đơn hàng không hợp lệ' });
+    if (!updatedOrder || typeof updatedOrder !== 'object') {
+      return res.status(400).json({ error: 'Dữ liệu đơn hàng cập nhật không hợp lệ' });
+    }
+
+    try {
+      const { error } = await supabase.rpc('edit_pos_order_tx', {
+        p_order_id: orderId,
+        p_updated_order: updatedOrder,
+        p_debt_record: debtRecord,
+        p_allow_sell_out_of_stock: allowSellOutOfStock,
+      });
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      console.error(`[DataRoute] edit pos order tx failed [${orderId}]:`, error);
+      writeErrorResponse(res, 'Không thể sửa đơn hàng', error);
+    }
+  });
+
   // [DATA-02] Cộng dồn doanh thu theo DELTA atomic (chống race 2 máy bán cùng ngày)
   router.post('/api/data/revenue/apply-delta', requireAuth, async (req, res) => {
     const id = req.body?.id ? String(req.body.id) : null;

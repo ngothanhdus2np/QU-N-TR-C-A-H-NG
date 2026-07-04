@@ -44,17 +44,28 @@ type DeleteOrderArgs = AtomicLocalSyncCallbacks & {
   deletePosOrderTx: (orderId: string) => Promise<void>;
 };
 
-type EditOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+type EditOrderArgs = AtomicLocalSyncCallbacks & {
   data: AppData;
   originalOrder: POSOrder;
   // Giữ NGUYÊN id/orderCode/date so với originalOrder — chỉ đổi items/khách/PTTT/giảm giá...
   updatedOrder: POSOrder;
   updatedCustomer?: POSCustomer;
   // Khách của ĐƠN GỐC khi bị đổi sang khách khác / bỏ chọn — bản ghi đã đảo hết phần
-  // totalSpent/điểm/nợ mà đơn gốc từng cộng (caller tính, service chỉ ghi)
+  // totalSpent/điểm/nợ mà đơn gốc từng cộng (caller tính, service chỉ ghi). Tính tier/điểm dùng
+  // cấu hình localStorage nên KHÔNG nằm trong RPC — vẫn 1 lời gọi mạng thật riêng (updateSurgical).
   revertedCustomer?: POSCustomer;
   debtRecord?: CustomerDebtRecord; // nợ MỚI nếu đơn sửa bật bán nợ (nợ CŨ tự xóa)
   allowSellOutOfStock?: boolean;
+  // [TXN-RPC-01] Sửa đơn qua RPC edit_pos_order_tx (1 transaction DB)
+  editPosOrderTx: (
+    orderId: string,
+    updatedOrder: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) => Promise<void>;
+  // Khách hàng (bước 5) + sales_records (bước 7) không nằm trong RPC — vẫn cần updateSurgical
+  // (mạng thật) riêng cho 2 bước này.
+  updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 };
 
 type ReturnOrderArgs = PosOrderCallbacks & {
@@ -946,13 +957,16 @@ export async function processCancelLegacyReturnTransaction({
   }
 }
 
-// Sửa 1 đơn BÁN đã tồn tại — mở lại trong POS, đổi sản phẩm/số lượng/giá/khách/PTTT..., lưu
-// đè lên đúng order.id cũ (không tạo đơn mới). Coi sửa đơn = hoàn tác đơn CŨ (giống
-// deletePosOrder) + áp dụng đơn MỚI (giống processPlaceOrder), nhưng gộp doanh thu thành 1
-// delta ròng và tính sales_records đúng 1 lần — tránh gọi 2 lần dư thừa vì ngày bán không đổi.
-// Không hỗ trợ đơn trả/đổi hàng (isReturn) — logic đảo ngược khác hẳn, và không xử lý trường
-// hợp đơn đã có phiếu trả hàng liên kết (originalOrderId trỏ tới order này) — sửa sản phẩm/số
-// lượng trong trường hợp đó có thể làm lệch số liệu đã trả, cần xử lý riêng nếu phát sinh.
+// [TXN-RPC-01] Sửa 1 đơn BÁN đã tồn tại — mở lại trong POS, đổi sản phẩm/số lượng/giá/khách/
+// PTTT..., lưu đè lên đúng order.id cũ (không tạo đơn mới). Gộp phần hoàn/áp tồn kho + xóa/ghi
+// nợ + ghi đè đơn + đảo doanh thu vào RPC edit_pos_order_tx (1 transaction DB) thay vì chuỗi
+// nhiều lời gọi mạng cũ. Server là nguồn sự thật; sau khi RPC thành công, áp lại ĐÚNG các delta
+// tương ứng (khớp 1-1 với migration 028_edit_pos_order_tx.sql) vào state local qua
+// applyLocalOnly/applyRevenueDeltaLocal — chỉ dispatch + lưu cache, không gọi thêm mạng.
+// Không hỗ trợ đơn trả/đổi hàng (isReturn) — logic đảo ngược khác hẳn.
+// KHÔNG nằm trong RPC: điểm/hạng khách hàng (computeNewTier() đọc cấu hình localStorage —
+// server không truy cập được, vẫn 1 lời gọi mạng thật riêng qua updateSurgical) và
+// sales_records (tính lại best-effort sau, cùng ranh giới delete_pos_order_tx/cancel_pos_return_tx).
 export async function editPosOrder({
   data,
   originalOrder,
@@ -961,8 +975,10 @@ export async function editPosOrder({
   revertedCustomer,
   debtRecord,
   allowSellOutOfStock = false,
+  applyLocalOnly,
+  applyRevenueDeltaLocal,
+  editPosOrderTx,
   updateSurgical,
-  applyRevenueDelta,
 }: EditOrderArgs): Promise<void> {
   if (originalOrder.isReturn || updatedOrder.isReturn) {
     throw new Error('Chưa hỗ trợ sửa đơn trả/đổi hàng qua chức năng này');
@@ -974,8 +990,7 @@ export async function editPosOrder({
     throw new Error('editPosOrder yêu cầu updatedOrder giữ nguyên id với originalOrder');
   }
 
-  const currentProducts = data.posProducts || [];
-  const currentMap = buildProductMap(currentProducts);
+  const currentMap = buildProductMap(data.posProducts || []);
 
   // Tồn kho cuối = tồn hiện tại + số lượng đơn CŨ (hoàn lại) − số lượng đơn MỚI (trừ lại),
   // gộp theo từng sản phẩm trong 1 bước — tránh sai nếu 1 SP xuất hiện ở cả 2 đơn.
@@ -989,10 +1004,8 @@ export async function editPosOrder({
   }
   const allProductIds = new Set([...oldQtyByProduct.keys(), ...newQtyByProduct.keys()]);
 
-  // [ORDERS-EDIT-02] Chặn giảm số lượng xuống dưới mức đã trả — editPosOrder tự tính lại tồn
-  // kho theo delta (cũ vs mới) độc lập với phiếu trả hàng đã xử lý trước đó; nếu số lượng mới
-  // < số lượng đã trả, tồn kho sẽ bị cộng trùng phần phiếu trả đã cộng lại rồi (xem phân tích
-  // trong TODO.md ORDERS-EDIT-02). Sửa xuống mức vẫn >= số đã trả thì toán học vẫn đúng.
+  // [ORDERS-EDIT-02] Chặn giảm số lượng xuống dưới mức đã trả — kiểm tra nhanh phía client
+  // trước khi gọi mạng (RPC cũng tự kiểm tra lại độc lập bằng SQL, xem migration 028).
   const returnedQuantities = getReturnedQuantitiesForOrder(
     originalOrder,
     data.posOrders || [],
@@ -1019,6 +1032,13 @@ export async function editPosOrder({
     }
   }
 
+  // RPC 1 transaction — hoàn/áp tồn kho + xóa/ghi nợ + ghi đè đơn + đảo doanh thu. Lỗi bất kỳ
+  // (vd guard trả hàng, tồn kho âm) → RPC tự rollback toàn bộ, không có gì để áp lại local.
+  await editPosOrderTx(originalOrder.id, updatedOrder, debtRecord ?? null, allowSellOutOfStock);
+
+  // Từ đây RPC đã áp dụng xong trên server — chỉ còn đồng bộ lại state local cho khớp.
+
+  // 1) Tồn kho + inventory transaction local
   const updatedProductsMap = new Map<string, POSProduct>();
   for (const productId of allProductIds) {
     const product = findProduct(currentMap, productId);
@@ -1026,10 +1046,6 @@ export async function editPosOrder({
     const net = (oldQtyByProduct.get(productId) || 0) - (newQtyByProduct.get(productId) || 0);
     updatedProductsMap.set(productId, { ...product, stock: product.stock + net });
   }
-
-  // Bước 1: hoàn tồn kho đơn CŨ (xóa inventory transaction gắn referenceId=originalOrder.id)
-  // + ghi transaction MỚI cho đơn đã sửa — gộp 1 lần gọi, xóa đứng TRƯỚC áp mới trong mảng để
-  // RPC chạy tuần tự đúng thứ tự trên stock LIVE trên server (không phụ thuộc `data` cũ/mới).
   const oldTransactionIds = (data.inventoryTransactions || [])
     .filter(t => t.referenceId === originalOrder.id)
     .map(t => t.id);
@@ -1043,8 +1059,7 @@ export async function editPosOrder({
     key: 'posProducts' as const,
     item,
   }));
-
-  await updateSurgical([
+  await applyLocalOnly([
     ...oldTransactionIds.map(id => ({
       key: 'inventoryTransactions' as const,
       item: { id } as { id: string },
@@ -1054,22 +1069,24 @@ export async function editPosOrder({
     ...stockUpdates,
   ]);
 
-  // Bước 2: Xóa nợ CŨ gắn với đơn (nếu có) — nợ MỚI (nếu có) ghi lại ở bước 4
+  // 2) Xóa nợ CŨ local (nợ MỚI ghi ở bước 4)
   const oldDebtRecords = (data.customerDebtHistory || []).filter(d => d.orderId === originalOrder.id);
-  for (const debt of oldDebtRecords) {
-    await updateSurgical([{ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }]);
+  if (oldDebtRecords.length > 0) {
+    await applyLocalOnly(
+      oldDebtRecords.map(debt => ({ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }))
+    );
   }
 
-  // Bước 3: Ghi đè order (giữ nguyên id/orderCode/date, đổi items/khách/PTTT/giảm giá...)
-  await updateSurgical([{ key: 'posOrders', item: updatedOrder }]);
+  // 3) Ghi đè order local (giữ nguyên id/orderCode/date, đổi items/khách/PTTT/giảm giá...)
+  await applyLocalOnly([{ key: 'posOrders', item: updatedOrder }]);
 
-  // Bước 4: Ghi nợ MỚI nếu đơn sửa bật bán nợ
+  // 4) Ghi nợ MỚI local nếu đơn sửa bật bán nợ
   if (debtRecord) {
-    await updateSurgical([{ key: 'customerDebtHistory', item: debtRecord }]);
+    await applyLocalOnly([{ key: 'customerDebtHistory', item: debtRecord }]);
   }
 
-  // Bước 5: Cập nhật khách hàng (điểm/tổng chi tiêu) nếu có — gồm cả khách CŨ bị đổi/bỏ
-  // (đảo phần đơn gốc từng cộng) lẫn khách hiện tại của đơn sửa
+  // 5) Cập nhật khách hàng (điểm/tổng chi tiêu/tier) — KHÔNG nằm trong RPC (tier đọc cấu hình
+  // localStorage), vẫn 1 lời gọi mạng thật riêng.
   const customerUpdates: AppDataSurgicalUpdate[] = [];
   if (revertedCustomer && revertedCustomer.id !== updatedCustomer?.id) {
     customerUpdates.push({ key: 'posCustomers', item: revertedCustomer });
@@ -1081,8 +1098,8 @@ export async function editPosOrder({
     await updateSurgical(customerUpdates);
   }
 
-  // Bước 6: Gộp delta đảo dấu đơn CŨ + delta đơn MỚI thành 1 delta ròng, gọi applyRevenueDelta
-  // ĐÚNG 1 LẦN (ngày bán giữ nguyên khi sửa, không cho đổi ngày).
+  // 6) Đảo doanh thu local — gộp delta đảo dấu đơn CŨ + delta đơn MỚI thành 1 delta ròng
+  // (khớp công thức RPC đã tính, ngày bán giữ nguyên khi sửa).
   const oldCogs = calculateOrderCogs(currentMap, originalOrder.items);
   const newCogs = calculateOrderCogs(currentMap, updatedOrder.items);
   const netRevenueDelta = mergeRevenueDeltas(
@@ -1090,10 +1107,9 @@ export async function editPosOrder({
     buildRevenueDelta(updatedOrder, newCogs)
   );
   const orderDate = toLocalDateKey(originalOrder.date);
-  await applyRevenueDelta(orderDate, netRevenueDelta);
+  await applyRevenueDeltaLocal(orderDate, netRevenueDelta);
 
-  // Bước 7: Tính lại sales_records ngày đó (ngày không đổi khi sửa) — dùng snapshot data đã
-  // thay order cũ bằng order mới để tính đúng phân bổ doanh số theo item/salesperson mới.
+  // 7) Tính lại sales_records ngày đó — không nằm trong RPC, vẫn qua mạng thật.
   const recalculationOrders = (data.posOrders || []).map(o =>
     o.id === updatedOrder.id ? updatedOrder : o
   );
@@ -1104,17 +1120,7 @@ export async function editPosOrder({
     updateSurgical
   );
 
-  // Bước 8: Ghi audit log
-  try {
-    auditService.logOrderEdit(
-      originalOrder.id,
-      originalOrder.orderCode,
-      { finalAmountBefore: originalOrder.finalAmount, finalAmountAfter: updatedOrder.finalAmount },
-      getCurrentStaffId()
-    );
-  } catch (auditError) {
-    console.error('[AUDIT] Không ghi được audit log khi sửa đơn:', originalOrder.orderCode, auditError);
-  }
+  // Audit log: RPC đã tự ghi (best-effort) bên trong transaction — không ghi trùng ở client.
 }
 
 // Tính lại sales_records (doanh số NV) cho 1 ngày, loại trừ TOÀN BỘ orderId đã xóa trong batch.
