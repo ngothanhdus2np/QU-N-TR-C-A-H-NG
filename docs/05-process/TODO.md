@@ -176,18 +176,18 @@
 
 ---
 
-### [~] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện + kiểm chứng 2026-06-30)*
+### [x] Vá lỗ hổng Auth Bypass + Privilege Escalation trên LAN *(phát hiện + kiểm chứng 2026-06-30, HOÀN TẤT + ĐÃ DEPLOY 2026-07-04)*
 
 > **Severity: HIGH → đã hạ rủi ro (kiểm chứng thật trên prod)**. Xem `docs/06-evaluation/PRODUCTION_AUDIT_2026-06-30.md`.
 >
-> **Lớp 1 — ✅ ĐÃ ĐÓNG**: `NODE_ENV=production` xác nhận trong tiến trình live `com.cfobrain.app` (set qua launchd plist) → `IS_PROD=true` → dev-bypass (`server.ts:548`) tắt, rate-limit bật.
+> **Lớp 1 — ✅ ĐÃ ĐÓNG**: `NODE_ENV=production` xác nhận trong tiến trình live `com.cfobrain.app` (set qua launchd plist) → `IS_PROD=true` → dev-bypass tắt, rate-limit bật.
 >
-> **Lớp 2 — KHÔNG khai thác được** (vì Lớp 1 đóng, request không-JWT bị `requireAuth` chặn 401 trước khi tới `resolveCaller`). Nhưng vẫn nên vá phòng thủ.
+> **Lớp 2 — ✅ ĐÃ VÁ 2026-07-04**: gỡ hẳn nhánh bypass dựa vào IP nguồn thuộc LAN (`isPrivateLanAddress`/`isTrustedDevBrowserRequest` trong `requireAuth`, `server.ts`) thay vì chỉ tắt bằng `!IS_PROD` — trước khi xóa đã xác minh không có caller nội bộ nào phụ thuộc nó (frontend luôn đính JWT thật qua session Supabase). Giữ `INTERNAL_API_KEY` header cho caller nội bộ không có JWT (cơ chế đã có sẵn). Verify: tsc sạch, restart server, toàn bộ API call vẫn 200 OK sau đăng nhập thật, không phát sinh 401 mới trên log prod.
 >
 > **Việc CÒN LẠI:**
 > 1. ~~Thêm `NODE_ENV=production` vào `.env.local` trên iMac~~ ✅ **xong 2026-07-02** (qua ssh, cùng đợt deploy).
 > 2. ~~Vá `auth.ts:21`~~ ✅ **xong 2026-06-30** — đổi `return { role: 'owner', userId: 'dev-user' }` → `return null` (defense-in-depth).
-> 3. Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header.
+> 3. ~~Dài hạn: thay LAN IP bypass bằng `INTERNAL_API_KEY` header~~ ✅ **xong 2026-07-04**.
 
 ---
 
@@ -215,9 +215,11 @@
 >
 > ✅ **Đã xử lý 2026-07-04**: xác nhận lại y hệt trên production qua SQL trực tiếp (giá trị khớp 100% với audit R3), user chọn phương án **xóa** (gross=0 + date rác → gần chắc chắn không phải doanh thu thật). Đã `DELETE` cả 3 dòng trên prod kèm `audit_logs` ghi lý do trước khi xóa.
 
-### [ ] 🟡 SEC-RATELIMIT-01 — Login `/auth/v1` không rate-limit ở tầng app *(phát hiện audit R3 2026-07-03)*
+### [x] 🟡 SEC-RATELIMIT-01 — Login `/auth/v1` không rate-limit ở tầng app *(phát hiện audit R3 2026-07-03, ✅ HOÀN TẤT + ĐÃ DEPLOY 2026-07-04)*
 
-> `apiLimiter` mount `/api/` ([server.ts:442](../../server.ts)), `authLimiter` (20/15ph) CHỈ mount `/api/auth/register` ([server.ts:443](../../server.ts)). Proxy Supabase `/auth/v1`+`/rest/v1`+`/storage/v1` ([server.ts:464](../../server.ts)) không qua limiter nào → đường login thật GoTrue `/auth/v1/token` không bị app chặn brute-force (chỉ dựa giới hạn nội bộ GoTrue). Đề xuất: thêm limiter `/auth/v1/token` (~10–20/15ph/IP) hoặc siết cấu hình GoTrue.
+> `apiLimiter` mount `/api/`, `authLimiter` (20/15ph) CHỈ mount `/api/auth/register`. Proxy Supabase `/auth/v1`+`/rest/v1`+`/storage/v1` không qua limiter nào → đường login thật GoTrue `/auth/v1/token` không bị app chặn brute-force (chỉ dựa giới hạn nội bộ GoTrue).
+>
+> **✅ ĐÃ SỬA**: thêm `app.use('/auth/v1/token', authLimiter)` trong `server.ts` — dùng lại `authLimiter` có sẵn (20 req/15 phút/IP, chỉ áp khi `IS_PROD`), mount trước proxy để chặn sớm. Verify: tsc sạch, health 200, `POST /auth/v1/token` qua domain public vẫn phản hồi đúng `401` cho sai mật khẩu (không phải 500/502).
 
 ### [x] 🟡 DATA-01 — Checkout web POS chưa gói vào 1 transaction DB (saga bù trừ) *(P2 — audit R3 ghi rõ rủi ro; GIẢI QUYẾT bởi TXN-RPC-01, ✅ ĐÃ DEPLOY 2026-07-04)*
 
