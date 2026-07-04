@@ -99,6 +99,10 @@ interface MainContentProps {
   ) => Promise<void>;
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
+  // [TXN-RPC-01] Local-only sync (dùng sau khi RPC server-side đã áp dụng đầy đủ) + RPC xóa đơn
+  applyLocalOnly: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
+  deletePosOrderTx: (orderId: string) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
@@ -133,6 +137,9 @@ const MainContent: React.FC<MainContentProps> = ({
   updateData,
   updateSurgical,
   applyRevenueDelta,
+  applyLocalOnly,
+  applyRevenueDeltaLocal,
+  deletePosOrderTx,
   pushBatch,
   loadInventoryOut,
   isDataReady = true,
@@ -649,7 +656,13 @@ const MainContent: React.FC<MainContentProps> = ({
                   continue;
                 }
                 try {
-                  await deletePosOrder({ data, order, updateSurgical, applyRevenueDelta });
+                  await deletePosOrder({
+                    data,
+                    order,
+                    applyLocalOnly,
+                    applyRevenueDeltaLocal,
+                    deletePosOrderTx,
+                  });
                   deletedOrderIds.add(order.id);
                   affectedDates.add(getOrderLocalDateKey(order));
                 } catch (err) {

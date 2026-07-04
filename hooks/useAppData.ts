@@ -1124,6 +1124,38 @@ export function useAppData() {
     [state.data, enqueueOp]
   );
 
+  // [TXN-RPC-01] Cập nhật state local (React + cache) mà KHÔNG gọi mạng — dùng khi 1 RPC
+  // server-side (vd delete_pos_order_tx) đã áp dụng đầy đủ thay đổi rồi, chỉ cần đồng bộ lại
+  // optimistic UI cho khớp. Tái dùng đúng phần "Durable Save" của updateSurgical, bỏ hẳn phần
+  // network/rollback vì không còn gì để rollback (server đã atomic).
+  const applyLocalOnly = useCallback(
+    async (updates: AppDataSurgicalUpdate[]) => {
+      updates.forEach(u => { if ('id' in u.item) markLocalWrite(u.item.id as string); });
+      dispatch({ type: 'UPDATE_SURGICAL', payload: updates });
+      try {
+        const cachedData = await loadCachedDataSnapshot();
+        const currentLocalData: Record<string, unknown> = { ...state.data, ...(cachedData || {}) };
+        for (const u of updates) {
+          const key = u.key as string;
+          const existingItems = Array.isArray(currentLocalData[key]) ? currentLocalData[key] : [];
+          const newList = [...existingItems];
+          const idx = newList.findIndex(item => isIdentifiableItem(item) && item.id === u.item.id);
+          if (u.isDelete) {
+            if (idx > -1) newList.splice(idx, 1);
+          } else {
+            if (idx > -1) newList[idx] = { ...newList[idx], ...u.item };
+            else newList.push(u.item);
+          }
+          currentLocalData[key] = newList;
+        }
+        await saveDataSnapshot(currentLocalData as Partial<AppData>);
+      } catch (e) {
+        console.error('Local storage sync error (applyLocalOnly):', e);
+      }
+    },
+    [state.data]
+  );
+
   // [DATA-02] Cộng dồn doanh thu theo DELTA atomic — thay read-modify-write ghi đè cả dòng.
   // Local: cập nhật optimistic theo date (giữ id cũ nếu đã có; ngày mới → tạo id và truyền
   //   chính id đó cho RPC → realtime echo khớp id, tránh nhân đôi dòng doanh thu sau resync).
@@ -1189,6 +1221,63 @@ export function useAppData() {
     },
     [state.data, enqueueOp]
   );
+
+  // [TXN-RPC-01] Giống applyRevenueDelta nhưng KHÔNG gọi mạng — dùng khi server (RPC) đã
+  // cộng dồn atomic rồi, chỉ cần merge local optimistic cho UI khớp ngay lập tức.
+  const applyRevenueDeltaLocal = useCallback(
+    async (dateKey: string, delta: RevenueDelta) => {
+      const cachedData = await loadCachedDataSnapshot();
+      const currentLocalData: Record<string, unknown> = { ...state.data, ...(cachedData || {}) };
+      const existingList: RevenueRecord[] = Array.isArray(currentLocalData.revenue)
+        ? (currentLocalData.revenue as RevenueRecord[])
+        : [];
+      const idx = existingList.findIndex(r => r.date === dateKey);
+
+      let recordId: string;
+      let newList: RevenueRecord[];
+      if (idx > -1) {
+        const cur = existingList[idx];
+        recordId = cur.id;
+        newList = [...existingList];
+        newList[idx] = {
+          ...cur,
+          totalGrossRevenue: (cur.totalGrossRevenue || 0) + delta.totalGrossRevenue,
+          discount: (cur.discount || 0) + delta.discount,
+          revenueOther: (cur.revenueOther || 0) + delta.revenueOther,
+          returnsValue: (cur.returnsValue || 0) + delta.returnsValue,
+          netRevenue: (cur.netRevenue || 0) + delta.netRevenue,
+          totalCogs: (cur.totalCogs || 0) + delta.totalCogs,
+          grossProfit: (cur.grossProfit || 0) + delta.grossProfit,
+        };
+      } else {
+        recordId = crypto.randomUUID();
+        newList = [...existingList, { id: recordId, date: dateKey, ...delta }];
+      }
+
+      markLocalWrite(recordId);
+      dispatch({ type: 'SET_DATA', payload: { revenue: newList } });
+      await saveDataSnapshot({ ...currentLocalData, revenue: newList } as Partial<AppData>);
+    },
+    [state.data]
+  );
+
+  // [TXN-RPC-01] Xóa đơn bán qua RPC 1 transaction (delete_pos_order_tx) — thay chuỗi nhiều
+  // lời gọi mạng cũ của deletePosOrder. Không hỗ trợ offline queue (giống pos_mobile_checkout):
+  // RPC atomic nên lỗi mạng = toàn bộ thao tác thất bại rõ ràng, không có trạng thái nửa vời
+  // cần queue lại — caller (posOrderService.deletePosOrder) không áp local update nếu lỗi.
+  const deletePosOrderTx = useCallback(async (orderId: string) => {
+    dispatch({ type: 'SET_SYNCING', payload: true });
+    try {
+      await apiService.deletePosOrderTx(orderId);
+      dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
+      dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
+    } catch (err: unknown) {
+      dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
+      throw err;
+    } finally {
+      dispatch({ type: 'SET_SYNCING', payload: false });
+    }
+  }, []);
 
   const pushBatch = useCallback(
     async <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => {
@@ -1310,6 +1399,9 @@ export function useAppData() {
     updateData,
     updateSurgical,
     applyRevenueDelta,
+    applyLocalOnly,
+    applyRevenueDeltaLocal,
+    deletePosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,

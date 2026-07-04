@@ -1183,6 +1183,12 @@ export const apiService = {
     return { success: true, transactionId };
   },
 
+  // [TXN-RPC-01] Xóa đơn bán qua RPC delete_pos_order_tx (1 transaction DB)
+  async deletePosOrderTx(orderId: string) {
+    await postDataRoute('/api/data/pos-orders/delete-tx', { orderId });
+    return { success: true, orderId };
+  },
+
   // [DATA-02] Cộng dồn doanh thu theo delta atomic (thay read-modify-write ghi đè cả dòng)
   async applyRevenueDelta(id: string, dateKey: string, delta: RevenueDelta) {
     const rounded = {

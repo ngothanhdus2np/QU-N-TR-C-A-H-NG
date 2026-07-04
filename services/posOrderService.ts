@@ -20,6 +20,15 @@ type PosOrderCallbacks = {
   applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
 };
 
+// [TXN-RPC-01] Callback riêng cho luồng xóa đơn qua RPC 1 transaction (delete_pos_order_tx):
+// applyLocalOnly/applyRevenueDeltaLocal chỉ đồng bộ state local (dispatch + cache), KHÔNG gọi
+// mạng — dùng sau khi RPC server-side đã áp dụng đầy đủ thay đổi (server là nguồn sự thật).
+type AtomicDeleteCallbacks = {
+  applyLocalOnly: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
+  applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
+  deletePosOrderTx: (orderId: string) => Promise<void>;
+};
+
 type PlaceOrderArgs = PosOrderCallbacks & {
   data: AppData;
   order: POSOrder;
@@ -29,7 +38,7 @@ type PlaceOrderArgs = PosOrderCallbacks & {
   allowSellOutOfStock?: boolean;
 };
 
-type DeleteOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+type DeleteOrderArgs = AtomicDeleteCallbacks & {
   data: AppData;
   order: POSOrder;
 };
@@ -560,18 +569,22 @@ export async function processReturnOrder({
   }
 }
 
-// Hủy 1 đơn BÁN (soft-delete — không hỗ trợ đơn trả/đổi, logic đảo ngược khác):
-// hoàn tồn kho qua RPC delete_inventory_transaction_with_stock_v2 (dựa vào inventory_transactions
-// đã ghi khi bán, referenceId = order.id — chính xác hơn tính lại từ order.items), trừ khỏi
-// revenue_records bằng delta đảo dấu của buildRevenueDelta, xóa lịch sử công nợ liên quan,
-// đảo totalSpent/điểm/nợ của khách, tính lại sales_records ngày đó, ghi audit log.
+// [TXN-RPC-01] Hủy 1 đơn BÁN (soft-delete — không hỗ trợ đơn trả/đổi, logic đảo ngược khác):
+// gộp toàn bộ vào RPC delete_pos_order_tx (1 transaction DB — hoàn tồn kho, đảo doanh thu,
+// đảo khách/nợ, soft-delete đơn) thay vì chuỗi nhiều lời gọi mạng cũ, đóng cửa sổ lệch khi
+// rớt mạng giữa chừng. Server là nguồn sự thật; sau khi RPC thành công, áp lại ĐÚNG các delta
+// tương ứng (công thức khớp 1-1 với migration 026_delete_pos_order_tx.sql) vào state local
+// qua applyLocalOnly/applyRevenueDeltaLocal — chỉ dispatch + lưu cache, không gọi thêm mạng.
+// sales_records (doanh số NV) không nằm trong RPC (client tính lại riêng qua
+// recalcSalesRecordsForDate, xem MainContent.tsx onDeleteOrders — cùng ranh giới pos_mobile_checkout).
 // Đơn KHÔNG bị xóa khỏi DB — chuyển status='cancelled', vẫn xem lại được ở trang Hóa đơn
 // (lọc "Đã hủy") và bị loại khỏi mọi tính toán/báo cáo.
 export async function deletePosOrder({
   data,
   order,
-  updateSurgical,
-  applyRevenueDelta,
+  applyLocalOnly,
+  applyRevenueDeltaLocal,
+  deletePosOrderTx,
 }: DeleteOrderArgs): Promise<void> {
   if (order.isReturn) {
     throw new Error('Chưa hỗ trợ xóa đơn trả/đổi hàng qua chức năng này');
@@ -580,53 +593,69 @@ export async function deletePosOrder({
     throw new Error(`Đơn ${order.orderCode} đã hủy trước đó`);
   }
 
-  const currentProducts = data.posProducts || [];
-  const currentMap = buildProductMap(currentProducts);
+  const currentMap = buildProductMap(data.posProducts || []);
 
-  // Bước 1: Hoàn tồn kho — xóa inventory transaction gắn với đơn (RPC tự cộng lại đúng stock
-  // theo dữ liệu ĐÃ LƯU, không suy luận lại từ order.items để tránh lệch nếu có drift).
-  const relatedTransactionIds = (data.inventoryTransactions || [])
-    .filter(t => t.referenceId === order.id)
-    .map(t => t.id);
+  // RPC 1 transaction — hoàn tồn kho + đảo doanh thu + đảo khách/nợ + soft-delete đơn.
+  // Lỗi bất kỳ → RPC tự rollback toàn bộ, không có gì để áp lại local (throw luôn cho caller).
+  await deletePosOrderTx(order.id);
 
-  if (relatedTransactionIds.length > 0) {
-    const stockUpdates = order.items
-      .map(item => {
-        const product = findProduct(currentMap, item.productId);
+  // Từ đây RPC đã áp dụng xong trên server — chỉ còn đồng bộ lại state local cho khớp.
+
+  // 1) Hoàn tồn kho local — dựa vào inventory transaction Sale ĐÃ LƯU (giống RPC dùng tx.items,
+  //    không suy luận lại từ order.items để tránh lệch nếu có drift).
+  const relatedTransactions = (data.inventoryTransactions || []).filter(
+    t => t.referenceId === order.id && t.type === 'Sale' && t.status !== 'cancelled'
+  );
+  if (relatedTransactions.length > 0) {
+    const stockDeltaByProduct = new Map<string, number>();
+    for (const tx of relatedTransactions) {
+      for (const item of tx.items) {
+        stockDeltaByProduct.set(
+          item.productId,
+          (stockDeltaByProduct.get(item.productId) || 0) + Math.abs(item.quantity)
+        );
+      }
+    }
+    const stockUpdates = Array.from(stockDeltaByProduct.entries())
+      .map(([productId, qty]) => {
+        const product = findProduct(currentMap, productId);
         if (!product) return null;
-        return { key: 'posProducts' as const, item: { ...product, stock: product.stock + item.quantity } };
+        return { key: 'posProducts' as const, item: { ...product, stock: product.stock + qty } };
       })
       .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u);
 
-    const inventoryDeletions = relatedTransactionIds.map(id => ({
+    const txCancelUpdates = relatedTransactions.map(tx => ({
       key: 'inventoryTransactions' as const,
-      item: { id } as { id: string },
-      isDelete: true,
+      item: { ...tx, status: 'cancelled' as const },
     }));
 
-    // Gộp chung 1 lần gọi → updateSurgical phát hiện có cả inventoryTransactions + posProducts
-    // → kích hoạt RPC atomic (giống processPlaceOrder/processReturnOrder).
-    await updateSurgical([...inventoryDeletions, ...stockUpdates]);
+    await applyLocalOnly([...txCancelUpdates, ...stockUpdates]);
   } else {
-    console.warn(`[deletePosOrder] Không tìm thấy inventory transaction cho đơn ${order.orderCode} — bỏ qua hoàn tồn kho`);
+    console.warn(`[deletePosOrder] Không tìm thấy inventory transaction cho đơn ${order.orderCode} — bỏ qua hoàn tồn kho local`);
   }
 
-  // Bước 2: Xóa lịch sử công nợ liên quan (nếu đơn bán nợ)
+  // 2) Xóa lịch sử công nợ liên quan (nếu đơn bán nợ)
   const relatedDebtRecords = (data.customerDebtHistory || []).filter(d => d.orderId === order.id);
-  for (const debt of relatedDebtRecords) {
-    await updateSurgical([{ key: 'customerDebtHistory', item: { id: debt.id }, isDelete: true }]);
+  if (relatedDebtRecords.length > 0) {
+    await applyLocalOnly(
+      relatedDebtRecords.map(debt => ({
+        key: 'customerDebtHistory',
+        item: { id: debt.id },
+        isDelete: true,
+      }))
+    );
   }
 
-  // Bước 3: Soft-delete — chuyển đơn sang 'cancelled', giữ lại để xem/audit
-  await updateSurgical([{ key: 'posOrders', item: { ...order, status: 'cancelled' } }]);
+  // 3) Soft-delete local — chuyển đơn sang 'cancelled', giữ lại để xem/audit
+  await applyLocalOnly([{ key: 'posOrders', item: { ...order, status: 'cancelled' } }]);
 
-  // Bước 4: Trừ khỏi doanh thu ngày bán (delta đảo dấu của buildRevenueDelta lúc tạo đơn)
+  // 4) Trừ khỏi doanh thu ngày bán (delta đảo dấu của buildRevenueDelta lúc tạo đơn)
   const orderCogs = calculateOrderCogs(currentMap, order.items);
   const orderDate = toLocalDateKey(order.date);
   const revenueDelta = negateRevenueDelta(buildRevenueDelta(order, orderCogs));
-  await applyRevenueDelta(orderDate, revenueDelta);
+  await applyRevenueDeltaLocal(orderDate, revenueDelta);
 
-  // Bước 4b (best-effort): đảo thống kê khách hàng — đơn gốc từng cộng totalSpent/điểm khi
+  // 5) (best-effort) đảo thống kê khách hàng — đơn gốc từng cộng totalSpent/điểm khi
   // tạo (POSComputer) và cộng debtAmount nếu bán nợ; hủy đơn phải trừ lại tương ứng
   // (trước đây bỏ sót → khách giữ nợ "ảo" không chứng từ + điểm/hạng như chưa hủy)
   try {
@@ -637,7 +666,7 @@ export async function deletePosOrder({
           (sum, d) => sum + (d.type === 'debt' ? d.amount : -d.amount),
           0
         );
-        await updateSurgical([
+        await applyLocalOnly([
           {
             key: 'posCustomers',
             item: {
@@ -654,12 +683,7 @@ export async function deletePosOrder({
     console.error('[deletePosOrder] Đảo thống kê khách hàng thất bại (non-critical):', e);
   }
 
-  // Bước 5: Ghi audit log
-  try {
-    auditService.logOrderCancel(order.id, order.orderCode, 'Xóa đơn hàng', getCurrentStaffId());
-  } catch (auditError) {
-    console.error('[AUDIT] Không ghi được audit log khi xóa đơn:', order.orderCode, auditError);
-  }
+  // Audit log: RPC đã tự ghi (best-effort) bên trong transaction — không ghi trùng ở client.
 }
 
 type CancelReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {

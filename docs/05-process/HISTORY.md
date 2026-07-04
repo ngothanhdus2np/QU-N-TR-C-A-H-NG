@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-04 (R21) — Wire migration 026 (TXN-RPC-01 luồng xóa đơn) + xử lý DATA-04
+
+- **DATA-04**: xóa 3 dòng rác trong `revenue_records` trên production (tổng 109.933.000đ, `gross=0`/`date` không hợp lệ, xác nhận lại bằng SQL trực tiếp trước khi xóa) — user chọn phương án xóa. Kèm audit log ghi lý do trước khi xóa.
+- **TXN-RPC-01 (luồng xóa đơn)**: wire RPC `delete_pos_order_tx` (migration 026, tạo sẵn từ trước nhưng chưa ai gọi) vào `deletePosOrder()`. Thêm endpoint `POST /api/data/pos-orders/delete-tx` ([routes/data.ts](../../routes/data.ts)), `apiService.deletePosOrderTx()`, và 2 hàm local-only mới trong [useAppData.ts](../../hooks/useAppData.ts): `applyLocalOnly()` (dispatch+cache không gọi mạng, tái dùng cho update generic) + `applyRevenueDeltaLocal()` (merge delta local). `deletePosOrder()` giờ gọi đúng 1 RPC rồi đồng bộ lại local bằng công thức khớp 1-1 với SQL (`buildRevenueDelta`/`calculateOrderCogs` đã verify khớp RPC trước khi chọn hướng recompute-local thay vì refetch).
+- **Phát hiện + fix 2 bug trong migration 026** khi wire lần đầu (chưa ai gọi hàm này trước đây nên chưa lộ): so sánh `inventory_transactions.reference_id` (TEXT) với UUID thiếu cast; `RETURNS TABLE(order_id UUID)` tạo biến ngầm trùng tên cột `customer_debt_history.order_id` gây "ambiguous". Sửa cả 2, áp lại (`CREATE OR REPLACE`) lên dev + prod.
+- +3 unit test `deletePosOrder` (posOrderService.test.ts). tsc sạch, 644/644 test pass.
+- **Verify live trên dev**: reset mật khẩu tạm tài khoản test `admin@cfobrain.local` (qua Supabase Admin API, chỉ trên dev) do session cũ hết hạn. Bán SP012439 qua UI (tồn 5→4) → xóa qua trang Hóa đơn → tồn hoàn về 5, inventory transaction đánh dấu cancelled, `revenue_records` đảo đúng delta, state local (React + IndexedDB) khớp DB. Restart dev server 1 lần giữa chừng (cổng 3000 bị phiên chat khác chiếm, user đóng phiên đó rồi tôi kill process cũ + start lại).
+- Files: `routes/data.ts`, `services/apiService.ts`, `services/posOrderService.ts`, `services/posOrderService.test.ts`, `hooks/useAppData.ts`, `components/MainContent.tsx`, `App.tsx`, `supabase_migrations/026_delete_pos_order_tx.sql`; prod: xóa 3 dòng `revenue_records` (DATA-04) + áp lại RPC `delete_pos_order_tx` đã sửa
+
 ### 2026-07-04 (R20) — Commit + deploy cụm R19 lên production
 
 - Commit toàn bộ 18 file sửa + 3 file mới của cụm R19 (hủy trả/trả hàng/xóa đơn + guard trả trùng, đã verify live phiên trước) — trước đó nằm ở working tree chưa commit.

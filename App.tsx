@@ -80,6 +80,9 @@ const App: React.FC = () => {
     updateData,
     updateSurgical,
     applyRevenueDelta,
+    applyLocalOnly,
+    applyRevenueDeltaLocal,
+    deletePosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,
@@ -296,6 +299,9 @@ const App: React.FC = () => {
             updateData={updateData}
             updateSurgical={updateSurgical}
             applyRevenueDelta={applyRevenueDelta}
+            applyLocalOnly={applyLocalOnly}
+            applyRevenueDeltaLocal={applyRevenueDeltaLocal}
+            deletePosOrderTx={deletePosOrderTx}
             pushBatch={pushBatch}
             loadInventoryOut={loadInventoryOut}
             offlinePendingCount={offlinePendingCount}

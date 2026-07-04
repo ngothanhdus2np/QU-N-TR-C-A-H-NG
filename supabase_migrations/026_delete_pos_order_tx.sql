@@ -45,7 +45,7 @@ BEGIN
   --    Dựa vào items ĐÃ LƯU trong transaction (nguồn sự thật của lần trừ kho), không suy lại.
   FOR tx IN
     SELECT * FROM inventory_transactions
-    WHERE reference_id = p_order_id AND type = 'Sale' AND COALESCE(status, '') <> 'cancelled'
+    WHERE reference_id = p_order_id::TEXT AND type = 'Sale' AND COALESCE(status, '') <> 'cancelled'
     FOR UPDATE
   LOOP
     FOR item IN SELECT * FROM jsonb_array_elements(COALESCE(tx.items, '[]'::JSONB))
@@ -90,7 +90,7 @@ BEGIN
   IF v_order.customer_id IS NOT NULL THEN
     SELECT COALESCE(SUM(CASE WHEN type = 'debt' THEN amount ELSE -amount END), 0)
       INTO v_debt_delta
-      FROM customer_debt_history WHERE order_id = p_order_id;
+      FROM customer_debt_history WHERE customer_debt_history.order_id = p_order_id;
 
     UPDATE pos_customers SET
       points      = GREATEST(0, COALESCE(points, 0) - COALESCE(v_order.points_earned, 0)),
@@ -99,7 +99,7 @@ BEGIN
     WHERE id = v_order.customer_id;
   END IF;
 
-  DELETE FROM customer_debt_history WHERE order_id = p_order_id;
+  DELETE FROM customer_debt_history WHERE customer_debt_history.order_id = p_order_id;
 
   -- 5) Soft-delete đơn
   UPDATE pos_orders SET status = 'cancelled' WHERE id = p_order_id;

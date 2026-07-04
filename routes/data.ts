@@ -616,6 +616,22 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // [TXN-RPC-01] Xóa (soft-delete) 1 đơn bán trong 1 transaction DB — thay chuỗi nhiều lời
+  // gọi mạng cũ, đóng cửa sổ lệch khi rớt mạng giữa chừng.
+  router.post('/api/data/pos-orders/delete-tx', requireAuth, async (req, res) => {
+    const orderId = String(req.body?.orderId || '');
+    if (!orderId) return res.status(400).json({ error: 'ID đơn hàng không hợp lệ' });
+
+    try {
+      const { error } = await supabase.rpc('delete_pos_order_tx', { p_order_id: orderId });
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      console.error(`[DataRoute] delete pos order tx failed [${orderId}]:`, error);
+      writeErrorResponse(res, 'Không thể xóa đơn hàng', error);
+    }
+  });
+
   // [DATA-02] Cộng dồn doanh thu theo DELTA atomic (chống race 2 máy bán cùng ngày)
   router.post('/api/data/revenue/apply-delta', requireAuth, async (req, res) => {
     const id = req.body?.id ? String(req.body.id) : null;

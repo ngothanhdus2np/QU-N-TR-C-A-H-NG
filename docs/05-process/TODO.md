@@ -51,11 +51,17 @@
 >    - `137519-06-26` → net 49.449.000 (id `6356bd21-90b8-4ea4-8b87-13ebfbd381e3`)
 >    - Gross=0 nên gần như chắc chắn nên **XÓA** (không phải doanh thu thật). User xác nhận xóa hoặc cho ngày đúng để sửa.
 
-### [ ] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction *(kế hoạch đã chốt với user 2026-07-04)*
+### [~] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction *(kế hoạch đã chốt với user 2026-07-04, luồng xóa đơn xong 2026-07-04)*
 
 > Giai đoạn 2 của lộ trình A→B: thay ruột các hàm service (`deletePosOrder`, `processCancelReturn`, `editPosOrder`, `processPlaceOrder`) từ chuỗi nhiều lời gọi mạng thành 1 RPC transaction DB theo mẫu `pos_mobile_checkout` — đóng nốt cửa sổ lệch khi rớt mạng giữa chừng. Gộp chung với DATA-01. UI/props không phải sửa lại (Giai đoạn 1 đã dồn mọi nút về service layer).
 >
-> **Tiến độ**: migration `026_delete_pos_order_tx.sql` đã viết RPC `delete_pos_order_tx()` (gộp hoàn tồn kho + đảo doanh thu + đảo khách/nợ + soft-delete đơn bán vào 1 transaction) — **CHƯA wire vào `deletePosOrder()` trong `posOrderService.ts`** (service vẫn dùng chuỗi nhiều lời gọi cũ) và **chưa có test**. Migration đã lên prod (an toàn — chỉ tạo function, không đổi hành vi hiện tại) nhưng còn việc: sửa `deletePosOrder()` gọi RPC này qua `supabase.rpc('delete_pos_order_tx', { p_order_id })`, viết test, verify live trước khi coi Giai đoạn 2 cho luồng xóa đơn là xong.
+> **✅ Luồng xóa đơn (`deletePosOrder`) xong**: wire RPC `delete_pos_order_tx()` qua endpoint mới `POST /api/data/pos-orders/delete-tx` ([routes/data.ts](../../routes/data.ts)) + `apiService.deletePosOrderTx()`. `deletePosOrder()` giờ gọi 1 RPC rồi đồng bộ lại state local (không gọi mạng) qua 2 hàm mới trong `useAppData.ts`: `applyLocalOnly()` (dispatch+cache, tái dùng cho update generic) và `applyRevenueDeltaLocal()` (merge delta local, không gọi RPC `apply_revenue_delta`). Quyết định kỹ thuật: **recompute delta ở client** (không refetch) vì công thức JS (`buildRevenueDelta`/`calculateOrderCogs`) đã khớp 100% với SQL trong RPC — verify từng dòng trước khi chọn hướng này.
+>
+> **🐛 2 bug phát hiện trong migration 026 khi wire lần đầu** (function tạo sẵn từ trước nhưng chưa ai gọi nên chưa lộ): (1) so sánh `inventory_transactions.reference_id` (TEXT) với `p_order_id` (UUID) thiếu cast → `operator does not exist: text = uuid`; (2) `RETURNS TABLE(order_id UUID)` tạo biến ngầm `order_id` trùng tên cột `customer_debt_history.order_id` → `column reference "order_id" is ambiguous`. Đã sửa cả 2 (cast `::TEXT` + qualify tên bảng), áp lại (`CREATE OR REPLACE`) lên cả dev và prod — an toàn vì chưa từng có code nào gọi hàm này trước đây.
+>
+> +3 unit test cho `deletePosOrder` (happy path so khớp delta, guard đã hủy, guard đơn trả). Verify live trên dev: bán SP012439 (tồn 5→4) → xóa qua RPC → tồn về 5, tx đánh dấu cancelled, revenue_records đảo đúng delta (khớp DB tuyệt đối sau khi bấm "Tải lại dữ liệu"), state local (React+IndexedDB) khớp DB không cần refetch (trừ 1 khoảng ngắn optimistic UI lệch do cache local vốn thiếu baseline ngày đó từ trước — tự lành sau reload, không phải bug mới).
+>
+> **⏳ CÒN LẠI**: `processCancelReturn`, `editPosOrder`, `processPlaceOrder` vẫn dùng chuỗi nhiều lời gọi cũ — chưa gộp RPC.
 
 ### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
 
