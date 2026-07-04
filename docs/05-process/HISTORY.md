@@ -3,6 +3,17 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-04 (R25) — TXN-RPC-01: gộp processPlaceOrder thành RPC 1 transaction — HOÀN TẤT toàn bộ TXN-RPC-01
+
+- **Migration `029_place_pos_order_tx.sql`**: RPC `place_pos_order_tx()` gộp insert order + ghi inventory transaction & trừ tồn kho + ghi nợ (nếu bán nợ) + cộng dồn doanh thu atomic vào 1 transaction DB, mô phỏng theo `pos_mobile_checkout` (migration 019, dành riêng POS mobile — không sửa để tránh phá ràng buộc riêng: staff cố định `mobile-cashier`, tier tính cứng trong SQL).
+- **1 bug phát hiện khi viết SQL** (biến thể của lỗi đã gặp ở 026/028): khai báo biến PL/pgSQL `it JSONB` không dùng làm loop var, chỉ trùng tên với alias `it` trong 1 subquery `jsonb_array_elements(...) it` → `column reference "it" is ambiguous`. Sửa bằng cách bỏ hẳn khai báo biến thừa (không cần thiết vì chỉ dùng làm alias). Verify bằng 3 kịch bản SQL tay (`BEGIN...ROLLBACK`) trước khi wire code: bán thường (số liệu khớp tay), chặn bán vượt tồn kho (raise đúng `STOCK_WOULD_BE_NEGATIVE`), bán nợ có khách hàng liên kết (ghi đúng `customer_debt_history`).
+- **Phạm vi RPC** (nhất quán với `editPosOrder`/`delete_pos_order_tx`/`cancel_pos_return_tx`): điểm/hạng khách hàng (`computeNewTier()` đọc localStorage) và `sales_records` giữ ngoài RPC, vẫn 2 lời gọi mạng thật riêng qua `updateSurgical` sau khi RPC xong.
+- **Wire vào code**: endpoint `POST /api/data/pos-orders/place-tx` ([routes/data.ts](../../routes/data.ts)) + `apiService.placePosOrderTx()` + `useAppData.placePosOrderTx()`. `processPlaceOrder()` bỏ hẳn cơ chế rollback thủ công nhiều bước cũ (mỗi bước tự đăng ký hàm rollback riêng khi lỗi giữa chừng) — RPC atomic thay thế hoàn toàn, giờ chỉ gọi 1 RPC rồi đồng bộ local qua `applyLocalOnly`/`applyRevenueDeltaLocal`.
+- +3 unit test viết lại (RPC happy-path so khớp delta, guard tồn kho chặn không gọi RPC, allowSellOutOfStock). 981/981 test pass, tsc sạch.
+- **Verify live đầy đủ trên dev**: bán SP011546 (tồn 6→5) qua RPC → order `HD-B4U01` đúng 130.000, inventory transaction ghi đúng `previousStock`/`newStock`, `revenue_records` cộng đúng (gross 130.000, cogs 76.000, profit 54.000 — khớp tính tay tuyệt đối), UI hiển thị hóa đơn đúng ngay sau thanh toán. Dọn dữ liệu test bằng SQL trực tiếp (không dùng nút "Hủy" nhanh trong danh sách — đã biết lệch số liệu từ R24, xem task riêng).
+- Cập nhật `TODO.md` (TXN-RPC-01 đánh dấu **hoàn tất toàn bộ 4 luồng**: xóa đơn, hủy phiếu trả, sửa đơn, tạo đơn — không còn luồng nào dùng chuỗi nhiều lời gọi + rollback thủ công phía client).
+- Files: `supabase_migrations/029_place_pos_order_tx.sql` (mới), `routes/data.ts`, `services/apiService.ts`, `services/posOrderService.ts`, `services/posOrderService.test.ts`, `hooks/useAppData.ts`, `components/MainContent.tsx`, `App.tsx`
+
 ### 2026-07-04 (R24) — TXN-RPC-01: gộp editPosOrder thành RPC 1 transaction
 
 - **Migration `028_edit_pos_order_tx.sql`**: RPC `edit_pos_order_tx()` gộp hoàn/áp tồn kho theo delta (SL cũ − SL mới, gộp theo SP) + xóa/ghi nợ + ghi đè đơn (giữ nguyên id/order_code/date) + đảo doanh thu ròng (gộp 1 delta, không tính 2 lần) vào 1 transaction DB. **Guard ORDERS-EDIT-02 viết lại độc lập bằng SQL** (2 nguồn: phiếu TH liên kết `original_order_id`/notes fallback + `inventory_transactions` type='Return' cũ) — theo yêu cầu user chọn "viết lại bằng SQL cho chắc" thay vì chỉ tin JS gửi lên.

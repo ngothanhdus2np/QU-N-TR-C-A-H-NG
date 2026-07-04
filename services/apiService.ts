@@ -1211,6 +1211,20 @@ export const apiService = {
     return { success: true, orderId };
   },
 
+  // [TXN-RPC-01] Tạo đơn bán mới qua RPC place_pos_order_tx (1 transaction DB)
+  async placePosOrderTx(
+    order: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) {
+    await postDataRoute('/api/data/pos-orders/place-tx', {
+      order,
+      debtRecord,
+      allowSellOutOfStock,
+    });
+    return { success: true, orderId: order.id };
+  },
+
   // [DATA-02] Cộng dồn doanh thu theo delta atomic (thay read-modify-write ghi đè cả dòng)
   async applyRevenueDelta(id: string, dateKey: string, delta: RevenueDelta) {
     const rounded = {

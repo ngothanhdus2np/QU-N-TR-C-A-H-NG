@@ -112,6 +112,11 @@ interface MainContentProps {
     debtRecord: CustomerDebtRecord | null,
     allowSellOutOfStock: boolean
   ) => Promise<void>;
+  placePosOrderTx: (
+    order: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
@@ -151,6 +156,7 @@ const MainContent: React.FC<MainContentProps> = ({
   deletePosOrderTx,
   cancelPosReturnTx,
   editPosOrderTx,
+  placePosOrderTx,
   pushBatch,
   loadInventoryOut,
   isDataReady = true,
@@ -987,9 +993,10 @@ const MainContent: React.FC<MainContentProps> = ({
                   updatedCustomer,
                   debtRecord,
                   allowSellOutOfStock: data.posInventorySettings?.allowSellOutOfStock ?? false,
-                  pushBatch,
+                  applyLocalOnly,
+                  applyRevenueDeltaLocal,
+                  placePosOrderTx,
                   updateSurgical,
-                  applyRevenueDelta,
                 })
               }
               onReturnOrder={(returnOrder, updatedProducts, returnedItems, exchangeItems, updatedCustomer) =>

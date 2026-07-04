@@ -48,24 +48,34 @@ const baseOrder: POSOrder = {
 };
 
 describe('posOrderService', () => {
-  it('records POS revenue with COGS and gross profit', async () => {
-    const pushBatch = vi.fn().mockResolvedValue(undefined);
+  // [TXN-RPC-01] processPlaceOrder giờ gọi RPC place_pos_order_tx rồi đồng bộ local
+  it('calls the RPC then syncs local state with matching revenue delta', async () => {
+    const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+    const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+    const placePosOrderTx = vi.fn().mockResolvedValue(undefined);
     const updateSurgical = vi.fn().mockResolvedValue(undefined);
-    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     const updatedProducts = [{ ...baseProduct, stock: 8 }];
 
     await processPlaceOrder({
       data: baseData,
       order: baseOrder,
       updatedProducts,
-      pushBatch,
+      applyLocalOnly,
+      applyRevenueDeltaLocal,
+      placePosOrderTx,
       updateSurgical,
-      applyRevenueDelta,
     });
 
-    expect(pushBatch).toHaveBeenCalledWith('posOrders', [baseOrder]);
-    // [DATA-02] Doanh thu nay cong don ATOMIC qua applyRevenueDelta (delta cua don), khong con pushBatch('revenue')
-    expect(applyRevenueDelta).toHaveBeenCalledWith(
+    // RPC (place_pos_order_tx) phải được gọi TRƯỚC — nếu lỗi, không có local update nào chạy
+    expect(placePosOrderTx).toHaveBeenCalledWith(baseOrder, null, false);
+
+    // Order local
+    expect(applyLocalOnly).toHaveBeenCalledWith([
+      expect.objectContaining({ key: 'posOrders', item: baseOrder }),
+    ]);
+
+    // Doanh thu local — khớp buildRevenueDelta
+    expect(applyRevenueDeltaLocal).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         totalGrossRevenue: 200000,
@@ -77,8 +87,8 @@ describe('posOrderService', () => {
         grossProfit: 50000,
       })
     );
-    // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
-    expect(updateSurgical).toHaveBeenCalledWith(
+    // Inventory transaction + stock update local gộp thành 1 call
+    expect(applyLocalOnly).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           key: 'inventoryTransactions',
@@ -93,27 +103,32 @@ describe('posOrderService', () => {
     );
   });
 
-  it('blocks checkout when stock is insufficient by default', async () => {
-    const pushBatch = vi.fn().mockResolvedValue(undefined);
-    const updateSurgical = vi.fn().mockResolvedValue(undefined);
+  it('blocks checkout when stock is insufficient by default, without calling the RPC', async () => {
+    const applyLocalOnly = vi.fn();
+    const applyRevenueDeltaLocal = vi.fn();
+    const placePosOrderTx = vi.fn();
+    const updateSurgical = vi.fn();
     const lowStockData = {
       ...baseData,
       posProducts: [{ ...baseProduct, stock: 1 }],
     } as AppData;
 
-    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     await expect(processPlaceOrder({
       data: lowStockData,
       order: baseOrder,
       updatedProducts: [{ ...baseProduct, stock: -1 }],
-      pushBatch,
+      applyLocalOnly,
+      applyRevenueDeltaLocal,
+      placePosOrderTx,
       updateSurgical,
-      applyRevenueDelta,
     })).rejects.toThrow('Không đủ tồn kho');
+    expect(placePosOrderTx).not.toHaveBeenCalled();
   });
 
   it('allows negative stock when out-of-stock sales are enabled', async () => {
-    const pushBatch = vi.fn().mockResolvedValue(undefined);
+    const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+    const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+    const placePosOrderTx = vi.fn().mockResolvedValue(undefined);
     const updateSurgical = vi.fn().mockResolvedValue(undefined);
     const lowStockData = {
       ...baseData,
@@ -121,19 +136,20 @@ describe('posOrderService', () => {
     } as AppData;
     const updatedProducts = [{ ...baseProduct, stock: -1 }];
 
-    const applyRevenueDelta = vi.fn().mockResolvedValue(undefined);
     await processPlaceOrder({
       data: lowStockData,
       order: baseOrder,
       updatedProducts,
       allowSellOutOfStock: true,
-      pushBatch,
+      applyLocalOnly,
+      applyRevenueDeltaLocal,
+      placePosOrderTx,
       updateSurgical,
-      applyRevenueDelta,
     });
 
-    // AUDIT-003/009: inventory transaction + stock update gộp thành 1 call atomic
-    expect(updateSurgical).toHaveBeenCalledWith(
+    expect(placePosOrderTx).toHaveBeenCalledWith(baseOrder, null, true);
+    // Inventory transaction + stock update local gộp thành 1 call
+    expect(applyLocalOnly).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           key: 'inventoryTransactions',

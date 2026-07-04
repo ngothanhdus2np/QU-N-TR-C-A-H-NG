@@ -28,13 +28,19 @@ type AtomicLocalSyncCallbacks = {
   applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
 };
 
-type PlaceOrderArgs = PosOrderCallbacks & {
+type PlaceOrderArgs = AtomicLocalSyncCallbacks & {
   data: AppData;
   order: POSOrder;
   updatedProducts: POSProduct[];
   updatedCustomer?: POSCustomer;
   debtRecord?: CustomerDebtRecord;
   allowSellOutOfStock?: boolean;
+  placePosOrderTx: (
+    order: POSOrder,
+    debtRecord: CustomerDebtRecord | null,
+    allowSellOutOfStock: boolean
+  ) => Promise<void>;
+  updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 };
 
 type DeleteOrderArgs = AtomicLocalSyncCallbacks & {
@@ -280,6 +286,15 @@ async function autoUpsertStaffSalesForDate(
   await updateSurgical(salesRecords.map(record => ({ key: 'sales' as const, item: record })));
 }
 
+// [TXN-RPC-01] Tạo 1 đơn BÁN mới — gộp insert order + ghi inventory tx & trừ tồn kho +
+// ghi nợ + cộng dồn doanh thu vào RPC place_pos_order_tx (1 transaction DB) thay vì chuỗi
+// nhiều lời gọi mạng + rollback thủ công từng bước cũ. Server là nguồn sự thật; sau khi RPC
+// thành công, áp lại ĐÚNG các delta tương ứng (khớp 1-1 với migration 029_place_pos_order_tx.sql)
+// vào state local qua applyLocalOnly/applyRevenueDeltaLocal — chỉ dispatch + lưu cache, không
+// gọi thêm mạng.
+// KHÔNG nằm trong RPC: điểm/hạng khách hàng (computeNewTier() đọc cấu hình localStorage —
+// server không truy cập được, vẫn 1 lời gọi mạng thật riêng qua updateSurgical) và
+// sales_records (tính lại best-effort sau, cùng ranh giới delete_pos_order_tx/edit_pos_order_tx).
 export async function processPlaceOrder({
   data,
   order,
@@ -287,17 +302,18 @@ export async function processPlaceOrder({
   updatedCustomer,
   debtRecord,
   allowSellOutOfStock = false,
-  pushBatch,
+  applyLocalOnly,
+  applyRevenueDeltaLocal,
+  placePosOrderTx,
   updateSurgical,
-  applyRevenueDelta,
 }: PlaceOrderArgs): Promise<void> {
   const currentProducts = data.posProducts || [];
   // Build Maps một lần — tránh O(items × products) khi nhiều items
   const currentMap = buildProductMap(currentProducts);
   const updatedMap  = buildProductMap(updatedProducts);
 
-  // Guard: phát hiện tồn kho âm trước khi ghi — bảo vệ client-side tránh race condition
-  // (phía server dùng RPC decrement_product_stock để đảm bảo atomicity thực sự)
+  // Guard tồn kho âm — kiểm tra nhanh phía client trước khi gọi mạng (RPC cũng tự kiểm tra
+  // lại độc lập bằng SQL, xem migration 029).
   if (!allowSellOutOfStock) {
     for (const item of order.items) {
       const current = findProduct(currentMap, item.productId);
@@ -309,120 +325,55 @@ export async function processPlaceOrder({
     }
   }
 
-  const orderCogs = calculateOrderCogs(currentMap, order.items);
-  const orderDate = toLocalDateKey(order.date);
-  const revenueDelta = buildRevenueDelta(order, orderCogs);
+  // RPC 1 transaction — insert order + ghi inventory tx & trừ tồn + ghi nợ + cộng doanh thu.
+  // Lỗi bất kỳ (vd tồn kho âm) → RPC tự rollback toàn bộ, không có gì để áp lại local.
+  await placePosOrderTx(order, debtRecord ?? null, allowSellOutOfStock);
+
+  // Từ đây RPC đã áp dụng xong trên server — chỉ còn đồng bộ lại state local cho khớp.
+
+  // 1) Order local
+  await applyLocalOnly([{ key: 'posOrders', item: order }]);
+
+  // 2) Inventory transaction + tồn kho local
   const inventoryTransaction = buildSaleTransaction(
     order,
     currentMap,
     updatedMap,
     allowSellOutOfStock
   );
+  const stockUpdates = order.items
+    .map(item => ({
+      key: 'posProducts' as const,
+      item: findProduct(updatedMap, item.productId),
+    }))
+    .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
+  await applyLocalOnly([{ key: 'inventoryTransactions', item: inventoryTransaction }, ...stockUpdates]);
 
-  // Rollback state để phục hồi nếu có lỗi
-  const rollbackSteps: Array<() => Promise<void>> = [];
-
-  try {
-    // Bước 1: Lưu order
-    await pushBatch('posOrders', [order]);
-    rollbackSteps.push(async () => {
-      console.error('[ROLLBACK] Xóa order:', order.id);
-      await updateSurgical([{ key: 'posOrders', item: { id: order.id }, isDelete: true }]);
-    });
-
-    // Bước 2: Ghi inventory transaction + cập nhật stock trong 1 lần gọi.
-    // updateSurgical phát hiện có cả inventoryTransactions + posProducts → kích hoạt
-    // apply_inventory_transaction_with_stock RPC (atomic INSERT + UPDATE trong 1 SQL transaction).
-    // AUDIT-003/009: gộp 2 lần gọi riêng lẻ thành 1 để đảm bảo atomicity.
-    const stockUpdates = order.items
-      .map(item => ({
-        key: 'posProducts' as const,
-        item: findProduct(updatedMap, item.productId),
-      }))
-      .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
-
-    await updateSurgical([{ key: 'inventoryTransactions', item: inventoryTransaction }, ...stockUpdates]);
-    rollbackSteps.push(async () => {
-      console.error('[ROLLBACK] Xóa inventory transaction + hoàn tồn kho:', inventoryTransaction.id);
-      const revertStockUpdates = order.items
-        .map(item => ({ key: 'posProducts' as const, item: findProduct(currentMap, item.productId) }))
-        .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u.item);
-      // Rollback cũng gộp 1 lần → RPC atomic deleteInventoryTransactionWithStock
-      await updateSurgical([
-        { key: 'inventoryTransactions', item: { id: inventoryTransaction.id }, isDelete: true },
-        ...revertStockUpdates,
-      ]);
-    });
-
-    // Bước 3: Cập nhật customer (nếu có)
-    if (updatedCustomer) {
-      await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
-      rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Hoàn điểm khách hàng:', updatedCustomer.id);
-        const originalCustomer = data.posCustomers?.find(c => c.id === updatedCustomer.id);
-        if (originalCustomer) {
-          await updateSurgical([{ key: 'posCustomers', item: originalCustomer }]);
-        }
-      });
-    }
-
-    // Bước 3b: Ghi lịch sử công nợ khách hàng (nếu có)
-    if (debtRecord) {
-      await pushBatch('customerDebtHistory', [debtRecord]);
-      rollbackSteps.push(async () => {
-        console.error('[ROLLBACK] Xóa debtRecord:', debtRecord.id);
-        await updateSurgical([{ key: 'customerDebtHistory', item: { id: debtRecord.id }, isDelete: true }]);
-      });
-    }
-
-    // Bước 4: Cộng dồn doanh thu ATOMIC theo delta (DATA-02 — hết race nhiều máy cùng ngày)
-    await applyRevenueDelta(orderDate, revenueDelta);
-    rollbackSteps.push(async () => {
-      console.error('[ROLLBACK] Hoàn doanh thu (delta đảo dấu) ngày', orderDate);
-      await applyRevenueDelta(orderDate, negateRevenueDelta(revenueDelta));
-    });
-
-  } catch (error) {
-    console.error('[ERROR] Lỗi khi xử lý đơn hàng, đang rollback...', error);
-
-    // Thực hiện rollback theo thứ tự ngược lại
-    for (let i = rollbackSteps.length - 1; i >= 0; i--) {
-      try {
-        await rollbackSteps[i]();
-      } catch (rollbackError) {
-        console.error('[ROLLBACK ERROR] Không thể rollback bước', i, rollbackError);
-      }
-    }
-
-    throw error; // Re-throw để UI xử lý
+  // 3) Nợ local (nếu đơn bật bán nợ)
+  if (debtRecord) {
+    await applyLocalOnly([{ key: 'customerDebtHistory', item: debtRecord }]);
   }
 
-  // Bước 4b: Tự động ghi doanh số nhân viên — best-effort, không rollback vì idempotent
-  // [FIX POS-1] Tách ra ngoài main try/catch — tránh rollback toàn đơn hàng khi staff update lỗi
+  // 4) Doanh thu local
+  const orderCogs = calculateOrderCogs(currentMap, order.items);
+  const orderDate = toLocalDateKey(order.date);
+  const revenueDelta = buildRevenueDelta(order, orderCogs);
+  await applyRevenueDeltaLocal(orderDate, revenueDelta);
+
+  // 5) Cập nhật khách hàng (điểm/tổng chi tiêu/tier) — KHÔNG nằm trong RPC (tier đọc cấu
+  // hình localStorage), vẫn 1 lời gọi mạng thật riêng.
+  if (updatedCustomer) {
+    await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+  }
+
+  // 6) Tự động ghi doanh số nhân viên — best-effort, không nằm trong RPC, vẫn qua mạng thật.
   try {
     await autoUpsertStaffSalesForDate(data, order, updateSurgical);
   } catch (staffErr) {
     console.error('[processPlaceOrder] autoUpsertStaffSalesForDate thất bại (non-critical):', staffErr);
   }
 
-  // Bước 5: Ghi audit log
-  try {
-    await auditService.logOrderCreate(
-      order.id,
-      order.orderCode,
-      {
-        customerName: order.customerName,
-        totalAmount: order.totalAmount,
-        discount: order.discount,
-        finalAmount: order.finalAmount,
-        paymentMethod: order.paymentMethod,
-        itemCount: order.items.length,
-      },
-      getCurrentStaffId()
-    );
-  } catch (auditError) {
-    console.error('[AUDIT] Không ghi được audit log cho đơn hàng:', order.orderCode, auditError);
-  }
+  // Audit log: RPC đã tự ghi (best-effort) bên trong transaction — không ghi trùng ở client.
 }
 
 export async function processReturnOrder({

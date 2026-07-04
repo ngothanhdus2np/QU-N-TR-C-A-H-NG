@@ -1321,6 +1321,25 @@ export function useAppData() {
     []
   );
 
+  // [TXN-RPC-01] Tạo đơn bán mới qua RPC place_pos_order_tx (1 transaction DB) — cùng ranh
+  // giới các RPC khác: không hỗ trợ offline queue, lỗi mạng = thất bại rõ ràng.
+  const placePosOrderTx = useCallback(
+    async (order: POSOrder, debtRecord: CustomerDebtRecord | null, allowSellOutOfStock: boolean) => {
+      dispatch({ type: 'SET_SYNCING', payload: true });
+      try {
+        await apiService.placePosOrderTx(order, debtRecord, allowSellOutOfStock);
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: true });
+        dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
+      } catch (err: unknown) {
+        dispatch({ type: 'SET_CLOUD_CONNECTED', payload: false });
+        throw err;
+      } finally {
+        dispatch({ type: 'SET_SYNCING', payload: false });
+      }
+    },
+    []
+  );
+
   const pushBatch = useCallback(
     async <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => {
       dispatch({ type: 'SET_SYNCING', payload: true });
@@ -1446,6 +1465,7 @@ export function useAppData() {
     deletePosOrderTx,
     cancelPosReturnTx,
     editPosOrderTx,
+    placePosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,

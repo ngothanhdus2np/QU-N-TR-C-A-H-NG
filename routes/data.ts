@@ -675,6 +675,31 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // [TXN-RPC-01] Tạo 1 đơn bán mới (insert order + ghi inventory tx & trừ tồn kho + ghi
+  // nợ + cộng dồn doanh thu) trong 1 transaction DB — thay chuỗi nhiều lời gọi mạng cũ +
+  // rollback thủ công từng bước.
+  router.post('/api/data/pos-orders/place-tx', requireAuth, async (req, res) => {
+    const order = req.body?.order;
+    const debtRecord = req.body?.debtRecord ?? null;
+    const allowSellOutOfStock = Boolean(req.body?.allowSellOutOfStock);
+    if (!order || typeof order !== 'object' || !order.id) {
+      return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ' });
+    }
+
+    try {
+      const { error } = await supabase.rpc('place_pos_order_tx', {
+        p_order: order,
+        p_debt_record: debtRecord,
+        p_allow_sell_out_of_stock: allowSellOutOfStock,
+      });
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      console.error(`[DataRoute] place pos order tx failed [${order.id}]:`, error);
+      writeErrorResponse(res, 'Không thể tạo đơn hàng', error);
+    }
+  });
+
   // [DATA-02] Cộng dồn doanh thu theo DELTA atomic (chống race 2 máy bán cùng ngày)
   router.post('/api/data/revenue/apply-delta', requireAuth, async (req, res) => {
     const id = req.body?.id ? String(req.body.id) : null;

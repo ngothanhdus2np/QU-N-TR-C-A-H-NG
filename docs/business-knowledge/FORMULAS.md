@@ -822,3 +822,28 @@ trả vì sửa đơn là ghi đè, không phải hoàn tác.
 **Ngoài phạm vi RPC** (vẫn 2 lời gọi mạng thật riêng qua `updateSurgical` sau khi
 RPC xong): cập nhật điểm/hạng khách hàng (`computeNewTier()` đọc cấu hình
 localStorage, server không truy cập được) và tính lại `sales_records` ngày đó.
+
+### 11.7 Tạo đơn (`processPlaceOrder`) — RPC `place_pos_order_tx` [TXN-RPC-01 — hoàn tất]
+
+> Source: `services/posOrderService.ts` → `processPlaceOrder()` +
+> `supabase_migrations/029_place_pos_order_tx.sql`
+
+Insert order + ghi inventory transaction & trừ tồn kho + ghi nợ (nếu bán nợ) +
+cộng dồn doanh thu chạy trong 1 transaction DB (RPC), thay chuỗi nhiều lời gọi
+mạng + cơ chế rollback thủ công từng bước cũ:
+```
+Tồn kho mới (mỗi SP) = Tồn hiện tại − SL đơn (gộp theo SP nếu 1 SP xuất hiện nhiều dòng)
+COGS = Σ (importPrice mỗi item × SL) — importPrice ưu tiên client gửi, fallback
+       import_price hiện tại của SP trong DB nếu client không gửi
+```
+Không trùng với RPC `pos_mobile_checkout` (mục 019, dành riêng POS mobile — staff
+cố định, tier tính cứng trong SQL) — `place_pos_order_tx` giữ nguyên order đã
+dựng sẵn từ client (giá/PTTT/giảm giá đã tính ở POSComputer, không tính lại).
+
+**Ngoài phạm vi RPC** (vẫn 2 lời gọi mạng thật riêng qua `updateSurgical` sau khi
+RPC xong): cập nhật điểm/hạng khách hàng và tính lại `sales_records` ngày đó —
+cùng ranh giới với `edit_pos_order_tx`.
+
+Với luồng này, **TXN-RPC-01 hoàn tất toàn bộ 4 luồng** (xóa đơn, hủy phiếu trả,
+sửa đơn, tạo đơn) — không còn luồng POS nào dùng chuỗi nhiều lời gọi mạng +
+rollback thủ công phía client.

@@ -85,6 +85,7 @@ const App: React.FC = () => {
     deletePosOrderTx,
     cancelPosReturnTx,
     editPosOrderTx,
+    placePosOrderTx,
     mergeRemoteUpdate,
     loadInventoryOut,
     pushBatch,
@@ -306,6 +307,7 @@ const App: React.FC = () => {
             deletePosOrderTx={deletePosOrderTx}
             cancelPosReturnTx={cancelPosReturnTx}
             editPosOrderTx={editPosOrderTx}
+            placePosOrderTx={placePosOrderTx}
             pushBatch={pushBatch}
             loadInventoryOut={loadInventoryOut}
             offlinePendingCount={offlinePendingCount}

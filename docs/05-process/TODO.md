@@ -53,7 +53,7 @@
 >    - `137519-06-26` → net 49.449.000 (id `6356bd21-90b8-4ea4-8b87-13ebfbd381e3`)
 >    - Gross=0 nên gần như chắc chắn nên **XÓA** (không phải doanh thu thật). User xác nhận xóa hoặc cho ngày đúng để sửa.
 
-### [~] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction *(luồng xóa đơn + hủy trả + sửa đơn ĐÃ DEPLOY 2026-07-04)*
+### [x] 🟡 TXN-RPC-01 — Giai đoạn 2: gộp xóa/hủy trả/sửa đơn + checkout web thành RPC 1 transaction — HOÀN TẤT 2026-07-04
 
 > Giai đoạn 2 của lộ trình A→B: thay ruột các hàm service (`deletePosOrder`, `processCancelReturn`, `editPosOrder`, `processPlaceOrder`) từ chuỗi nhiều lời gọi mạng thành 1 RPC transaction DB theo mẫu `pos_mobile_checkout` — đóng nốt cửa sổ lệch khi rớt mạng giữa chừng. Gộp chung với DATA-01. UI/props không phải sửa lại (Giai đoạn 1 đã dồn mọi nút về service layer).
 >
@@ -69,7 +69,9 @@
 >
 > **⚠️ Phát hiện ngoài phạm vi khi verify** (không thuộc TXN-RPC-01, không sửa trong phiên này): nút "Hủy" nhanh trong danh sách Hóa đơn (`OrderInvoices.tsx`) chỉ `POST /api/data/upsert` đổi `status='cancelled'` trực tiếp — **không** gọi qua `deletePosOrderTx`/RPC, nên không hoàn tồn kho lẫn không đảo doanh thu. Khác với luồng xóa đã convert RPC (nút riêng, có thể ở menu khác). Cần rà lại xem 2 luồng "hủy" nào đang trỏ tới hành động nào — có rủi ro dữ liệu lệch nếu người dùng bấm nhầm nút.
 >
-> **⏳ CÒN LẠI**: `processPlaceOrder` vẫn dùng chuỗi nhiều lời gọi cũ — chưa gộp RPC.
+> **✅ Luồng tạo đơn (`processPlaceOrder`) xong 2026-07-04 — TXN-RPC-01 HOÀN TẤT**: migration `029_place_pos_order_tx.sql` — RPC `place_pos_order_tx()` gộp insert order + ghi inventory transaction & trừ tồn kho + ghi nợ (nếu bán nợ) + cộng dồn doanh thu atomic vào 1 transaction, mô phỏng theo `pos_mobile_checkout` (019, dành riêng cho POS mobile — không sửa, không dùng chung vì ràng buộc khác: staff cố định, tier tính cứng). **1 bug phát hiện khi viết SQL** (cùng dạng đã gặp 3 lần): khai báo biến PL/pgSQL `it JSONB` trùng tên alias `it` trong subquery `jsonb_array_elements(...) it` → bỏ khai báo biến thừa (không dùng làm loop var, chỉ cần làm alias). Verify bằng 3 kịch bản SQL tay (`BEGIN...ROLLBACK`): bán thường (khớp tay), chặn bán vượt tồn kho (raise đúng exception), bán nợ có khách hàng liên kết (ghi đúng customer_debt_history). Phạm vi (nhất quán với `editPosOrder`): điểm/hạng khách hàng và `sales_records` giữ ngoài RPC, vẫn `updateSurgical` mạng thật riêng. Wire qua `POST /api/data/pos-orders/place-tx` + `apiService.placePosOrderTx()` + `useAppData.placePosOrderTx()`. +3 unit test viết lại (RPC happy-path, guard tồn kho không gọi RPC, allowSellOutOfStock). 981/981 test pass, tsc sạch. Verify live trên dev: bán SP011546 (tồn 6→5) qua RPC → order/inventory tx/revenue_records khớp tuyệt đối theo SQL, UI hiển thị đúng hóa đơn. Dọn dữ liệu test bằng SQL (không dùng nút "Hủy" — xem phát hiện ngoài phạm vi bên dưới).
+>
+> **TXN-RPC-01 đã hoàn tất cả 4 luồng**: xóa đơn, hủy phiếu trả, sửa đơn, tạo đơn — đều chạy qua RPC 1 transaction DB, không còn rollback thủ công nhiều bước phía client.
 
 ### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
 
