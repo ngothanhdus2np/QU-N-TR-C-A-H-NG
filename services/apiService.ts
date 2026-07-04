@@ -1189,6 +1189,12 @@ export const apiService = {
     return { success: true, orderId };
   },
 
+  // [TXN-RPC-01] Hủy phiếu trả hàng qua RPC cancel_pos_return_tx (1 transaction DB)
+  async cancelPosReturnTx(returnOrderId: string) {
+    await postDataRoute('/api/data/pos-orders/cancel-return-tx', { returnOrderId });
+    return { success: true, returnOrderId };
+  },
+
   // [DATA-02] Cộng dồn doanh thu theo delta atomic (thay read-modify-write ghi đè cả dòng)
   async applyRevenueDelta(id: string, dateKey: string, delta: RevenueDelta) {
     const rounded = {

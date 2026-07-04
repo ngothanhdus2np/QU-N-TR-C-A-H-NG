@@ -63,7 +63,9 @@
 >
 > +3 unit test cho `deletePosOrder` (happy path so khớp delta, guard đã hủy, guard đơn trả). Verify live trên dev: bán SP012439 (tồn 5→4) → xóa qua RPC → tồn về 5, tx đánh dấu cancelled, revenue_records đảo đúng delta (khớp DB tuyệt đối sau khi bấm "Tải lại dữ liệu"), state local (React+IndexedDB) khớp DB không cần refetch (trừ 1 khoảng ngắn optimistic UI lệch do cache local vốn thiếu baseline ngày đó từ trước — tự lành sau reload, không phải bug mới).
 >
-> **⏳ CÒN LẠI**: `processCancelReturn`, `editPosOrder`, `processPlaceOrder` vẫn dùng chuỗi nhiều lời gọi cũ — chưa gộp RPC.
+> **✅ Luồng hủy phiếu trả (`processCancelReturn`) xong 2026-07-04**: migration `027_cancel_pos_return_tx.sql` — RPC `cancel_pos_return_tx()` gộp đảo tồn kho (theo tx.type: Return→trừ lại, Sale/đổi→cộng lại) + đảo doanh thu + khôi phục điểm/chi tiêu khách + soft-delete phiếu vào 1 transaction. Wire qua endpoint `POST /api/data/pos-orders/cancel-return-tx` + `apiService.cancelPosReturnTx()` + `useAppData.cancelPosReturnTx()`. Không có bug lần này (rút kinh nghiệm từ 026 — verify kỹ tên/kiểu cột trước khi viết SQL, test trực tiếp bằng SQL trước khi wire code). sales_records vẫn tính lại qua `updateSurgical` thật (ngoài RPC, giữ nguyên `recalcSalesRecordsForDate`). +3 unit test. Verify live trên dev: bán 2 → trả 1 (tồn 5→3→4) → hủy phiếu trả qua RPC → tồn về 3 (khớp thực tế), revenue_records đảo đúng delta tuyệt đối (gross 130k không đổi, returnsValue 65k→0, net 65k→130k, cogs 38k→76k, profit 27k→54k), tx đánh dấu cancelled.
+>
+> **⏳ CÒN LẠI**: `editPosOrder`, `processPlaceOrder` vẫn dùng chuỗi nhiều lời gọi cũ — chưa gộp RPC.
 
 ### [~] 🔴 SEC-SECRET-01 — service_role JWT project cũ `tqouzxlnihfjdyxqlbqs` lộ trong GIT HISTORY *(✅ key đã vô hiệu hóa 2026-07-03 — chỉ còn scrub git history tùy chọn)*
 

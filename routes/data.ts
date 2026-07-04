@@ -632,6 +632,22 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // [TXN-RPC-01] Hủy phiếu trả hàng (TH receipt) trong 1 transaction DB — thay chuỗi nhiều lời
+  // gọi mạng cũ, đóng cửa sổ lệch khi rớt mạng giữa chừng.
+  router.post('/api/data/pos-orders/cancel-return-tx', requireAuth, async (req, res) => {
+    const returnOrderId = String(req.body?.returnOrderId || '');
+    if (!returnOrderId) return res.status(400).json({ error: 'ID phiếu trả hàng không hợp lệ' });
+
+    try {
+      const { error } = await supabase.rpc('cancel_pos_return_tx', { p_return_order_id: returnOrderId });
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      console.error(`[DataRoute] cancel pos return tx failed [${returnOrderId}]:`, error);
+      writeErrorResponse(res, 'Không thể hủy phiếu trả hàng', error);
+    }
+  });
+
   // [DATA-02] Cộng dồn doanh thu theo DELTA atomic (chống race 2 máy bán cùng ngày)
   router.post('/api/data/revenue/apply-delta', requireAuth, async (req, res) => {
     const id = req.body?.id ? String(req.body.id) : null;

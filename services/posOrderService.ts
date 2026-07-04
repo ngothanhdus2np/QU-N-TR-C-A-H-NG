@@ -21,13 +21,11 @@ type PosOrderCallbacks = {
   applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
 };
 
-// [TXN-RPC-01] Callback riêng cho luồng xóa đơn qua RPC 1 transaction (delete_pos_order_tx):
-// applyLocalOnly/applyRevenueDeltaLocal chỉ đồng bộ state local (dispatch + cache), KHÔNG gọi
-// mạng — dùng sau khi RPC server-side đã áp dụng đầy đủ thay đổi (server là nguồn sự thật).
-type AtomicDeleteCallbacks = {
+// [TXN-RPC-01] Đồng bộ state local (dispatch + cache), KHÔNG gọi mạng — dùng sau khi 1 RPC
+// server-side đã áp dụng đầy đủ thay đổi (server là nguồn sự thật, client chỉ đồng bộ UI).
+type AtomicLocalSyncCallbacks = {
   applyLocalOnly: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
-  deletePosOrderTx: (orderId: string) => Promise<void>;
 };
 
 type PlaceOrderArgs = PosOrderCallbacks & {
@@ -39,9 +37,11 @@ type PlaceOrderArgs = PosOrderCallbacks & {
   allowSellOutOfStock?: boolean;
 };
 
-type DeleteOrderArgs = AtomicDeleteCallbacks & {
+type DeleteOrderArgs = AtomicLocalSyncCallbacks & {
   data: AppData;
   order: POSOrder;
+  // [TXN-RPC-01] Xóa đơn bán qua RPC delete_pos_order_tx (1 transaction DB)
+  deletePosOrderTx: (orderId: string) => Promise<void>;
 };
 
 type EditOrderArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
@@ -687,9 +687,14 @@ export async function deletePosOrder({
   // Audit log: RPC đã tự ghi (best-effort) bên trong transaction — không ghi trùng ở client.
 }
 
-type CancelReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
+type CancelReturnArgs = AtomicLocalSyncCallbacks & {
   data: AppData;
   returnOrder: POSOrder;
+  // [TXN-RPC-01] Hủy phiếu trả hàng qua RPC cancel_pos_return_tx (1 transaction DB)
+  cancelPosReturnTx: (returnOrderId: string) => Promise<void>;
+  // sales_records KHÔNG nằm trong RPC (client tính lại best-effort) — vẫn cần updateSurgical
+  // (mạng thật) riêng cho bước này.
+  updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
 };
 
 type CancelLegacyReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyRevenueDelta'> & {
@@ -697,19 +702,21 @@ type CancelLegacyReturnArgs = Pick<PosOrderCallbacks, 'updateSurgical' | 'applyR
   transaction: InventoryTransaction;
 };
 
-// Hủy 1 phiếu trả hàng (TH receipt trong pos_orders) — phép đảo ngược của processReturnOrder.
-// Tồn kho đảo bằng cách xóa inventory transactions của phiếu qua RPC
-// delete_inventory_transaction_with_stock_v2: server tự đảo đúng chiều theo tx.type đã lưu
-// (xóa 'Return' → trừ kho lại có guard không âm, xóa 'Sale' hàng đổi → cộng kho lại) — hàng
-// trả đã bị bán tiếp thì RPC raise exception, chặn hủy (đúng nghiệp vụ). Phiếu chuyển
-// status='cancelled' (giữ lịch sử, chặn hủy lần 2), doanh thu đảo bằng delta atomic.
-// COGS đảo dùng importPrice hiện tại khi item không lưu importPrice — drift chấp nhận được,
-// cùng bản chất deletePosOrder. Giai đoạn 2 sẽ gộp toàn bộ vào 1 RPC transaction.
+// [TXN-RPC-01] Hủy 1 phiếu trả hàng (TH receipt trong pos_orders) — phép đảo ngược của
+// processReturnOrder. Gộp toàn bộ vào RPC cancel_pos_return_tx (1 transaction DB — đảo tồn
+// kho, đảo doanh thu, khôi phục khách, soft-delete phiếu) thay vì chuỗi nhiều lời gọi mạng cũ.
+// Server là nguồn sự thật; sau khi RPC thành công, áp lại ĐÚNG các delta tương ứng (công thức
+// khớp 1-1 với migration 027_cancel_pos_return_tx.sql) vào state local qua
+// applyLocalOnly/applyRevenueDeltaLocal — chỉ dispatch + lưu cache, không gọi thêm mạng.
+// sales_records (doanh số NV) không nằm trong RPC — vẫn tính lại qua updateSurgical (mạng thật),
+// cùng ranh giới pos_mobile_checkout/delete_pos_order_tx.
 export async function processCancelReturn({
   data,
   returnOrder,
+  applyLocalOnly,
+  applyRevenueDeltaLocal,
+  cancelPosReturnTx,
   updateSurgical,
-  applyRevenueDelta,
 }: CancelReturnArgs): Promise<void> {
   if (!returnOrder.isReturn) {
     throw new Error('Chỉ hủy được phiếu trả hàng');
@@ -722,19 +729,29 @@ export async function processCancelReturn({
   const returnedItems = returnOrder.items.filter(i => i.lineType !== 'exchange');
   const exchangeItems = returnOrder.items.filter(i => i.lineType === 'exchange');
 
-  // Bước 1: đảo tồn kho — xóa transactions gắn với phiếu qua RPC atomic
+  // RPC 1 transaction — hoàn/trừ tồn kho theo tx.type đã lưu + đảo doanh thu + khôi phục khách
+  // + soft-delete phiếu. Lỗi bất kỳ (vd hàng trả đã bán tiếp) → RPC tự rollback toàn bộ.
+  await cancelPosReturnTx(returnOrder.id);
+
+  // Từ đây RPC đã áp dụng xong trên server — chỉ còn đồng bộ lại state local cho khớp.
+
+  // 1) Đảo tồn kho local — dựa vào inventory transaction ĐÃ LƯU (giống RPC dùng tx.items):
+  // 'Return' (hàng trả) → trừ lại kho, 'Sale' (hàng đổi) → cộng lại kho.
   const relatedTransactions = (data.inventoryTransactions || []).filter(
     t => t.referenceId === returnOrder.id && t.status !== 'cancelled'
   );
   if (relatedTransactions.length > 0) {
-    // Delta cho cache local (server tự tính từ transaction đã lưu): hàng trả −, hàng đổi +
     const stockDelta = new Map<string, number>();
-    returnedItems.forEach(i =>
-      stockDelta.set(i.productId, (stockDelta.get(i.productId) || 0) - i.quantity)
-    );
-    exchangeItems.forEach(i =>
-      stockDelta.set(i.productId, (stockDelta.get(i.productId) || 0) + i.quantity)
-    );
+    for (const tx of relatedTransactions) {
+      for (const item of tx.items) {
+        const qty = Math.abs(item.quantity);
+        if (tx.type === 'Return') {
+          stockDelta.set(item.productId, (stockDelta.get(item.productId) || 0) - qty);
+        } else if (tx.type === 'Sale') {
+          stockDelta.set(item.productId, (stockDelta.get(item.productId) || 0) + qty);
+        }
+      }
+    }
     const stockUpdates = [...stockDelta.entries()]
       .map(([productId, delta]) => {
         const product = findProduct(currentMap, productId);
@@ -743,51 +760,35 @@ export async function processCancelReturn({
       })
       .filter((u): u is { key: 'posProducts'; item: POSProduct } => !!u);
 
-    await updateSurgical([
-      ...relatedTransactions.map(t => ({
-        key: 'inventoryTransactions' as const,
-        item: { id: t.id } as { id: string },
-        isDelete: true,
-      })),
-      ...stockUpdates,
-    ]);
+    const txCancelUpdates = relatedTransactions.map(tx => ({
+      key: 'inventoryTransactions' as const,
+      item: { ...tx, status: 'cancelled' as const },
+    }));
+
+    await applyLocalOnly([...txCancelUpdates, ...stockUpdates]);
   } else {
     console.warn(
-      `[processCancelReturn] Không tìm thấy inventory transaction cho phiếu ${returnOrder.orderCode} — bỏ qua đảo tồn kho`
+      `[processCancelReturn] Không tìm thấy inventory transaction cho phiếu ${returnOrder.orderCode} — bỏ qua đảo tồn kho local`
     );
   }
 
-  // Bước 2: chuyển phiếu sang 'cancelled' — không xóa, giữ lịch sử + chặn hủy lần 2
+  // 2) Soft-delete local — chuyển phiếu sang 'cancelled'
   const cancelledOrder: POSOrder = { ...returnOrder, status: 'cancelled' };
-  await updateSurgical([{ key: 'posOrders', item: cancelledOrder }]);
+  await applyLocalOnly([{ key: 'posOrders', item: cancelledOrder }]);
 
-  // Bước 3: đảo doanh thu ngày phiếu bằng delta đảo dấu (atomic — không ghi đè cả dòng)
+  // 3) Đảo doanh thu ngày phiếu (delta đảo dấu của buildReturnRevenueDelta lúc tạo phiếu)
   const totalReturnValue = returnedItems.reduce((sum, item) => sum + item.total, 0);
   const totalExchangeValue = exchangeItems.reduce((sum, item) => sum + item.total, 0);
   const returnCogs = calculateOrderCogs(currentMap, returnedItems);
   const exchangeCogs = calculateOrderCogs(currentMap, exchangeItems);
-  await applyRevenueDelta(
+  await applyRevenueDeltaLocal(
     toLocalDateKey(returnOrder.date),
     negateRevenueDelta(
       buildReturnRevenueDelta(returnOrder, totalReturnValue, totalExchangeValue, returnCogs, exchangeCogs)
     )
   );
 
-  // Bước 4 (best-effort): giữ bản sao transaction status='cancelled' làm lịch sử kho
-  if (relatedTransactions.length > 0) {
-    try {
-      await updateSurgical(
-        relatedTransactions.map(t => ({
-          key: 'inventoryTransactions' as const,
-          item: { ...t, status: 'cancelled' },
-        }))
-      );
-    } catch (e) {
-      console.error('[processCancelReturn] Không giữ được bản sao transaction đã hủy (non-critical):', e);
-    }
-  }
-
-  // Bước 5 (best-effort): khôi phục điểm + tổng chi tiêu khách — nghịch đảo công thức lúc tạo
+  // 4) (best-effort) khôi phục điểm + tổng chi tiêu khách — nghịch đảo công thức lúc tạo
   try {
     if (returnOrder.customerId) {
       const customer = (data.posCustomers || []).find(c => c.id === returnOrder.customerId);
@@ -800,7 +801,7 @@ export async function processCancelReturn({
             return sum + item.total;
           }, 0) / pointsRate
         );
-        await updateSurgical([
+        await applyLocalOnly([
           {
             key: 'posCustomers',
             item: {
@@ -816,7 +817,7 @@ export async function processCancelReturn({
     console.error('[processCancelReturn] Khôi phục khách hàng thất bại (non-critical):', e);
   }
 
-  // Bước 6 (best-effort): tính lại doanh số NV ngày phiếu — snapshot thay phiếu bằng bản cancelled
+  // 5) (best-effort) tính lại doanh số NV ngày phiếu — không nằm trong RPC, vẫn qua mạng thật
   try {
     const recalculationOrders = (data.posOrders || []).map(o =>
       o.id === returnOrder.id ? cancelledOrder : o
@@ -831,17 +832,7 @@ export async function processCancelReturn({
     console.error('[processCancelReturn] Tính lại doanh số NV thất bại (non-critical):', e);
   }
 
-  // Bước 7: audit log
-  try {
-    auditService.logOrderCancel(
-      returnOrder.id,
-      returnOrder.orderCode,
-      'Hủy phiếu trả hàng',
-      getCurrentStaffId()
-    );
-  } catch (auditError) {
-    console.error('[AUDIT] Không ghi được audit log khi hủy phiếu trả:', returnOrder.orderCode, auditError);
-  }
+  // Audit log: RPC đã tự ghi (best-effort) bên trong transaction — không ghi trùng ở client.
 }
 
 // Hủy phiếu trả kiểu CŨ — chỉ có inventory transaction 'Return' (không có TH receipt trong

@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-04 (R23) — TXN-RPC-01: gộp processCancelReturn thành RPC 1 transaction
+
+- **Migration `027_cancel_pos_return_tx.sql`**: RPC `cancel_pos_return_tx()` gộp đảo tồn kho (theo `tx.type` đã lưu: 'Return' → trừ lại kho có guard không âm, 'Sale' hàng đổi → cộng lại kho) + đảo doanh thu (nghịch đảo `buildReturnRevenueDelta`) + khôi phục điểm/tổng chi tiêu khách + soft-delete phiếu (status='cancelled', giữ lịch sử) vào 1 transaction DB. Viết cẩn thận sau bài học từ migration 026 (verify tên/kiểu cột `information_schema.columns` trước khi viết SQL, test trực tiếp bằng SQL thủ công trước khi wire code) — **không phát sinh bug lần này**, RPC chạy đúng ngay từ lần test SQL đầu tiên.
+- **Wire vào code**: endpoint mới `POST /api/data/pos-orders/cancel-return-tx` ([routes/data.ts](../../routes/data.ts)) + `apiService.cancelPosReturnTx()` + `useAppData.cancelPosReturnTx()` (wrapper gọi RPC, không hỗ trợ offline queue — cùng ranh giới `deletePosOrderTx`). Đổi type chung `AtomicDeleteCallbacks` → `AtomicLocalSyncCallbacks` (tách phần local-sync dùng chung khỏi RPC-caller riêng từng luồng, tái dùng cho cả xóa đơn lẫn hủy trả). `processCancelReturn()` giờ gọi 1 RPC rồi đồng bộ lại local qua `applyLocalOnly`/`applyRevenueDeltaLocal` — vẫn giữ `updateSurgical` (mạng thật) riêng cho bước tính lại `sales_records` (ngoài phạm vi RPC, giống `delete_pos_order_tx`).
+- +3 unit test cho `processCancelReturn` (happy path so khớp delta + khôi phục khách, guard đã hủy, guard không phải phiếu trả). 649/649 test pass, tsc sạch.
+- **Verify live đầy đủ trên dev**: bán 2× SP012439 (tồn 5→3) → trả 1 (TH-86O9Y, tồn 3→4) → hủy phiếu trả qua RPC → tồn về đúng 3 (khớp thực tế vật lý), `revenue_records` đảo đúng delta tuyệt đối từng đồng (gross 130.000 giữ nguyên, returnsValue 65.000→0, net 65.000→130.000, cogs 38.000→76.000, profit 27.000→54.000), inventory transaction đánh dấu cancelled. Dọn sạch dữ liệu test trên dev sau khi verify.
+- Cập nhật `TODO.md` (tiến độ TXN-RPC-01: còn `editPosOrder`, `processPlaceOrder`).
+- Files: `supabase_migrations/027_cancel_pos_return_tx.sql` (mới), `routes/data.ts`, `services/apiService.ts`, `services/posOrderService.ts`, `services/posOrderService.test.ts`, `hooks/useAppData.ts`, `components/MainContent.tsx`, `App.tsx`
+
 ### 2026-07-04 (R22) — ORDERS-EDIT-02: chặn sửa đơn giảm dưới số đã trả
 
 - **Fix ORDERS-EDIT-02**: `editPosOrder()` ([services/posOrderService.ts](../../services/posOrderService.ts)) tự tính lại tồn kho theo delta (SL cũ vs mới) độc lập với phiếu trả hàng đã xử lý — sửa SL xuống thấp hơn số đã trả sẽ cộng trùng tồn kho với phần phiếu trả đã cộng lại. Thêm guard tái dùng `getReturnedQuantitiesForOrder()` (đã có từ RETURNS-GUARD-01): chặn lưu nếu SL mới < SL đã trả của sản phẩm đó, cho phép nếu vẫn ≥. Lỗi tự hiện qua cơ chế cảnh báo có sẵn (`showStockWarning`), không cần sửa UI.

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AppData, InventoryTransaction, POSOrder, POSProduct } from '../types';
-import { processPlaceOrder, processReturnOrder, deletePosOrder, editPosOrder } from './posOrderService';
+import {
+  processPlaceOrder,
+  processReturnOrder,
+  deletePosOrder,
+  editPosOrder,
+  processCancelReturn,
+} from './posOrderService';
 
 const baseProduct: POSProduct = {
   id: 'product-1',
@@ -291,6 +297,149 @@ describe('posOrderService', () => {
         })
       ).rejects.toThrow('Chưa hỗ trợ xóa đơn trả/đổi');
       expect(deletePosOrderTx).not.toHaveBeenCalled();
+    });
+  });
+
+  // [TXN-RPC-01]
+  describe('processCancelReturn', () => {
+    const returnTransaction: InventoryTransaction = {
+      id: 'tx-return-1',
+      date: baseOrder.date,
+      type: 'Return',
+      staffId: 'Admin',
+      referenceId: 'return-1',
+      items: [
+        {
+          productId: 'product-1',
+          sku: 'SKU-1',
+          name: 'Giày test',
+          quantity: 1,
+          previousStock: 8,
+          newStock: 9,
+        },
+      ],
+    };
+    const returnOrder: POSOrder = {
+      ...baseOrder,
+      id: 'return-1',
+      orderCode: 'TH-000001',
+      isReturn: true,
+      customerId: 'cust-1',
+      items: [
+        {
+          productId: 'product-1',
+          sku: 'SKU-1',
+          name: 'Giày test',
+          quantity: 1,
+          price: 100000,
+          discount: 0,
+          total: 100000,
+          lineType: 'return',
+        },
+      ],
+    };
+
+    it('calls the RPC then syncs local state with matching reversal deltas', async () => {
+      const applyLocalOnly = vi.fn().mockResolvedValue(undefined);
+      const applyRevenueDeltaLocal = vi.fn().mockResolvedValue(undefined);
+      const cancelPosReturnTx = vi.fn().mockResolvedValue(undefined);
+      const updateSurgical = vi.fn().mockResolvedValue(undefined);
+      const dataWithReturn = {
+        ...baseData,
+        posProducts: [{ ...baseProduct, stock: 9 }],
+        posOrders: [returnOrder],
+        posCustomers: [{ id: 'cust-1', name: 'Khách A', points: 5, totalSpent: 500000 } as AppData['posCustomers'][number]],
+        inventoryTransactions: [returnTransaction],
+      } as AppData;
+
+      await processCancelReturn({
+        data: dataWithReturn,
+        returnOrder,
+        applyLocalOnly,
+        applyRevenueDeltaLocal,
+        cancelPosReturnTx,
+        updateSurgical,
+      });
+
+      expect(cancelPosReturnTx).toHaveBeenCalledWith('return-1');
+
+      // Đảo tồn kho local: hàng Return trừ lại kho (9 - 1 = 8), tx đánh dấu cancelled
+      expect(applyLocalOnly).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: 'inventoryTransactions',
+            item: expect.objectContaining({ id: 'tx-return-1', status: 'cancelled' }),
+          }),
+          expect.objectContaining({
+            key: 'posProducts',
+            item: expect.objectContaining({ id: 'product-1', stock: 8 }),
+          }),
+        ])
+      );
+
+      // Soft-delete local
+      expect(applyLocalOnly).toHaveBeenCalledWith([
+        expect.objectContaining({
+          key: 'posOrders',
+          item: expect.objectContaining({ id: 'return-1', status: 'cancelled' }),
+        }),
+      ]);
+
+      // Đảo doanh thu — nghịch đảo buildReturnRevenueDelta (trả thuần, không đổi hàng)
+      expect(applyRevenueDeltaLocal).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          returnsValue: -100000,
+          netRevenue: 100000,
+          totalCogs: 60000,
+        })
+      );
+
+      // Khôi phục khách hàng: totalSpent += 100000, points theo pointsRate mặc định 10000
+      expect(applyLocalOnly).toHaveBeenCalledWith([
+        expect.objectContaining({
+          key: 'posCustomers',
+          item: expect.objectContaining({ id: 'cust-1', totalSpent: 600000, points: 15 }),
+        }),
+      ]);
+    });
+
+    it('rejects cancelling an already-cancelled return without calling the RPC', async () => {
+      const applyLocalOnly = vi.fn();
+      const applyRevenueDeltaLocal = vi.fn();
+      const cancelPosReturnTx = vi.fn();
+      const updateSurgical = vi.fn();
+
+      await expect(
+        processCancelReturn({
+          data: baseData,
+          returnOrder: { ...returnOrder, status: 'cancelled' },
+          applyLocalOnly,
+          applyRevenueDeltaLocal,
+          cancelPosReturnTx,
+          updateSurgical,
+        })
+      ).rejects.toThrow('đã hủy rồi');
+      expect(cancelPosReturnTx).not.toHaveBeenCalled();
+    });
+
+    it('rejects cancelling a non-return order', async () => {
+      const applyLocalOnly = vi.fn();
+      const applyRevenueDeltaLocal = vi.fn();
+      const cancelPosReturnTx = vi.fn();
+      const updateSurgical = vi.fn();
+
+      await expect(
+        processCancelReturn({
+          data: baseData,
+          returnOrder: { ...returnOrder, isReturn: false },
+          applyLocalOnly,
+          applyRevenueDeltaLocal,
+          cancelPosReturnTx,
+          updateSurgical,
+        })
+      ).rejects.toThrow('Chỉ hủy được phiếu trả hàng');
+      expect(cancelPosReturnTx).not.toHaveBeenCalled();
     });
   });
 

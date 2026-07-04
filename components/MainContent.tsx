@@ -103,6 +103,7 @@ interface MainContentProps {
   applyLocalOnly: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   applyRevenueDeltaLocal: (dateKey: string, delta: RevenueDelta) => Promise<void>;
   deletePosOrderTx: (orderId: string) => Promise<void>;
+  cancelPosReturnTx: (returnOrderId: string) => Promise<void>;
   pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
@@ -140,6 +141,7 @@ const MainContent: React.FC<MainContentProps> = ({
   applyLocalOnly,
   applyRevenueDeltaLocal,
   deletePosOrderTx,
+  cancelPosReturnTx,
   pushBatch,
   loadInventoryOut,
   isDataReady = true,
@@ -697,7 +699,14 @@ const MainContent: React.FC<MainContentProps> = ({
             onCancelReturn={async (orderId: string) => {
               const returnOrder = (data.posOrders || []).find(o => o.id === orderId);
               if (!returnOrder) throw new Error('Không tìm thấy phiếu trả hàng');
-              await processCancelReturn({ data, returnOrder, updateSurgical, applyRevenueDelta });
+              await processCancelReturn({
+                data,
+                returnOrder,
+                applyLocalOnly,
+                applyRevenueDeltaLocal,
+                cancelPosReturnTx,
+                updateSurgical,
+              });
             }}
             onCancelLegacyReturn={async (transactionId: string) => {
               const transaction = (data.inventoryTransactions || []).find(t => t.id === transactionId);
