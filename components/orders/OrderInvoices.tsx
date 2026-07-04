@@ -31,10 +31,13 @@ interface OrderInvoicesProps {
   storeName: string;
   storeAddress?: string;
   storePhone?: string;
+  // Còn được các parent (MainContent, ProcessOrdersModal) truyền vào nhưng màn hình
+  // này không còn tự upsert đơn — mọi thao tác hủy đi qua onDeleteOrders/onCancelReturn.
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   onDeleteOrders?: (
     orderIds: string[]
   ) => Promise<{ successCount: number; failures: { orderCode: string; error: string }[] }>;
+  onCancelReturn?: (orderId: string) => Promise<void>;
   onEditInPOS?: (order: AppData['posOrders'][number]) => void;
   onReturnInPOS?: (order: AppData['posOrders'][number]) => void;
 }
@@ -67,7 +70,7 @@ function formatOrderDateTime(value: string) {
   });
 }
 
-export default function OrderInvoices({ orders, customers, storeName, storeAddress, storePhone, employees = [], onUpdateSurgical, onDeleteOrders, onEditInPOS, onReturnInPOS }: OrderInvoicesProps) {
+export default function OrderInvoices({ orders, customers, storeName, storeAddress, storePhone, employees = [], onDeleteOrders, onCancelReturn, onEditInPOS, onReturnInPOS }: OrderInvoicesProps) {
   const getStaffName = (staffId?: string) => {
     if (!staffId) return undefined;
     return employees.find(e => e.id === staffId)?.name;
@@ -187,6 +190,7 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
   };
 
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const handleBulkDelete = async () => {
     if (!onDeleteOrders || selectedIds.size === 0) return;
     const count = selectedIds.size;
@@ -256,13 +260,6 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  };
-
-  const persistOrder = async (order: AppData['posOrders'][number]) => {
-    setPageOrders(prev => prev.map(item => (item.id === order.id ? order : item)));
-    if (onUpdateSurgical) {
-      await onUpdateSurgical([{ key: 'posOrders', item: order, isDelete: false }]);
-    }
   };
 
   const exportOrders = (rows: AppData['posOrders'], fileName: string) => {
@@ -409,12 +406,59 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
       alert('Hóa đơn này đã hủy.');
       return;
     }
-    if (!window.confirm(`Hủy hóa đơn ${order.orderCode}?`)) return;
+    if (cancellingId) return;
+
+    // Phiếu trả hàng phải hủy qua luồng riêng (đảo tồn kho theo tx.type + đảo doanh thu trả +
+    // khôi phục khách) — KHÔNG dùng chung deletePosOrder của đơn bán.
+    if (order.isReturn) {
+      if (!onCancelReturn) {
+        alert('Chưa hỗ trợ hủy phiếu trả hàng ở màn hình này.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `Hủy phiếu trả hàng ${order.orderCode}?\n\nSẽ tự động đảo lại tồn kho và doanh thu của phiếu trả, khôi phục điểm/chi tiêu khách. Đơn sẽ chuyển sang trạng thái "Đã hủy".`
+        )
+      ) {
+        return;
+      }
+      setCancellingId(order.id);
+      try {
+        await onCancelReturn(order.id);
+      } catch (err) {
+        console.error('[OrderInvoices] handleCancelInvoice (return) failed', err);
+        alert(`Hủy phiếu trả thất bại: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`);
+      } finally {
+        setCancellingId(null);
+      }
+      return;
+    }
+
+    // Đơn bán: hủy = soft-delete đúng chuẩn (hoàn tồn kho + đảo doanh thu + tính lại doanh số NV)
+    // qua đúng luồng RPC deletePosOrderTx mà nút "Xóa" hàng loạt đang dùng.
+    if (!onDeleteOrders) {
+      alert('Chưa hỗ trợ hủy hóa đơn ở màn hình này.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Hủy hóa đơn ${order.orderCode}?\n\nSẽ tự động hoàn lại tồn kho, trừ khỏi doanh thu ngày bán và tính lại doanh số nhân viên. Đơn sẽ chuyển sang trạng thái "Đã hủy".`
+      )
+    ) {
+      return;
+    }
+    setCancellingId(order.id);
     try {
-      await persistOrder({ ...order, status: 'cancelled' });
+      const { successCount, failures } = await onDeleteOrders([order.id]);
+      if (successCount === 0) {
+        const reason = failures[0]?.error || 'Lỗi không xác định';
+        alert(`Hủy hóa đơn thất bại: ${reason}`);
+      }
     } catch (err) {
       console.error('[OrderInvoices] handleCancelInvoice failed', err);
       alert('Hủy hóa đơn thất bại. Vui lòng thử lại.');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -650,10 +694,11 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
               <div className="flex items-center gap-5">
                 <button
                   onClick={() => handleCancelInvoice(order)}
-                  className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-rose-600"
+                  disabled={cancellingId === order.id || order.status === 'cancelled'}
+                  className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Hủy
+                  {cancellingId === order.id ? 'Đang hủy...' : 'Hủy'}
                 </button>
                 <button
                   onClick={() => handleCopyInvoice(order)}

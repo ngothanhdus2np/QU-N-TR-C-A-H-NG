@@ -7,6 +7,14 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🔴 ORDERS-CANCEL-01 — Nút "Hủy" nhanh ở trang Hóa đơn không hoàn tồn kho/đảo doanh thu *(phát hiện R24, fix xong 2026-07-04)*
+
+> **Rủi ro gốc** (ghi nhận từ R24, xem TODO cũ mục ⚠️ trong TXN-RPC-01): nút "Hủy" trong chi tiết mỗi đơn (`OrderInvoices.tsx handleCancelInvoice`) chỉ `persistOrder({...order, status:'cancelled'})` = upsert đổi trạng thái trực tiếp — **không** hoàn tồn kho, **không** đảo doanh thu, **không** tính lại doanh số NV. Khác hẳn nút "Xóa" hàng loạt (đi qua RPC `deletePosOrderTx` đầy đủ). Ai bấm "Hủy" là lệch tồn kho + doanh thu ngay.
+>
+> **✅ ĐÃ SỬA**: `handleCancelInvoice` giờ định tuyến theo loại đơn — đơn bán → `onDeleteOrders([id])` (RPC `delete_pos_order_tx`, hoàn tồn kho + đảo doanh thu + tính lại doanh số NV, kết quả soft-delete "Đã hủy"); phiếu trả → prop mới `onCancelReturn(id)` tái dùng `processCancelReturn` đã deploy (đảo tồn/doanh thu/khách). Cập nhật lời xác nhận nêu rõ hệ quả, thêm state `cancellingId` disable nút khi chạy. Gỡ `persistOrder` (code chết + chính là kiểu upsert gây bug). Quyết định phạm vi: user chọn "hủy đúng chuẩn tại chỗ" cho phiếu trả. Files: `components/orders/OrderInvoices.tsx`, `components/MainContent.tsx`.
+>
+> **Verify**: tsc sạch, 981/981 test pass, đơn tháng 6 (import) vẫn render đúng (không regression). Verify tầng dữ liệu trên dev (sync prod→dev, login thật): tạo đơn native qua `place_pos_order_tx` (tồn 12→11) → gọi đúng RPC nút "Hủy" kích hoạt (`delete_pos_order_tx`) → **tồn 11→12, net_revenue 240k→0, cogs→0, status→cancelled** (khớp tuyệt đối). Không click được nút trên UI qua harness tự động vì hộp thoại `window.confirm` native chặn (giới hạn công cụ, không phải lỗi code) — nhưng đã chứng minh đủ: nút wired đúng luồng (code + tsc + test) và RPC đảo đúng.
+
 ### [x] 🟡 ORDERS-EDIT-01 — Sửa hóa đơn trong POS (mở đơn cũ để đổi sản phẩm/số lượng/giá) *(xong 2026-07-03)*
 
 > Nút "Sửa trong POS" ở trang Hóa đơn — mở lại đơn vào máy tính tiền, sửa xong lưu đè đúng id cũ (hoàn tồn kho + trừ/cộng doanh thu + tính lại doanh số NV, không nhân đôi lịch sử). Theo quyết định user: không giới hạn quyền/ngày, chưa xử lý riêng đơn có phiếu trả hàng liên kết (rủi ro đã ghi). Chưa hỗ trợ sửa đơn trả/đổi hàng. Chi tiết HISTORY.md.
@@ -124,7 +132,10 @@
 
 > **ĐÃ SỬA** bằng migration `023_revoke_anon_storefront_tables.sql`: REVOKE ALL FROM anon + bật RLS + policy authenticated cho 7 bảng RLS-off (`expense_categories`, `shipments`, `store_collections`, `store_order_addresses`, `store_preorder_requests`, `store_product_collections`, `store_settings`). App không đọc các bảng này qua anon (đã kiểm), storefront dùng service-role bypass RLS → không phá luồng nào. Cũng là bước xử lý gốc rễ MAINT-01 (bảng mới tự nhận grant anon).
 
-### [ ] 🔴 Đăng nhập lại Shopee cho bot trên iMac — USER làm trực tiếp trên iMac *(2026-07-02)*
+### [x] 🔴 Đăng nhập lại Shopee cho bot trên iMac — USER làm trực tiếp trên iMac *(xong 2026-07-04)*
+
+> **✅ XONG 2026-07-04**: user đăng nhập lại session cả 2 shop trên iMac (`node login.js --shop 1/2`), khởi động lại bot (`pm2 start ecosystem.config.js`). Log xác nhận hết `SESSION HẾT HẠN`, cả 2 bot `BOT ĐANG CHẠY`, click được mọi tab + cập nhật trạng thái đơn hàng loạt. Cài tự khởi động khi reboot (`pm2 startup launchd` + `pm2 save` → `dump.pm2`). Verify trên app: Đơn hàng online → "Tải lại" → đơn mới hiển thị đúng.
+
 
 > **Bối cảnh**: Bot Shopee đã chuyển từ MacBook lên iMac (xong 02/07 — phụ thuộc 1 máy duy nhất). Nhưng Shopee phát hiện "thiết bị mới" → **session cả 2 shop hết hạn**. Đơn Shopee CŨ vẫn hiển thị trên app; đơn MỚI sẽ không cập nhật cho đến khi đăng nhập lại. Bot MacBook đã tắt, tunnel đã gỡ — KHÔNG bật lại bot trên MacBook (2 bot chạy song song sẽ đá session nhau).
 >

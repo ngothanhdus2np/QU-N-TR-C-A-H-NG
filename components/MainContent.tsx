@@ -662,6 +662,18 @@ const MainContent: React.FC<MainContentProps> = ({
               setOrderToReturn(order);
               handleSetActiveTab('pos');
             }}
+            onCancelReturn={async (orderId: string) => {
+              const returnOrder = (data.posOrders || []).find(o => o.id === orderId);
+              if (!returnOrder) throw new Error('Không tìm thấy phiếu trả hàng');
+              await processCancelReturn({
+                data,
+                returnOrder,
+                applyLocalOnly,
+                applyRevenueDeltaLocal,
+                cancelPosReturnTx,
+                updateSurgical,
+              });
+            }}
             onDeleteOrders={async (orderIds: string[]) => {
               const failures: { orderCode: string; error: string }[] = [];
               const deletedOrderIds = new Set<string>();
