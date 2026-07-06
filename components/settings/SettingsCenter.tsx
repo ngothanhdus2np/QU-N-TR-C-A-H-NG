@@ -87,6 +87,7 @@ const GoodsTab = lazy(() => import('./tabs/GoodsTab'));
 const PrintTemplatesTab = lazy(() => import('./tabs/PrintTemplatesTab'));
 const MigrationTab = lazy(() => import('./tabs/MigrationTab'));
 const AccountsTab = lazy(() => import('./tabs/AccountsTab'));
+const ActivityLogTab = lazy(() => import('../audit/ActivityLogPage'));
 
 type SettingsTab =
   | 'store'
@@ -101,7 +102,8 @@ type SettingsTab =
   | 'sync'
   | 'migration'
   | 'security'
-  | 'accounts';
+  | 'accounts'
+  | 'activityLog';
 
 interface SettingsCenterProps {
   onNavigate: (id: string) => void;
@@ -123,6 +125,7 @@ interface SettingsCenterProps {
   inventorySettings?: POSInventorySettings;
   onUpdateInventorySettings: (settings: POSInventorySettings) => Promise<void>;
   products?: POSProduct[];
+  userRole?: string;
 }
 
 const SETTINGS_PAGES: Record<
@@ -182,6 +185,11 @@ const SETTINGS_PAGES: Record<
     description: 'Tạo, sửa mật khẩu và xóa tài khoản đăng nhập',
     icon: User,
   },
+  activityLog: {
+    label: 'Nhật ký hoạt động',
+    description: 'Ai đã thêm/sửa/xóa dữ liệu gì trong hệ thống — chỉ chủ cửa hàng xem được',
+    icon: History,
+  },
 };
 
 const SETTINGS_GROUPS: { title: string; items: SettingsTab[] }[] = [
@@ -190,7 +198,7 @@ const SETTINGS_GROUPS: { title: string; items: SettingsTab[] }[] = [
   { title: 'Quản lý', items: ['goods', 'customers'] },
   { title: 'Tiện ích', items: ['notifications', 'integrations'] },
   { title: 'Dữ liệu', items: ['sync', 'security', 'migration'] },
-  { title: 'Tài khoản', items: ['accounts'] },
+  { title: 'Tài khoản', items: ['accounts', 'activityLog'] },
 ];
 
 const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
@@ -237,6 +245,7 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
   accounts: [
     { id: 'accounts-create', label: 'Tạo tài khoản' },
   ],
+  activityLog: [],
 };
 
 const getPageMeta = (tab: SettingsTab) => SETTINGS_PAGES[tab] || SETTINGS_PAGES.store;
@@ -401,12 +410,21 @@ const SettingsTabLoader = () => (
   </div>
 );
 
+// Tab chỉ dành cho chủ cửa hàng (owner) — ẩn khỏi nav với role khác để tránh bấm vào rồi
+// nhận 403 (backend /api/data/audit-logs cũng chặn owner-only, xem routes/data.ts).
+const OWNER_ONLY_TABS = new Set<SettingsTab>(['activityLog']);
+const isTabVisible = (tab: SettingsTab, role?: string) =>
+  !OWNER_ONLY_TABS.has(tab) || role === 'owner';
+
 const MobileSettingsNav: React.FC<{
   activeTab: SettingsTab;
   setActiveTab: (tab: SettingsTab) => void;
-}> = ({ activeTab, setActiveTab }) => (
+  userRole?: string;
+}> = ({ activeTab, setActiveTab, userRole }) => (
   <div className="mt-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
-    {Object.entries(SETTINGS_PAGES).map(([id, page]) => (
+    {Object.entries(SETTINGS_PAGES)
+      .filter(([id]) => isTabVisible(id as SettingsTab, userRole))
+      .map(([id, page]) => (
       <button
         key={id}
         type="button"
@@ -424,7 +442,8 @@ const MobileSettingsNav: React.FC<{
 const SettingsSidebar: React.FC<{
   activeTab: SettingsTab;
   setActiveTab: (tab: SettingsTab) => void;
-}> = ({ activeTab, setActiveTab }) => (
+  userRole?: string;
+}> = ({ activeTab, setActiveTab, userRole }) => (
   <aside className="w-64 shrink-0 h-full min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
     <div className="p-4 border-b border-slate-100 shrink-0">
       <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-3">
@@ -437,13 +456,16 @@ const SettingsSidebar: React.FC<{
     </div>
 
     <nav className="flex-1 overflow-y-auto p-3 space-y-4">
-      {SETTINGS_GROUPS.map(group => (
+      {SETTINGS_GROUPS.map(group => {
+        const visibleItems = group.items.filter(itemId => isTabVisible(itemId, userRole));
+        if (visibleItems.length === 0) return null;
+        return (
         <div key={group.title}>
           <div className="px-3 pb-1 text-xs font-normal uppercase tracking-wider text-slate-400">
             {group.title}
           </div>
           <div className="space-y-1">
-            {group.items.map(itemId => {
+            {visibleItems.map(itemId => {
               const item = SETTINGS_PAGES[itemId];
               const Icon = item.icon;
               const isActive = itemId === activeTab;
@@ -465,7 +487,8 @@ const SettingsSidebar: React.FC<{
             })}
           </div>
         </div>
-      ))}
+        );
+      })}
     </nav>
   </aside>
 );
@@ -557,6 +580,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   inventorySettings,
   onUpdateInventorySettings,
   products = [],
+  userRole,
 }) => {
   const { showToast } = useToast();
   const logoUploadRef = useRef<HTMLInputElement>(null);
@@ -1644,14 +1668,15 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     tab === 'printTemplates' ||
     tab === 'appearance' ||
     tab === 'migration' ||
-    tab === 'accounts';
+    tab === 'accounts' ||
+    tab === 'activityLog';
 
   const ActiveIcon = activeTabMeta.icon;
 
   return (
     <div className="flex h-full min-h-0 flex-col px-4 py-4 md:px-8 bg-slate-50">
       <div className="flex flex-1 min-h-0 gap-4">
-        <SettingsSidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} />
+        <SettingsSidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} userRole={userRole} />
 
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <header className="shrink-0 border-b border-slate-100 px-4 py-4 md:px-6">
@@ -1662,7 +1687,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
             <h2 className="text-xl font-bold text-slate-900">{activeTabMeta.label}</h2>
             <p className="text-sm text-slate-500 mt-1">{activeTabMeta.description}</p>
 
-            <MobileSettingsNav activeTab={activeTab} setActiveTab={handleSetActiveTab} />
+            <MobileSettingsNav activeTab={activeTab} setActiveTab={handleSetActiveTab} userRole={userRole} />
           </header>
 
           <main
@@ -1700,6 +1725,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                     <MigrationTab onRefresh={onImportRefresh ?? onRefresh} />
                   )}
                   {activeTab === 'accounts' && <AccountsTab />}
+                  {activeTab === 'activityLog' && userRole === 'owner' && <ActivityLogTab />}
                 </Suspense>
               </div>
               {activeTab !== 'printTemplates' && <RightAnchor activeTab={activeTab} />}

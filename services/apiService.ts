@@ -839,6 +839,16 @@ export const apiService = {
     return result;
   },
 
+  // Nhật ký hoạt động — đọc qua server route (chỉ owner, xem routes/data.ts) thay vì supabase
+  // client trực tiếp, vì audit_logs không mở SELECT rộng rãi cho anon. Trả tối đa 1000 dòng
+  // gần nhất, trang hiển thị tự lọc/phân trang phía client.
+  async fetchAuditLogs(): Promise<{ data: any[] }> {
+    const res = await fetch('/api/data/audit-logs', { headers: await getAuthHeaders() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `Không thể tải nhật ký hoạt động (${res.status})`);
+    return { data: json?.data || [] };
+  },
+
   // Lấy một trang dữ liệu từ bất kỳ bảng nào (dùng cho lazy load / load thêm)
   async fetchTablePage(tableName: string, limit = 100, offset = 0) {
     const { data, error, count } = await supabase

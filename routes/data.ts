@@ -1,5 +1,7 @@
-import { Router, RequestHandler } from 'express';
+import { Router, RequestHandler, Request } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
+
+type Actor = { id: string; name: string; role: string };
 
 const KNOWLEDGE_FILES_BUCKET = 'knowledge-files';
 
@@ -387,20 +389,45 @@ async function deleteInventoryTransactionFallback(supabase: SupabaseClient, tran
   if (deleteError) throw deleteError;
 }
 
+// Lấy danh tính người gọi từ JWT — không tin client, giống pattern resolveCaller (routes/auth.ts).
+// Không có JWT (dev/LAN local, đã qua requireAuth) → null, auditLog() vẫn ghi nhưng thiếu actor.
+async function resolveActor(supabase: SupabaseClient, req: Request): Promise<Actor | null> {
+  const authHeader = req.headers.authorization;
+  const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!jwt) return null;
+  const { data: { user }, error } = await supabase.auth.getUser(jwt);
+  if (error || !user) return null;
+  return {
+    id: user.id,
+    name: String(user.user_metadata?.display_name || user.email || 'Không rõ'),
+    role: String(user.user_metadata?.role ?? 'cashier').toLowerCase(),
+  };
+}
+
 async function auditLog(
   supabase: SupabaseClient,
   tableName: string,
   recordId: string,
   action: string,
-  snapshot?: unknown
+  snapshot?: unknown,
+  actor?: Actor | null
 ) {
   if (!AUDITED_TABLES.has(tableName)) return;
   try {
+    let finalSnapshot: unknown = snapshot ?? null;
+    if (actor) {
+      finalSnapshot = {
+        ...(finalSnapshot && typeof finalSnapshot === 'object' ? (finalSnapshot as Record<string, unknown>) : {}),
+        actorId: actor.id,
+        actorName: actor.name,
+        actorRole: actor.role,
+      };
+    }
     await supabase.from('audit_logs').insert({
       table_name: tableName,
       record_id: recordId,
       action,
-      snapshot: snapshot ?? null,
+      snapshot: finalSnapshot,
     });
   } catch {
     // Audit table may not exist in older local databases; do not fail the write.
@@ -428,6 +455,36 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
   });
 
+  // Nhật ký hoạt động — chỉ chủ cửa hàng (owner) được xem, vì dữ liệu nhạy cảm về thao tác
+  // của toàn bộ nhân viên. Dev/LAN không kèm JWT → coi như owner (khớp resolveCaller/auth.ts).
+  router.get('/api/data/audit-logs', requireAuth, async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const jwt = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (jwt) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
+      if (userError || !user) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ' });
+      const role = String(user.user_metadata?.role ?? 'cashier').toLowerCase();
+      if (role !== 'owner') {
+        return res.status(403).json({ error: 'Chỉ chủ cửa hàng mới được xem nhật ký hoạt động' });
+      }
+    }
+
+    // Trả 1 lượt tối đa 1000 dòng gần nhất (giống customer-debt-history .limit(5000)) — trang
+    // hiển thị tự lọc/phân trang phía client, không cần cơ chế phân trang server riêng.
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      res.json({ data: data || [] });
+    } catch (error: unknown) {
+      console.error('[DataRoute] audit-logs read failed:', error);
+      writeErrorResponse(res, 'Không thể đọc nhật ký hoạt động');
+    }
+  });
+
   router.post('/api/data/upsert', requireAuth, async (req, res) => {
     const tableName = resolveTable(req.body?.key);
     const payload = req.body?.payload;
@@ -439,7 +496,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     try {
       const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
       if (error) throw error;
-      await auditLog(supabase, tableName, recordId, 'upsert', payload);
+      await auditLog(supabase, tableName, recordId, 'upsert', payload, await resolveActor(supabase, req));
 
       // Ghi lịch sử giá nhập khi upsert phiếu nhập hàng (bao gồm nhập hàng nhanh OP-011
       // vốn không đi qua apply_inventory_transaction_with_stock nên thiếu writeCostHistory)
@@ -478,7 +535,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
         if (error) throw new Error(`Lỗi ở dòng ${i}: ${error.message}`);
       }
-      await auditLog(supabase, tableName, '*', 'upsertMany', { count: payload.length });
+      await auditLog(supabase, tableName, '*', 'upsertMany', { count: payload.length }, await resolveActor(supabase, req));
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] upsert-many failed [${tableName}]:`, error);
@@ -495,7 +552,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
       const { data: snapshot } = await supabase.from(tableName).select('*').eq('id', id).single();
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
-      await auditLog(supabase, tableName, id, 'delete', snapshot);
+      await auditLog(supabase, tableName, id, 'delete', snapshot, await resolveActor(supabase, req));
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] delete failed [${tableName} - ${id}]:`, error);
@@ -523,7 +580,11 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
       if (error) throw error;
-      await auditLog(supabase, tableName, '*', 'clearTable');
+      await auditLog(supabase, tableName, '*', 'clearTable', undefined, {
+        id: user.id,
+        name: String(user.user_metadata?.display_name || user.email || 'Không rõ'),
+        role: String(user.user_metadata?.role ?? 'cashier').toLowerCase(),
+      });
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] clear failed [${tableName}]:`, error);
@@ -573,7 +634,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
           }
         }
       }
-      await auditLog(supabase, 'inventory_transactions', transactionId, 'applyWithStock', payload);
+      await auditLog(supabase, 'inventory_transactions', transactionId, 'applyWithStock', payload, await resolveActor(supabase, req));
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] inventory apply failed [${transactionId}]:`, error);
@@ -608,7 +669,7 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
           }
         }
       }
-      await auditLog(supabase, 'inventory_transactions', transactionId, 'deleteWithStock', snapshot);
+      await auditLog(supabase, 'inventory_transactions', transactionId, 'deleteWithStock', snapshot, await resolveActor(supabase, req));
       res.json({ ok: true });
     } catch (error: unknown) {
       console.error(`[DataRoute] inventory delete failed [${transactionId}]:`, error);
@@ -623,7 +684,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     if (!orderId) return res.status(400).json({ error: 'ID đơn hàng không hợp lệ' });
 
     try {
-      const { error } = await supabase.rpc('delete_pos_order_tx', { p_order_id: orderId });
+      const actor = await resolveActor(supabase, req);
+      const { error } = await supabase.rpc('delete_pos_order_tx', {
+        p_order_id: orderId,
+        p_actor_id: actor?.id ?? null,
+        p_actor_name: actor?.name ?? null,
+      });
       if (error) throw error;
       res.json({ ok: true });
     } catch (error: unknown) {
@@ -639,7 +705,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     if (!returnOrderId) return res.status(400).json({ error: 'ID phiếu trả hàng không hợp lệ' });
 
     try {
-      const { error } = await supabase.rpc('cancel_pos_return_tx', { p_return_order_id: returnOrderId });
+      const actor = await resolveActor(supabase, req);
+      const { error } = await supabase.rpc('cancel_pos_return_tx', {
+        p_return_order_id: returnOrderId,
+        p_actor_id: actor?.id ?? null,
+        p_actor_name: actor?.name ?? null,
+      });
       if (error) throw error;
       res.json({ ok: true });
     } catch (error: unknown) {
@@ -661,11 +732,14 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
 
     try {
+      const actor = await resolveActor(supabase, req);
       const { error } = await supabase.rpc('edit_pos_order_tx', {
         p_order_id: orderId,
         p_updated_order: updatedOrder,
         p_debt_record: debtRecord,
         p_allow_sell_out_of_stock: allowSellOutOfStock,
+        p_actor_id: actor?.id ?? null,
+        p_actor_name: actor?.name ?? null,
       });
       if (error) throw error;
       res.json({ ok: true });
@@ -687,10 +761,13 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
 
     try {
+      const actor = await resolveActor(supabase, req);
       const { error } = await supabase.rpc('place_pos_order_tx', {
         p_order: order,
         p_debt_record: debtRecord,
         p_allow_sell_out_of_stock: allowSellOutOfStock,
+        p_actor_id: actor?.id ?? null,
+        p_actor_name: actor?.name ?? null,
       });
       if (error) throw error;
       res.json({ ok: true });

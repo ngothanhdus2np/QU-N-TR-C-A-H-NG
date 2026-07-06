@@ -261,6 +261,7 @@ const App: React.FC = () => {
           <Suspense fallback={null}>
             <SettingsCenter
               onNavigate={handleSetActiveTab}
+              userRole={userRole}
               activeThemeId={themeId}
               onThemeChange={setThemeId}
               isCloudConnected={isCloudConnected}
