@@ -1,8 +1,11 @@
 import { Router, RequestHandler } from 'express';
 import axios from 'axios';
 
-// Host chạy bot shopee-monitor. Mặc định localhost (bot cùng máy với server);
-// trên iMac prod bot chạy ở MacBook khác → set SHOPEE_BOT_HOST=<ip> trong .env.local.
+// Host chạy bot shopee-monitor. Bot chỉ chạy trên iMac (chuyển từ MacBook 2026-07-02).
+// Prod (chạy cùng máy iMac): mặc định 'localhost' là đúng.
+// Dev (MacBook): dùng SSH tunnel -L 3001/3002 sang iMac (launchd agent
+// com.phucsang.dev-bot-tunnel) nên 'localhost' trên MacBook cũng trỏ đúng qua tunnel —
+// không cần set SHOPEE_BOT_HOST trong .env.local dev.
 const BOT_HOST = process.env.SHOPEE_BOT_HOST || 'localhost';
 
 // Slug của shop trong DB → port của bot PM2 tương ứng
