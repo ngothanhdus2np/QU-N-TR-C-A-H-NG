@@ -98,7 +98,7 @@ const InventoryOutTab: React.FC<Props> = ({
     setSyncMsg(null);
     try {
       const result = await onSyncFromBot();
-      setSyncMsg(`Đã thêm ${result.inserted} đơn mới, bỏ qua ${result.skipped} đơn đã có`);
+      setSyncMsg(`Đã thêm ${result.inserted} dòng sản phẩm mới, bỏ qua ${result.skipped} dòng đã có`);
       setTimeout(() => setSyncMsg(null), 5000);
     } catch (err) {
       setSyncMsg(`Lỗi: ${err instanceof Error ? err.message : 'Không kết nối được bot'}`);
@@ -120,7 +120,7 @@ const InventoryOutTab: React.FC<Props> = ({
     }
   };
 
-  // Dedup bằng orderId (mã vận đơn) trước khi filter — lớp bảo vệ cuối cùng
+  // Dedup bằng orderId + sku (1 đơn nhiều sản phẩm khác nhau = nhiều sku, không gộp mất) — lớp bảo vệ cuối cùng
   const dedupedInventoryOut = useMemo(() => {
     const score = (item: typeof shopeeInventoryOut[number]) =>
       (item.sku ? 100 : 0) +
@@ -129,7 +129,7 @@ const InventoryOutTab: React.FC<Props> = ({
       (item.status === 'OK' ? 1 : 0);
     const bestByOrder = new Map<string, typeof shopeeInventoryOut[number]>();
     shopeeInventoryOut.forEach(item => {
-      const key = item.orderId || item.id;
+      const key = item.orderId ? `${item.orderId}||${item.sku ?? ''}` : item.id;
       if (!key) return;
       const existing = bestByOrder.get(key);
       if (!existing || score(item) > score(existing)) bestByOrder.set(key, item);

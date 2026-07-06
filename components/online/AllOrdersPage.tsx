@@ -23,6 +23,12 @@ const SHOPS = [
   { id: 2, api: '/api/shopee-orders/2', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
 ];
 
+interface ShopeeOrderItemRaw {
+  product_name?: string;
+  product_sku?: string;
+  quantity?: number;
+}
+
 interface ShopeeOrderRaw {
   order_sn?: string;
   status?: string;
@@ -36,6 +42,7 @@ interface ShopeeOrderRaw {
   buyer_paid?: number;
   province?: string;
   shipping_carrier?: string;
+  items?: ShopeeOrderItemRaw[];
 }
 
 const SHOPEE_STATUS_MAP: Record<string, DisplayStatus> = {
@@ -91,6 +98,7 @@ interface UnifiedOrder {
   customer_phone: string;
   product_summary: string;
   sku_summary: string;
+  items: { name: string; sku: string }[];
   amount: number;
   location: string;
   carrier: string;
@@ -165,6 +173,13 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
             if (o.status === 'Đã nhận được hàng' && o.first_delivered_at) {
               if (now - new Date(o.first_delivered_at).getTime() > RETURN_WINDOW_MS) continue;
             }
+            const shopeeItems = o.items ?? [];
+            const itemsList = shopeeItems.length > 0
+              ? shopeeItems.map((it, idx) => ({
+                  name: it.product_name || '',
+                  sku: idx === 0 ? [it.product_sku, o.variation].filter(Boolean).join(' · ') : (it.product_sku || ''),
+                }))
+              : [{ name: o.product_name ?? '', sku: [o.product_sku, o.variation].filter(Boolean).join(' · ') }];
             results.push({
               key: `shopee-${shop.id}-${o.order_sn}`,
               platform: 'shopee',
@@ -175,8 +190,9 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
               order_id: o.order_sn ?? '',
               customer_name: o.buyer_name ?? '',
               customer_phone: o.buyer_phone ?? '',
-              product_summary: o.product_name ?? '',
-              sku_summary: [o.product_sku, o.variation].filter(Boolean).join(' · '),
+              product_summary: itemsList.map(it => it.name).join(', '),
+              sku_summary: itemsList.map(it => it.sku).filter(Boolean).join(', '),
+              items: itemsList,
               amount: o.buyer_paid ?? 0,
               location: o.province ?? '',
               carrier: o.shipping_carrier ?? '',
@@ -201,13 +217,7 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
         const ds: DisplayStatus = WEBSITE_STATUS_MAP[o.status] ?? 'other';
         const addr = o.store_order_addresses?.[0];
         const shipment = o.shipments?.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-        const items = o.items ?? [];
-        const productSummary = items.length === 0
-          ? ''
-          : items.length === 1
-          ? items[0].productName
-          : `${items[0].productName} + ${items.length - 1} sản phẩm khác`;
-        const skuSummary = items[0]?.sku ?? '';
+        const itemsList = (o.items ?? []).map(it => ({ name: it.productName, sku: it.sku }));
         const location = [addr?.district, addr?.province].filter(Boolean).join(', ');
         return {
           key: `website-${o.id}`,
@@ -216,8 +226,9 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
           order_id: o.order_code,
           customer_name: o.customer_name,
           customer_phone: o.customer_phone,
-          product_summary: productSummary,
-          sku_summary: skuSummary,
+          product_summary: itemsList.map(it => it.name).join(', '),
+          sku_summary: itemsList.map(it => it.sku).filter(Boolean).join(', '),
+          items: itemsList,
           amount: o.total_amount,
           location,
           carrier: shipment?.provider ?? '',
@@ -518,9 +529,17 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
                         )}
                       </td>
                       <td className="max-w-[220px] px-4 py-3">
-                        <p className="truncate text-slate-800">{order.product_summary || '—'}</p>
-                        {order.sku_summary && (
-                          <p className="text-xs text-slate-400 truncate">{order.sku_summary}</p>
+                        {order.items.length > 0 ? (
+                          <div className="space-y-1">
+                            {order.items.map((it, idx) => (
+                              <div key={idx}>
+                                <p className="truncate text-slate-800" title={it.name}>{it.name || '—'}</p>
+                                {it.sku && <p className="text-xs text-slate-400 truncate">{it.sku}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="truncate text-slate-800">—</p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-600">

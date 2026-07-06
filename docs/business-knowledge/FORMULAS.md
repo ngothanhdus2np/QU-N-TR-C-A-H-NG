@@ -717,6 +717,38 @@ Quy tắc đặc biệt:
 - Nếu SKU không tìm thấy trong `shopeeSourceData` → Giá gốc = 0 (không lỗi)
 - Lợi Nhuận âm → hiển thị màu đỏ (`text-rose-600`); dương → màu xanh (`text-emerald-700`)
 
+### 10.3 Đơn nhiều sản phẩm khác nhau — chia phí theo tỷ trọng giá trị (thêm 2026-07-05)
+
+> Source: `routes/inventoryOutSync.ts` → `mapOrderToRows()`
+
+1 đơn Shopee có thể chứa nhiều sản phẩm khác nhau (`items[]` từ bot, lấy từ
+`order_item_list.order_items` của Shopee). Mỗi sản phẩm → 1 dòng riêng trong
+`shopee_inventory_out` (key `order_id + sku`). Shopee chỉ trả phí (hoa hồng/vận
+chuyển/thuế/PiShip) ở **cấp đơn**, không tách theo từng sản phẩm → chia theo
+**tỷ trọng giá trị** (subtotal = đơn giá × số lượng) của từng sản phẩm trong đơn:
+
+```
+subtotal(sp_i)     = price(sp_i) × quantity(sp_i)
+tổng_subtotal      = Σ subtotal(sp_i) toàn đơn
+tỷ_trọng(sp_i)     = subtotal(sp_i) / tổng_subtotal   (nếu tổng_subtotal = 0 → chia đều 1/số_sản_phẩm)
+
+sale_price(sp_i)       = subtotal(sp_i)  (nếu có giá; fallback: tỷ_trọng × giá đơn cũ)
+customer_paid(sp_i)    = tỷ_trọng × buyer_paid (cấp đơn)
+platform_fee(sp_i)     = tỷ_trọng × commission_fee (cấp đơn)
+freeship_extra(sp_i)   = tỷ_trọng × service_fee
+payment_fee(sp_i)      = tỷ_trọng × transaction_fee
+piship_fee(sp_i)       = tỷ_trọng × piship_fee
+vat_tax(sp_i)          = tỷ_trọng × vat_tax (cấp đơn)
+personal_income_tax(sp_i) = tỷ_trọng × pit_tax (cấp đơn)
+```
+
+Ví dụ: đơn 388.700đ có SP A (giá 250.000đ) + SP B (giá 138.700đ) → tỷ trọng
+A ≈ 64%, B ≈ 36% → phí hoa hồng của đơn chia theo đúng tỷ lệ đó cho từng dòng.
+
+Giá + phân loại (`price`/`variation`) từng sản phẩm lấy từ API Shopee
+`get_order_income_components` → `order_item_list.order_items[].price/model_name`
+(field `price` cùng scale ÷100000 như các field tiền khác trong bot).
+
 ---
 
 ## 11. HỦY PHIẾU TRẢ & XÓA ĐƠN (SOFT-DELETE) — thêm 2026-07-04

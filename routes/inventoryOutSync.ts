@@ -23,6 +23,14 @@ const STATUS_MAP: Record<string, string> = {
   'Chờ xác nhận': 'PENDING',
 };
 
+interface BotOrderItem {
+  product_name: string;
+  product_sku: string;
+  quantity: number;
+  price: number;
+  variation: string;
+}
+
 interface BotOrder {
   order_sn: string;
   status: string;
@@ -33,6 +41,7 @@ interface BotOrder {
   product_price: number;
   quantity: number;
   buyer_paid: number;
+  items?: BotOrderItem[];
   escrow_amount: number;
   commission_fee: number;
   service_fee: number;
@@ -101,7 +110,19 @@ async function fetchAllBotOrders(port: number, shopIdx: number): Promise<BotOrde
   return results;
 }
 
-function mapToRow(o: BotOrder) {
+// 1 đơn Shopee có thể có nhiều sản phẩm khác nhau (items[]) — tách thành nhiều
+// dòng trong shopee_inventory_out (1 dòng/sản phẩm, khớp key order_id+sku).
+// Phí cấp đơn (hoa hồng/vận chuyển/thuế...) không tách theo sản phẩm ở nguồn Shopee
+// → chia theo TỶ TRỌNG GIÁ TRỊ (subtotal = price*quantity) từng sản phẩm trong đơn.
+function mapOrderToRows(o: BotOrder) {
+  const items: BotOrderItem[] = (o.items && o.items.length > 0)
+    ? o.items
+    : [{ product_name: o.product_name ?? '', product_sku: o.product_sku ?? '', quantity: o.quantity ?? 1, price: o.product_price ?? 0, variation: o.variation ?? '' }];
+
+  const subtotals = items.map(it => (it.price || 0) * (it.quantity || 1));
+  const totalSubtotal = subtotals.reduce((a, b) => a + b, 0);
+  const equalShare = 1 / items.length;
+
   const baseStatus = STATUS_MAP[o.status] ?? 'PENDING';
   // Hoàn đã xong → RETURNED (số lượng sẽ = 0, không tính tồn kho)
   let mappedStatus = baseStatus === 'RETURN' && o.return_completed_at ? 'RETURNED' : baseStatus;
@@ -109,39 +130,45 @@ function mapToRow(o: BotOrder) {
   if (mappedStatus === 'CANCEL' && o.cancel_reason?.toLowerCase().includes('giao hàng thất bại')) {
     mappedStatus = 'FAILED';
   }
-  const date         = parseOrderDate(o.order_date);
-  const platform     = SHOP_BOTS[o.shopIdx]?.platform ?? 'Shopee 1';
-  const variation    = o.variation ? o.variation.replace(',', '-') : '';
-  const sku          = variation ? `${o.product_sku}-${variation}` : (o.product_sku ?? '');
+  const date     = parseOrderDate(o.order_date);
+  const platform = SHOP_BOTS[o.shopIdx]?.platform ?? 'Shopee 1';
 
-  return {
-    order_id:            o.order_sn,
-    tracking_number:     o.order_sn,
-    date,
-    ship_date:           date,
-    status:              mappedStatus,
-    sku,
-    product_name:        o.product_name ?? '',
-    quantity:            o.quantity ?? 1,
-    sale_price:          o.product_price ?? o.buyer_paid ?? 0,
-    customer_paid:       o.buyer_paid ?? 0,
-    platform_fee:        Math.abs(o.commission_fee  ?? 0),
-    freeship_extra:      Math.abs(o.service_fee     ?? 0),
-    payment_fee:         Math.abs(o.transaction_fee ?? 0),
-    piship_fee:          Math.abs(o.piship_fee      ?? 0),
-    vat_tax:             Math.abs(o.vat_tax         ?? 0),
-    personal_income_tax: Math.abs(o.pit_tax         ?? 0),
-    affiliate_fee:       0,
-    handling_fee:        0,
-    ads_cost:            0,
-    ads_tax:             0,
-    net_profit:          0,
-    address:             o.province ?? '',
-    shipping_unit:       normalizeShippingUnit(o.shipping_carrier ?? ''),
-    platform,
-    profit_status:       (mappedStatus === 'CANCEL' || mappedStatus === 'FAILED') ? 'HỦY' : 'CHƯA TÍNH',
-    cancel_reason:       o.cancel_reason ?? null,
-  };
+  return items.map((it, idx) => {
+    const itemSubtotal = subtotals[idx];
+    const share = totalSubtotal > 0 ? itemSubtotal / totalSubtotal : equalShare;
+    const prorate = (val: number) => Math.round((val || 0) * share);
+    const variation = it.variation ? it.variation.replace(',', '-') : '';
+    const sku       = variation ? `${it.product_sku}-${variation}` : (it.product_sku ?? '');
+
+    return {
+      order_id:            o.order_sn,
+      tracking_number:     o.order_sn,
+      date,
+      ship_date:           date,
+      status:              mappedStatus,
+      sku,
+      product_name:        it.product_name ?? '',
+      quantity:            it.quantity ?? 1,
+      sale_price:          itemSubtotal > 0 ? itemSubtotal : prorate(o.product_price ?? o.buyer_paid ?? 0),
+      customer_paid:       prorate(o.buyer_paid ?? 0),
+      platform_fee:        Math.abs(prorate(o.commission_fee  ?? 0)),
+      freeship_extra:      Math.abs(prorate(o.service_fee     ?? 0)),
+      payment_fee:         Math.abs(prorate(o.transaction_fee ?? 0)),
+      piship_fee:          Math.abs(prorate(o.piship_fee      ?? 0)),
+      vat_tax:             Math.abs(prorate(o.vat_tax         ?? 0)),
+      personal_income_tax: Math.abs(prorate(o.pit_tax         ?? 0)),
+      affiliate_fee:       0,
+      handling_fee:        0,
+      ads_cost:            0,
+      ads_tax:             0,
+      net_profit:          0,
+      address:             o.province ?? '',
+      shipping_unit:       normalizeShippingUnit(o.shipping_carrier ?? ''),
+      platform,
+      profit_status:       (mappedStatus === 'CANCEL' || mappedStatus === 'FAILED') ? 'HỦY' : 'CHƯA TÍNH',
+      cancel_reason:       o.cancel_reason ?? null,
+    };
+  });
 }
 
 export async function runInventoryOutSync(supabase: SupabaseClient): Promise<{
@@ -187,49 +214,52 @@ export async function runInventoryOutSync(supabase: SupabaseClient): Promise<{
     allExisting.map((r) => [`${r.order_id}||${r.sku ?? ''}`, r.status])
   );
 
-  // 3. Tách thành 2 nhóm: đơn mới và đơn cần cập nhật
+  // 3. Tách thành 2 nhóm: dòng (đơn+sku) mới và dòng cần cập nhật — 1 đơn nhiều
+  // sản phẩm sẽ ra nhiều dòng ở đây (mapOrderToRows), mỗi dòng 1 sku riêng.
   const seenInBatch = new Set<string>();
-  const newOrders: BotOrder[] = [];
-  const toUpdate: BotOrder[] = [];
+  const newRows: ReturnType<typeof mapOrderToRows> = [];
+  const toUpdateRows: ReturnType<typeof mapOrderToRows> = [];
+  let totalRowsSeen = 0;
 
   for (const o of allOrders) {
     if (!o.order_sn) continue;
-    const row = mapToRow(o);
-    const batchKey = `${o.order_sn}||${row.sku ?? ''}`;
-    if (seenInBatch.has(batchKey)) continue;
-    seenInBatch.add(batchKey);
+    const rows = mapOrderToRows(o);
+    totalRowsSeen += rows.length;
+    for (const row of rows) {
+      const batchKey = `${row.order_id}||${row.sku ?? ''}`;
+      if (seenInBatch.has(batchKey)) continue;
+      seenInBatch.add(batchKey);
 
-    if (!existingMap.has(batchKey)) {
-      newOrders.push(o);
-    } else {
-      // Luôn update lại — để ghi đúng fee từ bot API vào những đơn trước đây bị ghi sai
-      toUpdate.push(o);
+      if (!existingMap.has(batchKey)) {
+        newRows.push(row);
+      } else {
+        // Luôn update lại — để ghi đúng fee từ bot API vào những đơn trước đây bị ghi sai
+        toUpdateRows.push(row);
+      }
     }
   }
 
-  // 4. Insert đơn mới — dùng upsert ignoreDuplicates để an toàn khi 2 sync chạy đồng thời (AUDIT-019)
+  // 4. Insert dòng mới — dùng upsert ignoreDuplicates để an toàn khi 2 sync chạy đồng thời (AUDIT-019)
   let inserted = 0;
-  if (newOrders.length > 0) {
-    const rows = newOrders.map(mapToRow);
+  if (newRows.length > 0) {
     const { error } = await supabase
       .from('shopee_inventory_out')
-      .upsert(rows, { onConflict: 'order_id,sku', ignoreDuplicates: true });
+      .upsert(newRows, { onConflict: 'order_id,sku', ignoreDuplicates: true });
     if (error) throw new Error(error.message);
-    inserted = rows.length;
+    inserted = newRows.length;
   }
 
   // 5. Cập nhật fee fields — batch upsert thay vì serial loop (AUDIT-015)
   let updated = 0;
-  if (toUpdate.length > 0) {
-    const updateRows = toUpdate.map(mapToRow);
+  if (toUpdateRows.length > 0) {
     const { error: updateError } = await supabase
       .from('shopee_inventory_out')
-      .upsert(updateRows, { onConflict: 'order_id,sku', ignoreDuplicates: false });
+      .upsert(toUpdateRows, { onConflict: 'order_id,sku', ignoreDuplicates: false });
     if (updateError) throw new Error(updateError.message);
-    updated = updateRows.length;
+    updated = toUpdateRows.length;
   }
 
-  return { inserted, updated, skipped: allOrders.length - inserted - updated, botErrors };
+  return { inserted, updated, skipped: totalRowsSeen - inserted - updated, botErrors };
 }
 
 export function createInventoryOutSyncRouter(supabase: SupabaseClient, requireAuth: RequestHandler) {
