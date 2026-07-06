@@ -7,6 +7,59 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 DEV-AUTH-01 — Trang Xuất kho (bảng đã khoá anon) không tải ở dev do bypass login chạy anon *(xong 2026-07-06)*
+
+> **User báo**: Bán online → Doanh Thu Shopee → Xuất kho báo lỗi tải đơn hàng (hiện 0 đơn).
+>
+> **Nguyên nhân**: dev bypass login (`AuthGate.tsx` khởi tạo session giả `{}`) → Supabase chạy role `anon`. Migration bảo mật `023`/`024` (02–03/07) REVOKE anon trên `shopee_inventory_out`/`shopee_source_data`... → anon `42501 permission denied`; `loadInventoryOut()` silent-catch → 0 đơn. Prod không bị (đăng nhập thật = `authenticated`). Xác minh: service-role thấy 2790 dòng thật, 2 bot 3001/3002 OK → backend khỏe, chỉ là dev chạy anon.
+>
+> **✅ ĐÃ SỬA** (`components/AuthGate.tsx`): dev auto-login thật khi `.env.local` có `VITE_DEV_LOGIN_USER`+`VITE_DEV_LOGIN_PASSWORD` (resolve username→`@cfobrain.local`), chờ login xong mới render. Thiếu biến → giữ bypass cũ (không regression).
+>
+> **Verify browser dev**: session role=`authenticated`; Sản phẩm Shopee 30 SP/1216 listing (trước 0); Xuất kho **2.396 đơn** (trước 0); console sạch. tsc pass.
+>
+> **Lưu ý**: creds dev nằm plaintext trong `.env.local` (gitignore). Cân nhắc tạo user dev quyền hạn chế thay cho tài khoản owner.
+>
+> Files: `components/AuthGate.tsx`, `.env.local` (ngoài repo).
+
+### [x] 🟠 SHOPEE-ORDERS-01 — Đơn Shopee: tỉnh trống + mất sản phẩm thứ 2 trở đi *(fix xong + đã deploy 2026-07-05)*
+
+> User báo trên link prod: (1) đơn Shopee mới không có tỉnh, để trống; (2) đơn `260703PMY9G09S` có 2 sản phẩm khác nhau nhưng app chỉ hiện 1.
+>
+> **Nguyên nhân 1 — tỉnh trống**: bot Shopee (`~/shopee-monitor`) đã có sẵn hàm bù tỉnh `fillMissingProvinces()` (`bots/orders.js`) nhưng **chỉ chạy khi ai đó gọi tay** `POST /api/fill-provinces` — không có lịch tự động, và app cũng chưa từng gọi endpoint này. Đơn nào lọt tỉnh lúc scrape ban đầu sẽ trống vĩnh viễn.
+>
+> **Nguyên nhân 2 — mất sản phẩm**: `order_details` là bảng 1-dòng-1-đơn, và code scrape list-card chỉ lấy `item_info_list[0].item_list[0]` — bỏ mọi sản phẩm còn lại ngay từ lúc quét. Phát hiện thêm: API `get_order_income_components` (đã được bot gọi sẵn qua `fetchOrderIncome`) trả về `order_item_list.order_items[]` — **đã có sẵn đầy đủ danh sách sản phẩm + số lượng**, nhưng code cũ chỉ lấy `[0]`.
+>
+> **✅ ĐÃ SỬA** (repo `~/shopee-monitor`, ngoài repo app — deploy thủ công qua rsync + pm2 restart, không có script deploy tự động cho bot):
+> - `src/db.js`: bảng mới `order_items` (order_sn, item_index, product_name, product_sku, quantity) + cột `order_details.items_synced` đánh dấu đã đồng bộ đủ sản phẩm chưa. Hàm `saveOrderItems()`/`getItemsForOrders()`/`getOrdersMissingItems()`.
+> - `bots/orders.js`: `fetchOrderIncome()` giờ lưu **toàn bộ** `order_item_list.order_items[]` (không chỉ `[0]`) vào `order_items`. Mở rộng `fillMissingProvinces()` bù **cả tỉnh lẫn sản phẩm** trong 1 lượt ghé trang chi tiết đơn (tiết kiệm request). Thêm lịch tự động `setInterval` 20 phút/lần tự chạy hàm này (trước đây không có lịch nào).
+> - `src/apiServer.js`: `GET /api/orders` giờ trả kèm `items: [...]` mỗi đơn (fallback dựng từ cột đơn lẻ nếu đơn chưa kịp đồng bộ).
+> - `backfill-multi-items.js` (mới): script một lần để bù sản phẩm cho đơn cũ hàng loạt qua gọi API trực tiếp (không cần dùng vì job tự động 20 phút đã quét sạch backlog ngay sau khi restart).
+> - App (`components/online/AllOrdersPage.tsx`): đổi `product_summary`/`sku_summary` dùng `items[]` mới, theo đúng pattern đã có sẵn cho đơn Website (`items.length===1 ? tên : "tên + N sản phẩm khác"`).
+>
+> **Verify live trên production** (restart pm2 `shopee-shop1`+`shopee-shop2` sau khi rsync code mới): log xác nhận đúng đơn `260703PMY9G09S` → `tỉnh Thành phố Cần Thơ` + `2 sản phẩm`; gọi lại API xác nhận `items` có đủ 2 sản phẩm (`DQND25` + `DQND21`). tsc sạch, 981/981 test pass.
+>
+> Files: `~/shopee-monitor/src/db.js`, `~/shopee-monitor/bots/orders.js`, `~/shopee-monitor/src/apiServer.js`, `~/shopee-monitor/backfill-multi-items.js` (mới, ngoài repo app), `components/online/AllOrdersPage.tsx`.
+
+### [x] 🟢 DEV-SHOPEE-01 — Trang "Đơn hàng online" trống ở local dev (bot Shopee chỉ chạy trên iMac) *(xong 2026-07-05)*
+
+> **Nguyên nhân**: bot Shopee (`~/shopee-monitor`) chỉ chạy trên iMac (chuyển từ MacBook 02/07). Backend dev (MacBook) forward `/api/shopee-orders/:shopId` tới `SHOPEE_BOT_HOST` (mặc định `localhost`) — nhưng bot không chạy trên MacBook nên `ECONNREFUSED` → route trả `503`, trang hiện rỗng. Không phải bug code, code tự báo lỗi đúng.
+>
+> **✅ ĐÃ SỬA**: tạo LaunchAgent `~/Library/LaunchAgents/com.phucsang.dev-bot-tunnel.plist` trên MacBook — tự mở & duy trì SSH tunnel `-L 3001:localhost:3001 -L 3002:localhost:3002` sang `imac-cfobrain` (dùng key SSH có sẵn cho deploy), tự khởi động cùng máy + tự restart nếu rớt (`KeepAlive`). Không cần đổi `.env.local` vì code mặc định `SHOPEE_BOT_HOST=localhost` sẵn — tunnel khiến `localhost:3001/3002` trên MacBook trỏ đúng sang bot thật. Cập nhật comment trong `routes/shopeeSync.ts` cho khớp kiến trúc hiện tại (trước đó ghi ngược: tưởng bot chạy MacBook, prod là iMac riêng).
+>
+> **Verify**: `curl localhost:3001/3002/api/orders` qua tunnel → 200. Gọi thẳng `GET /api/shopee-orders/1` qua `INTERNAL_API_KEY` → 200, trả đúng 236 đơn thật shop `phuc_sang_store`. Không verify được qua UI browser vì phiên preview chưa đăng nhập Supabase (vấn đề khác, không liên quan) — user tự đăng nhập app thật sẽ thấy dữ liệu ngay.
+>
+> Giữ nguyên tách biệt dữ liệu dev/prod (Supabase local Docker trên MacBook không đổi) — chỉ riêng luồng đọc-only đơn Shopee (dữ liệu ngoài app, không có khái niệm "dev version") mượn chung bot thật trên iMac qua tunnel.
+>
+> Files: `routes/shopeeSync.ts` (comment), `~/Library/LaunchAgents/com.phucsang.dev-bot-tunnel.plist` (mới, ngoài repo).
+
+### [x] 🟡 AUDIT-ACTOR-01 — Nhật ký hoạt động: ghi "ai" thao tác + trang xem (owner-only) *(hoàn tất + ĐÃ DEPLOY 2026-07-04)*
+
+> Ghi danh tính người thực hiện vào `audit_logs` cho mọi thao tác (tạo/sửa/xóa/hủy đơn, upsert, xóa bảng, giao dịch tồn kho) + trang "Nhật ký hoạt động" trong Settings để chủ cửa hàng xem ai đã làm gì.
+>
+> **✅ ĐÃ XONG + VERIFY (dev)**: migration `030` thêm `p_actor_id/p_actor_name` vào 4 RPC + ghi `audit_logs.snapshot` (thân hàm giữ nguyên); `routes/data.ts` có `resolveActor()` (lấy từ JWT, không tin client) truyền vào 4 RPC + mọi `auditLog()`, endpoint `GET /api/data/audit-logs` **owner-only**; `apiService.fetchAuditLogs()`; trang `ActivityLogPage.tsx` (lọc/tìm/phân trang/JSON); tab trong Settings **ẩn với non-owner** (gating `userRole` ở SettingsCenter + App.tsx). Verify live: owner 200 + actor ghi đúng ("Chủ cửa hàng") cho place/delete, non-owner 403, UI render sạch. tsc + 981 test pass. Chi tiết HISTORY R30.
+>
+> **✅ ĐÃ DEPLOY production 2026-07-04**: `deploy-imac.sh` áp migration `030` (đổi chữ ký 4 RPC, code cũ không còn dùng) + build + restart — health check 200 OK. Set `role='owner'` cho tài khoản chủ thật `admin@cfobrain.local` trên `auth.users` **prod** (trước đó là `manager`) — đã xác nhận qua SELECT sau UPDATE.
+
 ### [x] 🟡 ORDERS-EDIT-01 — Sửa hóa đơn trong POS (mở đơn cũ để đổi sản phẩm/số lượng/giá) *(xong 2026-07-03)*
 
 > Nút "Sửa trong POS" ở trang Hóa đơn — mở lại đơn vào máy tính tiền, sửa xong lưu đè đúng id cũ (hoàn tồn kho + trừ/cộng doanh thu + tính lại doanh số NV, không nhân đôi lịch sử). Theo quyết định user: không giới hạn quyền/ngày, chưa xử lý riêng đơn có phiếu trả hàng liên kết (rủi ro đã ghi). Chưa hỗ trợ sửa đơn trả/đổi hàng. Chi tiết HISTORY.md.
@@ -124,41 +177,6 @@
 
 > **ĐÃ SỬA** bằng migration `023_revoke_anon_storefront_tables.sql`: REVOKE ALL FROM anon + bật RLS + policy authenticated cho 7 bảng RLS-off (`expense_categories`, `shipments`, `store_collections`, `store_order_addresses`, `store_preorder_requests`, `store_product_collections`, `store_settings`). App không đọc các bảng này qua anon (đã kiểm), storefront dùng service-role bypass RLS → không phá luồng nào. Cũng là bước xử lý gốc rễ MAINT-01 (bảng mới tự nhận grant anon).
 
-### [ ] 🔴 Đăng nhập lại Shopee cho bot trên iMac — USER làm trực tiếp trên iMac *(2026-07-02)*
-
-> **Bối cảnh**: Bot Shopee đã chuyển từ MacBook lên iMac (xong 02/07 — phụ thuộc 1 máy duy nhất). Nhưng Shopee phát hiện "thiết bị mới" → **session cả 2 shop hết hạn**. Đơn Shopee CŨ vẫn hiển thị trên app; đơn MỚI sẽ không cập nhật cho đến khi đăng nhập lại. Bot MacBook đã tắt, tunnel đã gỡ — KHÔNG bật lại bot trên MacBook (2 bot chạy song song sẽ đá session nhau).
->
-> **Các bước làm trên iMac** (mở Terminal, copy từng dòng):
->
-> ```bash
-> export PATH=~/.npm-global/bin:/usr/local/bin:$PATH
-> pm2 stop all
-> cd ~/shopee-monitor
-> node login.js --shop 1
-> ```
-> → Cửa sổ Chrome mở ra → đăng nhập Shopee Seller Center (quét QR bằng app Shopee trên điện thoại) → khi thấy trang **quản lý đơn hàng** hiện ra → quay lại Terminal **nhấn ENTER** để lưu session.
->
-> ```bash
-> node login.js --shop 2
-> ```
-> → Lặp lại y như trên cho shop 2 (Phúc Sang_Đồ Da Cao Cấp 93).
->
-> ```bash
-> pm2 start ecosystem.config.js
-> pm2 logs --lines 30
-> ```
-> → Nhìn log ~2 phút: **KHÔNG còn** dòng `SESSION HẾT HẠN` là thành công (nhấn `Ctrl+C` để thoát log).
->
-> **Bước cuối — cho bot tự chạy khi iMac khởi động lại** (nhập mật khẩu admin khi hỏi):
-> ```bash
-> sudo env PATH=$PATH:/usr/local/bin /Users/mac/.npm-global/lib/node_modules/pm2/bin/pm2 startup launchd -u mac --hp /Users/mac
-> pm2 save
-> ```
->
-> Xong thì mở app → Đơn hàng online → bấm "Tải lại" kiểm tra đơn mới. Nếu trục trặc: nhắn Claude verify từ xa.
-
----
-
 ### [x] Migration tự động khi deploy *(xong 2026-07-02 khuya)*
 
 > `apply-migrations.sh` + sổ `schema_migrations` (baseline 20 file trên prod+dev). Deploy tự chạy migration mới trước build, lỗi = dừng deploy. Sync prod→dev tự áp lại migration chưa deploy. **Quy trình mới**: schema mới → viết file `021_xxx.sql` vào `supabase_migrations/` → test dev → deploy. LƯU Ý: task "Đồng bộ schema production với migrations" (bên dưới) về cơ bản được giải bằng baseline — drift lịch sử coi như mốc 0, từ giờ không lệch nữa.
@@ -239,11 +257,13 @@
 
 > Gói toàn bộ checkout vào RPC `pos_mobile_checkout` (1 transaction DB): insert đơn + trừ tồn inline atomic + cộng dồn revenue atomic + KH/nợ + audit. Verify trên prod (rollback test). Xem HISTORY.md.
 
-### [~] Đồng bộ schema production với migrations *(phát hiện khi làm #2 — 2026-06-27; vá thêm 1 phần 2026-07-02)*
+### [x] Đồng bộ schema production với migrations *(phát hiện khi làm #2 — 2026-06-27; vá 1 phần 2026-07-02; rà soát lại & đóng 2026-07-04)*
 
 > Production self-hosted (iMac, container `supabase-db`) **chưa chạy** một số migration: RPC `*_v2` (013) và cột `branch_id`/constraint `(date,branch_id)` của `revenue_records`. Hệ thống vẫn chạy nhờ fallback legacy, nhưng `supabase_setup.sql`/migrations đang **lệch** với DB thật. Nên rà soát & chạy bù các migration còn thiếu (hoặc cập nhật setup cho khớp) để tránh bẫy cho lần sau.
 >
 > **2026-07-02 đã vá phần store module trên prod DB**: migration 017 (shipments cols + `upsert_website_shipment` + `update_website_order_status` 3 tham số), 4 cột `pos_orders` (`shipping_fee`/`note`/`customer_phone`/`customer_email`), `create_store_order` bản canonical. ⚠️ Phát hiện: 3 cột `pos_orders` (note/customer_phone/customer_email) không nằm trong migration nào — cần bổ sung vào `supabase_setup.sql`/migration mới. Migration 014 chứa bản CŨ `update_website_order_status(UUID,TEXT)` — KHÔNG chạy nguyên file, sẽ tạo overload trùng.
+>
+> **✅ Rà soát lại 2026-07-04 — ĐÓNG, không cần hành động thêm**: query trực tiếp `information_schema`/`pg_proc` trên prod xác nhận 2/3 mục đã tự hết: RPC `apply_inventory_transaction_with_stock_v2` + `delete_inventory_transaction_with_stock_v2` **đã tồn tại**; cột `pos_orders.note`/`customer_phone`/`customer_email` **đã tồn tại** (từ đợt vá 07-02). Mục còn lại — `revenue_records.branch_id` + constraint `(date, branch_id)` — **cố ý không thêm**: migration `020_atomic_revenue_delta.sql` (dòng 14-16) đã chủ động chuyển toàn bộ `ON CONFLICT` sang khớp constraint thật trên prod là `UNIQUE(date)` (không kèm branch_id), và mọi RPC atomic sau này (026-030) đều theo đúng pattern đó. App hiện chỉ vận hành 1 chi nhánh (`branch_id` mặc định `'main'` ở các bảng khác không có tính năng multi-branch nào dùng tới) — thêm cột/constraint này bây giờ không phục vụ gì, chỉ là rủi ro thừa. Giữ nguyên hiện trạng.
 
 ### [x] Deploy fix "Đơn hàng online" lên prod *(✅ deploy + verify 2026-07-02)*
 
