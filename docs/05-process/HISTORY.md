@@ -29,6 +29,13 @@
 - **Chạy thử thành công**: dump 80MB, restore 18 lỗi vô hại (cùng loại index/graphql nội bộ đã thấy lúc setup ban đầu, tăng nhẹ do bảng `realtime.messages` có thêm partition ngày mới theo thời gian) — verify `pos_orders/shopee_inventory_out/revenue_records/audit_logs` khớp tuyệt đối 2 bên. Prod (`app.phucsang.com.vn`) và dev (`dev.phucsang.com.vn`) đều health OK sau khi chạy.
 - Files: `scripts/sync-prod-to-staging.sh` (mới), `scripts/sync-prod-to-dev.sh` (sửa IP cũ), `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
 
+**Đổi fallback local dev khỏi prod (cùng phiên, tiếp theo)**: user chỉ ra vấn đề — tool preview của agent chỉ xem được `localhost:3000` (server local do chính agent khởi động), không mở được URL ngoài như `dev.phucsang.com.vn`. Đào sâu phát hiện: local dev (`server.ts` dòng ~575-599, nhánh `!IS_PROD`) tự dò Supabase — nếu Docker Supabase local (bộ cũ trên MacBook) đang chạy thì dùng đúng, nhưng nếu **không chạy** (trạng thái phổ biến, phải tự bật tay) thì **fallback thẳng sang Supabase PROD** — đúng nguồn gốc rủi ro ban đầu của toàn bộ task hôm nay.
+- **Fix**: đổi fallback đó từ `https://app.phucsang.com.vn` (prod) sang `https://dev.phucsang.com.vn` (dev/staging) — 3 chỗ hardcode `192.168.1.6:8000` (prod Kong) trong nhánh local-dev cũng đổi sang `192.168.1.6:8010` (dev Kong). Từ nay Docker local tắt → rơi về dev, không bao giờ chạm prod.
+- **Hệ quả phát hiện thêm + sửa luôn**: khi local (port 3000) gọi thẳng `dev.phucsang.com.vn`, server dev-staging (chạy port riêng 3010) không nhận origin `localhost:3000` vào `allowedOrigins` (biến `PORT` trong code tự trỏ về port CỦA CHÍNH SERVER ĐÓ, không phải 3000) → sẽ dính lại đúng bug CORS vừa vá ở phần trước. Thêm cứng `http://localhost:3000`/`127.0.0.1:3000` vào `allowedOrigins`.
+- Deploy cả dev lẫn prod (server.ts dùng chung code), verify preflight CORS thật (`Origin: http://localhost:3000` → `dev.phucsang.com.vn`) trả đủ header, cả 2 domain health OK. tsc + 981 test pass.
+- **User cần tự làm**: restart local dev server (tsx không tự reload) để nạp code mới.
+- Files: `server.ts` (fallback local dev + CORS origin).
+
 ### 2026-07-08 (R49) — BOT-RACE-01: sửa lỗi race condition bot lưu nhầm số liệu chéo giữa các đơn
 
 - User đối chiếu ảnh chụp Shopee thật cho đơn `2607060KHA74EM` với dữ liệu app — phát hiện SAI HOÀN TOÀN (giá trị hàng 329k vs thật 299k, mọi phí khác đi, Sàn Thanh Toán 222.429đ vs thật 208.085đ).

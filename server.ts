@@ -56,7 +56,9 @@ import { createPosMobileRouter } from './routes/posMobile';
  * Nếu phát hiện cột bị thiếu → in SQL cần chạy vào console để user biết.
  */
 async function syncLocalSchema(): Promise<void> {
-  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
+  // Fallback trỏ Supabase DEV/staging (không phải prod) — hàm này chỉ chạy
+  // trong nhánh local dev, không nên đụng schema thật của prod.
+  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   // Danh sách cột quan trọng cần kiểm tra: { table, column, sql }
@@ -375,6 +377,11 @@ async function startServer() {
     const allowedOrigins = [
       `http://localhost:${PORT}`,
       `http://127.0.0.1:${PORT}`,
+      // Local dev (MacBook, luôn cổng 3000 mặc định) fallback gọi thẳng vào server
+      // dev-staging này (cổng riêng 3010) khi Docker Supabase local không chạy —
+      // cần whitelist cứng vì PORT ở trên là cổng CỦA SERVER NÀY, không phải 3000.
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
       process.env.APP_URL,
       'https://phucsang.com.vn',
       'https://www.phucsang.com.vn',
@@ -456,9 +463,11 @@ async function startServer() {
     app.use(cookieParser());
 
     // Supabase Proxy — forward /auth/v1, /rest/v1, /storage/v1 về Supabase nội bộ
-    // Cho phép truy cập Supabase từ bất kỳ đâu qua app.phucsang.com.vn
-    // Đích lấy từ SUPABASE_URL: prod (iMac) = localhost:8000; dev (MacBook) = Supabase local Docker
-    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
+    // Đích lấy từ SUPABASE_URL: prod (iMac) = localhost:8000; dev-staging (iMac) =
+    // localhost:8010; local dev (MacBook) = Supabase Docker local nếu đang chạy,
+    // KHÔNG mặc định fallback về prod — SUPABASE_URL luôn được set tường minh ở
+    // .env.local mỗi môi trường, default dưới đây chỉ dùng khi thiếu hẳn config.
+    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
     app.use(['/auth/v1', '/rest/v1', '/storage/v1'], async (req: Request, res: Response) => {
       const targetUrl = `${SUPABASE_INTERNAL}${req.originalUrl}`;
       const headers: Record<string, string> = {};
@@ -568,11 +577,13 @@ async function startServer() {
     app.use(createInventoryOutSyncRouter(supabase, requireAuth));
     app.use(createPosMobileRouter(supabase, requireAuth));
 
-    // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
+    // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang
+    // môi trường DEV/STAGING (dev.phucsang.com.vn) — KHÔNG fallback về prod, để local
+    // dev không bao giờ vô tình đọc/ghi dữ liệu thật (xem HISTORY.md mục DEV-ENV-01).
     if (!IS_PROD) {
       try {
-        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
-        const remoteUrl = 'https://app.phucsang.com.vn';
+        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
+        const remoteUrl = 'https://dev.phucsang.com.vn';
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 1500);
