@@ -9,6 +9,15 @@ import {
 
 const PAGE_SIZE = 100;
 
+// Độ rộng cố định (px) từng cột — khớp class w-* của header, dùng cho <colgroup> + table-fixed
+// để độ rộng không đổi khi cuộn ngang. Đúng thứ tự 29 cột trong bảng.
+const COLUMN_WIDTHS = [
+  48, 160, 128, 128, 128, 224, 160, // 1-7: đóng băng
+  320, 112, 128, 172, 128, 128, 140, 128, 144, 128, 128, 128, 152, 128, 128, 128, 160, 128, 128, 128, 128, 128, // 8-29
+];
+// Offset cộng dồn cho 7 cột đóng băng đầu tiên khi vuốt ngang
+const STICKY_LEFT = [0, 48, 208, 336, 464, 592, 816];
+
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   OK:       { label: 'Đã giao',      className: 'bg-emerald-700 text-white' },
   RETURN:   { label: 'Hoàn hàng',   className: 'bg-rose-600 text-white' },
@@ -146,13 +155,21 @@ const InventoryOutTab: React.FC<Props> = ({
         if (filterShippingUnits.length > 0 && !filterShippingUnits.includes(item.shippingUnit || 'GHN')) return false;
         if (q) {
           const haystack = [
-            item.orderCode, item.sku, item.productName, item.address,
+            item.orderCode, item.trackingNumber, item.orderId, item.sku, item.productName, item.address,
           ].filter(Boolean).join(' ').toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
       })
-      .sort((a, b) => (b.shipDate || b.date).localeCompare(a.shipDate || a.date));
+      .sort((a, b) => {
+        // Sort chính theo ngày (mới nhất trước). Sort phụ theo orderId + sku để các dòng
+        // cùng 1 đơn (đơn nhiều SKU) luôn nằm liền nhau — điều kiện để gộp ô (rowSpan) cột cấp đơn.
+        const dc = (b.shipDate || b.date).localeCompare(a.shipDate || a.date);
+        if (dc !== 0) return dc;
+        const oc = (a.orderId || a.trackingNumber || '').localeCompare(b.orderId || b.trackingNumber || '');
+        if (oc !== 0) return oc;
+        return (a.sku || '').localeCompare(b.sku || '');
+      });
   }, [dedupedInventoryOut, filterPlatforms, filterStatuses, filterShippingUnits, searchQuery]);
 
   // Map SKU → tên sản phẩm từ shopeeSourceData
@@ -184,52 +201,115 @@ const InventoryOutTab: React.FC<Props> = ({
     return '-';
   };
 
-  // Map id → số thứ tự đơn trong ngày (tính trên toàn bộ filteredData)
-  const dailyIndexMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    const countPerDate: Record<string, number> = {};
+  // Nhóm các dòng cùng 1 đơn (order_id) — filteredData đã sort để chúng nằm liền nhau.
+  // Đơn nhiều SKU = 1 group nhiều dòng (gộp ô các cột cấp đơn); đơn 1 SP = group 1 dòng.
+  const orderGroups = useMemo(() => {
+    const groups: { orderKey: string; rows: typeof filteredData }[] = [];
     filteredData.forEach(item => {
-      const d = item.shipDate || item.date;
-      countPerDate[d] = (countPerDate[d] || 0) + 1;
-      map[item.id] = countPerDate[d];
+      const key = item.orderId || item.id;
+      const last = groups[groups.length - 1];
+      if (last && last.orderKey === key) last.rows.push(item);
+      else groups.push({ orderKey: key, rows: [item] });
     });
-    return map;
+    return groups;
   }, [filteredData]);
 
-  // Sàn Thanh Toán = salePrice - tất cả phí shopee (không bao gồm QC và vận hành)
-  const calcPlatformNet = (i: ShopeeInventoryOutRecord) =>
-    i.salePrice - i.platformFee - (i.pishipFee || 0) - i.freeshipExtra
-    - i.paymentFee - (i.vatTax || 0) - i.personalIncomeTax - i.affiliateFee;
+  // Số thứ tự ĐƠN trong ngày — đếm mỗi đơn 1 lần (đơn đa SP không làm nhảy số)
+  const dailyOrderIndexMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    const countPerDate: Record<string, number> = {};
+    orderGroups.forEach(g => {
+      const d = g.rows[0].shipDate || g.rows[0].date;
+      countPerDate[d] = (countPerDate[d] || 0) + 1;
+      map[g.orderKey] = countPerDate[d];
+    });
+    return map;
+  }, [orderGroups]);
 
-  // Lợi nhuận = Sàn TT - Giá gốc × SL - QC - Thuế QC - Vận hành
+  // Phân trang theo NHÓM — không cắt 1 đơn ra 2 trang. Mỗi trang tối đa PAGE_SIZE dòng;
+  // nếu thêm 1 đơn làm vượt quá thì đẩy đơn đó sang trang sau (trừ khi đơn tự > PAGE_SIZE).
+  const groupPages = useMemo(() => {
+    const pages: (typeof orderGroups)[] = [];
+    let cur: typeof orderGroups = [];
+    let count = 0;
+    for (const g of orderGroups) {
+      if (count > 0 && count + g.rows.length > PAGE_SIZE) {
+        pages.push(cur); cur = []; count = 0;
+      }
+      cur.push(g);
+      count += g.rows.length;
+    }
+    if (cur.length) pages.push(cur);
+    return pages.length ? pages : [[] as typeof orderGroups];
+  }, [orderGroups]);
+
+  // ─── Phân loại đơn để tính phí/lợi nhuận đúng theo trạng thái ───
+  //  • Thành công (đã giao / đang giao / đã nhận): tính đủ phí + lợi nhuận.
+  //  • Lỗ ship (giao thất bại / hoàn hàng): chỉ chịu PiShip + Phí Vận Hành — hàng về kho nên
+  //    KHÔNG trừ giá gốc, các phí Shopee khác = 0.
+  //  • Còn lại (huỷ chưa giao / chờ xử lý / thất lạc): không phát sinh gì → 0.
+  // Nhận diện loại đơn từ cả status CODE (bot sync) lẫn status tiếng Việt thô (dữ liệu cũ/import)
+  const orderKind = (s: string): 'success' | 'shiploss' | 'void' => {
+    const x = (s || '').trim();
+    if (x === 'OK' || x === 'SHIPPING') return 'success';
+    if (x === 'FAILED' || x === 'RETURN' || x === 'RETURNED') return 'shiploss';
+    if (x === 'CANCEL' || x === 'PENDING' || x === 'LOST') return 'void';
+    // Dữ liệu cũ lưu status tiếng Việt thô — thứ tự kiểm tra quan trọng:
+    if (/giao hàng thất bại|giao thất bại|hoàn hàng|đang hoàn|trả hàng/i.test(x)) return 'shiploss';
+    if (/hủy|huỷ/i.test(x)) return 'void';
+    if (/đã giao|đã nhận được hàng|đang giao|hoàn tất/i.test(x)) return 'success';
+    return 'void'; // chờ xử lý / không rõ → không tính
+  };
+  const isSuccessOrder  = (s: string) => orderKind(s) === 'success';
+  const isShipLossOrder = (s: string) => orderKind(s) === 'shiploss';
+
+  // Phí Shopee + doanh thu chỉ tính ở đơn thành công
+  const successVal = (i: ShopeeInventoryOutRecord, v: number) => isSuccessOrder(i.status) ? v : 0;
+  // PiShip (= phí bảo vệ người bán) + Phí Vận Hành: tính ở đơn thành công VÀ đơn lỗ ship; đơn huỷ = 0
+  const pishipVal   = (i: ShopeeInventoryOutRecord) => (isSuccessOrder(i.status) || isShipLossOrder(i.status)) ? Math.abs(i.pishipFee || 0) : 0;
+  const handlingVal = (i: ShopeeInventoryOutRecord) => (isSuccessOrder(i.status) || isShipLossOrder(i.status)) ? (i.handlingFee || 0) : 0;
+
+  // Sàn Thanh Toán = salePrice - tất cả phí shopee (chỉ có ở đơn thành công, còn lại = 0)
+  // Gồm cả Phí Ads Shopee (shopeeAdsFee = AMS_COMMISSION_FEE) — Shopee tự trừ theo đơn
+  // ads cụ thể, xác minh 2026-07-08: thiếu khoản này khiến 65-81% đơn lệch escrow thật 12-15kđ.
+  const calcPlatformNet = (i: ShopeeInventoryOutRecord) =>
+    !isSuccessOrder(i.status) ? 0 :
+    i.salePrice - i.platformFee - Math.abs(i.pishipFee || 0) - i.freeshipExtra
+    - i.paymentFee - (i.vatTax || 0) - i.personalIncomeTax - i.affiliateFee - Math.abs(i.shopeeAdsFee || 0);
+
+  // Lợi nhuận theo loại đơn:
+  //  • Thành công: Sàn TT - Giá gốc×SL - QC - Thuế QC - Phí Vận Hành
+  //  • Giao thất bại / Hoàn hàng: -(PiShip + Phí Vận Hành)  (không trừ giá gốc — hàng về kho)
+  //  • Huỷ chưa giao / khác: 0
   const calcNetProfit = (i: ShopeeInventoryOutRecord) => {
+    if (isShipLossOrder(i.status)) return -(Math.abs(i.pishipFee || 0) + (i.handlingFee || 0));
+    if (!isSuccessOrder(i.status)) return 0;
     const importPrice = (shopeeSourceData.find(s => s.sku === i.sku)?.importPrice || 0) * (i.quantity || 1);
     return calcPlatformNet(i) - importPrice - i.adsCost - i.adsTax - i.handlingFee;
   };
 
   const tableTotals = useMemo(() => ({
-    quantity: filteredData.reduce((s, i) => s + i.quantity, 0),
+    quantity: filteredData.reduce((s, i) => s + (isSuccessOrder(i.status) ? i.quantity : 0), 0),
     salePrice: filteredData.reduce((s, i) => s + i.salePrice, 0),
-    customerPaid: filteredData.reduce((s, i) => s + i.customerPaid, 0),
-    platformFee: filteredData.reduce((s, i) => s + i.platformFee, 0),
-    pishipFee: filteredData.reduce((s, i) => s + (i.pishipFee || 0), 0),
-    freeshipExtra: filteredData.reduce((s, i) => s + i.freeshipExtra, 0),
-    paymentFee: filteredData.reduce((s, i) => s + i.paymentFee, 0),
-    vatTax: filteredData.reduce((s, i) => s + (i.vatTax || 0), 0),
-    personalIncomeTax: filteredData.reduce((s, i) => s + i.personalIncomeTax, 0),
-    affiliateFee: filteredData.reduce((s, i) => s + i.affiliateFee, 0),
+    customerPaid: filteredData.reduce((s, i) => s + successVal(i, i.customerPaid), 0),
+    platformFee: filteredData.reduce((s, i) => s + successVal(i, i.platformFee), 0),
+    pishipFee: filteredData.reduce((s, i) => s + pishipVal(i), 0),
+    shopeeAdsFee: filteredData.reduce((s, i) => s + successVal(i, Math.abs(i.shopeeAdsFee || 0)), 0),
+    freeshipExtra: filteredData.reduce((s, i) => s + successVal(i, i.freeshipExtra), 0),
+    paymentFee: filteredData.reduce((s, i) => s + successVal(i, i.paymentFee), 0),
+    vatTax: filteredData.reduce((s, i) => s + successVal(i, i.vatTax || 0), 0),
+    personalIncomeTax: filteredData.reduce((s, i) => s + successVal(i, i.personalIncomeTax), 0),
+    affiliateFee: filteredData.reduce((s, i) => s + successVal(i, i.affiliateFee), 0),
     platformNet: filteredData.reduce((s, i) => s + calcPlatformNet(i), 0),
-    adsCost: filteredData.reduce((s, i) => s + i.adsCost, 0),
-    adsTax: filteredData.reduce((s, i) => s + i.adsTax, 0),
-    handlingFee: filteredData.reduce((s, i) => s + i.handlingFee, 0),
-    netProfit: filteredData.reduce((s, i) => s + i.netProfit, 0),
-  }), [filteredData]);
+    adsCost: filteredData.reduce((s, i) => s + successVal(i, i.adsCost), 0),
+    adsTax: filteredData.reduce((s, i) => s + successVal(i, i.adsTax), 0),
+    handlingFee: filteredData.reduce((s, i) => s + handlingVal(i), 0),
+    netProfit: filteredData.reduce((s, i) => s + calcNetProfit(i), 0),
+  }), [filteredData, shopeeSourceData]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
-  const pagedData = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredData.slice(start, start + PAGE_SIZE);
-  }, [filteredData, page]);
+  const totalPages = groupPages.length;
+  const pagedGroups = groupPages[Math.min(page, totalPages) - 1] ?? [];
+  const pagedRows = pagedGroups.flatMap(g => g.rows);
 
   // Cột: STT(1) TrangThai(2) Ngay(3) SoDon(4) NenTang(5) MaVD(6) SKU(7) TenSP(8) SL(9) GiaTri(10) KhachTT(11)
   //       PhiCoDinh(12) PhiPiShip(13) PhiDV(14) PhiTT(15) ThueVAT(16) ThueTNCN(17) PhiAff(18)
@@ -272,11 +352,11 @@ const InventoryOutTab: React.FC<Props> = ({
               const rows = filteredData.map(i => [
                 i.shipDate || i.date, i.status, i.platform, i.trackingNumber || i.orderId,
                 i.sku, i.productName, i.quantity, i.salePrice, i.customerPaid,
-                i.platformFee, i.pishipFee || 0, i.freeshipExtra, i.paymentFee,
+                i.platformFee, i.pishipFee || 0, i.shopeeAdsFee || 0, i.freeshipExtra, i.paymentFee,
                 i.vatTax || 0, i.personalIncomeTax, i.affiliateFee, i.adsCost,
                 i.adsTax, i.handlingFee, i.netProfit, i.address, i.deliveredAt || '', i.shippingUnit,
               ].join(','));
-              const header = 'Ngày,Trạng thái,Nền tảng,Mã VĐ,SKU,Tên SP,SL,Giá trị,Khách TT,Phí CĐ,PiShip,Phí DV,Phí TT,VAT,TNCN,Affiliate,QC,Thuế QC,Vận hành,Lợi nhuận,Địa chỉ,Ngày giao,ĐVVC';
+              const header = 'Ngày,Trạng thái,Nền tảng,Mã VĐ,SKU,Tên SP,SL,Giá trị,Khách TT,Phí CĐ,PiShip,Ads Shopee,Phí DV,Phí TT,VAT,TNCN,Affiliate,QC,Thuế QC,Vận hành,Lợi nhuận,Địa chỉ,Ngày giao,ĐVVC';
               const csv = [header, ...rows].join('\n');
               const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
               const url = URL.createObjectURL(blob);
@@ -305,12 +385,20 @@ const InventoryOutTab: React.FC<Props> = ({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-separate border-spacing-0 text-left text-xs min-w-[2400px]">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-left text-xs min-w-[4000px]">
+          <colgroup>
+            {COLUMN_WIDTHS.map((w, i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
           <thead className="sticky top-0 z-30">
             {/* Row tổng: banner đỏ gộp 8 cột đầu + số tổng từng cột */}
             <tr className="border-b border-slate-200 font-semibold tabular-nums text-xs whitespace-nowrap">
-              {/* Cột 1-8 gộp: banner đỏ — rowSpan phủ cả hàng % bên dưới */}
-              <td colSpan={8} rowSpan={2} className="bg-white p-3 border-r border-slate-200">
+              {/* Cột 1-7 gộp (vùng đóng băng): banner đỏ — rowSpan phủ cả hàng % bên dưới */}
+              <td
+                colSpan={7}
+                rowSpan={2}
+                className="sticky left-0 z-40 bg-white p-3 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.08)]"
+                style={{ left: STICKY_LEFT[0] }}
+              >
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="relative flex-1">
                     <input
@@ -337,6 +425,8 @@ const InventoryOutTab: React.FC<Props> = ({
                   )}
                 </div>
               </td>
+              {/* Cột 8 (Tên Sản Phẩm) — không đóng băng, vẫn cuộn theo */}
+              <td rowSpan={2} className="bg-white p-3 border-r border-slate-200"></td>
               {/* 9: SL */}
               <td className="p-2 border-r border-slate-200 text-center bg-white">{tableTotals.quantity}</td>
               {/* 10: Giá trị */}
@@ -347,6 +437,8 @@ const InventoryOutTab: React.FC<Props> = ({
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.platformFee)} đ</td>
               {/* 13: Phí PiShip */}
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.pishipFee)} đ</td>
+              {/* 13b: Phí Ads Shopee */}
+              <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.shopeeAdsFee)} đ</td>
               {/* 14: Phí dịch vụ */}
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.freeshipExtra)} đ</td>
               {/* 15: Phí thanh toán */}
@@ -386,6 +478,8 @@ const InventoryOutTab: React.FC<Props> = ({
               <td className="p-2 border-r border-slate-200 text-center bg-white">{shopeeTotals.platformFeeRatio.toFixed(1)}%</td>
               {/* 13: Phí PiShip — no ratio */}
               <td className="p-2 border-r border-slate-200 text-center bg-white">—</td>
+              {/* 13b: Phí Ads Shopee — no ratio */}
+              <td className="p-2 border-r border-slate-200 text-center bg-white">—</td>
               {/* 14: Phí dịch vụ ratio */}
               <td className="p-2 border-r border-slate-200 text-center bg-white">{shopeeTotals.freeshipExtraRatio.toFixed(1)}%</td>
               {/* 15: Phí thanh toán ratio */}
@@ -417,29 +511,30 @@ const InventoryOutTab: React.FC<Props> = ({
 
             {/* Row 1: Column headers */}
             <tr className="bg-slate-50 border-b border-slate-200 whitespace-nowrap">
-              <th className="px-3 py-3 border-r border-slate-200 w-12 text-center bg-slate-50">
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-12 text-center bg-slate-50" style={{ left: STICKY_LEFT[0] }}>
                 <input
                   type="checkbox"
                   className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-600 cursor-pointer"
-                  checked={pagedData.length > 0 && pagedData.every(i => selectedIds.has(i.id))}
+                  checked={pagedRows.length > 0 && pagedRows.every(i => selectedIds.has(i.id))}
                   onChange={e => {
-                    if (e.target.checked) setSelectedIds(prev => new Set([...prev, ...pagedData.map(i => i.id)]));
-                    else setSelectedIds(prev => { const n = new Set(prev); pagedData.forEach(i => n.delete(i.id)); return n; });
+                    if (e.target.checked) setSelectedIds(prev => new Set([...prev, ...pagedRows.map(i => i.id)]));
+                    else setSelectedIds(prev => { const n = new Set(prev); pagedRows.forEach(i => n.delete(i.id)); return n; });
                   }}
                 />
               </th>
-              <th className="px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Tình Trạng</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Ngày đặt</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Số đơn/ngày</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Nền tảng</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-56 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Mã Vận Đơn</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">SKU Biến Thể</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[1] }}>Tình Trạng</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[2] }}>Ngày đặt</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[3] }}>Số đơn/ngày</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[4] }}>Nền tảng</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-56 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[5] }}>Mã Vận Đơn</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50 shadow-[2px_0_5px_rgba(0,0,0,0.08)]" style={{ left: STICKY_LEFT[6] }}>SKU Biến Thể</th>
               <th className="px-3 py-3 border-r border-slate-200 w-80 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Tên Sản Phẩm</th>
               <th className="px-3 py-3 border-r border-slate-200 w-28 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Số lượng</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Giá trị hàng</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Khách Thanh Toán</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Cố Định</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí PiShip</th>
+              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Ads Shopee</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Dịch Vụ</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Thanh Toán</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Thuế VAT</th>
@@ -458,111 +553,160 @@ const InventoryOutTab: React.FC<Props> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 tabular-nums">
-            {pagedData.length > 0 ? pagedData.map((item, idx) => {
-              const isNewDate = idx > 0 && item.date !== pagedData[idx - 1].date;
+            {pagedGroups.length > 0 ? pagedGroups.map((grp, gIdx) => {
+              const first = grp.rows[0];
+              const span = grp.rows.length;
+              // Đường kẻ phân cách ngày: khi group này khác ngày với group liền trước
+              const prevGroup = gIdx > 0 ? pagedGroups[gIdx - 1] : null;
+              const isNewDate = prevGroup
+                ? (first.shipDate || first.date) !== (prevGroup.rows[0].shipDate || prevGroup.rows[0].date)
+                : false;
               const dt = isNewDate ? ' border-t-2 border-t-slate-400' : '';
-              return (
-              <tr key={item.id} className="hover:bg-slate-50 transition-all group whitespace-nowrap">
-                <td className={`p-2 border-b border-r border-slate-200 text-center${dt}`}>
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-600 cursor-pointer"
-                    checked={selectedIds.has(item.id)}
-                    onChange={e => setSelectedIds(prev => {
-                      const n = new Set(prev);
-                      if (e.target.checked) n.add(item.id); else n.delete(item.id);
-                      return n;
-                    })}
-                  />
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  {(() => {
-                    const cfg = STATUS_CONFIG[item.status] ?? { label: item.status, className: 'bg-slate-400 text-white' };
-                    return (
-                      <div className={`inline-flex items-center px-2 py-1 rounded-md text-2xs font-semibold ${cfg.className}`}>
-                        {cfg.label}
+              const groupNetProfit = grp.rows.reduce((s, r) => s + calcNetProfit(r), 0);
+              const allSelected = grp.rows.every(r => selectedIds.has(r.id));
+              const orderIdx = dailyOrderIndexMap[grp.orderKey] ?? 1;
+              const statusCfg = STATUS_CONFIG[first.status] ?? { label: first.status, className: 'bg-slate-400 text-white' };
+              // Badge LÃI/LỖ: đơn huỷ/chờ/thất lạc → hiện trạng thái (xám); còn lại theo dấu lợi nhuận
+              const groupKind = orderKind(first.status);
+              const profitBadge = groupKind === 'void'
+                ? { label: statusCfg.label, cls: 'bg-slate-400 text-white' }
+                : groupKind === 'shiploss'
+                  ? { label: 'LỖ', cls: 'bg-rose-700 text-white' }
+                  : groupNetProfit >= 0
+                    ? { label: 'LÃI', cls: 'bg-emerald-700 text-white' }
+                    : { label: 'LỖ', cls: 'bg-rose-700 text-white' };
+
+              return grp.rows.map((item, rIdx) => {
+                const isFirst = rIdx === 0;
+                const rowDt = isFirst ? dt : '';
+                return (
+                <tr key={item.id} className="hover:bg-slate-50 transition-all whitespace-nowrap">
+                  {/* ── Cột cấp đơn (gộp ô rowSpan, hiện 1 lần cho cả đơn) ── */}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 text-center align-middle${dt}`} style={{ left: STICKY_LEFT[0] }}>
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-600 cursor-pointer"
+                        checked={allSelected}
+                        onChange={e => setSelectedIds(prev => {
+                          const n = new Set(prev);
+                          if (e.target.checked) grp.rows.forEach(r => n.add(r.id));
+                          else grp.rows.forEach(r => n.delete(r.id));
+                          return n;
+                        })}
+                      />
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 align-middle${dt}`} style={{ left: STICKY_LEFT[1] }}>
+                      <div className={`inline-flex items-center px-2 py-1 rounded-md text-2xs font-semibold ${statusCfg.className}`}>
+                        {statusCfg.label}
                       </div>
-                    );
-                  })()}
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200 text-center${dt}`}>{(item.shipDate || item.date).split('-').reverse().join('/')}</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-center font-normal${dt}`}>{dailyIndexMap[item.id] ?? 1}</td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className="flex items-center justify-between bg-orange-200 text-orange-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
-                    <span>{item.platform || 'Shopee 2'}</span>
-                    <ArrowDownToLine className="w-3 h-3 rotate-180" />
-                  </div>
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200 text-xs text-indigo-600${dt}`}>
-                  {item.trackingNumber || item.orderId || '-'}
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
-                    <span>{item.sku}</span>
-                    <ArrowDownToLine className="w-3 h-3 rotate-180" />
-                  </div>
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200 max-w-[320px]${dt}`}>
-                  <p className="truncate text-slate-800 text-xs">{getProductName(item)}</p>
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200 text-center font-normal${dt}`}>{(item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.quantity}</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${dt}`}>{formatNumber(item.salePrice)} đ</td>
-                {/* Từ đây đến Lợi nhuận: đơn huỷ hiển thị 0 */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.customerPaid)} đ</td>
-                {/* Phí shopee */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.platformFee)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : (item.pishipFee || 0))} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.freeshipExtra)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.paymentFee)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : (item.vatTax || 0))} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.personalIncomeTax)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.affiliateFee)} đ</td>
-                {/* Sàn Thanh Toán */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal text-slate-700 bg-slate-50${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : calcPlatformNet(item))} đ</td>
-                {/* QC + Vận hành */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.adsCost)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.adsTax)} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : item.handlingFee)} đ</td>
-                {/* Lợi nhuận */}
-                <td className={`p-2 border-b border-r border-slate-200 text-right font-normal ${item.status !== 'CANCEL' && item.status !== 'FAILED' && calcNetProfit(item) < 0 ? 'text-rose-600' : 'text-emerald-700'}${dt}`}>{formatNumber((item.status === 'CANCEL' || item.status === 'FAILED') ? 0 : calcNetProfit(item))} đ</td>
-                <td className={`p-2 border-b border-r border-slate-200 text-slate-500 uppercase${dt}`}>
-                  {item.address ? item.address.split(',').pop()!.trim() : '-'}
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200 text-center text-xs text-slate-600${dt}`}>
-                  {item.deliveredAt ? item.deliveredAt.split('-').reverse().join('/') : '-'}
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
-                    <span>{item.shippingUnit || 'GHN'}</span>
-                    <ArrowDownToLine className="w-3 h-3 rotate-180" />
-                  </div>
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className={`flex items-center justify-between px-2 py-1 rounded-md text-2xs font-normal cursor-pointer ${calcNetProfit(item) >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'}`}>
-                    <span>{item.profitStatus || (calcNetProfit(item) >= 0 ? 'LÃI 2' : 'LỖ 1')}</span>
-                    <ArrowDownToLine className="w-3 h-3 rotate-180" />
-                  </div>
-                </td>
-                <td className={`p-2 border-b border-r border-slate-200${dt}`}>
-                  <div className="flex items-center justify-center gap-2">
-                    {deleteConfirmId === item.id ? (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleRemoveInventoryOut(item.id)} className="p-1 bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors shadow-sm" title="Xác nhận xoá"><Check className="w-3 h-3" /></button>
-                        <button onClick={() => setDeleteConfirmId(null)} className="p-1 bg-slate-400 text-white rounded hover:bg-slate-500 transition-colors shadow-sm" title="Huỷ"><X className="w-3 h-3" /></button>
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 text-center align-middle${dt}`} style={{ left: STICKY_LEFT[2] }}>{(first.shipDate || first.date).split('-').reverse().join('/')}</td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 text-center font-normal align-middle${dt}`} style={{ left: STICKY_LEFT[3] }}>{orderIdx}</td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 align-middle${dt}`} style={{ left: STICKY_LEFT[4] }}>
+                      <div className="flex items-center justify-between bg-orange-200 text-orange-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
+                        <span>{first.platform || 'Shopee 2'}</span>
+                        <ArrowDownToLine className="w-3 h-3 rotate-180" />
                       </div>
-                    ) : (
-                      <>
-                        <button onClick={() => handleEditInventoryOut(item)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-md hover:bg-indigo-600 hover:text-white transition-all shadow-sm cursor-pointer" title="Sửa"><Pencil className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setDeleteConfirmId(item.id)} className="p-1.5 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-600 hover:text-white transition-all shadow-sm cursor-pointer" title="Xoá"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-              );
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 text-xs text-indigo-600 align-middle${dt}`} style={{ left: STICKY_LEFT[5] }}>
+                      {first.trackingNumber || first.orderId || '-'}
+                    </td>
+                  )}
+                  {/* ── Cột theo từng sản phẩm ── */}
+                  <td className={`sticky z-10 bg-white p-2 border-b border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.08)]${rowDt}`} style={{ left: STICKY_LEFT[6] }}>
+                    <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
+                      <span>{item.sku}</span>
+                      <ArrowDownToLine className="w-3 h-3 rotate-180" />
+                    </div>
+                  </td>
+                  <td className={`p-2 border-b border-r border-slate-200 max-w-[320px]${rowDt}`}>
+                    <p className="truncate text-slate-800 text-xs">{getProductName(item)}</p>
+                  </td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-center font-normal${rowDt}`}>{isSuccessOrder(item.status) ? item.quantity : 0}</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${rowDt}`}>{formatNumber(item.salePrice)} đ</td>
+                  {/* Khách TT + phí Shopee: chỉ đơn thành công; đơn lỗ ship/huỷ = 0 */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right font-normal${rowDt}`}>{formatNumber(successVal(item, item.customerPaid))} đ</td>
+                  {/* Phí shopee */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.platformFee))} đ</td>
+                  {/* PiShip (phí bảo vệ NB): có ở đơn thành công VÀ đơn lỗ ship */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(pishipVal(item))} đ</td>
+                  {/* Phí Ads Shopee (AMS_COMMISSION_FEE): chỉ đơn thành công */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, Math.abs(item.shopeeAdsFee || 0)))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.freeshipExtra))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.paymentFee))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.vatTax || 0))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.personalIncomeTax))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.affiliateFee))} đ</td>
+                  {/* Sàn Thanh Toán (0 nếu không phải đơn thành công) */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right font-normal text-slate-700 bg-slate-50${rowDt}`}>{formatNumber(calcPlatformNet(item))} đ</td>
+                  {/* QC */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.adsCost))} đ</td>
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.adsTax))} đ</td>
+                  {/* Phí Vận Hành: có ở đơn thành công VÀ đơn lỗ ship */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(handlingVal(item))} đ</td>
+                  {/* Lợi nhuận (từng SP) — đơn lỗ ship ra số âm */}
+                  <td className={`p-2 border-b border-r border-slate-200 text-right font-normal ${calcNetProfit(item) < 0 ? 'text-rose-600' : 'text-emerald-700'}${rowDt}`}>{formatNumber(calcNetProfit(item))} đ</td>
+                  {/* ── Cột cấp đơn (gộp ô rowSpan) ── */}
+                  {isFirst && (
+                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 text-slate-500 uppercase align-middle${dt}`}>
+                      {first.address ? first.address.split(',').pop()!.trim() : '-'}
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 text-center text-xs text-slate-600 align-middle${dt}`}>
+                      {first.deliveredAt ? first.deliveredAt.split('-').reverse().join('/') : '-'}
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 align-middle${dt}`}>
+                      <div className="flex items-center justify-between bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-2xs font-normal cursor-pointer">
+                        <span>{first.shippingUnit || 'GHN'}</span>
+                        <ArrowDownToLine className="w-3 h-3 rotate-180" />
+                      </div>
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 align-middle${dt}`}>
+                      <div className={`flex items-center justify-between px-2 py-1 rounded-md text-2xs font-normal cursor-pointer ${profitBadge.cls}`}>
+                        <span>{profitBadge.label}</span>
+                        <ArrowDownToLine className="w-3 h-3 rotate-180" />
+                      </div>
+                    </td>
+                  )}
+                  {isFirst && (
+                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 align-middle${dt}`}>
+                      <div className="flex items-center justify-center gap-2">
+                        {deleteConfirmId === first.id ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={async () => { for (const r of grp.rows) { await handleRemoveInventoryOut(r.id); } setDeleteConfirmId(null); }} className="p-1 bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors shadow-sm" title={span > 1 ? `Xác nhận xoá cả đơn (${span} SP)` : 'Xác nhận xoá'}><Check className="w-3 h-3" /></button>
+                            <button onClick={() => setDeleteConfirmId(null)} className="p-1 bg-slate-400 text-white rounded hover:bg-slate-500 transition-colors shadow-sm" title="Huỷ"><X className="w-3 h-3" /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <button onClick={() => handleEditInventoryOut(first)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-md hover:bg-indigo-600 hover:text-white transition-all shadow-sm cursor-pointer" title="Sửa"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setDeleteConfirmId(first.id)} className="p-1.5 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-600 hover:text-white transition-all shadow-sm cursor-pointer" title={span > 1 ? `Xoá cả đơn (${span} SP)` : 'Xoá'}><Trash2 className="w-3.5 h-3.5" /></button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+                );
+              });
             }) : (
               <tr>
-                <td colSpan={27} className="p-20 text-center text-slate-400 font-normal uppercase tracking-widest">Chưa có dữ liệu xuất kho</td>
+                <td colSpan={29} className="p-20 text-center text-slate-400 font-normal uppercase tracking-widest">Chưa có dữ liệu xuất kho</td>
               </tr>
             )}
           </tbody>
