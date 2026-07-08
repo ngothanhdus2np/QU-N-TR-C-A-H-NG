@@ -5,10 +5,13 @@
 # Cách dùng:
 #   ./scripts/apply-migrations.sh              → áp vào Supabase DEV local (MacBook)
 #   ./scripts/apply-migrations.sh --prod       → áp vào Supabase PROD (iMac, qua SSH)
+#   ./scripts/apply-migrations.sh --staging    → áp vào Supabase DEV/staging (iMac, qua SSH,
+#                                                container supabase-db-dev — môi trường dev
+#                                                riêng biệt, tách khỏi DB prod)
 #   ./scripts/apply-migrations.sh --baseline   → KHÔNG chạy SQL, chỉ đánh dấu tất cả
 #                                                file hiện có là "đã chạy" (dùng 1 lần
 #                                                khi DB đã có sẵn schema tương đương)
-#   (có thể kết hợp: --prod --baseline)
+#   (có thể kết hợp: --prod --baseline, --staging --baseline)
 #
 # Quy tắc viết migration mới:
 #   - Đặt tên: <số kế tiếp>_<mô tả>.sql (vd: 021_them_bang_x.sql)
@@ -19,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="$SCRIPT_DIR/../supabase_migrations"
-IMAC="mac@192.168.1.3"
+IMAC="mac@192.168.1.6"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 
 TARGET="local"
@@ -27,6 +30,7 @@ BASELINE=0
 for arg in "$@"; do
   case "$arg" in
     --prod) TARGET="prod" ;;
+    --staging) TARGET="staging" ;;
     --baseline) BASELINE=1 ;;
     *) echo "Tham số không hợp lệ: $arg"; exit 1 ;;
   esac
@@ -34,11 +38,17 @@ done
 
 # psql_run [flags...] — chạy psql trên DB đích, SQL đưa qua stdin
 psql_run() {
-  if [ "$TARGET" = "prod" ]; then
-    ssh -i "$SSH_KEY" "$IMAC" "/usr/local/bin/docker exec -i supabase-db psql -U postgres -d postgres $*"
-  else
-    docker exec -i supabase-db psql -U postgres -d postgres "$@"
-  fi
+  case "$TARGET" in
+    prod)
+      ssh -i "$SSH_KEY" "$IMAC" "/usr/local/bin/docker exec -i supabase-db psql -U postgres -d postgres $*"
+      ;;
+    staging)
+      ssh -i "$SSH_KEY" "$IMAC" "/usr/local/bin/docker exec -i supabase-db-dev psql -U postgres -d postgres $*"
+      ;;
+    *)
+      docker exec -i supabase-db psql -U postgres -d postgres "$@"
+      ;;
+  esac
 }
 
 echo "🎯 Đích: $TARGET$([ $BASELINE -eq 1 ] && echo ' (chế độ BASELINE — không thực thi SQL)')"

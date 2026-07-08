@@ -56,7 +56,7 @@ import { createPosMobileRouter } from './routes/posMobile';
  * Nếu phát hiện cột bị thiếu → in SQL cần chạy vào console để user biết.
  */
 async function syncLocalSchema(): Promise<void> {
-  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.3:8000';
+  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   // Danh sách cột quan trọng cần kiểm tra: { table, column, sql }
@@ -81,6 +81,7 @@ async function syncLocalSchema(): Promise<void> {
     { table: 'shopee_inventory_out', column: 'ship_date',        sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS ship_date TEXT;" },
     { table: 'shopee_inventory_out', column: 'product_name',     sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS product_name TEXT;" },
     { table: 'shopee_inventory_out', column: 'piship_fee',       sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS piship_fee NUMERIC DEFAULT 0;" },
+    { table: 'shopee_inventory_out', column: 'shopee_ads_fee',   sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS shopee_ads_fee NUMERIC DEFAULT 0;" },
     { table: 'shopee_inventory_out', column: 'vat_tax',          sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS vat_tax NUMERIC DEFAULT 0;" },
     { table: 'shopee_inventory_out', column: 'profit_status',    sql: "ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS profit_status TEXT;" },
   ];
@@ -379,6 +380,7 @@ async function startServer() {
       'https://www.phucsang.com.vn',
       'https://cfobrain.phucsang.com.vn',
       'https://app.phucsang.com.vn',
+      'https://dev.phucsang.com.vn',
       ...(!IS_PROD ? getLocalIPs().map(ip => `http://${ip}:${PORT}`) : []),
     ].filter(Boolean) as string[];
 
@@ -390,7 +392,7 @@ async function startServer() {
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.3:8000", "ws://192.168.1.3:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://static.cloudflareinsights.com"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.6:8000", "ws://192.168.1.6:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://dev.phucsang.com.vn", "wss://dev.phucsang.com.vn", "https://supabase-dev.phucsang.com.vn", "wss://supabase-dev.phucsang.com.vn", "https://static.cloudflareinsights.com"],
           upgradeInsecureRequests: null,
           fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           objectSrc: ["'self'", "blob:"],
@@ -443,7 +445,10 @@ async function startServer() {
           callback(null, false);
         },
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
+        // apikey/x-client-info/x-supabase-api-version: header supabase-js tự gắn vào
+        // mọi request — thiếu sẽ bị chặn ngay ở bước preflight khi gọi qua proxy /auth/v1,
+        // /rest/v1, /storage/v1 (cross-origin, vd local dev fallback qua app.phucsang.com.vn).
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'apikey', 'x-client-info', 'x-supabase-api-version'],
         credentials: true,
       })
     );
@@ -453,7 +458,7 @@ async function startServer() {
     // Supabase Proxy — forward /auth/v1, /rest/v1, /storage/v1 về Supabase nội bộ
     // Cho phép truy cập Supabase từ bất kỳ đâu qua app.phucsang.com.vn
     // Đích lấy từ SUPABASE_URL: prod (iMac) = localhost:8000; dev (MacBook) = Supabase local Docker
-    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.3:8000';
+    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
     app.use(['/auth/v1', '/rest/v1', '/storage/v1'], async (req: Request, res: Response) => {
       const targetUrl = `${SUPABASE_INTERNAL}${req.originalUrl}`;
       const headers: Record<string, string> = {};
@@ -470,7 +475,10 @@ async function startServer() {
           body: hasBody ? JSON.stringify(req.body) : undefined,
         });
         upstream.headers.forEach((value, key) => {
-          if (key === 'transfer-encoding' || key === 'connection') return;
+          // content-encoding/content-length của upstream không khớp body nữa vì
+          // fetch() đã tự giải nén khi đọc arrayBuffer() — giữ header cũ khiến
+          // browser cố giải nén lần 2 → ERR_CONTENT_DECODING_FAILED.
+          if (key === 'transfer-encoding' || key === 'connection' || key === 'content-encoding' || key === 'content-length') return;
           res.setHeader(key, value);
         });
         res.status(upstream.status);
@@ -563,7 +571,7 @@ async function startServer() {
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang domain
     if (!IS_PROD) {
       try {
-        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.3:8000';
+        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
         const remoteUrl = 'https://app.phucsang.com.vn';
         try {
           const controller = new AbortController();

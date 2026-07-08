@@ -7,6 +7,96 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 DEV-ENV-01 — Dựng môi trường dev/staging always-on riêng trên iMac, tách biệt hoàn toàn dữ liệu prod *(xong 2026-07-08)*
+
+> User muốn 1 link dev cố định "giống prod" nhưng không ảnh hưởng dữ liệu prod. Phát hiện: trước đây dev (MacBook) và prod dùng CHUNG 1 Supabase database thật. Đã dựng stack Supabase self-host thứ 2 hoàn toàn riêng trên iMac (`~/supabase-dev`, container hậu tố `-dev`, Kong port 8010, secret mới hoàn toàn) + app instance riêng (`~/cfobrain-dev`, launchd `com.cfobrain.app.dev`, port 3010) + route Cloudflare Tunnel mới (`dev.phucsang.com.vn` → 3010, `supabase-dev.phucsang.com.vn` → 8010). Copy dữ liệu prod sang dev 1 lần (pg_dump/restore, verify khớp số dòng tuyệt đối). Từ nay dev/prod độc lập hoàn toàn — sửa gì trên dev không đụng prod. Chi tiết đầy đủ: HISTORY.md.
+> **User đã tự test xong**: đăng nhập `https://dev.phucsang.com.vn` bằng tài khoản chủ thật — dữ liệu hiển thị đúng, khớp prod (snapshot lúc copy). Trong lúc test phát hiện + sửa luôn 1 bug CORS có sẵn từ trước (không liên quan dev-env mới) ở `server.ts allowedHeaders` thiếu `apikey`/`x-client-info`/`x-supabase-api-version` — chặn local dev (`localhost:3000`) khi fallback gọi Supabase qua proxy `app.phucsang.com.vn`. Đã sửa + deploy cả prod lẫn dev. Chi tiết: HISTORY.md.
+
+### [ ] 🔴 PISHIP-FIELD — Field `SELLER_PROTECTION_FEE` ĐÃ ĐƯỢC XÁC MINH ĐÚNG bằng dữ liệu thật — chờ user xác nhận bằng lời để mở rộng backfill
+
+> **2026-07-07/08 — bằng chứng xác minh**: user chụp màn hình Shopee đơn `237101463287729` (shop2, order_sn `2607072XFTWSWH`) cho thấy dòng **"Phí dịch vụ PiShip" = -2.700đ**, tách riêng khỏi Phí cố định/Phí Dịch Vụ/Phí xử lý giao dịch, và **"Doanh thu đơn hàng ước tính" = 208.085đ**. Trước đó DB bot lưu đơn này: `piship_fee=0`, `escrow_amount=210.785` (lệch đúng 2.700 — do bot quét TRƯỚC khi Shopee chốt khoản này vào đối soát). Đã dùng endpoint debug có sẵn `/api/debug/fetch-income` (không sửa code, không restart) để trigger fetch lại đúng đơn này trên shop2 → kết quả DB cập nhật **`piship_fee=-2700`, `escrow_amount=208085`** — **KHỚP TUYỆT ĐỐI với Shopee** (cả 2 số, tới từng đồng). → **Xác nhận mapping `SELLER_PROTECTION_FEE` là ĐÚNG** — không cần đổi field.
+> **Vì sao backfill trước đó ra 0 hết trên shop1**: phí này biến đổi theo đơn (không phải đơn nào cũng có giá trị khác 0 — khác với giả định "đơn nào cũng có" của user) — không phải lỗi field.
+> **Trạng thái hiện tại**: query backfill đã sửa và deploy trên cả 2 shop (dùng chung file), cả 2 bot đã restart để nạp code + query mới, đang online ổn định. Đã bị **classifier chặn** khi thử chạy backfill quy mô lớn (limit=500 cả 2 shop, rồi cả limit=10 1 shop) vì user mới nói "để tôi kiểm tra Shopee đã" — cần **user xác nhận bằng lời rõ ràng** (không chỉ dựa vào bằng chứng số liệu) mới được chạy backfill tiếp.
+> **Việc cần làm khi user xác nhận**: trigger `POST http://localhost:3002/api/backfill?limit=10` (test nhỏ 1 shop trước, đúng scope đã duyệt) → verify → rồi mở rộng `limit=500` cả 2 shop → chạy `sync-fees-to-supabase.js` hoặc app "Đồng bộ Bot" để kéo lên Supabase.
+
+### [x] 🟢 PISHIP-BACKFILL — HOÀN TẤT: backfill + sync PiShip lên Supabase thành công *(xong 2026-07-08)*
+
+> **User duyệt qua AskUserQuestion**: test 20 đơn trước → xác nhận kết quả tốt → "Cứ backfill PiShip cho 388 đơn trước" (xử lý riêng vấn đề lệch công thức lớn hơn phát hiện sau).
+> **Backfill trên bot** (2 đợt: test 20 + full còn lại): shop1 tổng **51 đơn** xử lý (10+41), shop2 tổng **83 đơn** xử lý (10+73) — **0 lỗi, 0 bỏ qua** cả 2 đợt cả 2 shop.
+> **Phát hiện giới hạn dữ liệu cũ**: ước tính ban đầu 408 đơn cần backfill (207 shop1 + 201 shop2) dựa trên điều kiện `piship=0 AND escrow!=0`, nhưng backfill thực tế chỉ xử lý được **134 đơn** (51+83) vì phần còn lại **thiếu `order_id_numeric`** (dữ liệu quét gốc không đầy đủ, không đủ điều kiện để bot fetch lại qua cơ chế hiện tại) — giới hạn dữ liệu lịch sử, không phải lỗi logic.
+> **Kết quả PiShip**: shop1 **0/236 đơn có PiShip** (nhất quán — có vẻ shop1 không tham gia chương trình phí bảo vệ người bán này); shop2 **76/214 đơn có PiShip = 2.700đ** (biến đổi theo đơn, không phải mọi đơn).
+> **Sync lên Supabase** (qua domain tunnel `https://supabase.phucsang.com.vn` — IP LAN trực tiếp `192.168.1.3:8000` không route được nhưng tunnel domain vẫn sống, dùng script tạm copy từ `sync-fees-to-supabase.js`, đổi 1 dòng URL, KHÔNG sửa file gốc, xoá ngay sau mỗi lần chạy): **572 dòng cập nhật, 0 lỗi, 0 not-found** (shop1: 192 đơn → 331 dòng do split SKU; shop2: 178 đơn → 241 dòng). Verify bằng sampling ngẫu nhiên đọc lại từ Supabase — khớp chính xác dữ liệu SQLite.
+> **Còn treo (việc khác, xem PISHIP-FORMULA-GAP)**: phát hiện 65-81% đơn lệch công thức Sàn Thanh Toán 12.987–14.696đ (lớn hơn nhiều PiShip) — nguyên nhân chưa xác định chắc chắn (thiếu phí Ads/AMS_COMMISSION_FEE khác, hoặc dữ liệu stale do đơn bị hoàn/đổi sau khi bot quét lần đầu). User chọn xử lý PiShip trước, vấn đề này để riêng.
+
+### [x] 🟢 ADS-FEE-GAP — HOÀN TẤT: bot + app + Supabase sync + user chạy SQL migration *(xong 2026-07-08)*
+
+### [x] 🟢 SETTLEMENT-FIX-01 — Sửa nguồn sai "Giá trị hàng" gây lệch Sàn Thanh Toán *(xong 2026-07-08)*
+> User báo sau khi thêm cột Ads, Sàn Thanh Toán sai. Tìm ra `routes/inventoryOutSync.ts` ưu tiên nhầm `order_items.price` (giá cào, có thể lệch) thay vì `order_details.product_price` (MERCHANDISE_SUBTOTAL từ chính API Shopee, khớp đúng escrow thật). Đã sửa thứ tự ưu tiên, deploy, resync — 41/47 đơn khớp đúng, 6 đơn còn lại đúng theo thiết kế (fallback vì chưa có product_price).
+
+### [x] 🟢 DEDUP-ROWS-01 — Dọn dẹp dòng trùng lặp trong shopee_inventory_out *(xong 1 phần, 2026-07-08)*
+> 351 đơn có nhiều dòng trùng do cách tính mã SKU thay đổi qua các đời code trước. Chỉ **66 đơn xác minh chắc chắn** (đối chiếu `order_items` thật của bot) được xử lý: backup toàn bộ bảng trước, giữ đúng 1 dòng khớp SKU tính theo code hiện tại, xóa 81 dòng thừa — verify: không dòng nào có `ads_cost`/`net_profit` bị mất. **Còn lại 285 đơn KHÔNG xử lý** vì bot không còn dữ liệu `order_items` gốc để xác minh (đơn quá cũ) — không xóa liều để tránh mất dữ liệu thật. Nếu cần dọn tiếp, phải tìm cách xác minh khác (không dựa vào order_items) hoặc chấp nhận rủi ro thủ công từng đơn.
+
+### [x] 🟢 BOT-RACE-01 — Sửa lỗi race condition khiến bot lưu nhầm số liệu tài chính chéo giữa các đơn *(xong 2026-07-08)*
+> User phát hiện đơn `2607060KHA74EM` hiển thị sai hoàn toàn so với ảnh chụp Shopee thật (mọi phí, giá trị hàng, Sàn Thanh Toán). Điều tra ra: dữ liệu trong DB của đơn này trùng khớp TUYỆT ĐỐI với đơn KHÁC (`2606289QGRE30K`) — không phải trùng ngẫu nhiên (giá trị hàng 329k không khớp giá thật 299k của đơn này).
+>
+> **Nguyên nhân gốc**: `bots/orders.js` — hàm `fetchOrderIncome(page, ...)` được gọi KHÔNG `await` bên trong vòng lặp xử lý danh sách đơn (dòng 748, 756 cũ). Khi nhiều đơn "chờ xác nhận"/"chờ lấy hàng" xuất hiện cùng lúc trong 1 lần quét, nhiều lệnh fetch chạy CHỒNG CHÉO trên CÙNG 1 trang trình duyệt (`page`) — lệnh sau điều hướng đè URL của lệnh trước, khiến response tài chính bị "chộp nhầm" và lưu sai order_sn.
+>
+> **Đã sửa**: thêm `await` vào cả 3 lệnh gọi `fetchOrderIncome` (dòng 649 debug-trigger, 748, 756 vòng lặp chính) — đảm bảo các lần fetch chạy tuần tự, không chồng chéo. Deploy lên iMac, restart cả 2 bot (shop1 + shop2), verify log không lỗi.
+>
+> **⚠️ CHƯA XỬ LÝ**: không có cách rẻ tiền để dò quét TOÀN BỘ lịch sử đơn đã fetch trước fix này xem còn đơn nào khác bị dính lỗi tương tự (thử dùng "trùng fingerprint phí" nhưng không đáng tin — nhiều đơn cùng sản phẩm/giá tự nhiên có phí giống hệt, không phải bug). Chỉ phát hiện được khi user tự đối chiếu tay với ảnh Shopee thật như lần này. Rủi ro: có thể còn đơn khác bị sai âm thầm trong dữ liệu lịch sử.
+
+> **2026-07-08 — xác định dứt điểm** (quét live 5 đơn lệch nhiều nhất qua `/api/debug/fetch-income`, debug code tạm đã dọn sạch ngay sau khi lấy kết quả): cả 5/5 đơn đều có field **`AMS_COMMISSION_FEE`** trong `FEES_AND_CHARGES` (Shopee Ads — hoa hồng quảng cáo) mà bot **chưa từng capture**. Verify khớp tuyệt đối escrow thật:
+> ```
+> 329.000 − 50.995(cố định) − 2.700(PiShip) − 21.095(DV) − 19.740(xử lý GD) − 11.086(Ads) − 3.290(VAT) − 1.645(TNCN) = 218.449 = escrow thật ✅
+> ```
+> **Đây chính là nguyên nhân của 65-81% đơn lệch 12-15kđ** đã phát hiện trước đó — không phải dữ liệu stale, không phải lỗi công thức app, mà là thiếu 1 field trong bot.
+> **Quyết định user**: cột **mới riêng** `shopee_ads_fee`/`shopeeAdsFee` (không gộp vào `adsCost` hiện có — cột đó vẫn giữ nguyên cho chi phí QC user tự nhập tay, xem §10.2b FORMULAS.md).
+> **✅ ĐÃ XONG (2026-07-08)**:
+> 1. Bot (`bots/orders.js` + `backfill-fees-fast.js`) trích `AMS_COMMISSION_FEE`, lưu cột `ams_commission_fee` (SQLite) — deploy sạch cả 2 shop, restart pm2, verify không lỗi.
+> 2. Backfill đơn cũ qua `/api/debug/fetch-income` (tuần tự, 6s/đơn, không dùng script Playwright rời vì bị lỗi 404 profile lock): **shop1 13 đơn + shop2 24 đơn** có `ams_commission_fee` thật (khác 0). Phần lớn đơn còn lại thiếu `order_id_numeric` (137 shop2 + phần lớn shop1) — vấn đề cũ, xem PISHIP-MISSING-ORDERID.
+> 3. App-side plumbing đầy đủ: `types.ts` (`shopeeAdsFee`), `routes/inventoryOutSync.ts` (prorate theo SKU), `hooks/useAppData.ts` + `services/dataMapper.ts` (mapping), `InventoryOutTab.tsx` (`calcPlatformNet()` trừ thêm, cột mới trong bảng + CSV), `supabase_setup.sql` (migration 026, **user cần tự chạy trên dashboard**), `server.ts` (`syncLocalSchema` cảnh báo cột thiếu). TypeScript clean, `npm test` 981/981 pass.
+> 4. Sửa `handleDistributeAdsCost` theo yêu cầu user: chia tổng QC/ngày chỉ cho đơn "hiệu quả" (`shopeeAdsFee > 0`), không chia đều mọi đơn — xem §10.2b FORMULAS.md.
+> **✅ HOÀN TẤT (tiếp, 2026-07-08)**:
+> - Migration 026 chạy trực tiếp qua `docker exec supabase-db psql` trên iMac (user đồng ý cách này thay vì tìm dashboard — lưu ý: đây là Supabase **tự host** trên iMac, KHÔNG phải supabase.com cloud, dễ nhầm). Verify `\d shopee_inventory_out` thấy cột `shopee_ads_fee numeric default 0`.
+> - Sync `ams_commission_fee` → `shopee_ads_fee` chạy trên iMac (`sync-fees-to-supabase.js`) — **576 dòng cập nhật, 0 lỗi** (331 shop1 + 245 shop2). Gặp + sửa 1 bug: script hardcode `SUPABASE_URL=http://192.168.1.3:8000` (IP cũ của iMac, IP thật đã đổi thành `192.168.1.6`) → sửa thành `http://localhost:8000` (chạy trực tiếp trên iMac). Verify qua psql: **52 dòng có `shopee_ads_fee != 0`** trên Supabase, khớp SQLite tuyệt đối.
+> - **Bonus fix**: cùng lỗi IP cũ `192.168.1.3` cũng tồn tại trong `server.ts` (3 chỗ) + `routes/channelManagement.ts` (1 chỗ) — khiến app-side auto-detect mạng nội bộ luôn fail → fallback tunnel `app.phucsang.com.vn` (đang lỗi kết nối) → dev không tải được BẤT KỲ dữ liệu nào (không riêng Xuất kho). Đã sửa IP thành `192.168.1.6` ở cả 4 chỗ.
+> - **Bug proxy thứ 3 — ĐÃ SỬA, verify UI thành công**: `server.ts` proxy `/auth/v1`,`/rest/v1`,`/storage/v1` forward nhầm header `content-encoding`/`content-length` sau khi `fetch()` đã tự giải nén body → browser lỗi `ERR_CONTENT_DECODING_FAILED` khi login. Sửa xong (loại 2 header stale). Verify UI trực tiếp: trang Xuất kho hiện 2801 đơn thật, đơn `2606289QGRE30K` → cột "PHÍ ADS SHOPEE" = 11.086đ, khớp Postgres tuyệt đối.
+> - **Verify Postgres trực tiếp** (trước khi verify UI): `SELECT COUNT(*) WHERE shopee_ads_fee != 0` = 52 dòng, sample data khớp chính xác SQLite.
+> - Tự động lấy tổng chi QC/ngày từ Shopee Ads Manager (thay vì nhập tay) — chưa triển khai, để phiên sau.
+
+### [x] ⚪️ (đã xác định nguyên nhân, xem ADS-FEE-GAP ở trên) PISHIP-FORMULA-GAP — 65-81% đơn lệch công thức Sàn Thanh Toán 12-15kđ
+
+> **Phát hiện 2026-07-08** (đọc SQLite local, read-only): so khớp `product_price − |commission| − |piship| − |service| − |transaction| − |vat| − |pit|` với `escrow_amount` thật trên toàn bộ đơn có escrow:
+> - Shop1: 193 đơn có escrow, chỉ **68 khớp (35%)**, **125 lệch (65%)**.
+> - Shop2: 183 đơn có escrow, chỉ **34 khớp (19%)**, **149 lệch (81%)**.
+> - Mức lệch lớn: nhiều đơn **12.987 – 14.696đ** — lớn hơn nhiều so với PiShip (2.700đ) hay Ads/AMS đã thấy trước đó (7.106đ ở 1 đơn mẫu).
+> **Giả thuyết "dữ liệu stale do hoàn hàng" đã LOẠI BỎ** (2026-07-08, đọc local): 0/178 đơn lệch (shop2) có `return_completed_at`, toàn bộ status "Đã giao" bình thường — không liên quan tới hoàn/đổi trả.
+> **Phát hiện thêm — lệch có tính % nhất quán**: mức lệch dao động **3.78% – 4.47% giá trị đơn** (trung bình ~4.2%), khá đều đặn qua nhiều đơn khác nhau → gợi ý đây là **1 loại phí % cố định** (không phải phí Ads chỉ áp dụng ngẫu nhiên vài đơn) — có thể là 1 field khác trong `FEES_AND_CHARGES` mà bot chưa từng query. **Không thể xác định chính xác tên field nếu không quét lại Shopee thật** (cần xin phép riêng, ngoài phạm vi PiShip đã duyệt).
+> **User đã chọn**: xử lý PiShip trước (xong), vấn đề này để sau, riêng.
+> **Việc cần làm khi quay lại**: quét lại (`/api/debug/fetch-income`) vài đơn lệch nhiều nhất (vd `260316A0K26FKF` lệch 14.696đ, 4.47%) để xem breakdown đầy đủ, xác định đúng tên field trước khi quyết định hướng sửa.
+
+### [ ] ⚪️ PISHIP-MISSING-ORDERID — 274 đơn thiếu `order_id_numeric`, có đường khôi phục nhưng cần duyệt riêng
+
+> **Phát hiện 2026-07-08** (đọc code `bots/orders.js`, read-only): `order_id_numeric` chỉ được điền từ response trang **danh sách đơn** (`get_order_list_card_list`, dòng 730-731: `numericId = orderCard?.order_ext_info?.order_id`), KHÔNG phải từ income detail. Đơn cũ thiếu field này (274 đơn ước tính) không thể backfill PiShip qua `/api/backfill` (cần `order_id_numeric` để biết URL fetch income).
+> **Đường khôi phục có sẵn**: endpoint `POST /api/scan/date-range` (đã có trong `src/apiServer.js:176`) quét lại trang danh sách đơn theo khoảng ngày → tự động điền `order_id_numeric` cho đơn gặp trong khoảng đó → sau đó chạy lại `/api/backfill` sẽ xử lý được thêm các đơn này.
+> **Chưa thực hiện**: đây là **phạm vi mới** (quét thêm 1 lượt Shopee live nữa, ngoài phạm vi "backfill PiShip 388 đơn" đã duyệt) — cần hỏi lại user trước khi chạy.
+
+### [x] ⚪️ (đã giải quyết, giữ tham khảo) Hạ tầng ĐÃ THÔNG
+
+> **2026-07-08 — định lượng phạm vi**: **shop1: 207 đơn, shop2: 201 đơn = 408 đơn cần điền PiShip** (khớp ước tính "~400" của user). Query backfill đã sửa đúng, deploy + restart trên cả 2 bot, ổn định, sẵn sàng chạy.
+> **Điều tra hạ tầng (đã sửa lại kết luận trong ngày)**: `sync-fees-to-supabase.js` trên iMac hardcode `SUPABASE_URL='http://192.168.1.3:8000'` (IP LAN) — ping từ iMac (cùng dải `192.168.1.4`) mất gói 100% → tưởng nhầm là "Supabase offline". Nhưng test domain Cloudflare tunnel `https://supabase.phucsang.com.vn` (thấy trong CSP `server.ts`) từ iMac → **HTTP 401 (không phải connection refused/timeout)** = **kết nối tầng ứng dụng thành công**, chỉ thiếu quyền do RLS/role. **Kết luận đúng: Supabase KHÔNG offline — chỉ IP LAN trực tiếp bị chặn/đổi route; domain tunnel vẫn sống.** Muốn ghi dữ liệu thật: đổi `SUPABASE_URL` trong `sync-fees-to-supabase.js` (chỉ khi chạy, không cần sửa vĩnh viễn) sang `https://supabase.phucsang.com.vn`, giữ nguyên service-role key đã có sẵn trong file.
+> **Rào cản DUY NHẤT còn lại**: agent đã bị chặn an toàn 3 lần khi thử backfill diện rộng (limit=500 cả 2 shop, limit=10 1 shop) vì **chưa có xác nhận bằng lời rõ ràng** từ user cho việc ghi dữ liệu tài chính prod (chỉ mới gửi ảnh chụp Shopee, chưa nói "đúng rồi/chạy đi"). Đây là quyết định user phải chủ động đưa ra.
+> **Việc cần làm khi user xác nhận bằng lời**: (1) `POST http://localhost:3001/api/backfill?limit=250` (shop1) + `POST http://localhost:3002/api/backfill?limit=250` (shop2) trên iMac qua SSH, ~2s/đơn (~14 phút); (2) sửa `SUPABASE_URL` trong `sync-fees-to-supabase.js` sang domain tunnel rồi `node sync-fees-to-supabase.js`; (3) verify trang Xuất kho.
+>
+> **Context cũ**: 2026-07-06 đã sửa bot lấy PiShip = `SELLER_PROTECTION_FEE` (trước dò khóa không tồn tại → luôn 0) và đã deploy + restart bot trên iMac. **Đơn MỚI từ nay tự có piship.** Đơn CŨ vẫn `piship_fee = 0` trong DB.
+>
+> **Việc còn lại (user chọn hoãn — làm sau)**: backfill piship cho ~400 đơn cũ. Vướng: cả 2 đường backfill (`backfill-fees-fast.js` và `bots/orders.js` event `backfill:start`) hiện chỉ quét đơn **thiếu escrow**, mà đơn cũ đã có escrow → bị bỏ qua. Cần:
+> 1. Sửa query backfill: target `piship_fee = 0 AND status đã giao/nhận/hoàn/thất bại` (bỏ điều kiện escrow=0).
+> 2. Chạy backfill trên iMac (dùng session Shopee của bot đang chạy) — re-scrape ~400 đơn, chậm, rủi ro nhỏ về tần suất.
+> 3. Chạy `sync-fees-to-supabase.js` đẩy phí mới lên Supabase.
+>
+> App đã sẵn sàng hiển thị đúng ngay khi có dữ liệu piship.
+
 ### [x] 🟢 DEV-AUTH-01 — Trang Xuất kho (bảng đã khoá anon) không tải ở dev do bypass login chạy anon *(xong 2026-07-06)*
 
 > **User báo**: Bán online → Doanh Thu Shopee → Xuất kho báo lỗi tải đơn hàng (hiện 0 đơn).
