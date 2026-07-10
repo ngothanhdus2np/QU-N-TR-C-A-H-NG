@@ -472,6 +472,7 @@ export const dataMapper = {
             paymentFee: r.payment_fee || r.paymentFee || 0,
             freeshipExtra: r.freeship_extra || r.freeshipExtra || 0,
             pishipFee: r.piship_fee || r.pishipFee || 0,
+            shopeeAdsFee: r.shopee_ads_fee || r.shopeeAdsFee || 0,
             vatTax: r.vat_tax || r.vatTax || 0,
             affiliateFee: r.affiliate_fee || r.affiliateFee || 0,
             handlingFee: r.handling_fee || r.handlingFee || 0,

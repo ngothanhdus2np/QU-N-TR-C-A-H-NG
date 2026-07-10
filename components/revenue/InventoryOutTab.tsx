@@ -11,12 +11,15 @@ const PAGE_SIZE = 100;
 
 // Độ rộng cố định (px) từng cột — khớp class w-* của header, dùng cho <colgroup> + table-fixed
 // để độ rộng không đổi khi cuộn ngang. Đúng thứ tự 29 cột trong bảng.
+// QUAN TRỌNG: tổng mảng này PHẢI khớp với min-w-[...] của <table> bên dưới — nếu min-w lớn
+// hơn tổng thật, trình duyệt sẽ giãn thêm cột để đủ min-w, làm sticky (cột đóng băng) bị lệch
+// khỏi vị trí cuộn thật khi vuốt ngang.
 const COLUMN_WIDTHS = [
-  48, 160, 128, 128, 128, 224, 160, // 1-7: đóng băng
-  320, 112, 128, 172, 128, 128, 140, 128, 144, 128, 128, 128, 152, 128, 128, 128, 160, 128, 128, 128, 128, 128, // 8-29
+  48, 128, 112, 112, 112, 144, 144, // 1-7: đóng băng — vừa nội dung (badge/mã/số nhỏ), không dư thừa như trước
+  320, 112, 128, 172, 128, 128, 0, 128, 144, 128, 128, 128, 152, 128, 128, 128, 160, 128, 128, 128, 128, 128, // 8-29 (cột 14 "Phí Ads Shopee" ẩn — width 0, dữ liệu vẫn dùng để tính Sàn Thanh Toán)
 ];
 // Offset cộng dồn cho 7 cột đóng băng đầu tiên khi vuốt ngang
-const STICKY_LEFT = [0, 48, 208, 336, 464, 592, 816];
+const STICKY_LEFT = [0, 48, 176, 288, 400, 512, 656];
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   OK:       { label: 'Đã giao',      className: 'bg-emerald-700 text-white' },
@@ -57,7 +60,9 @@ interface Props {
   handleRemoveInventoryOut: (id: string) => Promise<void>;
   handleClearAllInventoryOut: () => Promise<void>;
   handleShopeeFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleDistributeAdsCost: (totalAds: number, date: string) => void;
+  handleDistributeAdsCost: (totalAds: number, date: string, platform: string) => void;
+  handleSyncAdsFromBot?: () => Promise<{ updatedDays: number; error?: string }>;
+  syncingAds?: boolean;
   shopeeFileInputRef: React.RefObject<HTMLInputElement>;
   totalVariableCosts: number;
   formatNumber: (num: number) => string;
@@ -78,7 +83,7 @@ const InventoryOutTab: React.FC<Props> = ({
   deleteConfirmId, setDeleteConfirmId,
   clearAllConfirm, setClearAllConfirm,
   handleAddInventoryOut, handleEditInventoryOut, handleRemoveInventoryOut, handleClearAllInventoryOut,
-  handleShopeeFileUpload, handleDistributeAdsCost,
+  handleShopeeFileUpload, handleDistributeAdsCost, handleSyncAdsFromBot, syncingAds,
   shopeeFileInputRef, totalVariableCosts, formatNumber, dynamicTitle, shopeeTotals, onUpdateShopeeCosts,
   filterPlatforms = [],
   filterStatuses = [],
@@ -89,6 +94,8 @@ const InventoryOutTab: React.FC<Props> = ({
   const [showModal, setShowModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [selectedAdsPlatform, setSelectedAdsPlatform] = useState<'Shopee 1' | 'Shopee 2'>('Shopee 1');
+  const [adsSyncMsg, setAdsSyncMsg] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -100,6 +107,14 @@ const InventoryOutTab: React.FC<Props> = ({
   useEffect(() => {
     setPage(1);
   }, [shopeeInventoryOut.length, filterPlatforms, filterStatuses, filterShippingUnits]);
+
+  // Tự động phân bổ QC ngay khi mở trang — không cần người dùng bấm nút nữa.
+  // Job nền server (routes/adsSpendSync.ts, chạy mỗi 30 phút) cũng làm việc này độc
+  // lập để dữ liệu luôn cập nhật kể cả khi không ai mở trang.
+  useEffect(() => {
+    handleSyncAdsFromBot?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSyncFromBot = async () => {
     if (!onSyncFromBot || syncing) return;
@@ -114,6 +129,23 @@ const InventoryOutTab: React.FC<Props> = ({
       setTimeout(() => setSyncMsg(null), 5000);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSyncAds = async () => {
+    if (!handleSyncAdsFromBot || syncingAds) return;
+    setAdsSyncMsg(null);
+    try {
+      const result = await handleSyncAdsFromBot();
+      setAdsSyncMsg(
+        result.error
+          ? `Lỗi: ${result.error}`
+          : `Đã tự động phân bổ QC cho ${result.updatedDays} ngày (2 shop)`
+      );
+    } catch (err) {
+      setAdsSyncMsg(`Lỗi: ${err instanceof Error ? err.message : 'Không kết nối được bot'}`);
+    } finally {
+      setTimeout(() => setAdsSyncMsg(null), 5000);
     }
   };
 
@@ -269,6 +301,9 @@ const InventoryOutTab: React.FC<Props> = ({
   const pishipVal   = (i: ShopeeInventoryOutRecord) => (isSuccessOrder(i.status) || isShipLossOrder(i.status)) ? Math.abs(i.pishipFee || 0) : 0;
   const handlingVal = (i: ShopeeInventoryOutRecord) => (isSuccessOrder(i.status) || isShipLossOrder(i.status)) ? (i.handlingFee || 0) : 0;
 
+  // Bỏ tiền tố "Tỉnh"/"Thành phố"/"TP." khỏi tên tỉnh/thành — hiện gọn "Hà Nội" thay vì "Thành phố Hà Nội"
+  const shortProvinceName = (raw: string) => raw.replace(/^(Thành phố|Tỉnh|TP\.?)\s+/i, '').trim();
+
   // Sàn Thanh Toán = salePrice - tất cả phí shopee (chỉ có ở đơn thành công, còn lại = 0)
   // Gồm cả Phí Ads Shopee (shopeeAdsFee = AMS_COMMISSION_FEE) — Shopee tự trừ theo đơn
   // ads cụ thể, xác minh 2026-07-08: thiếu khoản này khiến 65-81% đơn lệch escrow thật 12-15kđ.
@@ -341,6 +376,23 @@ const InventoryOutTab: React.FC<Props> = ({
               )}
             </div>
           )}
+          {handleSyncAdsFromBot && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSyncAds}
+                disabled={syncingAds}
+                className="flex h-9 items-center gap-2 rounded-lg bg-rose-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncingAds ? 'animate-spin' : ''}`} />
+                {syncingAds ? 'Đang đồng bộ...' : 'Tự động phân bổ QC'}
+              </button>
+              {adsSyncMsg && (
+                <span className={`text-xs font-medium px-2 py-1 rounded-md ${adsSyncMsg.startsWith('Lỗi') ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {adsSyncMsg}
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setShowModal(true)}
             className="flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
@@ -385,7 +437,7 @@ const InventoryOutTab: React.FC<Props> = ({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full table-fixed border-separate border-spacing-0 text-left text-xs min-w-[4000px]">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-left text-xs min-w-[3780px]">
           <colgroup>
             {COLUMN_WIDTHS.map((w, i) => <col key={i} style={{ width: w }} />)}
           </colgroup>
@@ -437,8 +489,8 @@ const InventoryOutTab: React.FC<Props> = ({
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.platformFee)} đ</td>
               {/* 13: Phí PiShip */}
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.pishipFee)} đ</td>
-              {/* 13b: Phí Ads Shopee */}
-              <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.shopeeAdsFee)} đ</td>
+              {/* 13b: Phí Ads Shopee — ẩn */}
+              <td className="p-0 border-r border-slate-200 bg-white" style={{ overflow: 'hidden' }}></td>
               {/* 14: Phí dịch vụ */}
               <td className="p-2 border-r border-slate-200 text-right bg-white">{formatNumber(tableTotals.freeshipExtra)} đ</td>
               {/* 15: Phí thanh toán */}
@@ -478,8 +530,8 @@ const InventoryOutTab: React.FC<Props> = ({
               <td className="p-2 border-r border-slate-200 text-center bg-white">{shopeeTotals.platformFeeRatio.toFixed(1)}%</td>
               {/* 13: Phí PiShip — no ratio */}
               <td className="p-2 border-r border-slate-200 text-center bg-white">—</td>
-              {/* 13b: Phí Ads Shopee — no ratio */}
-              <td className="p-2 border-r border-slate-200 text-center bg-white">—</td>
+              {/* 13b: Phí Ads Shopee — ẩn */}
+              <td className="p-0 border-r border-slate-200 bg-white" style={{ overflow: 'hidden' }}></td>
               {/* 14: Phí dịch vụ ratio */}
               <td className="p-2 border-r border-slate-200 text-center bg-white">{shopeeTotals.freeshipExtraRatio.toFixed(1)}%</td>
               {/* 15: Phí thanh toán ratio */}
@@ -522,19 +574,20 @@ const InventoryOutTab: React.FC<Props> = ({
                   }}
                 />
               </th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[1] }}>Tình Trạng</th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[2] }}>Ngày đặt</th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[3] }}>Số đơn/ngày</th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[4] }}>Nền tảng</th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-56 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[5] }}>Mã Vận Đơn</th>
-              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-40 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50 shadow-[2px_0_5px_rgba(0,0,0,0.08)]" style={{ left: STICKY_LEFT[6] }}>SKU Biến Thể</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[1] }}>Tình Trạng</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-28 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[2] }}>Ngày đặt</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-28 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[3] }}>Số đơn/ngày</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-28 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[4] }}>Nền tảng</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-36 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50" style={{ left: STICKY_LEFT[5] }}>Mã Vận Đơn</th>
+              <th className="sticky z-40 px-3 py-3 border-r border-slate-200 w-36 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50 shadow-[2px_0_5px_rgba(0,0,0,0.08)]" style={{ left: STICKY_LEFT[6] }}>SKU Biến Thể</th>
               <th className="px-3 py-3 border-r border-slate-200 w-80 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Tên Sản Phẩm</th>
               <th className="px-3 py-3 border-r border-slate-200 w-28 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Số lượng</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Giá trị hàng</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Khách Thanh Toán</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Cố Định</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí PiShip</th>
-              <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Ads Shopee</th>
+              {/* Phí Ads Shopee: ẩn khỏi bảng (dễ nhầm với cột Quảng Cáo) — vẫn dùng để trừ đúng Sàn Thanh Toán */}
+              <th className="p-0 border-r border-slate-200 bg-slate-50" style={{ overflow: 'hidden' }}></th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Dịch Vụ</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Phí Thanh Toán</th>
               <th className="px-3 py-3 border-r border-slate-200 w-32 text-center text-xs font-semibold uppercase text-slate-500 bg-slate-50">Thuế VAT</th>
@@ -641,8 +694,8 @@ const InventoryOutTab: React.FC<Props> = ({
                   <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.platformFee))} đ</td>
                   {/* PiShip (phí bảo vệ NB): có ở đơn thành công VÀ đơn lỗ ship */}
                   <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(pishipVal(item))} đ</td>
-                  {/* Phí Ads Shopee (AMS_COMMISSION_FEE): chỉ đơn thành công */}
-                  <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, Math.abs(item.shopeeAdsFee || 0)))} đ</td>
+                  {/* Phí Ads Shopee (AMS_COMMISSION_FEE): ẩn khỏi bảng, vẫn dùng để tính Sàn Thanh Toán */}
+                  <td className="p-0 border-b border-r border-slate-200" style={{ overflow: 'hidden' }}></td>
                   <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.freeshipExtra))} đ</td>
                   <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.paymentFee))} đ</td>
                   <td className={`p-2 border-b border-r border-slate-200 text-right text-slate-500${rowDt}`}>{formatNumber(successVal(item, item.vatTax || 0))} đ</td>
@@ -659,8 +712,12 @@ const InventoryOutTab: React.FC<Props> = ({
                   <td className={`p-2 border-b border-r border-slate-200 text-right font-normal ${calcNetProfit(item) < 0 ? 'text-rose-600' : 'text-emerald-700'}${rowDt}`}>{formatNumber(calcNetProfit(item))} đ</td>
                   {/* ── Cột cấp đơn (gộp ô rowSpan) ── */}
                   {isFirst && (
-                    <td rowSpan={span} className={`p-2 border-b border-r border-slate-200 text-slate-500 uppercase align-middle${dt}`}>
-                      {first.address ? first.address.split(',').pop()!.trim() : '-'}
+                    <td
+                      rowSpan={span}
+                      className={`max-w-[160px] truncate p-2 border-b border-r border-slate-200 text-slate-500 uppercase align-middle${dt}`}
+                      title={first.address ? shortProvinceName(first.address.split(',').pop()!.trim()) : '-'}
+                    >
+                      {first.address ? shortProvinceName(first.address.split(',').pop()!.trim()) : '-'}
                     </td>
                   )}
                   {isFirst && (
@@ -768,14 +825,37 @@ const InventoryOutTab: React.FC<Props> = ({
                     <h4 className="text-xs font-semibold text-slate-900 uppercase">Quảng cáo ngày</h4>
                   </div>
                   <div className="flex-1 flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100 w-full">
+                    <div className="flex items-center gap-1">
+                      {(['Shopee 1', 'Shopee 2'] as const).map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setSelectedAdsPlatform(p)}
+                          className={`h-7 rounded-md px-2 text-2xs font-semibold transition-colors ${
+                            selectedAdsPlatform === p ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >
+                          {p === 'Shopee 1' ? 'Shop 1' : 'Shop 2'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="h-6 w-[1px] bg-slate-200"></div>
                     <input type="date" value={selectedAdsDate} onChange={e => setSelectedAdsDate(e.target.value)} className="bg-transparent border-none outline-none text-xs font-normal text-slate-600 w-32" />
                     <div className="h-6 w-[1px] bg-slate-200"></div>
                     <div className="flex-1 flex items-center gap-2">
                       <DollarSign className="w-3.5 h-3.5 text-rose-600" />
-                      <input type="number" value={dailyAdsConfig[selectedAdsDate] || 0} onChange={e => handleDistributeAdsCost(Number(e.target.value), selectedAdsDate)} className="bg-transparent border-none outline-none text-slate-900 font-normal text-xs w-full" placeholder="Nhập tổng tiền QC của ngày..." />
+                      <input
+                        type="number"
+                        value={dailyAdsConfig[`${selectedAdsPlatform}::${selectedAdsDate}`] || 0}
+                        onChange={e => handleDistributeAdsCost(Number(e.target.value), selectedAdsDate, selectedAdsPlatform)}
+                        className="bg-transparent border-none outline-none text-slate-900 font-normal text-xs w-full"
+                        placeholder="Nhập tổng tiền QC của ngày..."
+                      />
                     </div>
                   </div>
                 </div>
+                <p className="mt-2 text-2xs text-slate-400">
+                  Nhập tay để sửa riêng 1 ngày — dùng nút "Tự động phân bổ QC" ở thanh công cụ phía trên để đồng bộ tự động từ bot cho toàn bộ dữ liệu.
+                </p>
               </div>
 
               <div className={`bg-white rounded-2xl border ${editingInventoryOutId ? 'border-indigo-500 shadow-indigo-100 ring-2 ring-indigo-500/20' : 'border-slate-200'} shadow-sm p-5 transition-all`}>

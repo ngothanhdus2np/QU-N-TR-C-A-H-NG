@@ -9,6 +9,7 @@ import {
   POSOrder,
 } from '../../types';
 import { exportToExcel } from '../../services/exportService';
+import { translateError } from '../../services/errorMessages';
 import { GoodsKhoHistory, GoodsAuditForm } from './GoodsAuditForm';
 import { GoodsPurchaseForm } from './GoodsPurchaseForm';
 import { ImportStatus, toGoodsExportRows } from './GoodsImportExport';
@@ -861,7 +862,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             }
             showToast(`Đã ngừng kinh doanh "${product.name}".`);
           } catch (err: unknown) {
-            showToast(`Lỗi ngừng kinh doanh: ${err instanceof Error ? err.message : String(err)}`, 'error');
+            showToast(translateError(err, 'Lỗi ngừng kinh doanh'), 'error');
           } finally {
             closeConfirm();
           }
@@ -948,7 +949,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
           setSelectedIds([]);
           showToast(`Đã ngừng kinh doanh ${selectedProducts.length} mặt hàng.`);
         } catch (err: unknown) {
-          showToast(`Lỗi ngừng kinh doanh: ${err instanceof Error ? err.message : String(err)}`, 'error');
+          showToast(translateError(err, 'Lỗi ngừng kinh doanh'), 'error');
         } finally {
           closeConfirm();
         }
@@ -982,7 +983,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       setChangeGroupModal({ isOpen: false, selectedGroupId: '' });
       showToast(`Đã chuyển ${selectedProducts.length} sản phẩm sang nhóm "${changeGroupModal.selectedGroupId}".`);
     } catch (err: unknown) {
-      showToast(`Lỗi chuyển nhóm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      showToast(translateError(err, 'Lỗi chuyển nhóm'), 'error');
     }
   }, [changeGroupModal, selectedProducts, products, onUpdateProducts, onUpdateSurgical, setSelectedIds, showToast]);
 
@@ -1000,7 +1001,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
       setChangeGroupModal(prev => ({ ...prev, selectedGroupId: newGroup.name }));
       showToast(`Đã tạo nhóm hàng "${fullName}".`);
     } catch (err: unknown) {
-      showToast(`Lỗi tạo nhóm hàng: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      showToast(translateError(err, 'Lỗi tạo nhóm hàng'), 'error');
     }
   }, [createGroupModal, onPushBatch, showToast]);
 
@@ -1063,7 +1064,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         }
         setViewingProduct(null);
       } catch (err: unknown) {
-        showToast(`Lỗi xóa sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+        showToast(translateError(err, 'Lỗi xóa sản phẩm'), 'error');
       }
     },
     [onUpdateProducts, onUpdateSurgical, products, showToast]
@@ -1242,7 +1243,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
                   );
                 }
               } catch (err: unknown) {
-                showToast(`Lỗi lưu giá: ${err instanceof Error ? err.message : String(err)}`, 'error');
+                showToast(translateError(err, 'Lỗi lưu giá'), 'error');
               }
             }}
           />
@@ -1620,7 +1621,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
             setGridDetailProduct(null);
             setGridDetailSiblings([]);
           } catch (err: unknown) {
-            showToast(`Lỗi xóa sản phẩm: ${err instanceof Error ? err.message : String(err)}`, 'error');
+            showToast(translateError(err, 'Lỗi xóa sản phẩm'), 'error');
           }
         }}
         onStopBusiness={handleStopBusiness}

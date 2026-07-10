@@ -6,6 +6,7 @@ import {
   Database,
   Globe,
   Link2,
+  Megaphone,
   Package,
   Settings,
   ShoppingBag,
@@ -26,6 +27,7 @@ const shopeeItems: { id: RevenueSubTab; label: string; icon: React.ElementType; 
   { id: 'inventory_in', label: 'Nhập kho', icon: ArrowDownToLine, desc: 'Theo dõi hàng nhập về kho Shopee' },
   { id: 'inventory_out', label: 'Xuất kho', icon: ArrowUpFromLine, desc: 'Đơn đã xuất — doanh thu & phí thực tế' },
   { id: 'report', label: 'Báo cáo', icon: ClipboardList, desc: 'Tổng hợp lợi nhuận theo kỳ' },
+  { id: 'ads', label: 'Quảng cáo', icon: Megaphone, desc: 'Hiệu suất quảng cáo Shopee Ads theo ngày' },
 ];
 
 const websiteItems = [

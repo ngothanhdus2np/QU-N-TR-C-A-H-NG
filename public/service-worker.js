@@ -190,103 +190,13 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Background sync - sync offline data when online
-self.addEventListener('sync', (event) => {
-  console.log('🔄 Service Worker: Background sync triggered', event.tag);
-  
-  if (event.tag === 'sync-orders') {
-    event.waitUntil(syncOfflineOrders());
-  }
-  
-  if (event.tag === 'sync-inventory') {
-    event.waitUntil(syncInventoryChanges());
-  }
-});
-
-// Sync offline orders
-async function syncOfflineOrders() {
-  try {
-    console.log('📤 Syncing offline orders...');
-    
-    // Get offline orders from IndexedDB
-    const db = await openDB();
-    const orders = await db.getAll('pending_orders');
-    
-    // Send to server
-    for (const order of orders) {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(order)
-      });
-      
-      if (response.ok) {
-        await db.delete('pending_orders', order.id);
-        console.log('✅ Order synced:', order.id);
-      }
-    }
-    
-    // Notify clients
-    const clients = await self.clients.matchAll();
-    clients.forEach((client) => {
-      client.postMessage({
-        type: 'SYNC_COMPLETE',
-        data: { synced: orders.length }
-      });
-    });
-    
-  } catch (error) {
-    console.error('❌ Sync failed:', error);
-  }
-}
-
-// Sync inventory changes
-async function syncInventoryChanges() {
-  try {
-    console.log('📤 Syncing inventory changes...');
-    
-    const db = await openDB();
-    const changes = await db.getAll('pending_inventory');
-    
-    for (const change of changes) {
-      const response = await fetch('/api/inventory', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(change)
-      });
-      
-      if (response.ok) {
-        await db.delete('pending_inventory', change.id);
-        console.log('✅ Inventory synced:', change.id);
-      }
-    }
-    
-  } catch (error) {
-    console.error('❌ Inventory sync failed:', error);
-  }
-}
-
-// Helper: Open IndexedDB
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('CFOBrainDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      
-      if (!db.objectStoreNames.contains('pending_orders')) {
-        db.createObjectStore('pending_orders', { keyPath: 'id' });
-      }
-      
-      if (!db.objectStoreNames.contains('pending_inventory')) {
-        db.createObjectStore('pending_inventory', { keyPath: 'id' });
-      }
-    };
-  });
-}
+// LƯU Ý (dọn 2026-07-10, audit mục O): trước đây ở đây có 1 listener 'sync' +
+// syncOfflineOrders/syncInventoryChanges/openDB thao tác trên IndexedDB 'CFOBrainDB'
+// (store 'pending_orders'/'pending_inventory'). Đó là DEAD CODE — không listener nào
+// đăng ký các sync tag này, và store đó KHÔNG phải hàng đợi offline thật của app.
+// Hàng đợi offline thật là 'cfo_brain_pos_queue' (store 'pending_ops') trong
+// services/posOfflineQueue.ts, replay qua hooks/useOfflineSync.ts khi có mạng lại —
+// hoàn toàn không phụ thuộc Background Sync API. Đã xoá để tránh gây nhầm lẫn.
 
 // Push notification
 self.addEventListener('push', (event) => {

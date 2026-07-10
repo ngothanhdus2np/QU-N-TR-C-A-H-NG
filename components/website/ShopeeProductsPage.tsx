@@ -5,6 +5,7 @@ import {
   Image as ImageIcon, Video, Edit2, Download, LayoutGrid, List,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { translateError } from '../../services/errorMessages';
 import { useToast } from '../ui/Toast';
 import { GoodsPagination } from '../pos/GoodsPagination';
 
@@ -250,7 +251,7 @@ function ShopDetailPanel({
       setDirty(false);
       onSaved();
     } catch (err: unknown) {
-      showToast('Lỗi: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      showToast(translateError(err, 'Không lưu được thay đổi'), 'error');
     } finally { setSaving(false); }
   };
 
@@ -267,7 +268,7 @@ function ShopDetailPanel({
       if (!json.ok) throw new Error(json.error ?? 'Bot không phản hồi');
       showToast('Đã kích hoạt quét Shop — biến thể sẽ được cập nhật tự động (xem pm2 logs)', 'success');
     } catch (err: unknown) {
-      showToast('Sync lỗi: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      showToast(translateError(err, 'Không kích hoạt được quét Shop'), 'error');
     } finally {
       setSyncing(false);
     }
@@ -612,7 +613,7 @@ export default function ShopeeProductsPage() {
       showToast(`Đã cập nhật ${json.updated}/${json.total} sản phẩm từ Shopee!`, 'success');
       loadProducts();
     } catch (err: unknown) {
-      showToast('Lỗi SKU match: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      showToast(translateError(err, 'Không nối được SKU'), 'error');
     } finally {
       setSkuMatching(false);
     }

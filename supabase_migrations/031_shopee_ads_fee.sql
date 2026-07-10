@@ -1,0 +1,12 @@
+-- ============================================================
+-- SHOPEE INVENTORY OUT — PHÍ ADS SHOPEE (migration 031, 2026-07-08)
+-- shopee_ads_fee: phí hoa hồng quảng cáo Shopee Ads (AMS_COMMISSION_FEE) mà Shopee
+-- tự trừ theo TỪNG đơn cụ thể do ads mang lại — khác với cột adsCost hiện có (ngân
+-- sách QC user tự nhập tay, phân bổ trung bình). Thiếu field này khiến 65-81% đơn
+-- lệch công thức Sàn Thanh Toán 12-15k đ so với escrow thật (xem FORMULAS.md §10.0b).
+--
+-- Đã chạy thủ công trên prod qua docker exec psql trong phiên 2026-07-08 trước khi
+-- file này được tạo — migration này idempotent (IF NOT EXISTS) nên chạy lại vô hại,
+-- chỉ để đăng ký vào sổ theo dõi schema_migrations cho lần deploy tiếp theo.
+-- ============================================================
+ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS shopee_ads_fee NUMERIC DEFAULT 0;

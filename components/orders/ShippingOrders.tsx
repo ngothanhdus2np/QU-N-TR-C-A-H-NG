@@ -835,7 +835,7 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                   <th className="px-4 py-3 text-left">Mã đơn</th>
                   <th className="px-4 py-3 text-left">Người mua</th>
                   <th className="px-4 py-3 text-left">Sản phẩm</th>
-                  <th className="px-4 py-3 text-left">Tỉnh / ĐVVC</th>
+                  <th className="max-w-[160px] px-4 py-3 text-left">Tỉnh / ĐVVC</th>
                   <th className="px-4 py-3 text-right">Thanh toán</th>
                   <th className="px-4 py-3 text-center">Trạng thái</th>
                 </tr>
@@ -905,10 +905,10 @@ export default function ShippingOrders({ navigationSlot }: Props) {
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          <p>{order.province || '-'}</p>
+                        <td className="max-w-[160px] px-4 py-3 text-slate-600">
+                          <p className="truncate" title={order.province || '-'}>{order.province || '-'}</p>
                           {order.shipping_carrier && (
-                            <p className="text-xs text-slate-400">{order.shipping_carrier}</p>
+                            <p className="truncate text-xs text-slate-400">{order.shipping_carrier}</p>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-800">

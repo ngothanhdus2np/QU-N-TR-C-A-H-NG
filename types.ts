@@ -328,7 +328,8 @@ export type RevenueSubTab =
   | 'costs'
   | 'inventory_in'
   | 'inventory_out'
-  | 'report';
+  | 'report'
+  | 'ads';
 
 export type RevenueAuditColumnKey = 'totalGrossRevenue' | 'discount' | 'returnsValue' | 'totalCogs';
 
@@ -1176,6 +1177,7 @@ export interface ShopeeInventoryOutRecord {
   affiliateFee: number;
   handlingFee: number;
   pishipFee: number;
+  shopeeAdsFee: number; // AMS_COMMISSION_FEE — Shopee tự trừ theo đơn ads, khác adsCost (user tự nhập)
   vatTax: number;
   adsCost: number;
   adsTax: number;

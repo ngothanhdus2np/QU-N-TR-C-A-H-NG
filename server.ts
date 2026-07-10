@@ -49,7 +49,9 @@ import { createAdminStoreRouter } from './routes/adminStore';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
 import { createInventoryOutSyncRouter, runInventoryOutSync } from './routes/inventoryOutSync';
+import { createAdsSpendSyncRouter, runAdsSpendSync } from './routes/adsSpendSync';
 import { createPosMobileRouter } from './routes/posMobile';
+import { errorHandler } from './services/errorTracking';
 
 /**
  * Kiểm tra schema local Supabase qua REST API.
@@ -177,7 +179,23 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   if (!IS_PROD) console.error(`[STARTUP] Server is listening on port ${PORT}`);
 });
 
-const healthHandler: RequestHandler = (_req, res) => res.send('OK');
+// Health-check kiểm tra Supabase thật (không chỉ trả 'OK' cứng) — nếu không, deploy
+// script/monitoring coi app "khỏe" dù DB đã mất kết nối hoàn toàn. Timeout ngắn (2s)
+// để không làm chậm health-check khi DB treo thay vì lỗi rõ ràng.
+const healthHandler: RequestHandler = async (_req, res) => {
+  try {
+    const dbCheck = supabase.from('app_state').select('user_id').limit(1);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('DB health check timeout')), 2000)
+    );
+    const { error } = (await Promise.race([dbCheck, timeout])) as { error: unknown };
+    if (error) throw error;
+    res.send('OK');
+  } catch (err) {
+    console.error('[health] DB check failed:', err instanceof Error ? err.message : err);
+    res.status(503).send('DB_UNAVAILABLE');
+  }
+};
 
 app.get('/health', healthHandler);
 app.head('/health', healthHandler);
@@ -557,7 +575,7 @@ async function startServer() {
         const { data: { user }, error } = await supabase.auth.getUser(jwt);
         if (!error && user) return next();
       }
-      
+
       return res.status(401).json({ error: 'Unauthorized - Supabase session or server API key required' });
     };
 
@@ -575,6 +593,7 @@ async function startServer() {
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));
     app.use(createShopeeSyncRouter(requireAuth));
     app.use(createInventoryOutSyncRouter(supabase, requireAuth));
+    app.use(createAdsSpendSyncRouter(supabase, requireAuth));
     app.use(createPosMobileRouter(supabase, requireAuth));
 
     // Auto-detect Supabase URL: dùng IP nội bộ nếu đang ở cùng mạng, fallback sang
@@ -671,6 +690,26 @@ async function startServer() {
         }
       }).catch(e => console.error('[Auto-sync xuất kho] Lỗi:', e));
     }, INVENTORY_SYNC_INTERVAL);
+
+    const ADS_SPEND_SYNC_INTERVAL = 30 * 60 * 1000; // 30 phút
+    setInterval(() => {
+      runAdsSpendSync(supabase).then(r => {
+        if (r.updatedOrders > 0) {
+          console.log(`[Auto-sync tiền QC] Đã phân bổ ads_cost cho ${r.updatedOrders} đơn (${r.updatedDays} ngày)`);
+        }
+        if (r.transactionsSaved > 0) {
+          console.log(`[Auto-sync tiền QC] Đã lưu ${r.transactionsSaved} giao dịch ví quảng cáo`);
+        }
+        if (r.errors.length > 0) {
+          console.warn('[Auto-sync tiền QC] Lỗi:', r.errors.join('; '));
+        }
+      }).catch(e => console.error('[Auto-sync tiền QC] Lỗi:', e));
+    }, ADS_SPEND_SYNC_INTERVAL);
+
+    // Error handler tập trung (redact field nhạy cảm + ghi log file có rotation) — PHẢI
+    // đăng ký SAU CÙNG (sau mọi route/static/vite middleware) để Express coi là error
+    // middleware và bắt lỗi từ next(err)/throw trong các route phía trên.
+    app.use(errorHandler);
   } catch (error) {
     console.error('CRITICAL ERROR DURING SERVER STARTUP:', error);
     process.exit(1);

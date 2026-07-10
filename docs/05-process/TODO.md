@@ -7,6 +7,30 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [ ] 🔴 AUDIT-0710 — Audit production-readiness toàn diện 2026-07-10 (báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-10.md`)
+
+> Audit 4 agent song song trên branch `feat/online-audit-shopee`. Lõi POS vững, không hồi quy. Rủi ro tập trung ở tính năng Shopee Ads mới (chưa từng audit) + tầng vận hành. Các mục con:
+
+#### [x] 🔴 AUDIT-0710-A — BLOCKER: 2 bảng Ads mới (032/033) thiếu RLS → anon CRUD được dữ liệu tài chính *(code vá xong 2026-07-10, ⏳ CHỜ USER chạy prod)*
+> `shopee_ads_daily_spend` + `shopee_ads_wallet_transactions` tạo mới không kèm ENABLE RLS/POLICY/REVOKE anon — đúng "bom nổ chậm" R3 cảnh báo. Đã tạo `supabase_migrations/034_lock_anon_shopee_ads_tables.sql` + sửa `supabase_setup.sql`. **CÒN LẠI**: user chạy 034 trên prod + verify anon key thật (`curl /rest/v1/shopee_ads_daily_spend` phải trả 401/42501).
+
+#### [ ] 🔴 AUDIT-0710-B — BLOCKER: chưa có backup tự động (điểm yếu nhất hệ thống)
+> `sync-prod-to-dev.sh` chạy tay; `backup-mega.sh`+launchd (kế hoạch trong TODO) chưa tồn tại; 2 file `backup_2026*.sql` root = 0 byte (fail âm thầm). Ổ cứng iMac hỏng = mất dữ liệu bán hàng thật. → triển khai backup định kỳ + alert khi backup fail + dọn 2 file rác.
+
+#### [x] 🟡 AUDIT-0710-C — 12/14 chỗ `dangerouslySetInnerHTML` chưa DOMPurify *(xong 2026-07-10 — kiểm tra lại: THỰC RA cả 10 chỗ thật (không tính .bak) đều ĐÃ wrap DOMPurify.sanitize(), agent audit trước bị dương tính giả vì grep chỉ khớp dòng dangerouslySetInnerHTML= mà không thấy DOMPurify ở dòng __html: kế tiếp. Không cần sửa code.)*
+#### [x] 🟡 AUDIT-0710-D — 4 GET endpoint `notifications.ts` lộ dữ liệu tài chính không cần auth *(xong 2026-07-10 — thêm requireAuth cho eod-report/alerts/alerts-config/notifications-status; xác nhận App.tsx có fetch interceptor tự đính Bearer token cho mọi request /api nên không vỡ luồng cũ)*
+#### [x] 🟡 AUDIT-0710-E — Bug phân bổ Ads: `useShopeeInventoryOut.ts:542-562` không lọc platform + không dùng isEffectiveOrder + hard-code adsTax=0 *(xong 2026-07-10)*
+#### [x] 🟡 AUDIT-0710-F — FORMULAS.md §10.2b/c sai vs code *(xong 2026-07-10 — sửa §10.0b/§10.2b/§10.2c khớp code: tiêu chí đơn hiệu quả = status OK/SHIPPING, xác nhận code THẬT có ghi net_profit)*
+#### [x] 🟡 AUDIT-0710-G — Job Ads không gọi auditLog() + thiếu Number.isFinite() guard *(xong 2026-07-10 — thêm guard bỏ qua ngày có total_spend âm/NaN từ bot + ghi 1 dòng audit_logs tổng hợp mỗi lần job update ≥1 đơn)*
+#### [x] 🟡 AUDIT-0710-H — Validate backend yếu ở `/api/data/upsert` *(xong 2026-07-10 — thêm validateDataPayload: chặn NaN/Infinity toàn payload + số âm cho pos_products.sale_price/import_price; + migration 036 CHECK constraint DB-level NOT VALID, KHÔNG áp cho pos_orders/stock vì có giá trị âm/opt-in hợp lệ)*
+#### [x] 🟡 AUDIT-0710-I — `/health` trả 'OK' cứng + thiếu alerting hạ tầng *(xong 2026-07-10 — /health giờ SELECT 1 thật từ Supabase (timeout 2s, 503 nếu lỗi) + scripts/health-alert.sh cron 5p bắn Zalo khi fail 2 lần liên tiếp. Verify: xác nhận 503 khi DB unreachable trong sandbox; verify chiều thành công cần chạy trên iMac thật — user tự cài cron theo hướng dẫn trong file script)*
+#### [x] 🟡 AUDIT-0710-J — Logging thiếu redact + ghi file rotation *(xong 2026-07-10 — errorTracking.ts: thêm redact() che field password/token/secret/apikey/jwt..., ghi log ra logs/error-YYYY-MM-DD.log giữ 14 ngày; PHÁT HIỆN THÊM: errorHandler chưa từng được wire vào server.ts (middleware "chết") — đã thêm app.use(errorHandler) làm middleware cuối cùng)*
+#### [x] 🟡 AUDIT-0710-K — Rollback deploy chưa có *(xong 2026-07-10 — deploy-imac.sh: backup hardlink (cp -Rl) trước khi ghi đè, tự động rollback + restart nếu health-check fail sau deploy; docs/03-deployment/ROLLBACK_RUNBOOK.md mới cho các kịch bản build/migration/health-check fail. LƯU Ý: chưa test end-to-end trên iMac thật (không có SSH access) — user nên theo dõi sát lần deploy đầu tiên dùng script mới)*
+#### [x] 🟡 AUDIT-0710-L — Thiếu index *(xong 2026-07-10 — migration 035: pos_products(sku), shopee_inventory_out(date,platform). LƯU Ý: pos_orders(date) THỰC RA đã có sẵn từ migration 006 (idx_pos_orders_date_desc) — audit ban đầu bỏ sót vì chỉ quét supabase_setup.sql)*
+#### [x] 🟡 AUDIT-0710-M — Error message lộ raw tiếng Anh *(xong 2026-07-10 — tạo services/errorMessages.ts translateError(), áp dụng cho 13 chỗ ở ShopeeProductsPage/WebsiteProductsPage/WebsiteOrdersPage/WebsiteChannelLinksPage/GoodsInventory)*
+#### [x] 🟢 AUDIT-0710-N — routes/ coverage 0.89% *(xong 2026-07-10 — thêm routes/adsSpendSync.test.ts (4 test) + routes/inventoryOutSync.test.ts (4 test), mock SupabaseClient + axios, phủ logic phân bổ QC/prorate/status-map/unchanged-skip)*
+#### [x] 🟢 AUDIT-0710-O — Dead code Background Sync *(xong 2026-07-10 — xóa listener 'sync' + syncOfflineOrders/syncInventoryChanges/openDB trong service-worker.js, xác nhận không nơi nào đăng ký tag sync-orders/sync-inventory)*
+
 ### [x] 🟢 DEV-ENV-01 — Dựng môi trường dev/staging always-on riêng trên iMac, tách biệt hoàn toàn dữ liệu prod *(xong 2026-07-08)*
 
 > User muốn 1 link dev cố định "giống prod" nhưng không ảnh hưởng dữ liệu prod. Phát hiện: trước đây dev (MacBook) và prod dùng CHUNG 1 Supabase database thật. Đã dựng stack Supabase self-host thứ 2 hoàn toàn riêng trên iMac (`~/supabase-dev`, container hậu tố `-dev`, Kong port 8010, secret mới hoàn toàn) + app instance riêng (`~/cfobrain-dev`, launchd `com.cfobrain.app.dev`, port 3010) + route Cloudflare Tunnel mới (`dev.phucsang.com.vn` → 3010, `supabase-dev.phucsang.com.vn` → 8010). Copy dữ liệu prod sang dev 1 lần (pg_dump/restore, verify khớp số dòng tuyệt đối). Từ nay dev/prod độc lập hoàn toàn — sửa gì trên dev không đụng prod. Chi tiết đầy đủ: HISTORY.md.

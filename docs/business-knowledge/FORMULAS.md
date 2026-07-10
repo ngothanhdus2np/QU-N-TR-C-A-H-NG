@@ -685,37 +685,181 @@ customerOrders(productId) = MAX(pendingQuantity, importedValue)
 
 > Source: `components/revenue/InventoryOutTab.tsx`
 
+### 10.0 PiShip = Phí bảo vệ người bán (đã xác minh bằng dữ liệu thật 2026-07-08)
+
+Cột **"Phí PiShip"** = giá trị Shopee field **`SELLER_PROTECTION_FEE`** (Shopee hiển thị
+"Phí dịch vụ PiShip"), KHÔNG phải phí vận chuyển. Bot (`shopee-monitor/bots/orders.js` +
+`backfill-fees-fast.js`) trích từ `seller_income_breakdown.breakdown → FEES_AND_CHARGES →
+SELLER_PROTECTION_FEE`. Trước 2026-07-06 bot dò khóa `PISHIP_FEE`/`PISHIP_SERVICE_FEE`
+(không tồn tại trong JSON Shopee) → luôn = 0.
+
+**Xác minh 2026-07-08**: đối chiếu trực tiếp với screenshot Shopee đơn `2607072XFTWSWH` —
+fetch lại đúng đơn này bằng field `SELLER_PROTECTION_FEE` cho ra `piship_fee = -2.700` và
+`escrow_amount = 208.085`, **khớp tuyệt đối** (từng đồng) với "Phí dịch vụ PiShip" và
+"Doanh thu đơn hàng ước tính" Shopee hiển thị. Field này **KHÔNG cố định giá trị ở mọi đơn**
+(một số đơn = 0 thật, không phải lỗi quét) — khác giả định ban đầu "đơn nào cũng có".
+Việc sửa field cũng làm `total_fee` khớp đúng `FEES_AND_CHARGES` (trước đây thiếu khoản
+bảo vệ người bán).
+
+**Công thức đối chiếu (đơn mẫu, khớp Shopee)**:
+```
+Doanh thu ước tính = Tổng tiền SP − Phụ phí (cố định+PiShip+dịch vụ+xử lý GD) − Thuế (VAT+TNCN)
+208.085            = 299.000        − 86.430                                   − 4.485
+```
+Phí vận chuyển (`ACTUAL_SHIPPING_FEE`) không nằm trong công thức trên vì Shopee đã bù
+(`SHIPPING_REBATE_FROM_SHOPEE`) về **net 0** ở đơn thành công — không cần cột riêng trong
+`calcPlatformNet()`.
+
+### 10.0b Phí Ads Shopee = AMS_COMMISSION_FEE (thêm 2026-07-08)
+
+**Nguyên nhân lệch 65-81% đơn, 12-15k đ/đơn so với escrow thật**: thiếu field
+Shopee **`AMS_COMMISSION_FEE`** (Ads Management System) — phí hoa hồng quảng cáo
+Shopee tự trừ theo **TỪNG đơn cụ thể** do Shopee Ads mang lại. Khác hoàn toàn với
+cột `adsCost` hiện có (ngân sách QC user tự nhập tay, phân bổ theo ngày — xem §10.2b).
+
+Bot (`shopee-monitor/bots/orders.js`, `backfill-fees-fast.js`) trích từ
+`seller_income_breakdown.breakdown → FEES_AND_CHARGES → AMS_COMMISSION_FEE`, lưu
+cột `ams_commission_fee` (SQLite) → prorate theo tỷ trọng giá trị SKU (như §10.3)
+→ `shopee_ads_fee` (Supabase, cột `shopeeAdsFee` phía app).
+
+**Lưu ý khi đọc dữ liệu**: `shopeeAdsFee = 0` có thể là **giá trị đúng** (đơn hữu
+cơ — không đến từ quảng cáo), không nhất thiết là lỗi/thiếu dữ liệu.
+
+> ⚠️ **Tiêu chí "đơn hiệu quả" KHÔNG còn dựa vào `shopeeAdsFee > 0`.** User chốt
+> 2026-07-09: đơn hiệu quả = đơn có `status ∈ {OK, SHIPPING}` (đã giao / đang giao)
+> — xem §10.2b. Lý do đổi: `shopeeAdsFee` (từ AMS_COMMISSION_FEE) đồng bộ trễ vài
+> ngày do Shopee quyết toán chậm, khiến các ngày gần nhất luôn phân bổ ra 0.
+
 ### 10.1 Sàn Thanh Toán (Platform Net)
 
 ```
 Sàn Thanh Toán = Giá trị đơn
                − Phí cố định (platformFee)
-               − PiShip (pishipFee)
+               − PiShip = phí bảo vệ người bán (pishipFee)
                − Phí dịch vụ vận chuyển (freeshipExtra)
                − Phí thanh toán (paymentFee)
                − VAT (vatTax)
                − Thuế TNCN (personalIncomeTax)
                − Affiliate fee (affiliateFee)
+               − Phí Ads Shopee = AMS_COMMISSION_FEE (shopeeAdsFee)  ← thêm 2026-07-08
 ```
 
-Source: `calcPlatformNet()` — không bao gồm chi phí quảng cáo và vận hành.
+Source: `calcPlatformNet()` — chỉ tính cho **đơn thành công** (OK/SHIPPING); đơn khác = 0.
+Không bao gồm chi phí quảng cáo tự nhập tay (`adsCost`, xem §10.2b) và vận hành.
 
-### 10.2 Lợi Nhuận (Net Profit)
+### 10.2 Lợi Nhuận (Net Profit) — theo loại đơn (cập nhật 2026-07-06)
+
+Phân loại theo `status`, `calcNetProfit()`:
+
+| Loại đơn | status | Lợi nhuận |
+|---|---|---|
+| **Thành công** | `OK`, `SHIPPING` | Sàn TT − Giá gốc×SL − QC (adsCost) − Thuế QC (adsTax) − Phí Vận Hành (handlingFee) |
+| **Giao thất bại / Hoàn hàng** | `FAILED`, `RETURN`, `RETURNED` | **−(PiShip + Phí Vận Hành)** — lỗ thuần, **không trừ giá gốc** (hàng về kho) |
+| **Huỷ chưa giao / chờ / thất lạc** | `CANCEL`, `PENDING`, `LOST` | **0** |
+
+Giá gốc (`importPrice`) tra theo SKU từ `shopeeSourceData`.
+
+Quy tắc hiển thị cột theo loại đơn:
+- **Thành công**: hiện đủ mọi phí + doanh thu.
+- **Lỗ ship (FAILED/RETURN/RETURNED)**: CHỈ hiện **PiShip + Phí Vận Hành**; các phí Shopee khác, Khách TT, Sàn TT, SL = 0; Lợi Nhuận = −(PiShip + Phí Vận Hành).
+- **Huỷ/chờ/thất lạc**: mọi cột tiền = 0, SL = 0.
+- Nếu SKU không tìm thấy trong `shopeeSourceData` → Giá gốc = 0 (không lỗi).
+- Lợi Nhuận âm → màu đỏ (`text-rose-600`); dương → xanh (`text-emerald-700`).
+- Badge LÃI/LỖ: đơn huỷ/chờ/thất lạc → hiện trạng thái (xám); còn lại → **LÃI**/**LỖ** theo dấu tổng lợi nhuận cả đơn.
+- Tổng (footer) tính lại theo đúng các quy tắc trên (không cộng phí của đơn không phát sinh).
+
+### 10.2b Phân bổ chi phí QC theo ngày cho đơn hiệu quả (cập nhật 2026-07-09)
+
+> Source: `components/revenue/useShopeeInventoryOut.ts` → `handleDistributeAdsCost()`
+> (`isEffectiveOrder`, `ADS_TAX_RATE`)
+
+User nhập tổng chi QC thực tế của 1 ngày (từ Shopee Ads Manager, nhập tay). Hệ
+thống chia số tiền này **chỉ cho các đơn "hiệu quả"** trong ngày đó — đơn hiệu quả
+= đơn có **`status ∈ {OK, SHIPPING}`** (đã giao hoặc đang giao). Đơn huỷ/hoàn/giao
+thất bại/thất lạc/chờ xử lý **không** gánh phí QC.
 
 ```
-Lợi Nhuận = Sàn Thanh Toán
-           − Giá gốc × Số lượng
-           − Quảng cáo (adsCost)
-           − Thuế QC (adsTax)
-           − Phí vận hành (handlingFee)
+đơn_hiệu_quả(ngày)   = { đơn trong ngày | status ∈ {OK, SHIPPING} }
+adsCost(mỗi đơn hiệu quả) = tổng_QC_ngày / số_lượng(đơn_hiệu_quả)
+adsCost(đơn không hiệu quả) = 0
+adsTax(mỗi đơn) = adsCost × 8%     (ADS_TAX_RATE, user chốt 2026-07-10)
 ```
 
-Source: `calcNetProfit()` — Giá gốc (`importPrice`) tra theo SKU từ `shopeeSourceData` (không hiển thị thành cột riêng).
+Nếu ngày không có đơn hiệu quả nào → không có cơ sở phân bổ, tất cả giữ `adsCost = 0`.
 
-Quy tắc đặc biệt:
-- Đơn huỷ (`status === 'CANCEL'`): **tất cả cột từ "Khách Thanh Toán" đến "Lợi Nhuận" đều = 0**, kể cả Số lượng = 0 (để không sai tồn kho)
-- Nếu SKU không tìm thấy trong `shopeeSourceData` → Giá gốc = 0 (không lỗi)
-- Lợi Nhuận âm → hiển thị màu đỏ (`text-rose-600`); dương → màu xanh (`text-emerald-700`)
+**Quyết định 2026-07-08**: trước đây chia đều tổng QC/ngày cho **mọi** đơn trong
+ngày, khiến đơn không phát sinh doanh thu bị tính lỗ sai. User chốt: chỉ đơn hiệu
+quả gánh **toàn bộ** phí QC của ngày.
+
+**Đổi tiêu chí 2026-07-09**: trước dùng `shopeeAdsFee > 0` để nhận diện đơn hiệu
+quả, nhưng field này đồng bộ trễ vài ngày (Shopee quyết toán chậm) → các ngày gần
+nhất luôn ra 0. Chuyển sang dùng `status` (OK/SHIPPING) — có ngay khi đơn phát sinh.
+
+Việc tự động lấy tổng chi QC/ngày trực tiếp từ Shopee Ads Manager (thay vì user
+nhập tay) — xem §10.2c, đã triển khai 2026-07-09 cho 2 shop hiện có.
+
+### 10.2c Tự động lấy + phân bổ tiền QC theo ngày/shop (thêm 2026-07-09)
+
+> Source: `routes/adsSpendSync.ts` → `runAdsSpendSync()`, gọi mỗi 30 phút từ `server.ts`
+> (biến `ADS_SPEND_SYNC_INTERVAL`). Bot lấy dữ liệu: `src/adsReport.js` (`getAdsSpendSnapshot`)
+> trong repo `shopee-monitor` (**không nằm trong repo này**, xem `[[reference_bot_deploy_imac]]`).
+
+Thay vì user nhập tay tổng chi QC/ngày (§10.2b), bot Shopee tự động lấy con số
+này từ API ví quảng cáo Shopee (`pas/v1/wallet/get` → `ads_expense_today.total`,
+chia 100000 ra VNĐ) cho **từng shop riêng** (trước đây input chỉ có 1 ô chung
+cho cả 2 shop).
+
+```
+total_spend(ngày, shop) = ads_expense_today.total / 100000   (từ API Shopee Ads)
+đơn_hiệu_quả(ngày, shop) = { đơn trong ngày | platform = shop AND status ∈ {OK, SHIPPING} }
+adsCost(mỗi đơn hiệu quả) = total_spend(ngày, shop) / số_lượng(đơn_hiệu_quả)
+```
+
+Công thức phân bổ giống hệt §10.2b, chỉ thêm điều kiện lọc theo `platform`.
+Chạy lặp lại mỗi 30 phút trong ngày nên tự "làm mới" (true-up) khi
+`ads_expense_today` tăng dần hoặc có đơn hiệu quả mới phát sinh — không cộng dồn,
+mỗi lần chạy tính lại từ đầu.
+
+Lưu vào bảng `shopee_ads_daily_spend` (date, platform, total_spend,
+effective_orders_count) — nguồn dữ liệu tham chiếu cho lịch sử chi QC/ngày/shop.
+
+Mỗi lần chạy, job ghi lại **4 cột** cho từng đơn thay đổi: `ads_cost`, `ads_tax`,
+`handling_fee`, và `net_profit` (tính lại đầy đủ qua `calcNetProfit()`, dòng
+`adsSpendSync.ts:219-222`). Điều kiện bỏ qua (`unchanged`) so cả `net_profit` nên
+đơn cũ tự được true-up khi công thức đổi, kể cả khi `ads_cost` vốn đã đúng.
+
+**Giới hạn đã biết**:
+- UI (`InventoryOutTab.tsx` → `calcNetProfit()`) vẫn tính lại `netProfit` client-side
+  mỗi lần render, không đọc cột `net_profit` lưu sẵn — nên cột này chủ yếu phục vụ
+  file export CSV và query báo cáo. Vì job đã ghi `net_profit` (khác mô tả cũ),
+  cột này KHÔNG còn "lag" như trước.
+- Backfill dữ liệu quá khứ (`backfill-ads-spend.js` trong repo bot) chỉ lấy được
+  lô giao dịch mặc định Shopee trả về (chưa xác định được tham số phân trang của
+  `transaction_history/get`), KHÔNG phải toàn bộ lịch sử vài tuần/tháng.
+
+### 10.2d Lưu giao dịch gốc ví quảng cáo để phân tích sau (thêm 2026-07-09)
+
+> Source: `getAdsSpendSnapshot()` (`src/adsReport.js` trong repo bot) → `runAdsSpendSync()` (`routes/adsSpendSync.ts`)
+
+Mỗi lần đồng bộ (30 phút/lần), ngoài việc ghi `total_spend` vào
+`shopee_ads_daily_spend` (§10.2c), hệ thống còn lưu **từng giao dịch gốc** của
+Ví Quảng cáo (nạp/trừ tiền, kèm `transaction_type` — vd
+`manual_product_deduction_roi_two_bidding`) vào bảng `shopee_ads_wallet_transactions`
+(migration 033), dedup theo `(platform, transaction_id)`.
+
+Mục đích: dữ liệu thô để phân tích sau này (tổng nạp/chi theo tuần/tháng, theo
+loại hình quảng cáo...) — KHÔNG dùng cho việc tự động phân bổ `ads_cost` (đó là
+việc của `shopee_ads_daily_spend`, §10.2c).
+
+**Lợi ích phụ**: vì chạy đều 30 phút/lần và dedup theo transaction_id, bảng này
+tự tích lũy thành lịch sử ngày càng đầy đủ theo thời gian — gần như giải quyết
+được giới hạn phân trang ở trên, miễn phát sinh dưới ~10-20 giao dịch mỗi 30
+phút. Không backfill ngược được giao dịch xảy ra TRƯỚC khi tính năng này chạy.
+
+**Đã verify bằng dữ liệu thật (2026-07-08, staging)**: 10 giao dịch lưu đúng,
+toàn bộ giao dịch `deduction` của Shopee 2 đều thuộc loại
+`manual_product_deduction_roi_two_bidding` — xác nhận đây là ROI-2.0 auto-bidding,
+khớp với phần `product_ads_auto_bidding` trong `ads_expense_today` (§10.2c).
 
 ### 10.3 Đơn nhiều sản phẩm khác nhau — chia phí theo tỷ trọng giá trị (thêm 2026-07-05)
 
@@ -738,6 +882,7 @@ platform_fee(sp_i)     = tỷ_trọng × commission_fee (cấp đơn)
 freeship_extra(sp_i)   = tỷ_trọng × service_fee
 payment_fee(sp_i)      = tỷ_trọng × transaction_fee
 piship_fee(sp_i)       = tỷ_trọng × piship_fee
+shopee_ads_fee(sp_i)   = tỷ_trọng × ams_commission_fee   ← thêm 2026-07-08
 vat_tax(sp_i)          = tỷ_trọng × vat_tax (cấp đơn)
 personal_income_tax(sp_i) = tỷ_trọng × pit_tax (cấp đơn)
 ```

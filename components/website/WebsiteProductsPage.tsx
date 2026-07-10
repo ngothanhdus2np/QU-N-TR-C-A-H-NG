@@ -5,6 +5,7 @@ import {
   Tag, Link2, FileText, SearchIcon, LayoutGrid, List,
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { translateError } from '../../services/errorMessages';
 import { adminStoreRequest } from '../../services/adminStoreApi';
 import { useToast } from '../ui/Toast';
 import { GoodsPagination } from '../pos/GoodsPagination';
@@ -188,7 +189,7 @@ function MediaUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
         method: 'POST', body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64, altText }),
       });
       onUploaded(result.url); setAltText('');
-    } catch (error) { alert(error instanceof Error ? error.message : 'Không thể upload ảnh'); }
+    } catch (error) { alert(translateError(error, 'Không thể upload ảnh')); }
     finally { setUploading(false); }
   };
   return <div className="mt-2 flex flex-wrap items-center gap-2"><input value={altText} onChange={e => setAltText(e.target.value)} placeholder="Alt text ảnh" className="w-40 rounded border border-slate-200 px-2 py-1.5 text-xs"/><label className="cursor-pointer rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"><input type="file" accept="image/webp,image/jpeg,image/png,image/avif" className="hidden" disabled={uploading} onChange={e => upload(e.target.files?.[0])}/>{uploading ? 'Đang upload…' : 'Upload store-media'}</label></div>;
@@ -419,7 +420,7 @@ function DetailPanel({
       setDirty(false);
       onSaved();
     } catch (err: unknown) {
-      showToast('Lỗi lưu: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      showToast(translateError(err, 'Không lưu được sản phẩm'), 'error');
     } finally {
       setSaving(false);
     }
@@ -577,7 +578,7 @@ function DetailPanel({
                   if (file?.type.startsWith('image/')) {
                     setCoverUploading(true);
                     try { setF({ cover_image_url: await uploadMediaFile(file) }); }
-                    catch (err) { showToast(err instanceof Error ? err.message : 'Không thể upload', 'error'); }
+                    catch (err) { showToast(translateError(err, 'Không thể upload ảnh'), 'error'); }
                     finally { setCoverUploading(false); }
                   }
                 }}
@@ -860,7 +861,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       onSaved();
       onClose();
     } catch (err: unknown) {
-      showToast('Lỗi: ' + (err instanceof Error ? err.message : String(err)), 'error');
+      showToast(translateError(err), 'error');
     } finally {
       setSaving(false);
     }

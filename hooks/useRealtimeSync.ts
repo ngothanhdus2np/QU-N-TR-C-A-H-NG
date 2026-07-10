@@ -122,6 +122,19 @@ export function useRealtimeSync(
       return;
     }
 
+    // Bỏ qua khi Supabase đi qua app-proxy nội bộ (localhost:PORT của chính server này).
+    // Proxy ở server.ts chỉ forward /rest/v1, /auth/v1, /storage/v1 — KHÔNG forward
+    // realtime WS. supabase-js sẽ retry ws://localhost:PORT vô hạn và spam console
+    // ("Unexpected response code: 200"). Realtime chỉ là sync phụ (app đã offline-first
+    // merge qua dataMapper), nên tắt hẳn ở chế độ proxy này; prod (domain wss) không ảnh hưởng.
+    try {
+      const host = new URL(supabaseUrl).hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        console.info('[Realtime] Bỏ qua — Supabase qua proxy nội bộ không hỗ trợ WebSocket');
+        return;
+      }
+    } catch {}
+
     const channel = supabase
       .channel('cfo-realtime-sync')
       .on(

@@ -47,6 +47,7 @@ interface BotOrder {
   service_fee: number;
   transaction_fee: number;
   piship_fee: number;
+  ams_commission_fee: number;
   vat_tax: number;
   pit_tax: number;
   province: string;
@@ -140,6 +141,13 @@ function mapOrderToRows(o: BotOrder) {
     const variation = it.variation ? it.variation.replace(',', '-') : '';
     const sku       = variation ? `${it.product_sku}-${variation}` : (it.product_sku ?? '');
 
+    // Giá trị hàng: ưu tiên o.product_price (MERCHANDISE_SUBTOTAL lấy trực tiếp từ
+    // API tính phí của Shopee — khớp đúng với escrow_amount thật) hơn itemSubtotal
+    // (giá cào từ trang danh sách đơn, có thể lệch so với giá Shopee dùng để tính
+    // tiền trả về). Chỉ dùng itemSubtotal khi product_price chưa có (đơn chưa fetch
+    // income xong). Xác minh 2026-07-08: lệch tới 30-329k đ/đơn nếu dùng sai nguồn.
+    const hasOrderLevelPrice = (o.product_price ?? 0) > 0;
+
     return {
       order_id:            o.order_sn,
       tracking_number:     o.order_sn,
@@ -149,12 +157,13 @@ function mapOrderToRows(o: BotOrder) {
       sku,
       product_name:        it.product_name ?? '',
       quantity:            it.quantity ?? 1,
-      sale_price:          itemSubtotal > 0 ? itemSubtotal : prorate(o.product_price ?? o.buyer_paid ?? 0),
+      sale_price:          hasOrderLevelPrice ? prorate(o.product_price) : (itemSubtotal > 0 ? itemSubtotal : prorate(o.buyer_paid ?? 0)),
       customer_paid:       prorate(o.buyer_paid ?? 0),
       platform_fee:        Math.abs(prorate(o.commission_fee  ?? 0)),
       freeship_extra:      Math.abs(prorate(o.service_fee     ?? 0)),
       payment_fee:         Math.abs(prorate(o.transaction_fee ?? 0)),
       piship_fee:          Math.abs(prorate(o.piship_fee      ?? 0)),
+      shopee_ads_fee:      Math.abs(prorate(o.ams_commission_fee ?? 0)),
       vat_tax:             Math.abs(prorate(o.vat_tax         ?? 0)),
       personal_income_tax: Math.abs(prorate(o.pit_tax         ?? 0)),
       affiliate_fee:       0,
@@ -250,11 +259,24 @@ export async function runInventoryOutSync(supabase: SupabaseClient): Promise<{
   }
 
   // 5. Cập nhật fee fields — batch upsert thay vì serial loop (AUDIT-015)
+  // QUAN TRỌNG: KHÔNG ghi đè 4 cột phái sinh (handling_fee/ads_cost/ads_tax/net_profit) —
+  // đó là kết quả do job phân bổ QC (routes/adsSpendSync.ts) tính, không phải dữ liệu gốc
+  // từ bot. mapOrderToRows khởi tạo chúng = 0; nếu upsert cả 4 cột này thì cứ mỗi lần sync
+  // (10 phút/lần) sẽ xoá sạch phân bổ QC + phí vận hành. Bỏ 4 cột khỏi payload update →
+  // PostgREST chỉ SET các cột còn lại, 4 cột derived giữ nguyên giá trị đang có.
   let updated = 0;
   if (toUpdateRows.length > 0) {
+    const toUpdatePayload = toUpdateRows.map((row) => {
+      const copy: Record<string, unknown> = { ...row };
+      delete copy.handling_fee;
+      delete copy.ads_cost;
+      delete copy.ads_tax;
+      delete copy.net_profit;
+      return copy;
+    });
     const { error: updateError } = await supabase
       .from('shopee_inventory_out')
-      .upsert(toUpdateRows, { onConflict: 'order_id,sku', ignoreDuplicates: false });
+      .upsert(toUpdatePayload, { onConflict: 'order_id,sku', ignoreDuplicates: false });
     if (updateError) throw new Error(updateError.message);
     updated = toUpdateRows.length;
   }

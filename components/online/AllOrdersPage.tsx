@@ -149,6 +149,7 @@ interface Props {
 export default function AllOrdersPage({ navigationSlot }: Props) {
   const [shopeeOrders, setShopeeOrders] = useState<UnifiedOrder[]>([]);
   const [websiteOrders, setWebsiteOrders] = useState<UnifiedOrder[]>([]);
+  const [shopeeOffline, setShopeeOffline] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
@@ -156,6 +157,7 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
   const loadShopee = useCallback(async () => {
     const PAGE_SIZE = 200;
     const results: UnifiedOrder[] = [];
+    const offline: string[] = [];
     for (const shop of SHOPS) {
       try {
         let offset = 0;
@@ -204,10 +206,12 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
           offset += json.data.length;
         }
       } catch {
-        // monitor chưa chạy
+        // monitor chưa chạy / bot offline (proxy trả 503) → đánh dấu để báo UI
+        offline.push(shop.label);
       }
     }
     setShopeeOrders(results);
+    setShopeeOffline(offline);
   }, []);
 
   const loadWebsite = useCallback(async () => {
@@ -451,6 +455,20 @@ export default function AllOrdersPage({ navigationSlot }: Props) {
             </button>
           </div>
         </div>
+
+        {/* Cảnh báo bot Shopee offline */}
+        {shopeeOffline.length > 0 && (
+          <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div>
+              <p className="font-semibold">Không kết nối được bot Shopee — đơn Shopee tạm thời không hiển thị</p>
+              <p className="mt-0.5 text-amber-700">
+                Shop offline: {shopeeOffline.join(', ')}. Kiểm tra bot monitor trên iMac
+                (SSH tunnel / pm2). Đơn Website vẫn hiển thị bình thường.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Table header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">

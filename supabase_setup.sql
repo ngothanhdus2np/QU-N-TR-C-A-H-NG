@@ -473,6 +473,14 @@ CREATE INDEX IF NOT EXISTS idx_pos_orders_status          ON pos_orders(status);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_channel         ON pos_orders(channel);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_price_book      ON pos_orders(price_book_id);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_created_by      ON pos_orders(created_by);
+-- Index lookup SKU + filter ads theo shop/ngày (migration 035, 2026-07-10)
+CREATE INDEX IF NOT EXISTS idx_pos_products_sku           ON pos_products(sku);
+CREATE INDEX IF NOT EXISTS idx_shopee_inventory_out_date_platform ON shopee_inventory_out(date, platform);
+-- CHECK giá sản phẩm không âm (migration 036, 2026-07-10) — KHÔNG áp cho pos_orders
+-- (đơn trả âm hợp lệ) hay stock (tồn âm opt-in). NOT VALID: chỉ áp cho ghi mới.
+ALTER TABLE pos_products DROP CONSTRAINT IF EXISTS chk_pos_products_nonneg_prices;
+ALTER TABLE pos_products ADD CONSTRAINT chk_pos_products_nonneg_prices
+  CHECK (sale_price >= 0 AND import_price >= 0) NOT VALID;
 CREATE INDEX IF NOT EXISTS idx_revenue_records_branch     ON revenue_records(branch_id);
 CREATE INDEX IF NOT EXISTS idx_expense_records_branch     ON expense_records(branch_id);
 
@@ -2375,3 +2383,64 @@ ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS return_other_refund NUMERIC;
 CREATE INDEX IF NOT EXISTS idx_pos_orders_original_order_id
   ON pos_orders (original_order_id)
   WHERE original_order_id IS NOT NULL;
+
+-- ============================================================
+-- SHOPEE INVENTORY OUT — PHÍ ADS SHOPEE (migration 031, 2026-07-08)
+-- shopee_ads_fee: phí hoa hồng quảng cáo Shopee Ads (AMS_COMMISSION_FEE) mà Shopee
+-- tự trừ theo TỪNG đơn cụ thể do ads mang lại — khác với cột adsCost hiện có (ngân
+-- sách QC user tự nhập tay, phân bổ trung bình). Thiếu field này khiến 65-81% đơn
+-- lệch công thức Sàn Thanh Toán 12-15k đ so với escrow thật (xem FORMULAS.md §10.0b).
+-- ============================================================
+ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS shopee_ads_fee NUMERIC DEFAULT 0;
+
+-- ============================================================
+-- SHOPEE ADS DAILY SPEND (migration 032, 2026-07-09)
+-- Tổng tiền quảng cáo Shopee Ads đã chi trong ngày, theo từng shop (platform
+-- 'Shopee 1' / 'Shopee 2'). Bot shopee-monitor tự động lấy từ API ví quảng
+-- cáo Shopee (pas/v1/wallet/get) mỗi ~30 phút — xem routes/adsSpendSync.ts.
+-- Dùng để tự động phân bổ ads_cost cho đơn "hiệu quả" (shopee_ads_fee > 0).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS shopee_ads_daily_spend (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  date TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  total_spend NUMERIC DEFAULT 0,
+  effective_orders_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(date, platform)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopee_ads_daily_spend_date ON shopee_ads_daily_spend(date);
+
+-- RLS (migration 034, 2026-07-10): dữ liệu tài chính — khoá anon, chỉ authenticated.
+ALTER TABLE shopee_ads_daily_spend ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "shopee_ads_daily_spend_authenticated" ON shopee_ads_daily_spend;
+CREATE POLICY "shopee_ads_daily_spend_authenticated"
+  ON shopee_ads_daily_spend FOR ALL TO authenticated USING (true) WITH CHECK (true);
+REVOKE ALL ON shopee_ads_daily_spend FROM anon;
+
+-- ============================================================
+-- SHOPEE ADS WALLET TRANSACTIONS (migration 033, 2026-07-09)
+-- Lưu từng giao dịch gốc của Ví Quảng cáo Shopee (nạp/trừ tiền) để phân tích
+-- sau này — xem chi tiết trong supabase_migrations/033_shopee_ads_wallet_transactions.sql
+-- ============================================================
+CREATE TABLE IF NOT EXISTS shopee_ads_wallet_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  platform TEXT NOT NULL,
+  transaction_id TEXT NOT NULL,
+  tx_date TEXT NOT NULL,
+  amount NUMERIC DEFAULT 0,
+  transaction_group TEXT,
+  transaction_type TEXT,
+  synced_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(platform, transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopee_ads_wallet_tx_date ON shopee_ads_wallet_transactions(tx_date);
+
+-- RLS (migration 034, 2026-07-10): dữ liệu tài chính — khoá anon, chỉ authenticated.
+ALTER TABLE shopee_ads_wallet_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "shopee_ads_wallet_transactions_authenticated" ON shopee_ads_wallet_transactions;
+CREATE POLICY "shopee_ads_wallet_transactions_authenticated"
+  ON shopee_ads_wallet_transactions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+REVOKE ALL ON shopee_ads_wallet_transactions FROM anon;

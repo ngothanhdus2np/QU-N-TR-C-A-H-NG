@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShoppingBag, RefreshCw, Search, ChevronDown, ChevronUp, Phone, MapPin, Package, Truck } from 'lucide-react';
 import { adminStoreRequest } from '../../services/adminStoreApi';
+import { translateError } from '../../services/errorMessages';
 import { useToast } from '../ui/Toast';
 
 interface OrderAddress {
@@ -175,7 +176,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
       await adminStoreRequest(`/api/admin/store/orders/${order.id}/shipment`, { method: 'PUT', body: JSON.stringify(toShipmentPayload(draft)) });
       showToast('Đã lưu vận đơn SPX', 'success');
       await loadOrders();
-    } catch (error) { showToast(`Lỗi lưu vận đơn: ${error instanceof Error ? error.message : String(error)}`, 'error'); }
+    } catch (error) { showToast(translateError(error, 'Không lưu được vận đơn'), 'error'); }
     setUpdatingId(null);
   };
 
@@ -198,7 +199,7 @@ export default function WebsiteOrdersPage({ navigationSlot }: Props) {
         'success'
       );
       await loadOrders();
-    } catch (error) { showToast(`Lỗi cập nhật trạng thái: ${error instanceof Error ? error.message : String(error)}`, 'error'); }
+    } catch (error) { showToast(translateError(error, 'Không cập nhật được trạng thái'), 'error'); }
     setUpdatingId(null);
   };
 

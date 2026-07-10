@@ -5,6 +5,7 @@ import {
   Link2, Activity, Globe, Package,
 } from 'lucide-react';
 import { adminStoreRequest } from '../../services/adminStoreApi';
+import { translateError } from '../../services/errorMessages';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function AddChannelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
       onAdded();
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(translateError(err, 'Không thêm được kênh'));
     } finally {
       setLoading(false);
     }
@@ -206,7 +207,7 @@ function ReloginModal({ channel, onClose, onDone }: { channel: ShopeeChannel; on
       await apiPost(`/api/channels/${channel.id}/relogin`);
       setStep('waiting');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(translateError(err, 'Không đăng nhập lại được kênh'));
     } finally {
       setLoading(false);
     }
@@ -456,7 +457,7 @@ export default function WebsiteChannelLinksPage({ navigationSlot }: PageProps) {
       const res = await apiGet<{ ok: boolean; channels: Channel[] }>('/api/channels');
       setChannels(res.channels ?? []);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Không tải được danh sách kênh');
+      setError(translateError(err, 'Không tải được danh sách kênh'));
     } finally {
       setLoading(false);
     }

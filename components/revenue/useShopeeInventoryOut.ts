@@ -7,6 +7,7 @@ import {
   AppDataSurgicalUpdate,
 } from '../../types';
 import { cleanVNNumber, parseVNDate, normalizeHeader, generateId } from '../../src/lib';
+import { adminStoreRequest } from '../../services/adminStoreApi';
 
 // Chuẩn hóa tên đơn vị vận chuyển từ tên đầy đủ Shopee sang tên viết tắt
 const SHIPPING_UNIT_MAP: [string, string][] = [
@@ -344,20 +345,40 @@ export function useShopeeInventoryOut({
     reader.readAsArrayBuffer(file);
   };
 
-  const handleDistributeAdsCost = (totalAds: number, date: string) => {
+  // dailyAdsConfig được key theo "platform::date" (không chỉ "date") — vì mỗi shop
+  // (Shopee 1 / Shopee 2) có tổng tiền QC riêng theo bot, không được gộp chung.
+  const adsConfigKey = (platform: string, date: string) => `${platform}::${date}`;
+
+  // Đơn "hiệu quả" = đơn đã giao hoặc đang giao (OK/SHIPPING) — đơn thực sự phát sinh
+  // doanh thu. Đơn huỷ/hoàn/giao thất bại/thất lạc/chờ xử lý = 0, không gánh QC.
+  // User chốt 2026-07-09: dùng trạng thái đơn thay vì shopeeAdsFee (field này đồng bộ
+  // trễ vài ngày do Shopee quyết toán chậm, khiến các ngày gần nhất luôn ra 0).
+  const isEffectiveOrder = (status: string | undefined) => status === 'OK' || status === 'SHIPPING';
+
+  // Thuế QC = 8% tiền QC — User chốt 2026-07-10
+  const ADS_TAX_RATE = 0.08;
+
+  // Chia QC ngày cho đơn hiệu quả của ĐÚNG 1 SHOP, KHÔNG chia đều cho mọi đơn trong
+  // ngày, KHÔNG lẫn sang shop khác.
+  const handleDistributeAdsCost = (totalAds: number, date: string, platform: string) => {
     if (!onUpdateShopeeInventoryOut || !onUpdateDailyAdsConfig) return;
 
-    const newConfig = { ...dailyAdsConfig, [date]: totalAds };
+    const newConfig = { ...dailyAdsConfig, [adsConfigKey(platform, date)]: totalAds };
     onUpdateDailyAdsConfig(newConfig);
 
-    const recordsForDate = shopeeInventoryOut.filter(r => r.date === date);
+    const recordsForDate = shopeeInventoryOut.filter(r => r.date === date && r.platform === platform);
     if (recordsForDate.length === 0) return;
 
-    const adsPerOrder = totalAds / recordsForDate.length;
+    const effectiveRecords = recordsForDate.filter(r => isEffectiveOrder(r.status));
+    const effectiveCount = effectiveRecords.length;
+    // Không có đơn hiệu quả nào trong ngày → không có cơ sở phân bổ, giữ nguyên 0
+    const adsPerOrder = effectiveCount > 0 ? totalAds / effectiveCount : 0;
 
     const newList = shopeeInventoryOut.map(r => {
-      if (r.date === date) {
-        const adsTax = 0;
+      if (r.date === date && r.platform === platform) {
+        const isEffective = isEffectiveOrder(r.status);
+        const adsCost = isEffective ? adsPerOrder : 0;
+        const adsTax = adsCost * ADS_TAX_RATE;
         const skuData = shopeeSourceData.find(s => s.sku === r.sku);
         const importPrice = (skuData?.importPrice || 0) * (r.quantity || 1);
         const netProfit =
@@ -367,15 +388,79 @@ export function useShopeeInventoryOut({
           r.freeshipExtra -
           r.affiliateFee -
           r.handlingFee -
-          adsPerOrder -
+          adsCost -
           adsTax -
           importPrice;
-        return { ...r, adsCost: adsPerOrder, adsTax, netProfit };
+        return { ...r, adsCost, adsTax, netProfit };
       }
       return r;
     });
 
     onUpdateShopeeInventoryOut(newList);
+  };
+
+  // Đồng bộ tiền QC tự động từ bot shopee-monitor (thay vì gõ tay từng ngày): lấy
+  // /api/shopee-ads-report/{shopId} cho cả 2 shop, rồi áp handleDistributeAdsCost cho
+  // từng ngày ĐANG CÓ đơn hàng trong bảng Xuất kho của đúng shop đó.
+  const [syncingAds, setSyncingAds] = useState(false);
+  const handleSyncAdsFromBot = async () => {
+    if (!onUpdateShopeeInventoryOut || !onUpdateDailyAdsConfig) {
+      return { updatedDays: 0, error: 'Chưa cấu hình cập nhật dữ liệu' };
+    }
+    setSyncingAds(true);
+    try {
+      const SHOP_IDS: { platform: string; id: string }[] = [
+        { platform: 'Shopee 1', id: '1' },
+        { platform: 'Shopee 2', id: '2' },
+      ];
+
+      let updatedDays = 0;
+      const config = { ...dailyAdsConfig };
+      let list = [...shopeeInventoryOut];
+
+      for (const { platform, id } of SHOP_IDS) {
+        const datesForPlatform = [...new Set(
+          shopeeInventoryOut.filter(r => r.platform === platform).map(r => r.date)
+        )];
+        if (datesForPlatform.length === 0) continue;
+
+        const res = await adminStoreRequest<{ ok: boolean; data: Record<string, { cost_vnd: number }>; error?: string }>(
+          `/api/shopee-ads-report/${id}`
+        );
+        if (!res.ok) continue;
+
+        for (const date of datesForPlatform) {
+          const totalAds = res.data[date]?.cost_vnd || 0;
+          config[adsConfigKey(platform, date)] = totalAds;
+
+          const recordsForDate = list.filter(r => r.date === date && r.platform === platform);
+          const effectiveCount = recordsForDate.filter(r => isEffectiveOrder(r.status)).length;
+          const adsPerOrder = effectiveCount > 0 ? totalAds / effectiveCount : 0;
+
+          list = list.map(r => {
+            if (r.date !== date || r.platform !== platform) return r;
+            const isEffective = isEffectiveOrder(r.status);
+            const adsCost = isEffective ? adsPerOrder : 0;
+            const adsTax = adsCost * ADS_TAX_RATE;
+            const skuData = shopeeSourceData.find(s => s.sku === r.sku);
+            const importPrice = (skuData?.importPrice || 0) * (r.quantity || 1);
+            const netProfit =
+              r.salePrice - r.platformFee - r.paymentFee - r.freeshipExtra -
+              r.affiliateFee - r.handlingFee - adsCost - adsTax - importPrice;
+            return { ...r, adsCost, adsTax, netProfit };
+          });
+          updatedDays++;
+        }
+      }
+
+      await onUpdateDailyAdsConfig(config);
+      await onUpdateShopeeInventoryOut(list);
+      return { updatedDays };
+    } catch (err) {
+      return { updatedDays: 0, error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      setSyncingAds(false);
+    }
   };
 
   const handleAddInventoryOut = async () => {
@@ -392,13 +477,35 @@ export function useShopeeInventoryOut({
     const affiliateFee = Number(inventoryOutForm.affiliateFee) || 0;
     const handlingFee = totalVariableCosts;
 
-    const dailyTotalAds = dailyAdsConfig[inventoryOutForm.date || localTodayStr] || 0;
+    const formDate = inventoryOutForm.date || localTodayStr;
+    const formPlatform = inventoryOutForm.platform || 'Shopee 2';
+    const newStatus = inventoryOutForm.status || 'OK';
+    const dailyTotalAds = dailyAdsConfig[adsConfigKey(formPlatform, formDate)] || 0;
+    // Tổng số đơn cùng shop/ngày (mọi trạng thái) — chỉ dùng cho chỉ số hiển thị
+    // dailyOrderIndex, KHÔNG dùng để chia tiền QC.
     const ordersToday =
-      shopeeInventoryOut.filter(r => r.date === (inventoryOutForm.date || localTodayStr)).length +
+      shopeeInventoryOut.filter(r => r.date === formDate && r.platform === formPlatform).length +
       (editingInventoryOutId ? 0 : 1);
+    // Chia QC CHỈ cho đơn hiệu quả (OK/SHIPPING) cùng shop/ngày (gồm đơn đang thêm nếu
+    // hiệu quả) — khớp handleDistributeAdsCost: không lẫn shop khác, không gánh cho đơn
+    // huỷ/hoàn/thất bại.
+    const effectiveCount =
+      shopeeInventoryOut.filter(
+        r =>
+          r.date === formDate &&
+          r.platform === formPlatform &&
+          r.id !== editingInventoryOutId &&
+          isEffectiveOrder(r.status)
+      ).length + (isEffectiveOrder(newStatus) ? 1 : 0);
+    const adsPerOrder =
+      dailyTotalAds > 0 && effectiveCount > 0 ? dailyTotalAds / effectiveCount : 0;
     const adsCost =
-      dailyTotalAds > 0 ? dailyTotalAds / ordersToday : Number(inventoryOutForm.adsCost) || 0;
-    const adsTax = 0;
+      dailyTotalAds > 0
+        ? isEffectiveOrder(newStatus)
+          ? adsPerOrder
+          : 0
+        : Number(inventoryOutForm.adsCost) || 0;
+    const adsTax = adsCost * ADS_TAX_RATE;
     const personalIncomeTax = 0;
 
     const quantity = Number(inventoryOutForm.quantity) || 1;
@@ -425,6 +532,7 @@ export function useShopeeInventoryOut({
       affiliateFee,
       handlingFee,
       pishipFee: 0,
+      shopeeAdsFee: 0,
       vatTax: 0,
       adsCost,
       adsTax,
@@ -441,8 +549,6 @@ export function useShopeeInventoryOut({
 
     if (onUpdateSurgical) {
       if (dailyTotalAds > 0) {
-        const adsPerOrder = dailyTotalAds / ordersToday;
-
         let workingList = [...shopeeInventoryOut];
         if (editingInventoryOutId) {
           const idx = workingList.findIndex(r => r.id === editingInventoryOutId);
@@ -451,12 +557,15 @@ export function useShopeeInventoryOut({
           workingList = [newRecord, ...workingList];
         }
 
+        // Chỉ cập nhật đơn CÙNG shop + CÙNG ngày; đơn hiệu quả gánh adsPerOrder, đơn
+        // không hiệu quả = 0; adsTax = adsCost × ADS_TAX_RATE (không hard-code 0).
         const updates = workingList
-          .filter(r => r.date === (inventoryOutForm.date || localTodayStr))
+          .filter(r => r.date === formDate && r.platform === formPlatform)
           .map(r => {
             const sData = shopeeSourceData.find(s => s.sku === r.sku);
-            const importPrice = sData?.importPrice || 0;
-            const newAdsTax = 0;
+            const importPrice = (sData?.importPrice || 0) * (r.quantity || 1);
+            const rowAdsCost = isEffectiveOrder(r.status) ? adsPerOrder : 0;
+            const rowAdsTax = rowAdsCost * ADS_TAX_RATE;
             const newNetProfit =
               r.salePrice -
               r.platformFee -
@@ -464,12 +573,12 @@ export function useShopeeInventoryOut({
               r.freeshipExtra -
               r.affiliateFee -
               r.handlingFee -
-              adsPerOrder -
-              newAdsTax -
+              rowAdsCost -
+              rowAdsTax -
               importPrice;
             return {
               key: 'shopeeInventoryOut' as const,
-              item: { ...r, adsCost: adsPerOrder, adsTax: newAdsTax, netProfit: newNetProfit },
+              item: { ...r, adsCost: rowAdsCost, adsTax: rowAdsTax, netProfit: newNetProfit },
             };
           });
         try {
@@ -635,6 +744,8 @@ export function useShopeeInventoryOut({
     fixedCostPerOrder,
     handleShopeeFileUpload,
     handleDistributeAdsCost,
+    handleSyncAdsFromBot,
+    syncingAds,
     handleAddInventoryOut,
     handleEditInventoryOut,
     handleRemoveInventoryOut,

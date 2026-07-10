@@ -1,16 +1,30 @@
 #!/bin/bash
 # Deploy app lên iMac cá nhân
 # Chạy từ MacBook: ./scripts/deploy-imac.sh
+#
+# Rollback tự động (audit 2026-07-10 mục K): trước khi ghi đè code, backup bản đang
+# chạy bằng hardlink (rẻ, tức thì — không copy nội dung file không đổi). Nếu health-check
+# sau deploy fail, tự động khôi phục lại bản backup + restart, rồi báo kết quả rõ ràng.
+# LƯU Ý: rollback chỉ khôi phục CODE, KHÔNG khôi phục schema DB (migration không tự
+# revert) — xem docs/03-deployment/ROLLBACK_RUNBOOK.md khi cần xử lý sâu hơn.
 
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.3"
+IMAC_IP="192.168.1.6"
 IMAC_DIR="~/cfobrain"
+BACKUP_DIR="~/cfobrain-backup-prev"
 APP_LABEL="com.cfobrain.app"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 
 echo "🚀 Bắt đầu deploy lên iMac..."
+
+# Bước 0: Backup bản đang chạy (hardlink, giữ đúng 1 bản gần nhất) — có thể fail vô hại
+# nếu đây là lần deploy đầu tiên (chưa có gì để backup).
+echo "🧷 Backup bản hiện tại (để rollback nếu cần)..."
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "rm -rf $BACKUP_DIR && cp -Rl $IMAC_DIR $BACKUP_DIR" \
+  && echo "✅ Backup xong" \
+  || echo "⚠️  Không backup được (có thể là lần deploy đầu tiên) — tiếp tục, không rollback được nếu lần này lỗi"
 
 # Bước 1: Sync code
 echo "📦 Đang copy code lên iMac..."
@@ -48,7 +62,8 @@ ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "export PATH=/usr/local/bin:/usr/bin:/bin:
 
 echo "✅ Restart xong"
 
-# Bước 4: Kiểm tra
+# Bước 4: Kiểm tra — health-check giờ verify DB thật (xem server.ts), nên "OK" nghĩa là
+# app VÀ Supabase đều phản hồi, không chỉ process còn sống.
 sleep 3
 STATUS=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "curl -s http://localhost:3000/health")
 if [ "$STATUS" = "OK" ]; then
@@ -56,6 +71,35 @@ if [ "$STATUS" = "OK" ]; then
   echo "✅ Deploy thành công! App đang chạy tại:"
   echo "   🌐 https://cfobrain.phucsang.com.vn"
   echo "   🏠 http://192.168.1.3:3000"
+  exit 0
+fi
+
+# Bước 5: Health-check fail → thử tự động rollback về bản backup (nếu có)
+echo "⚠️  App chưa phản hồi đúng (trả về: '$STATUS') — thử rollback tự động..."
+HAS_BACKUP=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "[ -d $BACKUP_DIR ] && echo yes || echo no")
+if [ "$HAS_BACKUP" != "yes" ]; then
+  echo "❌ Không có bản backup để rollback (có thể là lần deploy đầu tiên)."
+  echo "   Kiểm tra log: ssh -i $SSH_KEY $IMAC_USER@$IMAC_IP 'tail -50 /tmp/cfobrain-app.log'"
+  echo "   Xem thêm: docs/03-deployment/ROLLBACK_RUNBOOK.md"
+  exit 1
+fi
+
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "
+  rm -rf ${IMAC_DIR}-failed
+  mv $IMAC_DIR ${IMAC_DIR}-failed
+  mv $BACKUP_DIR $IMAC_DIR
+  export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH
+  launchctl kickstart -k gui/\$(id -u)/$APP_LABEL 2>/dev/null || launchctl start $APP_LABEL
+"
+sleep 3
+STATUS2=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "curl -s http://localhost:3000/health")
+if [ "$STATUS2" = "OK" ]; then
+  echo "↩️  Đã ROLLBACK thành công — app đang chạy lại code CŨ (bản deploy lỗi giữ tại ${IMAC_DIR}-failed để debug)."
+  echo "   ⚠️  Nếu migration mới đã chạy ở Bước 1.6, schema DB KHÔNG được revert — xem docs/03-deployment/ROLLBACK_RUNBOOK.md"
+  exit 1
 else
-  echo "⚠️  App chưa phản hồi, kiểm tra log: ssh $IMAC_USER@$IMAC_IP 'tail -50 /tmp/cfobrain-app.log'"
+  echo "❌ Rollback cũng thất bại — CẦN CAN THIỆP THỦ CÔNG NGAY."
+  echo "   SSH vào máy: ssh -i $SSH_KEY $IMAC_USER@$IMAC_IP"
+  echo "   Xem: docs/03-deployment/ROLLBACK_RUNBOOK.md"
+  exit 1
 fi

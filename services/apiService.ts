@@ -820,7 +820,10 @@ export const apiService = {
   async fetchShopeeInventoryOut() {
     const result = await fetchAllRows('shopee_inventory_out', 'id');
     if (result.data) {
-      // Dedup theo order_id — giữ hàng có dữ liệu đầy đủ nhất (customer_paid cao nhất)
+      // Dedup theo order_id + sku — 1 đơn Shopee nhiều sản phẩm khác nhau = nhiều dòng
+      // (mỗi SKU 1 dòng, phí đã prorate ở inventoryOutSync.mapOrderToRows). Gộp theo order_id
+      // đơn thuần sẽ nuốt mất SKU thứ 2 (đơn đa sản phẩm chỉ còn 1 dòng ở trang Xuất kho).
+      // Vẫn giữ dedup để loại bản ghi trùng thật (cùng order_id+sku), chọn bản đầy đủ nhất.
       const bestByOrder = new Map<string, any>();
       const score = (r: any) =>
         (r.sku ? 100 : 0) +
@@ -829,7 +832,7 @@ export const apiService = {
         (r.product_name ? 10 : 0) +
         (Number(r.sale_price ?? 0) > 0 ? 5 : 0);
       for (const r of result.data) {
-        const key = r.order_id || r.id;
+        const key = r.order_id ? `${r.order_id}||${r.sku ?? ''}` : r.id;
         if (!key) continue;
         const existing = bestByOrder.get(key);
         if (!existing || score(r) > score(existing)) bestByOrder.set(key, r);

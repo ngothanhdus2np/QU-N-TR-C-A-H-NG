@@ -21,7 +21,7 @@ export function createNotificationsRouter(
 ): Router {
   const router = Router();
 
-  router.get('/api/eod-report', async (req, res) => {
+  router.get('/api/eod-report', requireAuth, async (req, res) => {
     try {
       const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
       const report = await getEODReport(supabase, date);
@@ -45,7 +45,7 @@ export function createNotificationsRouter(
     }
   });
 
-  router.get('/api/notifications/status', (_req, res) => {
+  router.get('/api/notifications/status', requireAuth, (_req, res) => {
     res.json({
       emailConfigured: isEmailConfigured(),
       emailTo: process.env.EMAIL_TO || null,
@@ -100,7 +100,7 @@ export function createNotificationsRouter(
     }
   });
 
-  router.get('/api/alerts', async (_req, res) => {
+  router.get('/api/alerts', requireAuth, async (_req, res) => {
     try {
       const alerts = await checkAllAlerts(supabase);
       res.json(alerts);
@@ -110,7 +110,7 @@ export function createNotificationsRouter(
     }
   });
 
-  router.get('/api/alerts/config', async (_req, res) => {
+  router.get('/api/alerts/config', requireAuth, async (_req, res) => {
     try {
       const config = await loadAlertConfig(supabase);
       res.json(config);

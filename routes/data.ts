@@ -74,6 +74,48 @@ const writeErrorResponse = (
   error?: unknown
 ) => res.status(500).json({ error: error ? getErrorMessage(error) || fallback : fallback });
 
+// Trường số KHÔNG được âm theo nghiệp vụ. Cố ý HẸP: đơn trả hàng lưu số âm hợp lệ ở
+// pos_orders, và allowSellOutOfStock cho phép stock âm — nên KHÔNG chặn âm chung chung,
+// chỉ chặn giá bán/giá vốn sản phẩm (không bao giờ âm hợp lệ).
+const NON_NEGATIVE_FIELDS: Record<string, string[]> = {
+  pos_products: ['sale_price', 'import_price'],
+  shopee_source_data: ['import_price'],
+};
+
+// Duyệt sâu payload, phát hiện số vô nghĩa (NaN/±Infinity) ở bất kỳ trường nào — luôn là
+// lỗi, không nghiệp vụ hợp lệ nào cần. Trả về mô tả trường vi phạm, hoặc null nếu sạch.
+const findNonFinite = (value: unknown, path = ''): string | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? null : `Trường "${path || 'giá trị'}" là số không hợp lệ`;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const r = findNonFinite(value[i], `${path}[${i}]`);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      const r = findNonFinite(v, path ? `${path}.${k}` : k);
+      if (r) return r;
+    }
+  }
+  return null;
+};
+
+// Validate payload backend TRƯỚC KHI ghi (không tin frontend): chặn NaN/Infinity toàn
+// payload + số âm ở các trường tài chính không được âm. Trả về thông báo lỗi hoặc null.
+const validateDataPayload = (tableName: string, payload: Record<string, unknown>): string | null => {
+  const nonFinite = findNonFinite(payload);
+  if (nonFinite) return nonFinite;
+  for (const field of NON_NEGATIVE_FIELDS[tableName] ?? []) {
+    const raw = payload[field];
+    if (typeof raw === 'number' && raw < 0) return `Trường "${field}" không được âm`;
+  }
+  return null;
+};
+
 const getErrorCode = (error: unknown): string | null => {
   if (error && typeof error === 'object' && 'code' in error) {
     const code = (error as { code?: unknown }).code;
@@ -492,6 +534,10 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     if (!tableName || !payload || !recordId) {
       return res.status(400).json({ error: 'Dữ liệu ghi không hợp lệ' });
     }
+    const validationError = validateDataPayload(tableName, payload as Record<string, unknown>);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
 
     try {
       const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
@@ -526,6 +572,12 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     const payload = req.body?.payload;
     if (!tableName || !Array.isArray(payload)) {
       return res.status(400).json({ error: 'Dữ liệu ghi hàng loạt không hợp lệ' });
+    }
+    for (let i = 0; i < payload.length; i++) {
+      const validationError = validateDataPayload(tableName, payload[i] as Record<string, unknown>);
+      if (validationError) {
+        return res.status(400).json({ error: `Dòng ${i}: ${validationError}` });
+      }
     }
 
     try {

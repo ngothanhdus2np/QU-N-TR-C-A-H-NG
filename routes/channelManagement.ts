@@ -54,7 +54,7 @@ async function triggerAutoRelogin(supabase: SupabaseClient, shop: ShopRow) {
 
 // Tạo lại ecosystem.config.js từ danh sách shops trong DB
 function generateEcosystem(shops: ShopRow[]): string {
-  const SUPABASE_URL = process.env.SUPABASE_URL || 'http://192.168.1.3:8000';
+  const SUPABASE_URL = process.env.SUPABASE_URL || 'http://192.168.1.6:8000';
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
   const GOOGLE_CREDS = 'gen-lang-client-0513345549-1d9a41618fef.json';
 

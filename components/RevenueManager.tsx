@@ -18,6 +18,7 @@ import CostsTab from './revenue/CostsTab';
 import InventoryInTab from './revenue/InventoryInTab';
 import InventoryOutTab from './revenue/InventoryOutTab';
 import ReportTab from './revenue/ReportTab';
+import AdsTab from './revenue/AdsTab';
 import LedgerTab from './revenue/LedgerTab';
 import { RevenueSubTabNav } from './revenue/RevenueSubTabNav';
 import { RevenueAuditModal } from './revenue/RevenueAuditModal';
@@ -413,6 +414,8 @@ const RevenueManager: React.FC<Props> = ({
           handleClearAllInventoryOut={shopee.handleClearAllInventoryOut}
           handleShopeeFileUpload={shopee.handleShopeeFileUpload}
           handleDistributeAdsCost={shopee.handleDistributeAdsCost}
+          handleSyncAdsFromBot={shopee.handleSyncAdsFromBot}
+          syncingAds={shopee.syncingAds}
           shopeeFileInputRef={shopee.shopeeFileInputRef}
           totalVariableCosts={shopee.totalVariableCosts}
           formatNumber={formatNumber}
@@ -433,6 +436,10 @@ const RevenueManager: React.FC<Props> = ({
           timeContext={timeContext}
           formatNumber={formatNumber}
         />
+      )}
+
+      {isShopee && activeSubTab === 'ads' && (
+        <AdsTab shopFilter={shopFilter} timeContext={timeContext} formatNumber={formatNumber} />
       )}
 
       {activeSubTab === 'ledger' && !isShopee && (
