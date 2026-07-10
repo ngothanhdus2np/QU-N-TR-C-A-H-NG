@@ -62,10 +62,28 @@ ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "export PATH=/usr/local/bin:/usr/bin:/bin:
 
 echo "✅ Restart xong"
 
+# Poll /health tối đa 15 lần (1s/lần) NGAY TRÊN iMac (1 lần ssh, tránh round-trip mạng mỗi
+# lần thử) thay vì sleep cố định — tsx (chạy TS trực tiếp, không phải build sẵn) + kết nối
+# DB đầu tiên có thể mất hơn vài giây để sẵn sàng, sleep cố định ngắn từng gây rollback
+# NHẦM dù app thực ra lên khỏe (xảy ra thật ở lần deploy 2026-07-10 lúc 23:55).
+# `|| echo CURL_FAILED` bên trong BẮT BUỘC — nếu không, curl fail (ECONNREFUSED lúc app
+# chưa kịp bind port) làm cả vòng lặp remote thoát sớm, và với `set -e` phía LOCAL script
+# sẽ THOÁT NGAY khi gán biến, bỏ qua toàn bộ logic rollback bên dưới (đã xảy ra thật —
+# exit code 7 — ở lần chạy đầu tiên 2026-07-10 lúc 23:51).
+wait_for_health() {
+  ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" '
+    for i in $(seq 1 15); do
+      STATUS=$(curl -s http://localhost:3000/health 2>/dev/null || echo CURL_FAILED)
+      if [ "$STATUS" = "OK" ]; then echo OK; exit 0; fi
+      sleep 1
+    done
+    echo "$STATUS"
+  '
+}
+
 # Bước 4: Kiểm tra — health-check giờ verify DB thật (xem server.ts), nên "OK" nghĩa là
 # app VÀ Supabase đều phản hồi, không chỉ process còn sống.
-sleep 3
-STATUS=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "curl -s http://localhost:3000/health")
+STATUS=$(wait_for_health)
 if [ "$STATUS" = "OK" ]; then
   echo ""
   echo "✅ Deploy thành công! App đang chạy tại:"
@@ -91,8 +109,7 @@ ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "
   export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH
   launchctl kickstart -k gui/\$(id -u)/$APP_LABEL 2>/dev/null || launchctl start $APP_LABEL
 "
-sleep 3
-STATUS2=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "curl -s http://localhost:3000/health")
+STATUS2=$(wait_for_health)
 if [ "$STATUS2" = "OK" ]; then
   echo "↩️  Đã ROLLBACK thành công — app đang chạy lại code CŨ (bản deploy lỗi giữ tại ${IMAC_DIR}-failed để debug)."
   echo "   ⚠️  Nếu migration mới đã chạy ở Bước 1.6, schema DB KHÔNG được revert — xem docs/03-deployment/ROLLBACK_RUNBOOK.md"
