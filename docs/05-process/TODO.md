@@ -11,8 +11,8 @@
 
 > Audit 4 agent song song trên branch `feat/online-audit-shopee`. Lõi POS vững, không hồi quy. Rủi ro tập trung ở tính năng Shopee Ads mới (chưa từng audit) + tầng vận hành. Các mục con:
 
-#### [x] 🔴 AUDIT-0710-A — BLOCKER: 2 bảng Ads mới (032/033) thiếu RLS → anon CRUD được dữ liệu tài chính *(code vá xong 2026-07-10, ⏳ CHỜ USER chạy prod)*
-> `shopee_ads_daily_spend` + `shopee_ads_wallet_transactions` tạo mới không kèm ENABLE RLS/POLICY/REVOKE anon — đúng "bom nổ chậm" R3 cảnh báo. Đã tạo `supabase_migrations/034_lock_anon_shopee_ads_tables.sql` + sửa `supabase_setup.sql`. **CÒN LẠI**: user chạy 034 trên prod + verify anon key thật (`curl /rest/v1/shopee_ads_daily_spend` phải trả 401/42501).
+#### [x] 🔴 AUDIT-0710-A — BLOCKER: 2 bảng Ads mới (032/033) thiếu RLS → anon CRUD được dữ liệu tài chính *(XONG HẲN 2026-07-10 — đã deploy + verify trên prod)*
+> `shopee_ads_daily_spend` + `shopee_ads_wallet_transactions` tạo mới không kèm ENABLE RLS/POLICY/REVOKE anon — đúng "bom nổ chậm" R3 cảnh báo. Đã tạo `supabase_migrations/034_lock_anon_shopee_ads_tables.sql` + sửa `supabase_setup.sql`. Migration 034 đã chạy trên prod (deploy 2026-07-10) và verify bằng anon key thật: cả 2 bảng trả `401 permission denied (42501)`.
 
 #### [ ] 🔴 AUDIT-0710-B — BLOCKER: chưa có backup tự động (điểm yếu nhất hệ thống)
 > `sync-prod-to-dev.sh` chạy tay; `backup-mega.sh`+launchd (kế hoạch trong TODO) chưa tồn tại; 2 file `backup_2026*.sql` root = 0 byte (fail âm thầm). Ổ cứng iMac hỏng = mất dữ liệu bán hàng thật. → triển khai backup định kỳ + alert khi backup fail + dọn 2 file rác.

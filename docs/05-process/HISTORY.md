@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-10 (R53) — Deploy production toàn bộ fix R52 lên iMac + vá 2 bug hạ tầng phát hiện khi deploy thật
+
+- **Deploy production**: chạy `./scripts/deploy-imac.sh` đưa toàn bộ code + 5 migration mới (032-036) từ R52 lên iMac. Migration chạy sạch, không lỗi.
+- **Verify blocker RLS (AUDIT-0710-A) đã vá thật trên prod**: curl trực tiếp bằng anon key thật tới `shopee_ads_daily_spend`/`shopee_ads_wallet_transactions` qua `supabase.phucsang.com.vn` → cả 2 đều trả `401 permission denied for table` (`42501`). Trước đây 2 bảng này hoàn toàn mở cho anon.
+- **Bug #1 phát hiện khi deploy thật — sửa ngay**: `deploy-imac.sh` có lỗi `set -e` kết hợp `curl` fail bên trong `ssh` khiến cả script thoát đột ngột (exit code 7) ngay tại bước health-check, bỏ qua toàn bộ logic rollback vừa viết ở R52 — dù app thực ra vẫn lên khỏe. Đã sửa: thêm `|| echo CURL_FAILED` fallback + thay `sleep 3` cố định bằng vòng lặp poll 15 lần/1s chạy ngay trên iMac (tsx chạy TS trực tiếp, không phải build sẵn, cần hơn 3s để sẵn sàng đôi lúc). Deploy lại lần 3 sau khi sửa — chạy sạch, không rollback nhầm.
+- **Bug #2 phát hiện — sửa với xác nhận user**: domain công khai `cfobrain.phucsang.com.vn` trả `401` với header Cloudflare/Kong thay vì app — dò ra nguyên nhân: `~/.cloudflared/config.yml` (service `com.cfobrain.cloudflared`, đang chạy) có ingress rule trỏ `cfobrain.phucsang.com.vn → http://localhost:8000` (Supabase Kong) thay vì `:3000` (app). Xác nhận qua 2 file backup config (02/07, 08/07) rằng lỗi này đã tồn tại ít nhất từ 02/07, không phải do deploy hôm nay. Domain `app.phucsang.com.vn` vẫn đúng (đã trỏ `:3000` từ trước) — đây là URL thật đang hoạt động. Hỏi user qua AskUserQuestion trước khi sửa (hạ tầng ngoài repo) → user chọn sửa ngay. Đã backup config cũ, sửa đúng dòng `cfobrain.phucsang.com.vn` (không đụng dòng `supabase.phucsang.com.vn` liền kề), reload `launchctl kickstart com.cfobrain.cloudflared`. Verify: `cfobrain.phucsang.com.vn/health` → 200 OK; `supabase.phucsang.com.vn` không bị ảnh hưởng.
+- Files: `scripts/deploy-imac.sh` (fix health-check retry). Config tunnel (`~/.cloudflared/config.yml` trên iMac) không nằm trong repo — đã backup tại chỗ trước khi sửa.
+
 ### 2026-07-10 (R52) — AUDIT-0710: fix toàn bộ 13 mục "nên triển khai sớm" từ audit R51
 
 - Theo yêu cầu user "fix tất cả các mục nên triển khai sớm theo thứ tự từ dễ đến khó" — hoàn thành cả 13 mục 🟡/🟢 (C, D, E, F, G, H, I, J, K, L, M, N, O). Chi tiết từng mục + bằng chứng: xem `docs/05-process/TODO.md` (AUDIT-0710-C…O, đã đánh dấu `[x]`).
