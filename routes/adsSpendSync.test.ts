@@ -34,6 +34,8 @@ function makeSupabaseMock(opts: {
   rowsByPlatform?: Record<string, InventoryOutRowFixture[]>;
   updateShouldError?: boolean;
 }) {
+  // Job giờ batch upsert 1 lần/ngày (audit 2026-07-11 mục D) — capture từng dòng trong
+  // payload để test vẫn assert theo đơn như trước.
   const updateCalls: { table: string; fields: Record<string, unknown>; id: string }[] = [];
   const auditInserts: Record<string, unknown>[] = [];
 
@@ -67,12 +69,12 @@ function makeSupabaseMock(opts: {
             },
           }),
         }),
-        update: (fields: Record<string, unknown>) => ({
-          eq: (_col: string, id: string) => {
-            updateCalls.push({ table, fields, id });
-            return Promise.resolve({ error: opts.updateShouldError ? { message: 'update failed' } : null });
-          },
-        }),
+        upsert: (rows: Record<string, unknown>[], _opts?: { onConflict?: string }) => {
+          for (const fields of rows) {
+            updateCalls.push({ table, fields, id: String(fields.id) });
+          }
+          return Promise.resolve({ error: opts.updateShouldError ? { message: 'update failed' } : null });
+        },
       };
     }
     if (table === 'audit_logs') {

@@ -747,9 +747,20 @@ Sàn Thanh Toán = Giá trị đơn
 Source: `calcPlatformNet()` — chỉ tính cho **đơn thành công** (OK/SHIPPING); đơn khác = 0.
 Không bao gồm chi phí quảng cáo tự nhập tay (`adsCost`, xem §10.2b) và vận hành.
 
-### 10.2 Lợi Nhuận (Net Profit) — theo loại đơn (cập nhật 2026-07-06)
+### 10.2 Lợi Nhuận (Net Profit) — theo loại đơn (cập nhật 2026-07-11)
 
-Phân loại theo `status`, `calcNetProfit()`:
+> **Source (2026-07-11, nguồn DUY NHẤT)**: `src/lib/shopeeProfit.ts` —
+> `shopeeOrderKind()`, `calcShopeePlatformNet()`, `calcShopeeNetProfit()`.
+> Mọi nơi (UI hiển thị `InventoryOutTab.tsx`, job phân bổ QC `routes/adsSpendSync.ts`,
+> 3 đường ghi + nhập tay + **luồng import Excel** trong `useShopeeInventoryOut.ts`)
+> đều import từ đây — KHÔNG chép lại.
+> Trước 2026-07-11, 3 đường ghi frontend dùng bản cũ thiếu PiShip/VAT/TNCN/Phí Ads
+> Shopee và không phân nhánh đơn hủy/hoàn → cột `net_profit` lưu trên Supabase lệch
+> với số hiển thị (audit 2026-07-11 mục A, đã sửa). Audit lần 3 cùng ngày phát hiện
+> thêm đường thứ 5 (import Excel) còn sót bản inline: đơn hoàn ghi 0 thay vì
+> −(PiShip + Vận hành) và giá vốn quên nhân số lượng — đã đưa về công thức chuẩn.
+
+Phân loại theo `status`, `calcShopeeNetProfit()`:
 
 | Loại đơn | status | Lợi nhuận |
 |---|---|---|
@@ -771,7 +782,8 @@ Quy tắc hiển thị cột theo loại đơn:
 ### 10.2b Phân bổ chi phí QC theo ngày cho đơn hiệu quả (cập nhật 2026-07-09)
 
 > Source: `components/revenue/useShopeeInventoryOut.ts` → `handleDistributeAdsCost()`
-> (`isEffectiveOrder`, `ADS_TAX_RATE`)
+> (`isEffectiveOrder`, `ADS_TAX_RATE`; netProfit tính qua `calcShopeeNetProfit()`
+> của `src/lib/shopeeProfit.ts` từ 2026-07-11)
 
 User nhập tổng chi QC thực tế của 1 ngày (từ Shopee Ads Manager, nhập tay). Hệ
 thống chia số tiền này **chỉ cho các đơn "hiệu quả"** trong ngày đó — đơn hiệu quả
@@ -824,9 +836,12 @@ Lưu vào bảng `shopee_ads_daily_spend` (date, platform, total_spend,
 effective_orders_count) — nguồn dữ liệu tham chiếu cho lịch sử chi QC/ngày/shop.
 
 Mỗi lần chạy, job ghi lại **4 cột** cho từng đơn thay đổi: `ads_cost`, `ads_tax`,
-`handling_fee`, và `net_profit` (tính lại đầy đủ qua `calcNetProfit()`, dòng
-`adsSpendSync.ts:219-222`). Điều kiện bỏ qua (`unchanged`) so cả `net_profit` nên
-đơn cũ tự được true-up khi công thức đổi, kể cả khi `ads_cost` vốn đã đúng.
+`handling_fee`, và `net_profit` (tính qua `calcShopeeNetProfit()` của
+`src/lib/shopeeProfit.ts` — công thức chuẩn dùng chung, từ 2026-07-11). Các đơn
+thay đổi của cùng 1 ngày được gom **batch upsert 1 request** (trước 2026-07-11
+update từng dòng — lỗi giữa chừng để ngày ở trạng thái nửa cập nhật). Điều kiện
+bỏ qua (`unchanged`) so cả `net_profit` nên đơn cũ tự được true-up khi công thức
+đổi, kể cả khi `ads_cost` vốn đã đúng.
 
 **Giới hạn đã biết**:
 - UI (`InventoryOutTab.tsx` → `calcNetProfit()`) vẫn tính lại `netProfit` client-side

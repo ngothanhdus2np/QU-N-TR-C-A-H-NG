@@ -322,9 +322,22 @@ export function createChannelManagementRouter(
   });
 
   // POST /api/channels/notify-logout — bot gọi khi detect session hết hạn
-  // Không cần auth vì gọi từ localhost bot
   // Auto-relogin được kích hoạt qua GET /api/channels khi phát hiện sessionExpired
+  //
+  // Guard: bot gọi trực tiếp localhost KHÔNG kèm key (code bot ngoài repo) → chấp nhận
+  // request "thật sự local": socket loopback VÀ không có header proxy-forward (request
+  // qua Cloudflare tunnel dù socket là loopback vẫn mang cf-connecting-ip/x-forwarded-for).
+  // Request từ ngoài phải có x-api-key khớp INTERNAL_API_KEY.
   router.post('/api/channels/notify-logout', async (req, res) => {
+    const remoteAddr = req.socket.remoteAddress || '';
+    const isLoopback = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+    const hasProxyHeaders = Boolean(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']);
+    const internalKey = process.env.INTERNAL_API_KEY;
+    const keyOk = Boolean(internalKey && req.headers['x-api-key'] === internalKey);
+    if (!keyOk && !(isLoopback && !hasProxyHeaders)) {
+      res.status(401).json({ ok: false, error: 'Unauthorized' });
+      return;
+    }
     try {
       const { shopId } = req.body as { shopId?: string };
       if (!shopId) { res.status(400).json({ ok: false }); return; }

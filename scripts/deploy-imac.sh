@@ -88,7 +88,7 @@ if [ "$STATUS" = "OK" ]; then
   echo ""
   echo "✅ Deploy thành công! App đang chạy tại:"
   echo "   🌐 https://cfobrain.phucsang.com.vn"
-  echo "   🏠 http://192.168.1.3:3000"
+  echo "   🏠 http://$IMAC_IP:3000"
   exit 0
 fi
 

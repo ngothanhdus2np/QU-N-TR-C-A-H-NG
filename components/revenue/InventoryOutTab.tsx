@@ -3,6 +3,9 @@ import {
   ShopeeInventoryOutRecord, ShopeeSourceItem, ShopeeCostConfig,
 } from '../../types';
 import {
+  shopeeOrderKind, calcShopeePlatformNet, calcShopeeNetProfit,
+} from '../../src/lib/shopeeProfit';
+import {
   Upload, TrendingUp, DollarSign, Plus, Pencil, Save, Trash2,
   Check, X, ArrowUpFromLine, ArrowDownToLine, ChevronLeft, ChevronRight, FileDown, RefreshCw,
 } from 'lucide-react';
@@ -281,17 +284,8 @@ const InventoryOutTab: React.FC<Props> = ({
   //    KHÔNG trừ giá gốc, các phí Shopee khác = 0.
   //  • Còn lại (huỷ chưa giao / chờ xử lý / thất lạc): không phát sinh gì → 0.
   // Nhận diện loại đơn từ cả status CODE (bot sync) lẫn status tiếng Việt thô (dữ liệu cũ/import)
-  const orderKind = (s: string): 'success' | 'shiploss' | 'void' => {
-    const x = (s || '').trim();
-    if (x === 'OK' || x === 'SHIPPING') return 'success';
-    if (x === 'FAILED' || x === 'RETURN' || x === 'RETURNED') return 'shiploss';
-    if (x === 'CANCEL' || x === 'PENDING' || x === 'LOST') return 'void';
-    // Dữ liệu cũ lưu status tiếng Việt thô — thứ tự kiểm tra quan trọng:
-    if (/giao hàng thất bại|giao thất bại|hoàn hàng|đang hoàn|trả hàng/i.test(x)) return 'shiploss';
-    if (/hủy|huỷ/i.test(x)) return 'void';
-    if (/đã giao|đã nhận được hàng|đang giao|hoàn tất/i.test(x)) return 'success';
-    return 'void'; // chờ xử lý / không rõ → không tính
-  };
+  // Phân loại đơn: nguồn duy nhất src/lib/shopeeProfit.ts — không chép lại công thức
+  const orderKind = shopeeOrderKind;
   const isSuccessOrder  = (s: string) => orderKind(s) === 'success';
   const isShipLossOrder = (s: string) => orderKind(s) === 'shiploss';
 
@@ -304,23 +298,16 @@ const InventoryOutTab: React.FC<Props> = ({
   // Bỏ tiền tố "Tỉnh"/"Thành phố"/"TP." khỏi tên tỉnh/thành — hiện gọn "Hà Nội" thay vì "Thành phố Hà Nội"
   const shortProvinceName = (raw: string) => raw.replace(/^(Thành phố|Tỉnh|TP\.?)\s+/i, '').trim();
 
-  // Sàn Thanh Toán = salePrice - tất cả phí shopee (chỉ có ở đơn thành công, còn lại = 0)
-  // Gồm cả Phí Ads Shopee (shopeeAdsFee = AMS_COMMISSION_FEE) — Shopee tự trừ theo đơn
-  // ads cụ thể, xác minh 2026-07-08: thiếu khoản này khiến 65-81% đơn lệch escrow thật 12-15kđ.
-  const calcPlatformNet = (i: ShopeeInventoryOutRecord) =>
-    !isSuccessOrder(i.status) ? 0 :
-    i.salePrice - i.platformFee - Math.abs(i.pishipFee || 0) - i.freeshipExtra
-    - i.paymentFee - (i.vatTax || 0) - i.personalIncomeTax - i.affiliateFee - Math.abs(i.shopeeAdsFee || 0);
-
-  // Lợi nhuận theo loại đơn:
-  //  • Thành công: Sàn TT - Giá gốc×SL - QC - Thuế QC - Phí Vận Hành
-  //  • Giao thất bại / Hoàn hàng: -(PiShip + Phí Vận Hành)  (không trừ giá gốc — hàng về kho)
-  //  • Huỷ chưa giao / khác: 0
+  // Sàn Thanh Toán / Lợi nhuận — wrapper quanh công thức chuẩn (src/lib/shopeeProfit.ts)
+  const calcPlatformNet = (i: ShopeeInventoryOutRecord) => calcShopeePlatformNet(i.status, i);
   const calcNetProfit = (i: ShopeeInventoryOutRecord) => {
-    if (isShipLossOrder(i.status)) return -(Math.abs(i.pishipFee || 0) + (i.handlingFee || 0));
-    if (!isSuccessOrder(i.status)) return 0;
     const importPrice = (shopeeSourceData.find(s => s.sku === i.sku)?.importPrice || 0) * (i.quantity || 1);
-    return calcPlatformNet(i) - importPrice - i.adsCost - i.adsTax - i.handlingFee;
+    return calcShopeeNetProfit(i.status, i, {
+      importPrice,
+      adsCost: i.adsCost,
+      adsTax: i.adsTax,
+      handlingFee: i.handlingFee,
+    });
   };
 
   const tableTotals = useMemo(() => ({

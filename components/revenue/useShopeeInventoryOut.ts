@@ -7,6 +7,7 @@ import {
   AppDataSurgicalUpdate,
 } from '../../types';
 import { cleanVNNumber, parseVNDate, normalizeHeader, generateId } from '../../src/lib';
+import { calcShopeeNetProfit } from '../../src/lib/shopeeProfit';
 import { adminStoreRequest } from '../../services/adminStoreApi';
 
 // Chuẩn hóa tên đơn vị vận chuyển từ tên đầy đủ Shopee sang tên viết tắt
@@ -250,14 +251,16 @@ export function useShopeeInventoryOut({
             const personalIncomeTax = 0;
 
             const skuData = shopeeSourceData.find(s => s.sku === sku);
-            const importPrice = skuData?.importPrice || 0;
-            const platformNet =
-              salePrice - platformFee - pishipFee - freeshipExtra
-              - paymentFee - vatTax - personalIncomeTax - affiliateFee;
-            const netProfit =
-              status === 'OK' || status === 'SHIPPING'
-                ? platformNet - adsCost - adsTax - handlingFee - importPrice
-                : 0;
+            // Công thức chuẩn dùng chung (src/lib/shopeeProfit.ts) — bản inline cũ ở đây
+            // ghi 0 cho đơn hoàn (đúng nghiệp vụ là −(PiShip + Vận hành)) và giá vốn
+            // quên nhân số lượng (đơn qty ≥ 2 bị thổi phồng lãi).
+            const netProfit = calcShopeeNetProfit(status, {
+              salePrice, platformFee, paymentFee, freeshipExtra, affiliateFee,
+              pishipFee, vatTax, personalIncomeTax, shopeeAdsFee: 0,
+            }, {
+              importPrice: (skuData?.importPrice || 0) * (quantity || 1),
+              adsCost, adsTax, handlingFee,
+            });
 
             const customerPaid = cleanVNNumber(
               obj.tongsotiennguoimuanthanhtoan ||
@@ -381,16 +384,11 @@ export function useShopeeInventoryOut({
         const adsTax = adsCost * ADS_TAX_RATE;
         const skuData = shopeeSourceData.find(s => s.sku === r.sku);
         const importPrice = (skuData?.importPrice || 0) * (r.quantity || 1);
-        const netProfit =
-          r.salePrice -
-          r.platformFee -
-          r.paymentFee -
-          r.freeshipExtra -
-          r.affiliateFee -
-          r.handlingFee -
-          adsCost -
-          adsTax -
-          importPrice;
+        // Công thức chuẩn dùng chung (trừ đủ PiShip/VAT/TNCN/Phí Ads Shopee, phân
+        // nhánh đơn hủy/hoàn) — trước 2026-07-11 chỗ này dùng bản cũ thiếu 4 khoản.
+        const netProfit = calcShopeeNetProfit(r.status, r, {
+          importPrice, adsCost, adsTax, handlingFee: r.handlingFee,
+        });
         return { ...r, adsCost, adsTax, netProfit };
       }
       return r;
@@ -444,9 +442,9 @@ export function useShopeeInventoryOut({
             const adsTax = adsCost * ADS_TAX_RATE;
             const skuData = shopeeSourceData.find(s => s.sku === r.sku);
             const importPrice = (skuData?.importPrice || 0) * (r.quantity || 1);
-            const netProfit =
-              r.salePrice - r.platformFee - r.paymentFee - r.freeshipExtra -
-              r.affiliateFee - r.handlingFee - adsCost - adsTax - importPrice;
+            const netProfit = calcShopeeNetProfit(r.status, r, {
+              importPrice, adsCost, adsTax, handlingFee: r.handlingFee,
+            });
             return { ...r, adsCost, adsTax, netProfit };
           });
           updatedDays++;
@@ -509,11 +507,16 @@ export function useShopeeInventoryOut({
     const personalIncomeTax = 0;
 
     const quantity = Number(inventoryOutForm.quantity) || 1;
-    const platformNet2 =
-      salePrice - platformFee - freeshipExtra - paymentFee - affiliateFee;
-    const netProfit =
-      platformNet2 - adsCost - adsTax - handlingFee
-      - (skuData?.importPrice || 0) * quantity;
+    // Đơn nhập tay không có phí đối soát Shopee (PiShip/VAT/TNCN/Ads = 0, khớp newRecord
+    // bên dưới) — vẫn đi qua công thức chuẩn để phân nhánh đúng đơn hủy/hoàn.
+    const manualFees = {
+      salePrice, platformFee, paymentFee, freeshipExtra, affiliateFee,
+      pishipFee: 0, vatTax: 0, personalIncomeTax: 0, shopeeAdsFee: 0,
+    };
+    const netProfit = calcShopeeNetProfit(newStatus, manualFees, {
+      importPrice: (skuData?.importPrice || 0) * quantity,
+      adsCost, adsTax, handlingFee,
+    });
 
     const newRecord: ShopeeInventoryOutRecord = {
       id: editingInventoryOutId || generateId(),
@@ -559,6 +562,7 @@ export function useShopeeInventoryOut({
 
         // Chỉ cập nhật đơn CÙNG shop + CÙNG ngày; đơn hiệu quả gánh adsPerOrder, đơn
         // không hiệu quả = 0; adsTax = adsCost × ADS_TAX_RATE (không hard-code 0).
+        // netProfit qua công thức chuẩn dùng chung (đủ PiShip/VAT/TNCN/Ads Shopee).
         const updates = workingList
           .filter(r => r.date === formDate && r.platform === formPlatform)
           .map(r => {
@@ -566,16 +570,9 @@ export function useShopeeInventoryOut({
             const importPrice = (sData?.importPrice || 0) * (r.quantity || 1);
             const rowAdsCost = isEffectiveOrder(r.status) ? adsPerOrder : 0;
             const rowAdsTax = rowAdsCost * ADS_TAX_RATE;
-            const newNetProfit =
-              r.salePrice -
-              r.platformFee -
-              r.paymentFee -
-              r.freeshipExtra -
-              r.affiliateFee -
-              r.handlingFee -
-              rowAdsCost -
-              rowAdsTax -
-              importPrice;
+            const newNetProfit = calcShopeeNetProfit(r.status, r, {
+              importPrice, adsCost: rowAdsCost, adsTax: rowAdsTax, handlingFee: r.handlingFee,
+            });
             return {
               key: 'shopeeInventoryOut' as const,
               item: { ...r, adsCost: rowAdsCost, adsTax: rowAdsTax, netProfit: newNetProfit },

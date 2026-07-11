@@ -1,6 +1,7 @@
 import { Router, RequestHandler } from 'express';
 import axios from 'axios';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { calcShopeeNetProfit } from '../src/lib/shopeeProfit';
 
 const SHOP_BOTS = [
   { port: 3001, platform: 'Shopee 1' },
@@ -53,28 +54,24 @@ interface InventoryOutRow {
   net_profit: number;
 }
 
-// Phân loại đơn — PHẢI khớp đúng orderKind() trong components/revenue/InventoryOutTab.tsx
-// (đã lược bớt nhánh status tiếng Việt thô vì dữ liệu mới luôn dùng mã OK/SHIPPING/...).
-type OrderKind = 'success' | 'shiploss' | 'void';
-function orderKind(status: string): OrderKind {
-  if (status === 'OK' || status === 'SHIPPING') return 'success';
-  if (status === 'FAILED' || status === 'RETURN' || status === 'RETURNED') return 'shiploss';
-  return 'void'; // CANCEL / PENDING / LOST / không rõ
-}
-
-// Lợi nhuận — PHẢI khớp đúng calcNetProfit() trong InventoryOutTab.tsx:
-//  • Thành công: Sàn TT - Giá gốc×SL - QC - Thuế QC - Phí Vận Hành
-//  • Giao thất bại / Hoàn hàng: -(PiShip + Phí Vận Hành)
-//  • Huỷ / chờ xử lý / khác: 0
+// Lợi nhuận — công thức chuẩn dùng chung với UI và các đường ghi frontend
+// (src/lib/shopeeProfit.ts, audit 2026-07-11 mục A) — chỉ map snake_case → camelCase.
 function calcNetProfit(r: InventoryOutRow, importPrice: number, newAdsCost: number, newAdsTax: number, handlingFee: number): number {
-  const kind = orderKind(r.status);
-  if (kind === 'shiploss') return -(Math.abs(r.piship_fee || 0) + handlingFee);
-  if (kind === 'void') return 0;
-  const platformNet =
-    (r.sale_price || 0) - (r.platform_fee || 0) - Math.abs(r.piship_fee || 0) - (r.freeship_extra || 0)
-    - (r.payment_fee || 0) - (r.vat_tax || 0) - (r.personal_income_tax || 0) - (r.affiliate_fee || 0)
-    - Math.abs(r.shopee_ads_fee || 0);
-  return platformNet - importPrice - newAdsCost - newAdsTax - handlingFee;
+  return calcShopeeNetProfit(
+    r.status,
+    {
+      salePrice: r.sale_price || 0,
+      platformFee: r.platform_fee || 0,
+      paymentFee: r.payment_fee || 0,
+      freeshipExtra: r.freeship_extra || 0,
+      affiliateFee: r.affiliate_fee || 0,
+      pishipFee: r.piship_fee || 0,
+      vatTax: r.vat_tax || 0,
+      personalIncomeTax: r.personal_income_tax || 0,
+      shopeeAdsFee: r.shopee_ads_fee || 0,
+    },
+    { importPrice, adsCost: newAdsCost, adsTax: newAdsTax, handlingFee }
+  );
 }
 
 // Trigger bot lấy dữ liệu ví quảng cáo rồi poll kết quả — chỉ dùng để lưu lại giao
@@ -206,7 +203,11 @@ export async function runAdsSpendSync(supabase: SupabaseClient): Promise<{
       const effectiveRows = dateRows.filter(r => EFFECTIVE_STATUSES.includes(r.status));
       const adsPerOrder = effectiveRows.length > 0 ? totalAds / effectiveRows.length : 0;
 
-      let dayChanged = false;
+      // Gom mọi đơn cần đổi của ngày rồi upsert 1 request (audit 2026-07-11 mục D) —
+      // trước đây update từng dòng, lỗi giữa chừng để ngày ở trạng thái nửa cập nhật.
+      // Payload kèm `date` (cột NOT NULL duy nhất không default) cho nhánh insert của
+      // upsert; onConflict id → thực tế luôn là UPDATE các cột có trong payload.
+      const updates: { id: string; date: string; ads_cost: number; ads_tax: number; handling_fee: number; net_profit: number }[] = [];
       for (const r of dateRows) {
         const isEffective = EFFECTIVE_STATUSES.includes(r.status);
         const newAdsCost = isEffective ? adsPerOrder : 0;
@@ -223,19 +224,26 @@ export async function runAdsSpendSync(supabase: SupabaseClient): Promise<{
           Math.abs((r.net_profit || 0) - netProfit) < 1;
         if (unchanged) continue;
 
-        const { error: updError } = await supabase
-          .from('shopee_inventory_out')
-          .update({ ads_cost: newAdsCost, ads_tax: newAdsTax, handling_fee: totalVariableCosts, net_profit: netProfit })
-          .eq('id', r.id);
-
-        if (updError) {
-          errors.push(`${bot.platform} ${date}: lỗi cập nhật đơn ${r.id} — ${updError.message}`);
-        } else {
-          updatedOrders++;
-          dayChanged = true;
-        }
+        updates.push({
+          id: r.id,
+          date: r.date,
+          ads_cost: newAdsCost,
+          ads_tax: newAdsTax,
+          handling_fee: totalVariableCosts,
+          net_profit: netProfit,
+        });
       }
-      if (dayChanged) updatedDays++;
+      if (updates.length === 0) continue;
+
+      const { error: updError } = await supabase
+        .from('shopee_inventory_out')
+        .upsert(updates, { onConflict: 'id' });
+      if (updError) {
+        errors.push(`${bot.platform} ${date}: lỗi cập nhật ${updates.length} đơn — ${updError.message}`);
+      } else {
+        updatedOrders += updates.length;
+        updatedDays++;
+      }
     }
   }
 

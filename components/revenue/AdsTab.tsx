@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts';
 import { adminStoreRequest } from '../../services/adminStoreApi';
+import { translateError } from '../../services/errorMessages';
 import { TableSkeleton } from '../ui/Skeleton';
 
 interface DayMetrics {
@@ -71,7 +72,7 @@ const AdsTab: React.FC<Props> = ({ shopFilter, timeContext, formatNumber }) => {
         if (cancelled) return;
         const failed = results.find(r => !r.ok);
         if (failed) {
-          setError(failed.error || 'Không lấy được dữ liệu quảng cáo');
+          setError(translateError(failed.error, 'Không lấy được dữ liệu quảng cáo'));
           setByDate({});
           return;
         }
@@ -79,7 +80,7 @@ const AdsTab: React.FC<Props> = ({ shopFilter, timeContext, formatNumber }) => {
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(translateError(err, 'Không lấy được dữ liệu quảng cáo'));
         setByDate({});
       })
       .finally(() => {

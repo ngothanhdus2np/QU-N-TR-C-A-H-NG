@@ -457,6 +457,9 @@ async function startServer() {
 
     app.use('/api/', apiLimiter);
     app.use('/api/auth/register', authLimiter);
+    // verify-manager nhận username+password (xác minh quyền quản lý trước thao tác nhạy
+    // cảm) — cùng bản chất brute-force với login, phải chịu ngưỡng 20/15p thay vì 1000/15p.
+    app.use('/api/auth/verify-manager', authLimiter);
     // [SEC-RATELIMIT-01] Đường login thật đi qua proxy /auth/v1/token (GoTrue) — không nằm
     // dưới /api/ nên apiLimiter không chạm tới, brute-force chỉ bị chặn bởi giới hạn nội bộ
     // GoTrue (nếu có). Áp cùng ngưỡng với authLimiter, mount TRƯỚC proxy để chặn sớm.

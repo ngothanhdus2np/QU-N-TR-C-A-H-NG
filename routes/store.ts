@@ -96,6 +96,11 @@ export function createStoreRouter(supabase: SupabaseClient) {
   const router = Router();
   const contactLimiter = publicFormRateLimit(5, 'Bạn đã gửi quá nhiều yêu cầu liên hệ. Vui lòng thử lại sau 15 phút.');
   const newsletterLimiter = publicFormRateLimit(3, 'Bạn đã đăng ký quá nhiều lần. Vui lòng thử lại sau 15 phút.');
+  // Đặt hàng/đặt trước tạo dữ liệu thật + giữ tồn kho — không limiter thì script spam
+  // tạo đơn ảo chiếm hết stock. Ngưỡng rộng cho khách thật (kể cả nhiều người chung IP).
+  const orderLimiter = publicFormRateLimit(20, 'Bạn đã đặt quá nhiều đơn trong thời gian ngắn. Vui lòng thử lại sau 15 phút.');
+  const preorderLimiter = publicFormRateLimit(10, 'Bạn đã gửi quá nhiều yêu cầu đặt trước. Vui lòng thử lại sau 15 phút.');
+  const lookupLimiter = publicFormRateLimit(30, 'Bạn đã tra cứu quá nhiều lần. Vui lòng thử lại sau 15 phút.');
 
   /** Public Website-only presentation/settings data. */
   router.get('/api/store/settings', async (_req, res) => {
@@ -339,7 +344,7 @@ export function createStoreRouter(supabase: SupabaseClient) {
    * - Kiểm tra sản phẩm published, tồn kho, tính lại giá server-side
    * - Tạo pos_orders (channel='website'), store_order_addresses, trừ tồn ngay, ghi audit_log
    */
-  router.post('/api/store/orders', async (req: Request, res: Response) => {
+  router.post('/api/store/orders', orderLimiter, async (req: Request, res: Response) => {
     const { customer, shippingAddress, paymentMethod, note, items } = req.body ?? {};
 
     // --- Validate payload ---
@@ -426,7 +431,7 @@ export function createStoreRouter(supabase: SupabaseClient) {
    * Đặt trước khi hết hàng — CHỈ thu thông tin, KHÔNG tạo đơn thật.
    * Nhân viên sẽ liên hệ khách khi có hàng lại.
    */
-  router.post('/api/store/preorders', async (req: Request, res: Response) => {
+  router.post('/api/store/preorders', preorderLimiter, async (req: Request, res: Response) => {
     const { customerName, phone: rawPhone, posProductId, sku, size, note } = req.body ?? {};
 
     if (!customerName || typeof customerName !== 'string' || !customerName.trim()) {
@@ -468,7 +473,7 @@ export function createStoreRouter(supabase: SupabaseClient) {
    * Tra cứu đơn hàng website theo mã đơn + số điện thoại.
    * Bắt buộc cả hai — không cho tra chỉ bằng mã đơn (tránh liệt kê đơn).
    */
-  router.post('/api/store/orders/lookup', async (req: Request, res: Response) => {
+  router.post('/api/store/orders/lookup', lookupLimiter, async (req: Request, res: Response) => {
     const { orderCode, phone: rawPhone } = req.body ?? {};
 
     if (!orderCode || typeof orderCode !== 'string' || !orderCode.trim()) {

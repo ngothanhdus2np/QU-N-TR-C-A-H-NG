@@ -7,6 +7,31 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [ ] 🟠 AUDIT-0711 — Audit lần 2 (2026-07-11): kiểm chứng 13 fix R52 + phát hiện mới (báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-11.md`)
+
+> Đã kiểm chứng bằng code thật: **13/13 fix R52 đều thật, không hồi quy** (RLS 034 verify prod, DOMPurify 10/10, requireAuth notifications, validate backend + migration 036, /health DB thật, errorHandler wired, redact+log rotation, deploy rollback, index 035, translateError, tests, service-worker sạch). Blocker duy nhất còn lại = AUDIT-0710-B (backup). **2026-07-11 (cùng ngày): fix xong 6/7 mục con (A-E, G) — tsc sạch, 1009/1009 test pass. Chưa deploy prod.** Còn F chờ user.
+> **Audit lần 3 (cùng ngày, R56)**: kiểm chứng 6/6 fix R55 đều thật (soi phản biện cả trust-proxy cho limiter, nhánh insert NOT NULL của batch upsert). Phát hiện + fix thêm 3 mục H/I/J bên dưới — **1029/1029 test pass, tsc sạch. Vẫn CHƯA commit/deploy prod — mọi fix R55+R56 chỉ nằm trên working tree.**
+
+#### [x] 🟠 AUDIT-0711-A — Thống nhất công thức netProfit *(xong 2026-07-11 — tạo `src/lib/shopeeProfit.ts` (shopeeOrderKind/calcShopeePlatformNet/calcShopeeNetProfit) làm NGUỒN DUY NHẤT; thay cả 4 chỗ chép công thức: InventoryOutTab.tsx (hiển thị), routes/adsSpendSync.ts (job), useShopeeInventoryOut.ts (3 đường ghi + newRecord nhập tay — giờ đơn hủy/hoàn nhập tay cũng ra 0/−(PiShip+VH) đúng thay vì công thức thành công). +10 unit test src/lib/shopeeProfit.test.ts, có fixture đơn thật khớp escrow 218.449đ. FORMULAS.md §10.2/10.2b/10.2c đã cập nhật source.)*
+
+#### [x] 🟡 AUDIT-0711-B — Rate-limit storefront public POST *(xong 2026-07-11 — store.ts: orderLimiter 20/15p cho /api/store/orders, preorderLimiter 10/15p, lookupLimiter 30/15p — cùng pattern publicFormRateLimit có sẵn, message tiếng Việt)*
+
+#### [x] 🟡 AUDIT-0711-C — verify-manager + notify-logout *(xong 2026-07-11 — server.ts: `app.use('/api/auth/verify-manager', authLimiter)` 20/15p; channelManagement.ts: guard notify-logout chấp nhận x-api-key khớp INTERNAL_API_KEY HOẶC request thật sự local (socket loopback + không có header cf-connecting-ip/x-forwarded-for — request qua tunnel luôn mang các header này) → bot localhost cũ chạy tiếp không cần sửa bot)*
+
+#### [x] 🟡 AUDIT-0711-D — Batch upsert trong adsSpendSync *(xong 2026-07-11 — gom mọi đơn cần đổi của 1 ngày thành 1 request `upsert(..., { onConflict: 'id' })` (payload kèm `date` vì là cột NOT NULL duy nhất không default); lỗi giờ tính theo ngày trọn vẹn thay vì nửa chừng. Test mock đổi update→upsert tương ứng)*
+
+#### [x] 🟡 AUDIT-0711-E — Test tầng HTTP cho createDataRouter *(xong 2026-07-11 — routes/data.test.ts: 10 test dùng express app thật listen port 0 + fetch (không thêm dependency supertest): 401 khi không qua requireAuth, 400 key lạ/NaN/giá âm/thiếu id, upsert hợp lệ ghi audit_logs kèm actor từ JWT, upsert-many validate TRƯỚC khi ghi, clear chặn non-admin 403, place-tx gọi đúng RPC + trả 500 khi RPC lỗi)*
+
+#### [ ] 🟡 AUDIT-0711-F — Xác nhận cron health-alert.sh chạy thật trên iMac *(BLOCKED 2026-07-11: agent thử SSH read-only kiểm tra crontab/launchd nhưng bị permission classifier chặn (đọc host prod cần user duyệt) — **bị chặn LẦN 2 trong phiên R56**. User tự kiểm tra: `ssh -i ~/.ssh/imac_deploy mac@192.168.1.6 'crontab -l | grep health-alert'` — nếu trống thì cài theo hướng dẫn đầu file scripts/health-alert.sh)*
+
+#### [x] 🟢 AUDIT-0711-G — translateError AdsTab + IP echo deploy script *(xong 2026-07-11 — AdsTab.tsx bọc translateError() cả 2 nhánh lỗi; deploy-imac.sh echo dùng `$IMAC_IP` thay IP cũ hardcode)*
+
+#### [x] 🟡 AUDIT-0711-H — Đường ghi thứ 5 (import Excel) sót công thức netProfit inline *(xong 2026-07-11 R56 — audit lần 3 phát hiện `useShopeeInventoryOut.ts` luồng import Excel còn bản inline: đơn hoàn ghi 0 thay vì −(PiShip+VH), và `importPrice` QUÊN NHÂN số lượng (đơn qty ≥ 2 thổi phồng lãi). Đã thay bằng `calcShopeeNetProfit()` + `importPrice × (quantity || 1)`; FORMULAS.md §10.2 cập nhật. **Lưu ý dữ liệu cũ**: dòng đã import bằng Excel trước fix có thể mang sai số này — job adsSpendSync 30p sẽ true-up dần các dòng có QC, dòng không QC giữ nguyên giá trị cũ)*
+
+#### [x] 🟡 AUDIT-0711-I — Test tầng HTTP cho store.ts (storefront public) *(xong 2026-07-11 R56 — routes/store.test.ts mới: 20 test cùng pattern data.test.ts (express listen port 0 + fetch): validate biên orders/preorders/lookup, chặn injection qua UUID, phone 84xxx→0xxx, RPC create_store_order nhận items chỉ id+quantity (giá server-side), lỗi 500 không lộ chi tiết kỹ thuật, lookup không lộ costPrice/customer_id/id nội bộ + chống dò đơn (404 đồng nhất), rate-limiter preorder trả 429 THẬT ở request thứ 11)*
+
+#### [x] 🟢 AUDIT-0711-J — Tạo docs/06-evaluation/EVALUATION_WORKFLOW.md *(xong 2026-07-11 R56 — workflow.md tham chiếu file này (và 6 file ROLE_*.md) nhưng KHÔNG file nào tồn tại → agent sau làm "full audit" không tìm thấy quy trình. Đã tạo EVALUATION_WORKFLOW.md: nguyên tắc kiểm chứng code thật/không tin báo cáo cũ, trình tự 7 bước, bảng 8 hạng mục nhúng checklist vai trò, cấu trúc kết luận, giới hạn môi trường sandbox/SSH. 6 file ROLE riêng vẫn chưa tạo — ghi chú rõ trong file, tạo khi cần)*
+
 ### [ ] 🔴 AUDIT-0710 — Audit production-readiness toàn diện 2026-07-10 (báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-10.md`)
 
 > Audit 4 agent song song trên branch `feat/online-audit-shopee`. Lõi POS vững, không hồi quy. Rủi ro tập trung ở tính năng Shopee Ads mới (chưa từng audit) + tầng vận hành. Các mục con:
