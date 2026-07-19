@@ -1356,7 +1356,14 @@ export function useAppData() {
       const itemMap = new Map(
         existingList.filter(isIdentifiableItem).map(item => [item.id, item] as const)
       );
-      (items as unknown[]).filter(isIdentifiableItem).forEach(item => itemMap.set(item.id, item));
+      // [IMPORT-02] Merge field-level (spread) thay vì thay thế: object đẩy lên có thể là
+      // PARTIAL (vd import cập nhật sản phẩm cũ cố tình bỏ cột stock để giữ tồn kho DB) →
+      // giữ nguyên các field cũ không có trong payload. Caller đẩy object ĐẦY ĐỦ vẫn ghi đè
+      // toàn bộ như trước (mọi key trùng → item thắng), nên không đổi hành vi cũ.
+      (items as unknown[]).filter(isIdentifiableItem).forEach(item => {
+        const prev = itemMap.get(item.id);
+        itemMap.set(item.id, prev ? { ...prev, ...item } : item);
+      });
       const newList = Array.from(itemMap.values());
 
       dispatch({ type: 'SET_DATA', payload: { [key]: newList } });

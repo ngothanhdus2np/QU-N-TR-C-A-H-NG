@@ -55,7 +55,11 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       category_path: item.categoryPath || null,
       import_price: n(item.importPrice),
       sale_price: n(item.salePrice),
-      stock: n(item.stock),
+      // [IMPORT-02] Bỏ HẲN cột stock khỏi payload khi caller cố tình không gửi (item.stock ===
+      // undefined) → PostgREST upsert giữ nguyên tồn kho DB thay vì ghi đè. Dùng cho luồng
+      // import Excel cập nhật sản phẩm cũ (tồn kho do app quản lý qua nhập/xuất/kiểm kho).
+      // Mọi caller cũ luôn gửi stock là số → không đổi hành vi.
+      ...(item.stock === undefined ? {} : { stock: n(item.stock) }),
       expected_out_of_stock: item.expectedOutOfStock || null,
       min_stock: n(item.minStock),
       max_stock: n(item.maxStock) || 999999,

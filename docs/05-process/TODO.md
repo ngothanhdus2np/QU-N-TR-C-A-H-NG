@@ -7,6 +7,12 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 AUDIT-0719 — Audit QA production-readiness + fix delta IMPORT-02 (trừ backup) *(xong 2026-07-19 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md`)*
+
+> Lõi POS kiểm chứng SQL trực tiếp — vững, không hồi quy. Phát hiện + fix **P2-1** (import client ghi đè tồn kho DB bằng giá trị bộ nhớ cũ) qua 3 thay đổi tương thích ngược (`apiService.sanitizeItem` bỏ stock khi undefined + `pushBatch` merge field-level + `stripStockForUpdate` trong import). Fix **P2-2** (test HTTP nhánh import server — `routes/importProducts.test.ts` 4 test). Fix **P4** (`delete rest.created_at` khi cập nhật). `tsc` sạch, `npm test` **1045/1045**, build OK. **Chưa commit/deploy** — user nên test import Excel thật trên dev trước. Backup tự động (AUDIT-0710-B) = blocker duy nhất còn lại, user chốt làm sau.
+
+### [x] 🟢 IMPORT-02 — Import danh sách sản phẩm theo SKU: trùng → cập nhật (giữ tồn kho), mới → thêm *(xong 2026-07-14; audit 2026-07-19 phát hiện + fix P2-1: nhánh client ghi đè tồn kho DB bằng giá trị bộ nhớ cũ — xem AUDIT-0719. user cần test import file Excel thật trên dev trước khi deploy prod)*
+
 ### [ ] 🟠 AUDIT-0711 — Audit lần 2 (2026-07-11): kiểm chứng 13 fix R52 + phát hiện mới (báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-11.md`)
 
 > Đã kiểm chứng bằng code thật: **13/13 fix R52 đều thật, không hồi quy** (RLS 034 verify prod, DOMPurify 10/10, requireAuth notifications, validate backend + migration 036, /health DB thật, errorHandler wired, redact+log rotation, deploy rollback, index 035, translateError, tests, service-worker sạch). Blocker duy nhất còn lại = AUDIT-0710-B (backup). **2026-07-11 (cùng ngày): fix xong 6/7 mục con (A-E, G) — tsc sạch, 1009/1009 test pass. Chưa deploy prod.** Còn F chờ user.

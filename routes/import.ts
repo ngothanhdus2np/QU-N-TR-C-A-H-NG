@@ -569,7 +569,30 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         // related_sku chỉ dùng để build parent_id, không có cột này trong DB
         delete r.related_sku;
       }
-      const recordsToUpsert = [...parentRecords, ...records];
+
+      // [IMPORT-02] Sản phẩm ĐÃ tồn tại (id có sẵn trong DB): GIỮ tồn kho hiện tại —
+      // tồn kho do app quản lý qua nhập/xuất/kiểm kho, không ghi đè từ Excel.
+      // Chỉ sản phẩm MỚI nhận stock từ file. Tách 2 nhóm vì PostgREST bulk upsert
+      // yêu cầu mọi dòng trong 1 request có cùng bộ cột.
+      const existingIdSet = new Set(existingProducts.map(p => p.id));
+      const newRecords: ImportedProductRecord[] = [];
+      const existingRecordsNoStock: ImportedProductRecord[] = [];
+      for (const rec of [...parentRecords, ...records]) {
+        if (existingIdSet.has(String(rec.id))) {
+          const rest = { ...rec };
+          delete rest.stock;
+          // [P4] Giữ nguyên ngày tạo gốc khi cập nhật: created_at chỉ có nghĩa lúc TẠO MỚI.
+          // Đồng thời tránh bulk upsert (defaultToNull) set created_at = NULL cho dòng cập nhật
+          // thiếu field này khi nằm chung request với dòng có created_at.
+          delete rest.created_at;
+          existingRecordsNoStock.push(rest);
+        } else {
+          newRecords.push(rec);
+        }
+      }
+      // Đếm thêm mới/cập nhật trên sản phẩm thật (không tính parent logic)
+      const createdCount = records.filter(r => !existingIdSet.has(String(r.id))).length;
+      const updatedCount = records.length - createdCount;
 
       const BATCH = 300;
       let importedCount = 0;
@@ -581,30 +604,32 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const addRowError = (sku: string, reason: string) => {
         if (rowErrors.length < 50) rowErrors.push({ sku: sku || '(không mã)', reason });
       };
-      for (let i = 0; i < recordsToUpsert.length; i += BATCH) {
-        const batch = recordsToUpsert.slice(i, i + BATCH);
-        const { error: upsertErr } = await supabase
-          .from('pos_products')
-          .upsert(batch, { onConflict: 'id' });
-        if (!upsertErr) {
-          importedCount += batch.length;
-          continue;
-        }
-        // [IMPORT-01] Batch lỗi → KHÔNG bỏ cả 300 dòng. Upsert lại TỪNG dòng để
-        // cô lập đúng dòng hỏng; các dòng hợp lệ trong batch vẫn được ghi.
-        console.warn(
-          `[Import] Batch ${i / BATCH + 1} lỗi (${upsertErr.message}); thử lại từng dòng để cô lập.`
-        );
-        for (const rec of batch) {
-          const { error: rowErr } = await supabase
+      for (const group of [newRecords, existingRecordsNoStock]) {
+        for (let i = 0; i < group.length; i += BATCH) {
+          const batch = group.slice(i, i + BATCH);
+          const { error: upsertErr } = await supabase
             .from('pos_products')
-            .upsert(rec, { onConflict: 'id' });
-          if (rowErr) {
-            errorCount += 1;
-            if (!firstError) firstError = rowErr.message;
-            addRowError(String(rec.sku || ''), rowErr.message);
-          } else {
-            importedCount += 1;
+            .upsert(batch, { onConflict: 'id' });
+          if (!upsertErr) {
+            importedCount += batch.length;
+            continue;
+          }
+          // [IMPORT-01] Batch lỗi → KHÔNG bỏ cả 300 dòng. Upsert lại TỪNG dòng để
+          // cô lập đúng dòng hỏng; các dòng hợp lệ trong batch vẫn được ghi.
+          console.warn(
+            `[Import] Batch ${i / BATCH + 1} lỗi (${upsertErr.message}); thử lại từng dòng để cô lập.`
+          );
+          for (const rec of batch) {
+            const { error: rowErr } = await supabase
+              .from('pos_products')
+              .upsert(rec, { onConflict: 'id' });
+            if (rowErr) {
+              errorCount += 1;
+              if (!firstError) firstError = rowErr.message;
+              addRowError(String(rec.sku || ''), rowErr.message);
+            } else {
+              importedCount += 1;
+            }
           }
         }
       }
@@ -612,8 +637,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       res.json({
         total: records.length,
         logicalParents: parentRecords.length,
-        upserted: recordsToUpsert.length,
+        upserted: newRecords.length + existingRecordsNoStock.length,
         imported: importedCount,
+        created: createdCount,
+        updated: updatedCount,
         errors: errorCount,
         firstError,
         rowErrors,
