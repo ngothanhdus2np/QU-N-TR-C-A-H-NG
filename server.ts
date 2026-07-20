@@ -60,7 +60,7 @@ import { errorHandler } from './services/errorTracking';
 async function syncLocalSchema(): Promise<void> {
   // Fallback trỏ Supabase DEV/staging (không phải prod) — hàm này chỉ chạy
   // trong nhánh local dev, không nên đụng schema thật của prod.
-  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
+  const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.2:8010';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   // Danh sách cột quan trọng cần kiểm tra: { table, column, sql }
@@ -417,7 +417,7 @@ async function startServer() {
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.6:8000", "ws://192.168.1.6:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://dev.phucsang.com.vn", "wss://dev.phucsang.com.vn", "https://supabase-dev.phucsang.com.vn", "wss://supabase-dev.phucsang.com.vn", "https://static.cloudflareinsights.com"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.2:8000", "ws://192.168.1.2:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://dev.phucsang.com.vn", "wss://dev.phucsang.com.vn", "https://supabase-dev.phucsang.com.vn", "wss://supabase-dev.phucsang.com.vn", "https://static.cloudflareinsights.com"],
           upgradeInsecureRequests: null,
           fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           objectSrc: ["'self'", "blob:"],
@@ -488,7 +488,7 @@ async function startServer() {
     // localhost:8010; local dev (MacBook) = Supabase Docker local nếu đang chạy,
     // KHÔNG mặc định fallback về prod — SUPABASE_URL luôn được set tường minh ở
     // .env.local mỗi môi trường, default dưới đây chỉ dùng khi thiếu hẳn config.
-    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
+    const SUPABASE_INTERNAL = process.env.SUPABASE_URL || 'http://192.168.1.2:8010';
     app.use(['/auth/v1', '/rest/v1', '/storage/v1'], async (req: Request, res: Response) => {
       const targetUrl = `${SUPABASE_INTERNAL}${req.originalUrl}`;
       const headers: Record<string, string> = {};
@@ -604,7 +604,7 @@ async function startServer() {
     // dev không bao giờ vô tình đọc/ghi dữ liệu thật (xem HISTORY.md mục DEV-ENV-01).
     if (!IS_PROD) {
       try {
-        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.6:8010';
+        const localUrl = process.env.SUPABASE_URL || 'http://192.168.1.2:8010';
         const remoteUrl = 'https://dev.phucsang.com.vn';
         try {
           const controller = new AbortController();

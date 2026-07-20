@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-20 — Nốt 5 chỗ IP chết trong app code (server.ts + channelManagement.ts)
+
+- User chốt "làm luôn" — hoàn tất dọn nốt phần đã ghi chú để riêng (khác nhóm script infra vì đụng code app + CSP, cần restart+verify).
+- Sửa `192.168.1.6` → `192.168.1.2` (giữ nguyên port): `server.ts:63,491,607` (3 chỗ fallback `SUPABASE_URL`/`SUPABASE_INTERNAL`/`localUrl`, port `8010` dev-staging) + `server.ts:420` (CSP `connectSrc`, cả `http://` lẫn `ws://`, port `8000` prod) + `routes/channelManagement.ts:57` (fallback `SUPABASE_URL` trong `generateEcosystem()`, port `8000` prod).
+- Kiểm tra tự động: `tsc --noEmit` sạch, `npm test` **1045/1045 pass**.
+- **Theo đúng quy trình bắt buộc sau sửa code**: `preview_stop` server cũ → `preview_start` lại → `preview_logs` không lỗi → verify browser thật: app render đầy đủ (màn POS, tên NV "Ngô Thành Du", UI tiếng Việt, format tiền đúng), session vẫn giữ, console sạch, **không vi phạm CSP** (dòng `connectSrc` vừa sửa). 4 request `/health` "FAILED: ERR_ABORTED" chỉ là polling cũ bị hủy bởi polling mới — không liên quan IP vừa sửa, không phải lỗi.
+- **Quét lại toàn repo xác nhận**: 0 chỗ còn IP chết `192.168.1.6` trong code/script thật (chỉ còn 1 chuỗi mock text trong `routes/store.test.ts:211` — không phải cấu hình, không cần sửa; và log lịch sử trong HISTORY.md/báo cáo audit — giữ nguyên đúng quy tắc không sửa việc đã ghi).
+- Files: `server.ts`, `routes/channelManagement.ts`, `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
+
 ### 2026-07-20 — Đặt IP tĩnh cho iMac + sửa 7 nơi hardcode IP chết + verify SSH/backup off-site thật
 
 - Tiếp nối việc cài backup: phát hiện SSH MacBook→iMac không thông do **IP iMac đổi liên tục qua DHCP** (`192.168.1.3`→`192.168.1.6`→`192.168.88.112`→...). User tự đặt **IP tĩnh trên iMac** (System Settings → Network → Ethernet → TCP/IP Manually): `192.168.1.2` / subnet `255.255.255.0` / router+DNS `192.168.1.1`; bật **Remote Login**.
