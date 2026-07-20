@@ -16,7 +16,7 @@ Từ 2026-07-10, `deploy-imac.sh` tự động:
 Script dừng ở bước "Build trên iMac" (do `set -e`) — code MỚI **chưa** được restart, app cũ vẫn đang chạy bình thường (chưa bị ảnh hưởng, vì restart launchd chỉ xảy ra ở bước sau build).
 
 ```bash
-ssh -i ~/.ssh/imac_deploy mac@192.168.1.6
+ssh imac-cfobrain   # alias ~/.ssh/config, tương đương ssh -i ~/.ssh/imac_deploy mac@192.168.1.2
 cd ~/cfobrain
 npm install && npm run build     # xem lỗi cụ thể, sửa rồi chạy lại
 ```
@@ -39,7 +39,7 @@ Xử lý:
 Đây là tình huống nghiêm trọng nhất — script đã thử khôi phục `~/cfobrain-backup-prev` nhưng app vẫn không lên. Xử lý thủ công:
 
 ```bash
-ssh -i ~/.ssh/imac_deploy mac@192.168.1.6
+ssh imac-cfobrain   # alias ~/.ssh/config, tương đương ssh -i ~/.ssh/imac_deploy mac@192.168.1.2
 
 # 1. Xem log lỗi thật
 tail -100 /tmp/cfobrain-app.log
@@ -65,7 +65,7 @@ Nếu vẫn không lên được — kiểm tra Supabase self-host còn chạy k
 Nếu phát hiện bản đang chạy có bug nghiêm trọng và muốn rollback ngay (không qua deploy script):
 
 ```bash
-ssh -i ~/.ssh/imac_deploy mac@192.168.1.6
+ssh imac-cfobrain   # alias ~/.ssh/config, tương đương ssh -i ~/.ssh/imac_deploy mac@192.168.1.2
 ls -la ~ | grep cfobrain-backup    # xác nhận có bản backup gần nhất không
 rm -rf ~/cfobrain-rollback-now && mv ~/cfobrain ~/cfobrain-rollback-now
 mv ~/cfobrain-backup-prev ~/cfobrain
@@ -80,7 +80,7 @@ curl -s http://localhost:3000/health
 `scripts/health-alert.sh` — cron/launchd chạy mỗi 5 phút trên iMac, bắn Zalo nếu `/health` fail 2 lần liên tiếp. Cài đặt (nếu chưa có):
 
 ```bash
-ssh -i ~/.ssh/imac_deploy mac@192.168.1.6
+ssh imac-cfobrain   # alias ~/.ssh/config, tương đương ssh -i ~/.ssh/imac_deploy mac@192.168.1.2
 crontab -e
 # thêm dòng:
 */5 * * * * /Users/mac/cfobrain/scripts/health-alert.sh >> /tmp/cfobrain-health-alert.log 2>&1

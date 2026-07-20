@@ -3,7 +3,24 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
-### 2026-07-20 — Dựng backup tự động (đóng blocker AUDIT-0710-B, trừ bước cài trên iMac)
+### 2026-07-20 — Đặt IP tĩnh cho iMac + sửa 7 nơi hardcode IP chết + verify SSH/backup off-site thật
+
+- Tiếp nối việc cài backup: phát hiện SSH MacBook→iMac không thông do **IP iMac đổi liên tục qua DHCP** (`192.168.1.3`→`192.168.1.6`→`192.168.88.112`→...). User tự đặt **IP tĩnh trên iMac** (System Settings → Network → Ethernet → TCP/IP Manually): `192.168.1.2` / subnet `255.255.255.0` / router+DNS `192.168.1.1`; bật **Remote Login**.
+- **Verify SSH thật**: lần đầu nối `192.168.1.2` → `Host key verification failed` (bình thường, máy lạ chưa từng kết nối — không phải cảnh báo MITM) → chấp nhận host key lần đầu (`accept-new`) → từ đó kết nối ổn định bình thường.
+- **Sửa 7 nơi hardcode IP chết** (`192.168.1.6` hoặc `192.168.88.112`) → `192.168.1.2`: `~/.ssh/config` (alias `imac-cfobrain`, ngoài repo), `scripts/deploy-imac.sh`, `scripts/sync-prod-to-staging.sh`, `scripts/deploy-imac-dev.sh`, `scripts/sync-prod-to-dev.sh`, `scripts/backup-pull-offsite.sh`, `scripts/apply-migrations.sh`, cùng 2 runbook thao tác thật (`ROLLBACK_RUNBOOK.md` 4 chỗ, `BACKUP_RUNBOOK.md` 1 chỗ). `bash -n` sạch cả 6 script.
+- **Verify end-to-end thật** (không chỉ syntax check): chạy `backup-pull-offsite.sh` → **kéo thành công bản backup PROD thật 12MB** (`db-20260720-145130.sql.gz`, chính bản launchd tạo trên iMac trước đó) về MacBook, `gzip -t` xác nhận nguyên vẹn → off-site backup redundancy giờ hoạt động thật (không chỉ code viết ra chưa test).
+- **Còn sót, để riêng** (mức thấp hơn — app runtime code, cần restart+verify browser, khác nhóm script bash infra): `server.ts` (CSP connectSrc + 2 fallback Kong local) + `routes/channelManagement.ts:57` vẫn còn IP cũ trong nhánh auto-detect LAN dev (có fallback khác phía sau nếu fail, không downtime, không khẩn).
+- Đóng **BACKUP-INFRA-01**. Files: `scripts/deploy-imac.sh`, `scripts/sync-prod-to-staging.sh`, `scripts/deploy-imac-dev.sh`, `scripts/sync-prod-to-dev.sh`, `scripts/backup-pull-offsite.sh`, `scripts/apply-migrations.sh`, `docs/03-deployment/ROLLBACK_RUNBOOK.md`, `docs/03-deployment/BACKUP_RUNBOOK.md`, `~/.ssh/config` (ngoài repo), `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
+
+### 2026-07-20 — Backup tự động: CÀI + CHẠY THẬT trên iMac prod → BLOCKER AUDIT-0710-B ĐÓNG, app "GO"
+
+- Sau khi commit/push script (04c25bb), cài lên iMac prod. SSH MacBook→iMac KHÔNG thông (IP DHCP đổi: `deploy-imac.sh` hardcode `192.168.1.6` chết + refuse; alias ssh `imac-cfobrain`=`192.168.88.112` down) → **user tự chạy tay trên iMac**. Phát hiện `~/cfobrain` là thư mục rsync (KHÔNG git) → `git checkout` fail → chuyển sang **tạo file bằng heredoc** trên iMac.
+- **Kết quả trên iMac PROD**: `bash backup-db.sh` → dump PROD thật **12MB** (`db-20260720-144615.sql.gz`). `launchctl load -w` → `launchctl list` thấy `- 0 com.cfobrain.backup`. `launchctl start` (kích hoạt qua launchd) → **tạo bản mới 11M** (`db-20260720-145130.sql.gz`) → xác nhận **launchd thực thi được script** trong env tối giản (docker + container prod OK). Backup tự động 02:30 hằng ngày + Zalo alert khi fail = **hoạt động thật trên prod**.
+- **Blocker duy nhất của toàn bộ audit production-readiness ĐÓNG** → app từ "GO WITH CONDITIONS" chính thức "GO".
+- **Phát hiện hạ tầng mới (BACKUP-INFRA-01)**: IP iMac không ổn định (DHCP đổi 3+ lần) làm rớt deploy/SSH — cần đặt IP tĩnh + sửa `deploy-imac.sh` (còn hardcode IP chết). Ghi TODO 🟠.
+- Files: (đã commit 04c25bb) `scripts/backup-db.sh`, `scripts/com.cfobrain.backup.plist`, `scripts/backup-pull-offsite.sh`, `docs/03-deployment/BACKUP_RUNBOOK.md`; cài trên iMac: `~/cfobrain/scripts/backup-db.sh` + `~/Library/LaunchAgents/com.cfobrain.backup.plist` (ngoài repo); cập nhật `docs/05-process/TODO.md` + `HISTORY.md`.
+
+### 2026-07-20 — Dựng backup tự động (build + test local, chuẩn bị cài iMac)
 
 - User chốt "dựng luôn" backup tự động — blocker duy nhất còn lại. Đọc `sync-prod-to-dev.sh` (pattern pg_dump iMac `mac@192.168.1.6` key `imac_deploy`, container `supabase-db`, dir `~/backups/cfobrain/`) + `health-alert.sh` (pattern Zalo alert + launchd) để làm khớp hạ tầng thật.
 - **`scripts/backup-db.sh`** (chạy trên iMac, test được trên MacBook): pg_dump `--clean --if-exists` → gzip `~/backups/cfobrain/db-STAMP.sql.gz`. **Fix lỗi fail âm thầm** (nguyên nhân blocker: 2 file backup cũ 0-byte): guard chặn file < 10KB + `gzip -t` toàn vẹn + container-down → **xoá file rác + Zalo alert** cho chủ. Rotate giữ 14 bản.

@@ -16,7 +16,7 @@
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.6"
+IMAC_IP="192.168.1.2"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 
 echo "⚠️  Script này sẽ GHI ĐÈ toàn bộ dữ liệu hiện có trên DEV/STAGING (supabase-db-dev"

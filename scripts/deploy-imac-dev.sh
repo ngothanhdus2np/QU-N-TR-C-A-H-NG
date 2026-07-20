@@ -12,7 +12,7 @@
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.6"
+IMAC_IP="192.168.1.2"
 IMAC_DIR="~/cfobrain-dev"
 APP_LABEL="com.cfobrain.app.dev"
 SSH_KEY="$HOME/.ssh/imac_deploy"

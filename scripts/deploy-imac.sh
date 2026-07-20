@@ -11,7 +11,7 @@
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.6"
+IMAC_IP="192.168.1.2"
 IMAC_DIR="~/cfobrain"
 BACKUP_DIR="~/cfobrain-backup-prev"
 APP_LABEL="com.cfobrain.app"

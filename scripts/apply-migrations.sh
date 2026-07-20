@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="$SCRIPT_DIR/../supabase_migrations"
-IMAC="mac@192.168.1.6"
+IMAC="mac@192.168.1.2"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 
 TARGET="local"

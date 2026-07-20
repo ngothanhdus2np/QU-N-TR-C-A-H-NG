@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-IMAC="${CFOBRAIN_IMAC:-mac@192.168.1.6}"
+IMAC="${CFOBRAIN_IMAC:-mac@192.168.1.2}"
 SSH_KEY="${CFOBRAIN_SSH_KEY:-$HOME/.ssh/imac_deploy}"
 REMOTE_DIR="${CFOBRAIN_REMOTE_BACKUP_DIR:-/Users/mac/backups/cfobrain}"
 LOCAL_DIR="${CFOBRAIN_BACKUP_DIR:-$HOME/backups/cfobrain}"

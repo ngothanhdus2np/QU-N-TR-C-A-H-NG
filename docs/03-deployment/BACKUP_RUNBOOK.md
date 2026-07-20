@@ -22,7 +22,7 @@ Backup nằm cùng ổ với dữ liệu gốc = vô dụng khi ổ đó hỏng 
 SSH vào iMac rồi chạy (giả định app ở `/Users/mac/cfobrain`):
 
 ```bash
-ssh -i ~/.ssh/imac_deploy mac@192.168.1.6
+ssh -i ~/.ssh/imac_deploy mac@192.168.1.2   # hoặc: ssh imac-cfobrain
 
 # 1. Đảm bảo code mới nhất đã có trên iMac (deploy hoặc git pull) — cần scripts/backup-db.sh
 ls ~/cfobrain/scripts/backup-db.sh
