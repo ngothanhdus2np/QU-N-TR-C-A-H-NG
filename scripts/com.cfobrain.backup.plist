@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job SAO LƯU DB — CÀI TRÊN iMAC (user `mac`).
+  Chạy scripts/backup-db.sh mỗi ngày 02:30 sáng (giờ vắng khách).
+
+  Cài đặt: xem docs/03-deployment/BACKUP_RUNBOOK.md
+    cp scripts/com.cfobrain.backup.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.cfobrain.backup.plist
+
+  Sửa đường dẫn nếu app KHÔNG ở /Users/mac/cfobrain.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cfobrain.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/mac/cfobrain/scripts/backup-db.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CFOBRAIN_DIR</key>
+    <string>/Users/mac/cfobrain</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <!-- Chạy mỗi ngày lúc 02:30 -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+
+  <!-- Nếu iMac đang tắt/ngủ đúng 02:30, chạy bù khi bật lại -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cfobrain-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cfobrain-backup.log</string>
+</dict>
+</plist>

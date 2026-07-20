@@ -10,6 +10,12 @@
 ### [x] 🟢 AUDIT-0719 — Audit QA production-readiness + fix delta IMPORT-02 (trừ backup) *(xong 2026-07-19 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md`)*
 
 > Lõi POS kiểm chứng SQL trực tiếp — vững, không hồi quy. Phát hiện + fix **P2-1** (import client ghi đè tồn kho DB bằng giá trị bộ nhớ cũ) qua 3 thay đổi tương thích ngược (`apiService.sanitizeItem` bỏ stock khi undefined + `pushBatch` merge field-level + `stripStockForUpdate` trong import). Fix **P2-2** (test HTTP nhánh import server — `routes/importProducts.test.ts` 4 test). Fix **P4** (`delete rest.created_at` khi cập nhật). `tsc` sạch, `npm test` **1045/1045**, build OK. **Chưa commit/deploy** — user nên test import Excel thật trên dev trước. Backup tự động (AUDIT-0710-B) = blocker duy nhất còn lại, user chốt làm sau.
+>
+> **Audit lần 2 (cùng ngày 2026-07-19, HEAD `26b252a`)**: kiểm chứng độc lập lại — tự chạy `npm test` 1045/1045 + `tsc`/`build` OK, tự đọc lại SQL lõi (029/028) không hồi quy, **boot app thật trên browser** verify render + `/health` check DB live. **Không blocker mới.** Quan sát mới 🟢 **P3-CONSISTENCY** bên dưới. Báo cáo: section "AUDIT LẦN 2" trong `PRODUCTION_AUDIT_2026-07-19.md`.
+
+### [ ] 🟢 P3-CONSISTENCY — Điểm/hạng khách + doanh số NV (`sales_records`) nằm ngoài RPC transaction *(phát hiện Audit lần 2, 2026-07-19 — không chặn go-live)*
+
+> `place/edit/delete/cancel_pos_order_tx` chỉ bao đơn+kho+doanh thu+nợ trong 1 transaction. Điểm/hạng khách (đọc cấu hình localStorage) + `sales_records` là lời gọi mạng RIÊNG sau RPC, bọc try/catch best-effort (`posOrderService.ts:72,295-297,330`). Rớt mạng/đóng browser NGAY SAU RPC commit → đơn/kho/doanh thu ĐÚNG, nhưng điểm khách không cộng + doanh số NV thiếu tới khi recalc. **Không mất tiền/sai kho**; `sales_records` recalc-overwrite theo ngày (idempotent) → không double-count, recover được. Có chủ đích, đã ghi rõ trong code. **Đề xuất (khi rảnh)**: job recalc `sales_records` cuối ngày để tự lành, hoặc đưa điểm/hạng vào server-side (cần chuyển cấu hình hạng khỏi localStorage) nếu muốn atomic hoàn toàn.
 
 ### [x] 🟢 IMPORT-02 — Import danh sách sản phẩm theo SKU: trùng → cập nhật (giữ tồn kho), mới → thêm *(xong 2026-07-14; audit 2026-07-19 phát hiện + fix P2-1: nhánh client ghi đè tồn kho DB bằng giá trị bộ nhớ cũ — xem AUDIT-0719. user cần test import file Excel thật trên dev trước khi deploy prod)*
 
@@ -45,8 +51,10 @@
 #### [x] 🔴 AUDIT-0710-A — BLOCKER: 2 bảng Ads mới (032/033) thiếu RLS → anon CRUD được dữ liệu tài chính *(XONG HẲN 2026-07-10 — đã deploy + verify trên prod)*
 > `shopee_ads_daily_spend` + `shopee_ads_wallet_transactions` tạo mới không kèm ENABLE RLS/POLICY/REVOKE anon — đúng "bom nổ chậm" R3 cảnh báo. Đã tạo `supabase_migrations/034_lock_anon_shopee_ads_tables.sql` + sửa `supabase_setup.sql`. Migration 034 đã chạy trên prod (deploy 2026-07-10) và verify bằng anon key thật: cả 2 bảng trả `401 permission denied (42501)`.
 
-#### [ ] 🔴 AUDIT-0710-B — BLOCKER: chưa có backup tự động (điểm yếu nhất hệ thống)
-> `sync-prod-to-dev.sh` chạy tay; `backup-mega.sh`+launchd (kế hoạch trong TODO) chưa tồn tại; 2 file `backup_2026*.sql` root = 0 byte (fail âm thầm). Ổ cứng iMac hỏng = mất dữ liệu bán hàng thật. → triển khai backup định kỳ + alert khi backup fail + dọn 2 file rác.
+#### [~] 🔴 AUDIT-0710-B — BLOCKER backup tự động: SCRIPT XONG + TEST, chỉ còn CÀI TRÊN iMAC *(2026-07-20)*
+> **Đã làm (2026-07-20)**: `scripts/backup-db.sh` (pg_dump `supabase-db` → gzip `~/backups/cfobrain/`, **guard chống fail âm thầm**: chặn file 0-byte/quá nhỏ + `gzip -t` + container-down → xoá file rác + **Zalo alert**; rotate giữ 14 bản). **Test thật trên Supabase local**: dump 16MB (73.8MB giải nén, đủ schema+data+12 RPC+auth.users); cả 2 guard (container-down, size quá nhỏ) bắt đúng + không để lại file rác. `scripts/com.cfobrain.backup.plist` (launchd iMac 02:30 hằng ngày, `plutil -lint` OK). `scripts/backup-pull-offsite.sh` (MacBook kéo bản off-site qua SSH `imac_deploy`, giữ 30 bản). Runbook đầy đủ + **quy trình RESTORE** `docs/03-deployment/BACKUP_RUNBOOK.md`. Đã **xóa 2 file `backup_2026*.sql` 0-byte** ở gốc repo.
+> **Còn lại (cần user/quyền SSH prod)**: cài trên iMac theo BACKUP_RUNBOOK §2 — `cp plist ~/Library/LaunchAgents/ && launchctl load -w`. Agent tự SSH prod bị chặn classifier → user chạy (hoặc duyệt cho agent). Sau khi cài → blocker CLOSED → app lên mức "GO".
+> (Tuỳ chọn tương lai: cloud off-site MEGA/rclone — §6 runbook.)
 
 #### [x] 🟡 AUDIT-0710-C — 12/14 chỗ `dangerouslySetInnerHTML` chưa DOMPurify *(xong 2026-07-10 — kiểm tra lại: THỰC RA cả 10 chỗ thật (không tính .bak) đều ĐÃ wrap DOMPurify.sanitize(), agent audit trước bị dương tính giả vì grep chỉ khớp dòng dangerouslySetInnerHTML= mà không thấy DOMPurify ở dòng __html: kế tiếp. Không cần sửa code.)*
 #### [x] 🟡 AUDIT-0710-D — 4 GET endpoint `notifications.ts` lộ dữ liệu tài chính không cần auth *(xong 2026-07-10 — thêm requireAuth cho eod-report/alerts/alerts-config/notifications-status; xác nhận App.tsx có fetch interceptor tự đính Bearer token cho mọi request /api nên không vỡ luồng cũ)*

@@ -3,6 +3,35 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-20 — Dựng backup tự động (đóng blocker AUDIT-0710-B, trừ bước cài trên iMac)
+
+- User chốt "dựng luôn" backup tự động — blocker duy nhất còn lại. Đọc `sync-prod-to-dev.sh` (pattern pg_dump iMac `mac@192.168.1.6` key `imac_deploy`, container `supabase-db`, dir `~/backups/cfobrain/`) + `health-alert.sh` (pattern Zalo alert + launchd) để làm khớp hạ tầng thật.
+- **`scripts/backup-db.sh`** (chạy trên iMac, test được trên MacBook): pg_dump `--clean --if-exists` → gzip `~/backups/cfobrain/db-STAMP.sql.gz`. **Fix lỗi fail âm thầm** (nguyên nhân blocker: 2 file backup cũ 0-byte): guard chặn file < 10KB + `gzip -t` toàn vẹn + container-down → **xoá file rác + Zalo alert** cho chủ. Rotate giữ 14 bản.
+- **Test thật trên Supabase local**: dump 16MB (73.8MB giải nén) — verify đủ 4 bảng lõi CREATE + COPY dữ liệu + 12 RPC + `auth.users` (khôi phục được thật). Test 2 guard: container không tồn tại → fail + không tạo file rác; ngưỡng size cực cao → coi dump thật là "quá nhỏ" → fail + **tự xoá file lỗi, giữ bản tốt**. Cả 2 kích hoạt Zalo alert đúng (skip gửi vì .env.local local không có token — trên iMac gửi thật).
+- **`scripts/com.cfobrain.backup.plist`** (launchd iMac, 02:30 hằng ngày, PATH có docker, `plutil -lint` OK). **`scripts/backup-pull-offsite.sh`** (MacBook kéo bản mới từ iMac qua SSH sẵn có → bản off-site chống ổ iMac hỏng, giữ 30 bản, best-effort không lỗi khi iMac tắt). **`docs/03-deployment/BACKUP_RUNBOOK.md`**: cài iMac + off-site MacBook + **quy trình RESTORE chi tiết** + kiểm tra + nâng cấp cloud.
+- **Xóa 2 file `backup_20260518_*.sql` 0-byte** ở gốc repo (rác fail âm thầm cũ).
+- **Còn lại**: cài launchd trên iMac (SSH prod tự động bị chặn → user chạy theo runbook §2). Sau khi cài xong → blocker CLOSED, app từ "GO WITH CONDITIONS" → "GO". **KHÔNG sửa code ứng dụng** (chỉ thêm script/doc hạ tầng).
+- Files: `scripts/backup-db.sh` (mới), `scripts/backup-pull-offsite.sh` (mới), `scripts/com.cfobrain.backup.plist` (mới), `docs/03-deployment/BACKUP_RUNBOOK.md` (mới), xóa `backup_20260518_011509.sql` + `backup_20260518_011551.sql`, `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
+
+### 2026-07-20 — Test LIVE nốt luồng sửa đơn + trả hàng (đóng gap NOT VERIFIED của Audit lần 2)
+
+- Tiếp nối Audit lần 2: user yêu cầu chạy Supabase local test nốt 2 luồng còn NOT VERIFIED. Supabase self-host (`~/supabase-dev/docker`) vẫn chạy từ hôm trước; restart app dev, auto-login `admin@cfobrain.local`.
+- **EDIT-01 (sửa đơn) LIVE**: `edit_pos_order_tx` đổi SL 2→5 → tồn 8→5 (đảo delta cũ + áp mới), doanh thu net 40k→100k, cogs 16k→40k. ✅
+- **RETURN-01 (trả hàng FLOW 4) LIVE qua UI ĐẦY ĐỦ**: nút Đổi trả → chọn đơn HD-ORO5K (tạo mới qua UI) → SL trả 1 → THANH TOÁN (`processReturnOrder`). Kết quả DB: tồn 978→979, ledger `inventory_transactions` type Return qty +1, đơn trả TH-OV4RN `is_return=true`, doanh thu net 35k→0 + cogs→0 + returns_value 0→35k. Hạch toán trả chính xác. ✅
+- **Quan sát P4 (offline-first cache)**: sửa DB trực tiếp bằng psql (ngoài app) → cache client IndexedDB `cfo_brain_app_cache` KHÔNG tự đồng bộ (UI hiện tồn/đơn cũ). Khắc phục khi test: clear IndexedDB (giữ token auth) + reload. Lưu ý cho vá dữ liệu prod thủ công: phải bảo user reload app. Không phải lỗi.
+- Dọn sạch mọi dữ liệu test (đơn HD-ORO5K/TH-OV4RN, revenue/sales_records 07-20, inventory_transactions, audit_logs), tồn SP004120 về 979. **Cả 5 luồng POS + an toàn/bảo mật/hiệu năng đều đã kiểm chứng LIVE.** Blocker duy nhất KHÔNG đổi: backup tự động. **KHÔNG sửa code ứng dụng.**
+- Files: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md` (bổ sung EDIT-01/RETURN-01 vào L2.9), `docs/05-process/HISTORY.md`.
+
+### 2026-07-19 (Audit lần 2) — Kiểm chứng độc lập lại toàn bộ (sau khi IMPORT-02 đã commit)
+
+- **Audit QA production-readiness lần 2 trong ngày** theo yêu cầu user (prompt enterprise 15 phase), HEAD `26b252a`. Áp dụng "không tin báo cáo cũ": TỰ CHẠY LẠI `npm test` (**1045/1045 pass**), `tsc` sạch, `build` OK; TỰ ĐỌC lại SQL lõi (`029` oversell atomic + doanh thu ON CONFLICT + idempotency; `028` FOR UPDATE + guard đơn trả/hủy + guard SQL độc lập không tin client) — **không hồi quy, không blocker mới**.
+- **Mới so Audit lần 1**: **boot app THẬT trên browser** (port 3000) — xác minh render sạch (POS mobile, empty state tiếng Việt, format VND) + **`/health` check DB thật LIVE** (log `ECONNREFUSED` khi thiếu Supabase, không trả "OK" cứng). Chuyển các mục này từ NOT VERIFIED (Audit lần 1) → VERIFIED.
+- **Quan sát mới 🟢 P3**: điểm/hạng khách + `sales_records` (doanh số NV) nằm NGOÀI RPC transaction (gọi mạng riêng best-effort sau, đã ghi rõ trong code `posOrderService.ts:72,295-297`). Rớt mạng sau RPC commit → đơn/kho/doanh thu đúng nhưng điểm/doanh số NV có thể thiếu; `sales_records` recalc-overwrite theo ngày nên KHÔNG double-count, recover được. Không chặn go-live.
+- **Blocker xác minh lại**: backup tự động vẫn CHƯA CÓ (2 file `backup_2026*.sql` = 0 byte, `scripts/` không có script backup) → blocker duy nhất, điều kiện của "GO WITH CONDITIONS".
+- **KIỂM CHỨNG LIVE (theo yêu cầu user "Chạy Supabase local")**: khởi động Docker + Supabase self-host `~/supabase-dev/docker` (DB copy prod 14.873 SP/69.736 đơn), app auto-login thật `admin@cfobrain.local`, chạy CRUD/negative/concurrency THẬT đối chiếu DB: **SALE-01** (UI→RPC `place-tx`→DB: tồn 979→976, doanh thu gross/net 105.000 cogs 48.000 lãi gộp 57.000 khớp từng đồng, ledger −3 nhất quán); **CONC-01** race 2 psql song song tồn=1 → 1 thành công 1 chặn `STOCK_WOULD_BE_NEGATIVE`, tồn cuối 0 không âm; **NEG-01** oversell 5/tồn=1 → ERROR rollback, tồn giữ 1; **NEG-02** chiết khấu 15k>tổng 10k → net clamp 0; **DEL-01** xóa đơn → tồn 976→979, đơn cancelled, doanh thu đảo sạch; **RLS live** anon→401/404 mọi bảng tài chính; **hiệu năng** Index Scan sub-ms trên bảng lớn. Đã **dọn sạch** toàn bộ dữ liệu test, DB về nguyên trạng. Confidence ~85%→~90%. Chi tiết: section "L2.9" trong báo cáo.
+- **NOT VERIFIED còn lại** (không chặn): full E2E trả hàng (FLOW 4) + sửa đơn (FLOW 5) qua UI; cron/backup trên iMac prod (SSH chặn). Blocker duy nhất KHÔNG đổi: **backup tự động**. **Audit-only: KHÔNG sửa code ứng dụng.**
+- Files: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md` (thêm section "AUDIT LẦN 2" + "L2.9" live), `docs/05-process/HISTORY.md`, `docs/05-process/TODO.md`.
+
 ### 2026-07-19 — Audit QA production-readiness + fix delta IMPORT-02 (trừ backup)
 
 - **Audit toàn diện** theo `EVALUATION_WORKFLOW.md`: kiểm chứng SQL trực tiếp lõi POS (`029_place_pos_order_tx.sql:68-73` guard oversell atomic `UPDATE ... WHERE stock-qty>=0` + `IF NOT FOUND RAISE`; doanh thu `ON CONFLICT (date) DO UPDATE` cộng dồn atomic; idempotency `ORDER_ALREADY_EXISTS`) — **không hồi quy**. Xác nhận fix R55/R56 đã commit trong HEAD `152a256` (rate-limit storefront, verify-manager authLimiter, RLS 034, guard notify-logout, `calcShopeeNetProfit` nguồn duy nhất). Báo cáo: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md`.
