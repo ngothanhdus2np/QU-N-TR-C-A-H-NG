@@ -34,7 +34,12 @@
 
 #### [x] 🟡 AUDIT-0711-E — Test tầng HTTP cho createDataRouter *(xong 2026-07-11 — routes/data.test.ts: 10 test dùng express app thật listen port 0 + fetch (không thêm dependency supertest): 401 khi không qua requireAuth, 400 key lạ/NaN/giá âm/thiếu id, upsert hợp lệ ghi audit_logs kèm actor từ JWT, upsert-many validate TRƯỚC khi ghi, clear chặn non-admin 403, place-tx gọi đúng RPC + trả 500 khi RPC lỗi)*
 
-#### [ ] 🟡 AUDIT-0711-F — Xác nhận cron health-alert.sh chạy thật trên iMac *(BLOCKED 2026-07-11: agent thử SSH read-only kiểm tra crontab/launchd nhưng bị permission classifier chặn (đọc host prod cần user duyệt) — **bị chặn LẦN 2 trong phiên R56**. User tự kiểm tra: `ssh -i ~/.ssh/imac_deploy mac@192.168.1.6 'crontab -l | grep health-alert'` — nếu trống thì cài theo hướng dẫn đầu file scripts/health-alert.sh)*
+#### [x] 🟢 AUDIT-0711-F — health-alert.sh: CÀI XONG + PHÁT HIỆN & FIX BUG THẬT *(xong 2026-07-20, sau khi có SSH thật)*
+> SSH giờ đã thông (xem BACKUP-INFRA-01) → gỡ được block cũ. Kiểm tra: **chưa từng được cài** (không crontab, không launchd) suốt từ 2026-07-10. Tạo `scripts/com.cfobrain.health-alert.plist` (launchd, 5 phút/lần) → cài trên iMac → **launchctl báo exit code 1** (không phải 0).
+> **Bug thật phát hiện qua log**: `ZALO_OA_ACCESS_TOKEN`/`ZALO_FOLLOWER_ID` chưa từng được set trong `.env.local` trên iMac → dòng `grep -E '^ZALO_OA_ACCESS_TOKEN='` không khớp gì → exit 1 → dưới `set -euo pipefail` làm **chết cả script trước khi kịp chạy health-check** (script chưa bao giờ chạy được 1 lần trọn vẹn từ khi viết). Fix: thêm `|| true` vào 2 dòng grep (cùng pattern đã dùng đúng trong `backup-db.sh`) — giờ graceful, không tin tưởng biến optional có sẵn.
+> **Verify end-to-end thật** (giả lập app sập bằng port không tồn tại): fail lần 1 → log đúng; fail lần 2 (đủ ngưỡng) → log đúng + thử gửi Zalo + graceful "Zalo chưa cấu hình — bỏ qua" (không crash). Exit code sau fix = **0**. Cơ chế phát hiện crash 2-lần-liên-tiếp hoạt động đúng thiết kế.
+> **CÒN THIẾU (cần user, không phải bug code)**: `.env.local` trên iMac **chưa có** `ZALO_OA_ACCESS_TOKEN`/`ZALO_FOLLOWER_ID` → cảnh báo hiện tại chỉ dừng ở log, **KHÔNG gửi được tin Zalo thật**. Cần user có sẵn Zalo Official Account + access token, tự thêm 2 dòng vào `.env.local` trên iMac (không dán token vào chat).
+> Files: `scripts/health-alert.sh` (fix bug), `scripts/com.cfobrain.health-alert.plist` (mới).
 
 #### [x] 🟢 AUDIT-0711-G — translateError AdsTab + IP echo deploy script *(xong 2026-07-11 — AdsTab.tsx bọc translateError() cả 2 nhánh lỗi; deploy-imac.sh echo dùng `$IMAC_IP` thay IP cũ hardcode)*
 

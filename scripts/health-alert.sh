@@ -19,8 +19,10 @@ STATE_FILE="${CFOBRAIN_HEALTH_STATE:-/tmp/cfobrain-health-alert.state}"
 FAIL_THRESHOLD=2
 
 if [ -z "${ZALO_OA_ACCESS_TOKEN:-}" ] && [ -f "$APP_DIR/.env.local" ]; then
-  ZALO_OA_ACCESS_TOKEN=$(grep -E '^ZALO_OA_ACCESS_TOKEN=' "$APP_DIR/.env.local" | tail -1 | cut -d '=' -f2-)
-  ZALO_FOLLOWER_ID=$(grep -E '^ZALO_FOLLOWER_ID=' "$APP_DIR/.env.local" | tail -1 | cut -d '=' -f2-)
+  # [FIX 2026-07-20] grep không match (biến chưa cấu hình) trả exit 1 -> dưới set -e
+  # làm chết cả script trước khi kịp chạy health-check. Thêm `|| true` để graceful.
+  ZALO_OA_ACCESS_TOKEN=$(grep -E '^ZALO_OA_ACCESS_TOKEN=' "$APP_DIR/.env.local" | tail -1 | cut -d '=' -f2- || true)
+  ZALO_FOLLOWER_ID=$(grep -E '^ZALO_FOLLOWER_ID=' "$APP_DIR/.env.local" | tail -1 | cut -d '=' -f2- || true)
 fi
 
 send_zalo() {

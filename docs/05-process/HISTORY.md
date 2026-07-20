@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-20 — Cài health-alert.sh trên iMac + phát hiện & fix bug set -e chết script
+
+- User hỏi "còn việc gì cần làm trên iMac" → SSH kiểm tra thật (không đoán từ trí nhớ): phát hiện **AUDIT-0711-F chưa từng được cài** (blocked từ 2026-07-11 vì SSH chưa thông) — script `health-alert.sh` có sẵn trên iMac từ 2026-07-10 nhưng chưa từng có lịch chạy nào (không crontab, không launchd).
+- Tạo `scripts/com.cfobrain.health-alert.plist` (launchd 5 phút/lần + RunAtLoad) → scp + cài trên iMac → **launchctl báo exit 1**.
+- **Bug thật**: `.env.local` trên iMac thiếu `ZALO_OA_ACCESS_TOKEN`/`ZALO_FOLLOWER_ID` → `grep` không khớp → exit 1 → `set -euo pipefail` giết chết script TRƯỚC health-check — nghĩa là script này **chưa bao giờ chạy trọn 1 lần** kể từ khi viết (chỉ vì chưa từng có cơ hội chạy thật do SSH bị chặn trước đó). Fix: thêm `|| true` vào 2 dòng grep lấy config Zalo (đúng pattern đã dùng trong `backup-db.sh` hôm qua).
+- **Verify thật bằng giả lập lỗi** (trỏ `CFOBRAIN_HEALTH_URL` vào port không tồn tại): fail #1 → log đúng; fail #2 (đủ ngưỡng `FAIL_THRESHOLD=2`) → log đúng + cố gửi Zalo + graceful "chưa cấu hình — bỏ qua" thay vì crash. Exit code sau fix = 0. State file xác nhận health-check thật đã chạy.
+- **Còn thiếu (không phải bug code, cần user)**: chưa có `ZALO_OA_ACCESS_TOKEN`/`ZALO_FOLLOWER_ID` trong `.env.local` iMac → cơ chế phát hiện crash hoạt động đúng nhưng **chưa gửi được cảnh báo Zalo thật** tới điện thoại — cần user có Zalo OA + tự thêm token (không dán vào chat).
+- Files: `scripts/health-alert.sh` (fix bug set -e), `scripts/com.cfobrain.health-alert.plist` (mới), `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
+
 ### 2026-07-20 — Nốt 5 chỗ IP chết trong app code (server.ts + channelManagement.ts)
 
 - User chốt "làm luôn" — hoàn tất dọn nốt phần đã ghi chú để riêng (khác nhóm script infra vì đụng code app + CSP, cần restart+verify).
