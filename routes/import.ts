@@ -19,6 +19,7 @@ import {
   resolveReturnColumns,
   parseReturnRow,
 } from './importParsers';
+import { lastDayOfMonth, parseRevenueByTimeRows } from './kiotvietRevenueParser';
 
 type KiotVietRevenueInput = {
   date?: string;
@@ -808,12 +809,6 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         });
       }
 
-      const lastDayOfMonth = (yearMonth: string): string => {
-        const [y, m] = yearMonth.split('-').map(Number);
-        const d = new Date(y, m, 0).getDate();
-        return `${yearMonth}-${d.toString().padStart(2, '0')}`;
-      };
-
       // ── Pass 1: aggregate by day → revenue_records ──
       type DayAgg = {
         totalGross: number;   // doanh thu hàng hóa (không tính đơn trả)
@@ -859,44 +854,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       const orderMap = new Map<string, ImportedOrderData>();
 
       if (isTheoThoiGian) {
-        // ── Format "Báo cáo bán hàng theo thời gian" ──
-        // Hỗ trợ cả "theo ngày" (date = "31/05/2024") và "theo tháng" (date = "05-2026" hoặc "05/2026")
-        const parseDateOrMonth = (raw: unknown): string => {
-          if (!raw) return '';
-          const s = String(raw).trim();
-          // Thử parse ngày đầy đủ trước
-          const d = parseVNDate(s);
-          if (d) return d;
-          // Thử format "MM-YYYY" hoặc "MM/YYYY" → lấy ngày cuối tháng
-          const m = s.match(/^(\d{1,2})[-\/](\d{4})$/);
-          if (m) {
-            const month = parseInt(m[1]), year = parseInt(m[2]);
-            if (month >= 1 && month <= 12 && year > 1900) {
-              const lastDay = new Date(year, month, 0).getDate();
-              return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-            }
-          }
-          return '';
-        };
-
-        const seenDates = new Set<string>();
-        for (const row of rows.slice(1)) {
-          if (!row[0]) continue;
-          const date = parseDateOrMonth(row[0]);
-          if (!date || seenDates.has(date)) continue;
-          seenDates.add(date);
-          const gross = Math.abs(Number(row[2] || 0));
-          const discount = Number(row[3] || 0); // âm theo KiotViet
-          const returns = Math.abs(Number(row[6] || 0));
-          const net = Number(row[7] || 0);
-          dateMap.set(date, {
-            totalGross: gross,
-            discount,
-            returnsGross: returns,
-            netRev: net,
-            cogs: 0,
-            profit: net,
-          });
+        // ── Format "Báo cáo bán hàng theo thời gian" — parse thuần ở kiotvietRevenueParser.ts ──
+        // Hỗ trợ cả "theo ngày" (31/05/2024) và "theo tháng" (05-2026 → ngày cuối tháng)
+        for (const { date, agg } of parseRevenueByTimeRows(rows.slice(1))) {
+          dateMap.set(date, agg);
         }
       } else if (isChiTietHoaDon) {
         // ── Format "Chi tiết hóa đơn" KiotViet — parse thuần ở routes/importParsers.ts ──
