@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { ChevronRight, ChevronDown, Search, List, LayoutGrid, X, Image as ImageIcon, Globe, ShoppingCart, Package, ShoppingBag, Loader2 } from 'lucide-react';
 import { GoodsPagination } from '../pos/GoodsPagination';
 import { GoodsProductDetailPanel } from '../pos/GoodsProductDetailPanel';
-import { supabase } from '../../services/supabase';
 import type { POSProduct } from '../../types';
+import { toggleChannelBackend } from '../../services/channelLinkService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,24 +30,6 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: 'units', label: 'Tồn kho' },
   { id: 'channels', label: 'Liên kết kênh bán' },
 ];
-
-async function toggleChannelBackend(payload: {
-  channel: 'website' | 'shopee';
-  action: 'link' | 'unlink';
-  product: { id: string; name: string; sku: string; parentId?: string; isParent?: boolean };
-  childIds?: { id: string; sku: string }[];
-  shopId?: string;
-}): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-  const res = await fetch('/api/channel-links/toggle', {
-    method: 'POST', headers, credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-  const json: { ok: boolean; error?: string } = await res.json();
-  if (!json.ok) throw new Error(json.error ?? 'Lỗi không xác định');
-}
 
 function ChannelBtn({ linked, loading, label, color, title, onClick }: {
   linked: boolean; loading: boolean; label: string;

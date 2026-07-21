@@ -1,5 +1,6 @@
 import { Router, RequestHandler, Request } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { buildCostHistoryBySku, findHistoricalCostBySku } from '../src/lib/costHistoryLookup';
 
 type Actor = { id: string; name: string; role: string };
 
@@ -957,24 +958,9 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         .order('effective_date', { ascending: true });
 
       // Build Map<sku, [{date, price}]> để lookup giá gần nhất trước ngày bán
-      const historyBySku = new Map<string, { date: string; price: number }[]>();
-      for (const h of ((costHistory as any[]) || [])) {
-        const sku = String(h.sku || '').trim();
-        if (!sku) continue;
-        if (!historyBySku.has(sku)) historyBySku.set(sku, []);
-        historyBySku.get(sku)!.push({ date: h.effective_date, price: Number(h.import_price || 0) });
-      }
-
-      // Tìm giá nhập gần nhất <= orderDate cho 1 SKU
-      const getHistoricalPrice = (sku: string, orderDate: string): number => {
-        const entries = historyBySku.get(sku);
-        if (!entries?.length) return 0;
-        let best = 0;
-        for (const e of entries) {
-          if (e.date <= orderDate && e.price > 0) best = e.price;
-        }
-        return best;
-      };
+      const historyBySku = buildCostHistoryBySku(costHistory as any[]);
+      const getHistoricalPrice = (sku: string, orderDate: string): number =>
+        findHistoricalCostBySku(historyBySku, sku, orderDate);
 
       // Fallback: giá hiện tại từ pos_products (cho sản phẩm chưa có history)
       const { data: products } = await supabase.from('pos_products').select('id, sku, import_price');
@@ -1111,22 +1097,9 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
         .from('product_cost_history')
         .select('sku, import_price, effective_date')
         .order('effective_date', { ascending: true });
-      const matrixHistoryBySku = new Map<string, { date: string; price: number }[]>();
-      for (const h of ((matrixCostHistory as any[]) || [])) {
-        const sku = String(h.sku || '').trim();
-        if (!sku) continue;
-        if (!matrixHistoryBySku.has(sku)) matrixHistoryBySku.set(sku, []);
-        matrixHistoryBySku.get(sku)!.push({ date: h.effective_date, price: Number(h.import_price || 0) });
-      }
-      const getHistoricalCost = (sku: string, orderDate: string): number => {
-        const entries = matrixHistoryBySku.get(sku);
-        if (!entries?.length) return 0;
-        let best = 0;
-        for (const e of entries) {
-          if (e.date <= orderDate && e.price > 0) best = e.price;
-        }
-        return best;
-      };
+      const matrixHistoryBySku = buildCostHistoryBySku(matrixCostHistory as any[]);
+      const getHistoricalCost = (sku: string, orderDate: string): number =>
+        findHistoricalCostBySku(matrixHistoryBySku, sku, orderDate);
 
       type YearAgg = { gross: number; discount: number; returns: number; net: number; cogs: number };
       const byYear = new Map<string, YearAgg>();

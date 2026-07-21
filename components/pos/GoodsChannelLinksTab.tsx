@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Globe, ShoppingBag, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { POSProduct } from '../../types';
+import { toggleChannelBackend } from '../../services/channelLinkService';
 
 interface ChannelStatus {
   linked: boolean;
@@ -17,32 +18,6 @@ interface ShopeeShopStatus {
 
 interface Props {
   product: POSProduct;
-}
-
-async function toggleChannelBackend(payload: {
-  channel: 'website' | 'shopee';
-  action: 'link' | 'unlink';
-  product: { id: string; name: string; sku: string; parentId?: string; isParent?: boolean };
-  childIds?: { id: string; sku: string }[];
-  variantId?: string;
-  shopId?: string;
-}): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-  const res = await fetch('/api/channel-links/toggle', {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-  let json: { ok: boolean; error?: string };
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error(`Lỗi server (HTTP ${res.status}) — server có thể chưa restart sau cập nhật`);
-  }
-  if (!json.ok) throw new Error(json.error ?? 'Lỗi không xác định');
 }
 
 function ToggleSwitch({
