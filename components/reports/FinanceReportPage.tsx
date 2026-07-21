@@ -59,7 +59,7 @@ type DateMode = 'month' | 'custom';
 
 const BLUE = '#0f5bed';
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-const formatCurrency = (value: number) => `$${Math.round(value).toLocaleString('en-US')}`;
+const formatCurrency = (value: number) => `${Math.round(value).toLocaleString('vi-VN')}đ`;
 const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
 
 const formatDate = (value: string) =>
