@@ -78,7 +78,9 @@ export default defineConfig(() => {
       test: {
         environment: 'node',
         include: ['**/*.test.ts'],
-        exclude: ['supabase/**', 'node_modules/**'],
+        // .claude/** : worktree của Claude chứa bản copy repo cũ — không exclude sẽ chạy trùng
+        // test cũ và thổi phồng tổng số test (đã xảy ra 04/07→21/07: báo 1045 thay vì 396 thật)
+        exclude: ['supabase/**', 'node_modules/**', '.claude/**', 'dist/**', 'scripts/archive/**'],
       },
     };
 });
