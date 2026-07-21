@@ -7,6 +7,18 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 CLEANUP-0721 — Audit dọn dẹp codebase 5 giai đoạn (senior engineer review) *(xong 2026-07-21)*
+
+> User yêu cầu audit toàn diện tìm code thừa/lỗi thời/trùng lặp. Khảo sát + knip + kiểm chứng chéo grep từng phát hiện → trình báo cáo đầy đủ cho user duyệt từng phần trước khi làm (không tự động xóa). Thực thi 5 giai đoạn, mỗi giai đoạn verify `tsc`+`npm test`+browser thật trước khi commit. Chi tiết đầy đủ: HISTORY.md.
+> **Phát hiện đáng chú ý nhất**: `vitest include '**/*.test.ts'` quét luôn bản copy test trong `.claude/worktrees/` → tổng test bị thổi phồng từ 04/07 (mọi báo cáo audit trước ghi "1045/1045" — số thật là **396/22 file**, không phải suy giảm coverage, chỉ là đếm trùng). Đã thêm exclude vào `vite.config.ts` để ngăn tái diễn — **agent phiên sau nếu thấy số test khác 1045 trong lịch sử, đó là do bug đếm trùng đã sửa, không phải mất test**.
+> Cũng sửa 4 bug thật phát hiện trong lúc audit (không nằm trong scope "dọn dẹp" ban đầu nhưng lộ ra khi kiểm chứng): icon PWA 404 toàn bộ (script CommonJS chạy sai module + sai nguồn logo), 2 bộ Skeleton trùng, `FinanceReportPage` hiển thị `$` thay vì `đ`, 1 dòng SQL trùng lặp.
+
+### [ ] 🟡 DISCOUNT-PERCENT-01 — Xác minh cột `discount_percent` trên Supabase trước khi bật code gửi *(phát hiện trong CLEANUP-0721, 2026-07-21)*
+
+> UI đã xây xong đầy đủ (`components/pos/GoodsPriceSetupModal.tsx`, `components/pos/GoodsInventory.tsx`, `types.ts:517`) — form nhập % giảm giá mặc định sản phẩm hoạt động, chỉ riêng dòng gửi lên Supabase bị comment-out tại `services/apiService.ts:82` và `:524` chờ xác nhận migration đã chạy. `supabase_setup.sql:279` đã có sẵn `ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0` (ghi ngày 2026-06-23) — không rõ đã chạy trên Supabase dev/prod thật chưa. Không tự xác minh được từ sandbox (Docker Supabase local trên MacBook không chạy trong phiên audit — connection refused; không có credential cho `dev.phucsang.com.vn` hay prod).
+> **Việc cần làm**: chạy `SELECT column_name FROM information_schema.columns WHERE table_name='pos_products' AND column_name='discount_percent';` trên Supabase SQL Editor (cả dev và prod). Nếu rỗng → chạy dòng ALTER TABLE ở `supabase_setup.sql:279` trên môi trường đó trước. Sau khi xác nhận có cột trên CẢ 2 môi trường → bỏ comment dòng `discount_percent: n(item.discountPercent || 0)` tại `apiService.ts:82` (và dòng tương ứng `:524`), test tạo/sửa sản phẩm với % giảm giá trên dev trước khi deploy prod.
+> **Rủi ro nếu bật nhầm khi cột chưa tồn tại**: PostgREST trả lỗi cho MỌI request tạo/sửa sản phẩm (`pos_products` upsert) — vỡ toàn bộ luồng quản lý hàng hóa, không chỉ tính năng giảm giá.
+
 ### [x] 🟢 AUDIT-0721 — Audit QA production-readiness (kiểm chứng lõi bằng THỰC THI RPC thật) *(xong 2026-07-21 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-21.md`)*
 
 > HEAD `6386ff3`, audit-only. Tự chạy `npm test` **1045/1045** + `tsc` sạch. Delta từ audit 07-19 thuần hạ tầng. **Nạp 4 RPC thật (029/028/027/026) vào Postgres 16 live** → chạy bán/oversell/clamp/**race đồng thời**/sửa/xóa đối chiếu DB: **7/7 PASS, không mất tiền/âm kho/sai doanh thu**. Không P0/P1, không blocker chặn dùng nội bộ. Phát sinh 2 finding dưới (P2 + P3).
