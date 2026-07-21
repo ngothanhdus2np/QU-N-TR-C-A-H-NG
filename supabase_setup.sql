@@ -2132,9 +2132,6 @@ NOTIFY pgrst, 'reload schema';
 -- Add is_starred column to pos_customers for favorite marking
 ALTER TABLE pos_customers ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE;
 
--- Add discount_percent column to pos_products (run this before enabling discount_percent in apiService.ts)
-ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
-
 -- Add cancel_reason column to shopee_inventory_out (để phân biệt FAILED vs CANCEL)
 ALTER TABLE shopee_inventory_out ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 
