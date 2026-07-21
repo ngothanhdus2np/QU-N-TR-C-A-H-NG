@@ -84,6 +84,7 @@ import {
   normalizeVatDateValue,
   parseVatMoneyInput,
 } from './purchase-invoices/utils';
+import { vatGroupMatchesSourceText } from './purchaseInvoicesVatHelpers';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc;
 
@@ -96,17 +97,7 @@ const shiftDate = (value: string, days: number) => {
   return date.toLocaleDateString('sv-SE');
 };
 
-const vatGroupMatchesSourceText = (groupName: string, sourceText: string) => {
-  const normalizedSource = normalizeVatText(sourceText);
-  if (!normalizedSource) return false;
-  const normalizedGroup = normalizeVatText(groupName);
-  if (normalizedGroup && (normalizedSource === normalizedGroup || normalizedSource.includes(normalizedGroup))) return true;
-  return String(groupName || '')
-    .split(/\s*(?:>{1,2}|\/)\s*/)
-    .map(part => normalizeVatText(part))
-    .filter(part => part.length >= 4)
-    .some(part => normalizedSource === part || normalizedSource.includes(part));
-};
+// vatGroupMatchesSourceText đã tách ra ./purchaseInvoicesVatHelpers (GĐ5 audit — có test)
 
 export default function PurchaseInvoices({ transactions, suppliers, products }: PurchaseInvoicesProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
