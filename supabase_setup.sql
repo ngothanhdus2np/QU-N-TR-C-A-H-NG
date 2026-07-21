@@ -441,6 +441,29 @@ END $$;
 -- Chạy thủ công trên Supabase Dashboard > SQL Editor
 -- ============================================================
 
+-- ============================================================
+-- [AUDIT-0721-B] Bổ sung CREATE cho bảng tài chính trước đây CHỈ được ALTER (không CREATE)
+--   → dựng lại DB từ đầu từ repo sẽ fail ngay ở ALTER `revenue_records` bên dưới.
+--   An toàn tuyệt đối với prod: IF NOT EXISTS = no-op vì bảng đã tồn tại.
+--   revenue_records dùng khóa UNIQUE(date) (chuẩn hóa ở block AUDIT-022 phía dưới) để khớp
+--   `ON CONFLICT (date)` của mọi RPC atomic. date kiểu DATE (khác pos_orders.date kiểu TEXT).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS revenue_records (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  date                DATE NOT NULL,
+  total_gross_revenue NUMERIC DEFAULT 0,
+  discount            NUMERIC DEFAULT 0,
+  revenue_other       NUMERIC DEFAULT 0,
+  returns_value       NUMERIC DEFAULT 0,
+  net_revenue         NUMERIC DEFAULT 0,
+  total_cogs          NUMERIC DEFAULT 0,
+  gross_profit        NUMERIC DEFAULT 0
+);
+
+-- LƯU Ý (AUDIT-0721-B): expense_records + payroll_records cũng chỉ được ALTER, chưa có CREATE
+-- trong repo (schema gốc dựng tay trên Supabase). Chưa bổ sung tại đây vì chưa xác minh chắc
+-- đủ cột — theo dõi trong TODO. Đường DR chính (restore từ pg_dump) KHÔNG bị ảnh hưởng.
+
 -- 1. Thêm branch_id cho các bảng nghiệp vụ chính
 --    DEFAULT 'main' → tương thích ngược với dữ liệu cũ
 ALTER TABLE pos_products        ADD COLUMN IF NOT EXISTS branch_id TEXT NOT NULL DEFAULT 'main';
@@ -1504,22 +1527,29 @@ ALTER TABLE shopee_inventory_out
 -- Chạy theo thứ tự: dedup trước, thêm constraint sau
 -- ============================================================
 
--- revenue_records: UNIQUE(date, branch_id) — 1 bản ghi doanh thu / ngày / chi nhánh
--- Bước 1: Xóa constraint cũ nếu đã tồn tại
+-- revenue_records: UNIQUE(date) — 1 bản ghi doanh thu / ngày.
+-- [AUDIT-0721-B] KHÔNG dùng (date, branch_id): mọi RPC atomic ghi doanh thu bằng
+--   `ON CONFLICT (date)` (place/edit/delete/cancel_pos_return_tx + apply_revenue_delta), mà
+--   ràng buộc composite KHÔNG thỏa `ON CONFLICT (date)` → INSERT doanh thu fail lỗi 42P10
+--   ("no unique or exclusion constraint matching") — đã chứng minh trên Postgres live 2026-07-21.
+--   Prod dùng đúng UNIQUE(date) (uq_revenue_records_date, chạy 2026-06-20). Đây là fix schema drift.
+-- Bước 1: Xóa mọi constraint cũ (cả composite lẫn tên mới) để chạy lại idempotent
 ALTER TABLE revenue_records
   DROP CONSTRAINT IF EXISTS uq_revenue_records_date_branch;
+ALTER TABLE revenue_records
+  DROP CONSTRAINT IF EXISTS uq_revenue_records_date;
 
--- Bước 2: Xóa các dòng duplicate, giữ dòng có ctid lớn nhất (mới nhất vật lý)
+-- Bước 2: Xóa dòng trùng THEO NGÀY (khớp constraint mới), giữ dòng ctid lớn nhất (mới nhất vật lý)
 DELETE FROM revenue_records
 WHERE ctid NOT IN (
   SELECT MAX(ctid)
   FROM revenue_records
-  GROUP BY date, branch_id
+  GROUP BY date
 );
 
--- Bước 3: Thêm UNIQUE constraint
+-- Bước 3: Thêm UNIQUE(date) — khớp `ON CONFLICT (date)` của các RPC
 ALTER TABLE revenue_records
-  ADD CONSTRAINT uq_revenue_records_date_branch UNIQUE (date, branch_id);
+  ADD CONSTRAINT uq_revenue_records_date UNIQUE (date);
 
 -- payroll_records: UNIQUE(employee_id, month) — 1 bản ghi lương / nhân viên / tháng
 -- Bước 1: Xóa constraint cũ nếu đã tồn tại

@@ -7,6 +7,23 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 AUDIT-0721 — Audit QA production-readiness (kiểm chứng lõi bằng THỰC THI RPC thật) *(xong 2026-07-21 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-21.md`)*
+
+> HEAD `6386ff3`, audit-only. Tự chạy `npm test` **1045/1045** + `tsc` sạch. Delta từ audit 07-19 thuần hạ tầng. **Nạp 4 RPC thật (029/028/027/026) vào Postgres 16 live** → chạy bán/oversell/clamp/**race đồng thời**/sửa/xóa đối chiếu DB: **7/7 PASS, không mất tiền/âm kho/sai doanh thu**. Không P0/P1, không blocker chặn dùng nội bộ. Phát sinh 2 finding dưới (P2 + P3).
+
+### [ ] 🟠 AUDIT-0721-A — Backup: cấu hình kênh CẢNH BÁO khi FAIL (Zalo) — lưới an toàn còn hở cửa cuối *(phát hiện 2026-07-21)*
+
+> **Vấn đề**: `scripts/backup-db.sh` phần thân vững (guard 0-byte/`gzip -t`, đã chạy thật trên iMac), NHƯNG cơ chế cảnh báo khi backup FAIL dựa hoàn toàn vào Zalo mà `ZALO_OA_ACCESS_TOKEN`/`ZALO_FOLLOWER_ID` **chưa cấu hình** (0 key trong `.env.local` local; iMac cũng chưa có — xem AUDIT-0711-F). → backup hỏng thật (đầy ổ, container down) chỉ in log launchd, **không ai biết** = "fail âm thầm" vẫn còn — đúng thứ blocker AUDIT-0710-B sinh ra để diệt. Không có kênh cảnh báo thứ 2.
+> **Mức**: 🟠 P2 — **điều kiện để coi app là sổ sách tài chính DUY NHẤT** (không lưới an toàn). Không chặn dùng nội bộ.
+> **Việc cần làm (user, không phải bug code)**: thêm `ZALO_OA_ACCESS_TOKEN` + `ZALO_FOLLOWER_ID` vào `.env.local` trên iMac (không dán token vào chat) → **test 1 lần fail giả** (đổi tên container tạm) xác nhận nhận được tin Zalo. Cùng token bật luôn cảnh báo `health-alert.sh`.
+
+### [x] 🟢 AUDIT-0721-B — Sửa `supabase_setup.sql` khớp prod (schema drift `revenue_records`) *(xong 2026-07-21)*
+
+> **Vấn đề (đã sửa)**: RPC dùng `ON CONFLICT (date)` khớp ràng buộc THẬT prod `UNIQUE(date)`, nhưng `supabase_setup.sql` (a) **không `CREATE TABLE revenue_records`** (chỉ ALTER → dựng lại từ đầu fail ngay dòng 457), (b) chỉ thêm composite `UNIQUE(date, branch_id)` → `ON CONFLICT(date)` fail 42P10 (chứng minh live).
+> **ĐÃ SỬA (2 thay đổi, an toàn tuyệt đối với prod vì IF NOT EXISTS = no-op)**: (1) thêm `CREATE TABLE IF NOT EXISTS revenue_records` (cột lấy đúng từ RPC: id UUID PK, date DATE, 7 numeric) trước block ALTER branch_id; (2) đổi constraint block sang `DROP IF EXISTS` cả 2 tên + dedup `GROUP BY date` + `ADD CONSTRAINT uq_revenue_records_date UNIQUE(date)`.
+> **VERIFY end-to-end trên Postgres 16 SẠCH**: chạy đúng DDL đã sửa theo thứ tự rebuild-from-scratch → CREATE+ALTER chạy sạch (không còn fail), `ON CONFLICT (date)` cộng dồn đúng (2 đơn cùng ngày → net 150, 1 dòng), chạy lại constraint block idempotent (chỉ NOTICE, 0 ERROR), `psql` exit 0. `npm test` vẫn 1045/1045.
+> **Còn sót (nhỏ) — [ ] AUDIT-0721-C**: `expense_records` + `payroll_records` cũng chỉ được ALTER, chưa có CREATE trong repo. CHƯA bổ sung vì chưa xác minh chắc đủ cột (không bịa schema tài chính). Đường DR chính (restore pg_dump) không ảnh hưởng. Cần: lấy schema thật 2 bảng này (từ `\d` trên prod hoặc types.ts) rồi thêm `CREATE TABLE IF NOT EXISTS` tương tự.
+
 ### [x] 🟢 AUDIT-0719 — Audit QA production-readiness + fix delta IMPORT-02 (trừ backup) *(xong 2026-07-19 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md`)*
 
 > Lõi POS kiểm chứng SQL trực tiếp — vững, không hồi quy. Phát hiện + fix **P2-1** (import client ghi đè tồn kho DB bằng giá trị bộ nhớ cũ) qua 3 thay đổi tương thích ngược (`apiService.sanitizeItem` bỏ stock khi undefined + `pushBatch` merge field-level + `stripStockForUpdate` trong import). Fix **P2-2** (test HTTP nhánh import server — `routes/importProducts.test.ts` 4 test). Fix **P4** (`delete rest.created_at` khi cập nhật). `tsc` sạch, `npm test` **1045/1045**, build OK. **Chưa commit/deploy** — user nên test import Excel thật trên dev trước. Backup tự động (AUDIT-0710-B) = blocker duy nhất còn lại, user chốt làm sau.

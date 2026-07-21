@@ -3,6 +3,18 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-07-21 — Audit QA production-readiness (vai trò Senior QA) — kiểm chứng lõi bằng THỰC THI RPC thật
+
+- Audit toàn diện theo prompt enterprise 15-phase + `EVALUATION_WORKFLOW.md`. HEAD `6386ff3`. **Audit-only, không sửa source code.**
+- Tự chạy lại: `npm test` **1045/1045 pass**, `tsc --noEmit` sạch. Delta `26b252a..HEAD` = 4 commit **thuần hạ tầng** (backup/health-alert/IP tĩnh), không đụng code tiền/kho.
+- **Phương pháp khác các audit trước**: volume Supabase-dev đã bị xoá → thay vì boot cả stack, **nạp trực tiếp 4 RPC thật (029/028/027/026) vào Postgres 16 throwaway** (schema tối giản khớp ràng buộc prod `UNIQUE(date)`), chạy live đối chiếu DB trước–sau: **SALE-01, NEG-01 oversell, NEG-02 clamp, CONC-01 race đồng thời 2 tiến trình, EDIT-01, DEL-01 — 7/7 PASS**. Race chứng minh row-lock + `stock-qty>=0` chặn oversell dưới tải đồng thời thật (1 thắng / 1 chặn / tồn 0 không âm / 1 đơn).
+- **Phát hiện MỚI 🟠 P2**: lưới an toàn backup **hở cửa cuối** — script guard chặn 0-byte/gzip-t vững + đã chạy thật trên iMac, NHƯNG kênh cảnh báo khi FAIL (Zalo) chưa cấu hình token (0 key trong `.env.local`) → backup hỏng sẽ chỉ log, không báo = "fail âm thầm" vẫn có thể xảy ra. Điều kiện để lên "sổ sách tài chính duy nhất".
+- **Phát hiện 🟡 P3 (đã biết, kiểm chứng thực nghiệm)**: schema drift `revenue_records` — `supabase_setup.sql` ship composite `UNIQUE(date,branch_id)` + không `CREATE TABLE`, nhưng RPC cần `UNIQUE(date)`. Chứng minh live: composite + `ON CONFLICT(date)` → lỗi 42P10; standalone → OK. Prod đúng, restore-từ-pg_dump an toàn; chỉ gãy đường "rebuild từ repo SQL". Đề xuất sửa setup.sql khớp prod.
+- Bảo mật (static + prod verify các audit trước): requireAuth mọi route mutate `data.ts`, DOMPurify mọi `dangerouslySetInnerHTML`, RLS 39 bảng + migration 034 khóa bảng Ads, secrets sạch. Boot app: render POS sạch + `/health` trả 503 DB thật (không hardcode OK).
+- **Kết luận**: GO nội bộ (đang dùng) · GO WITH CONDITIONS cho sổ sách tài chính duy nhất (đóng P2 Zalo alert) · Không P0/P1, không blocker chặn go-live. Confidence ~90%.
+- **Fix theo yêu cầu user (sau audit)** — AUDIT-0721-B: sửa `supabase_setup.sql` khớp prod. Thêm `CREATE TABLE IF NOT EXISTS revenue_records` (cột đúng theo RPC) + đổi constraint composite `(date,branch_id)` → `UNIQUE(date)` (khớp `ON CONFLICT (date)` của RPC) + dedup theo `date`. An toàn với prod (IF NOT EXISTS/DROP IF EXISTS = no-op/idempotent). **Verify trên Postgres 16 sạch**: rebuild-from-scratch chạy sạch, `ON CONFLICT (date)` cộng dồn đúng (150, 1 dòng), chạy lại idempotent, exit 0; `npm test` 1045/1045. Còn sót nhỏ (AUDIT-0721-C): `expense_records`/`payroll_records` cũng thiếu CREATE — chưa bịa schema, để lại theo dõi.
+- Files: `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-21.md` (mới), `supabase_setup.sql` (fix AUDIT-0721-B), `docs/05-process/TODO.md`, `docs/05-process/HISTORY.md`.
+
 ### 2026-07-20 — Cài health-alert.sh trên iMac + phát hiện & fix bug set -e chết script
 
 - User hỏi "còn việc gì cần làm trên iMac" → SSH kiểm tra thật (không đoán từ trí nhớ): phát hiện **AUDIT-0711-F chưa từng được cài** (blocked từ 2026-07-11 vì SSH chưa thông) — script `health-alert.sh` có sẵn trên iMac từ 2026-07-10 nhưng chưa từng có lịch chạy nào (không crontab, không launchd).
