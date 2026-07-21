@@ -13,6 +13,18 @@
 > **Phát hiện đáng chú ý nhất**: `vitest include '**/*.test.ts'` quét luôn bản copy test trong `.claude/worktrees/` → tổng test bị thổi phồng từ 04/07 (mọi báo cáo audit trước ghi "1045/1045" — số thật là **396/22 file**, không phải suy giảm coverage, chỉ là đếm trùng). Đã thêm exclude vào `vite.config.ts` để ngăn tái diễn — **agent phiên sau nếu thấy số test khác 1045 trong lịch sử, đó là do bug đếm trùng đã sửa, không phải mất test**.
 > Cũng sửa 4 bug thật phát hiện trong lúc audit (không nằm trong scope "dọn dẹp" ban đầu nhưng lộ ra khi kiểm chứng): icon PWA 404 toàn bộ (script CommonJS chạy sai module + sai nguồn logo), 2 bộ Skeleton trùng, `FinanceReportPage` hiển thị `$` thay vì `đ`, 1 dòng SQL trùng lặp.
 
+### [x] 🟢 CLEANUP-0721-audit2 — Audit lần 2 phạm vi rộng: code smell + dedup + test coverage (5 GĐ) *(xong 2026-07-21 phiên 3)*
+
+> User yêu cầu audit lại đào sâu hơn (anti-pattern/coupling/God object, không chỉ dead code). 5 agent song song + kiểm chứng chéo. Làm 5 GĐ, mỗi GĐ verify+commit riêng, test 396→448. Chi tiết: HISTORY.md phiên 3. Điểm đáng chú ý: **HỦY đổi tên migration trùng 005/019** (verify cho thấy `apply-migrations.sh` track theo tên file → đổi tên làm rối sổ prod/dev, rủi ro > lợi ích); **thu hẹp 2 scope** agent phóng đại (formatCurrency: chỉ 2/5 hàm trùng thật; import test: dời sang GĐ5 test parser tách ra thay vì HTTP-test monolith sắp đổi).
+
+### [ ] 🟠 CLEANUP-0721-B — Tách HẾT 2 God file (mới làm bước đầu ở phiên 3) *(phát hiện 2026-07-21 phiên 3)*
+
+> Phiên 3 mới tách 1 phần nhỏ mỗi file (có test): `import.ts` 2655 dòng → rút `kiotvietRevenueParser.ts`; `PurchaseInvoices.tsx` 2627 dòng → rút `vatGroupMatchesSourceText`. **CÒN LẠI**: (a) `import.ts` — tách tiếp handler `kiotviet-purchase-details` (414 dòng) + `kiotviet-products` SKU-gen (298 dòng) ra service thuần có test; cân nhắc tách sub-router theo domain. (b) `PurchaseInvoices.tsx` — tách ~60 useState thành custom hook theo domain (`useVatDocumentForm`, `useOpeningStockAllocation`...). **Điều kiện làm an toàn**: cần drive được UI trung tâm VAT + luồng import Excel với DỮ LIỆU THẬT trên dev để verify (sandbox không có Supabase). Nên là ca riêng, không rush trong ca dài chung. **Rủi ro cao** (logic thuế/tồn kho/tiền) — mỗi lần tách phải verify workflow thật trên browser dev.
+
+### [ ] 🟡 CLEANUP-0721-C — Bổ sung test cho 12/16 route file chưa có test *(phát hiện 2026-07-21 phiên 3)*
+
+> Phiên 3 đã thêm test cho auth.ts + ai.ts. Còn thiếu test tầng HTTP: `channelLinks.ts` (831), `facebook.ts` (479), `channelManagement.ts` (404), `adminStore.ts` (290), `shopeeProductsCrud.ts` (275), `shopeeSync.ts` (237), `notifications.ts` (237), `posMobile.ts` (179). Ưu tiên route mutate dữ liệu. `import.ts` cover dần qua các parser thuần tách ra (CLEANUP-0721-B).
+
 ### [ ] 🟡 DISCOUNT-PERCENT-01 — Xác minh cột `discount_percent` trên Supabase trước khi bật code gửi *(phát hiện trong CLEANUP-0721, 2026-07-21)*
 
 > UI đã xây xong đầy đủ (`components/pos/GoodsPriceSetupModal.tsx`, `components/pos/GoodsInventory.tsx`, `types.ts:517`) — form nhập % giảm giá mặc định sản phẩm hoạt động, chỉ riêng dòng gửi lên Supabase bị comment-out tại `services/apiService.ts:82` và `:524` chờ xác nhận migration đã chạy. `supabase_setup.sql:279` đã có sẵn `ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0` (ghi ngày 2026-06-23) — không rõ đã chạy trên Supabase dev/prod thật chưa. Không tự xác minh được từ sandbox (Docker Supabase local trên MacBook không chạy trong phiên audit — connection refused; không có credential cho `dev.phucsang.com.vn` hay prod).
