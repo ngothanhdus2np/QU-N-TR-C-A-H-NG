@@ -1,5 +1,6 @@
 import { Router, Request, Response, RequestHandler } from 'express';
 import { SupabaseClient, User } from '@supabase/supabase-js';
+import { isR2Configured, uploadToR2, deleteFromR2 } from '../services/r2';
 
 type StoreRole = 'admin' | 'content_manager' | 'order_staff' | 'viewer';
 type VariantInput = {
@@ -176,20 +177,43 @@ export function createAdminStoreRouter(supabase: SupabaseClient, requireAuth: Re
     }
     const data = Buffer.from(encoded.replace(/^data:[^;]+;base64,/, ''), 'base64');
     if (!data.length || data.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'Ảnh phải nhỏ hơn 10MB' });
-    const path = `products/${Date.now()}-${filename}`;
-    const { error } = await supabase.storage.from('store-media').upload(path, data, { contentType, upsert: false });
-    if (error) return res.status(400).json({ error: error.message });
-    const { data: url } = supabase.storage.from('store-media').getPublicUrl(path);
-    await supabase.from('store_media_assets').insert({ path, public_url: url.publicUrl, alt_text: altText, created_by: res.locals.storeUser.id });
+
+    // R2 (ưu tiên) — ảnh storefront lưu trên Cloudflare R2 để web + app dùng chung 1 nguồn.
+    // Fallback Supabase Storage nếu R2 chưa cấu hình (tránh vỡ khi thiếu R2_* env).
+    let path: string;
+    let publicUrl: string;
+    if (isR2Configured()) {
+      path = `store-media/${Date.now()}-${filename}`;
+      try {
+        ({ url: publicUrl } = await uploadToR2(path, data, contentType));
+      } catch (e) {
+        return res.status(500).json({ error: 'Upload R2 thất bại: ' + (e as Error).message });
+      }
+    } else {
+      path = `products/${Date.now()}-${filename}`;
+      const { error } = await supabase.storage.from('store-media').upload(path, data, { contentType, upsert: false });
+      if (error) return res.status(400).json({ error: error.message });
+      publicUrl = supabase.storage.from('store-media').getPublicUrl(path).data.publicUrl;
+    }
+    await supabase.from('store_media_assets').insert({ path, public_url: publicUrl, alt_text: altText, created_by: res.locals.storeUser.id });
     await writeAudit(supabase, res.locals.storeUser, 'store_media', path, 'upload', { content_type: contentType });
-    return res.status(201).json({ path, url: url.publicUrl });
+    return res.status(201).json({ path, url: publicUrl });
   });
 
   router.delete('/api/admin/store/media', ...requireRole(CONTENT_ROLES), async (req, res) => {
     const path = text(req.body?.path, 500);
     if (!path || path.includes('..')) return res.status(400).json({ error: 'Đường dẫn ảnh không hợp lệ' });
-    const { error } = await supabase.storage.from('store-media').remove([path]);
-    if (error) return res.status(400).json({ error: error.message });
+    // Key R2 mới có prefix 'store-media/'; ảnh Supabase cũ có prefix 'products/'.
+    if (isR2Configured() && path.startsWith('store-media/')) {
+      try {
+        await deleteFromR2(path);
+      } catch (e) {
+        return res.status(400).json({ error: 'Xóa R2 thất bại: ' + (e as Error).message });
+      }
+    } else {
+      const { error } = await supabase.storage.from('store-media').remove([path]);
+      if (error) return res.status(400).json({ error: error.message });
+    }
     await supabase.from('store_media_assets').delete().eq('path', path);
     await writeAudit(supabase, res.locals.storeUser, 'store_media', path, 'delete', {});
     return res.json({ ok: true });
