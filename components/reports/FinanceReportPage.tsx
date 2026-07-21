@@ -18,6 +18,7 @@ import {
 import type { ExpenseRecord, InventoryTransaction, PayrollRecord, POSOrder, POSProduct } from '../../types';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import { calcOrderRevenue } from '../../src/lib/reportCalculations';
+import { formatCurrency } from '../../src/lib/formatCurrency';
 import ReportDropdownFilter from './ReportDropdownFilter';
 
 interface FinanceReportPageProps {
@@ -59,7 +60,6 @@ type DateMode = 'month' | 'custom';
 
 const BLUE = '#0f5bed';
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-const formatCurrency = (value: number) => `${Math.round(value).toLocaleString('vi-VN')}đ`;
 const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
 
 const formatDate = (value: string) =>

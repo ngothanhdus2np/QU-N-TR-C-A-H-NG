@@ -10,6 +10,7 @@ import {
   getOrderedGoodsReportRows,
   type OrderedGoodsReportRow,
 } from '../../src/lib/reportCalculations';
+import { formatCurrencyAxis } from '../../src/lib/formatCurrency';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import ReportDropdownFilter, { getReportDropdownOptions } from './ReportDropdownFilter';
 import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
@@ -33,13 +34,6 @@ const formatDate = (value: string) =>
     month: '2-digit',
     year: 'numeric',
   });
-
-const formatCurrencyAxis = (value: number) => {
-  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))} tr`;
-  if (value >= 1000) return `${Math.round(value / 1000)}k`;
-  return String(value);
-};
-
 
 const SelectButton: React.FC<{
   children: React.ReactNode;
