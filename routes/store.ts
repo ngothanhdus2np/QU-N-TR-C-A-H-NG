@@ -27,6 +27,7 @@ type RawVariant = {
 
 function mapVariant(v: RawVariant, stockMap: Record<string, PosProductSafe>) {
   const pos = stockMap[v.pos_product_id] ?? { stock: 0, sale_price: 0, status: 'Inactive' };
+  const realStock = pos.status === 'Active' ? Math.max(0, pos.stock) : 0;
   return {
     id: v.id,
     sku: v.sku,
@@ -35,7 +36,9 @@ function mapVariant(v: RawVariant, stockMap: Record<string, PosProductSafe>) {
     color_hex: v.color_hex,
     price: v.website_price_override ?? pos.sale_price,
     compare_at_price: v.compare_at_price,
-    in_stock: pos.status === 'Active' && pos.stock > 0,
+    in_stock: realStock > 0,
+    // Cap ở 10 để không lộ tồn kho lớn ra public; số nhỏ (1-9) chính xác cho cảnh báo khan hiếm.
+    stock: Math.min(realStock, 10),
     pos_product_id: v.pos_product_id,
   };
 }
