@@ -28,10 +28,13 @@ type RawVariant = {
 function mapVariant(v: RawVariant, stockMap: Record<string, PosProductSafe>) {
   const pos = stockMap[v.pos_product_id] ?? { stock: 0, sale_price: 0, status: 'Inactive' };
   const realStock = pos.status === 'Active' ? Math.max(0, pos.stock) : 0;
+  // size lưu trong SKU biến thể (vd "DBD21-Đen-38"); cột size thường null → parse hậu tố số.
+  const sizeMatch = /-(\d{2,3})$/.exec(v.sku || '');
+  const size = v.size ?? (sizeMatch ? Number(sizeMatch[1]) : null);
   return {
     id: v.id,
     sku: v.sku,
-    size: v.size,
+    size,
     color_name: v.color_name,
     color_hex: v.color_hex,
     price: v.website_price_override ?? pos.sale_price,
