@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "security:audit": "tsx scripts/security-audit.ts",
-    "generate:icons": "node scripts/generate-pwa-icons.js",
+    "generate:icons": "node scripts/generate-pwa-icons.cjs",
     "pwa:test": "npx serve dist -p 3000",
     "help:capture": "node scripts/capture-help-screenshots.cjs"
   },
@@ -67,6 +67,7 @@
     "eslint": "^10.3.0",
     "postcss": "^8.5.14",
     "prettier": "^3.8.3",
+    "sharp": "^0.35.3",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",

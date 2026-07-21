@@ -37,7 +37,7 @@ const SPLASH_SIZES = [
 ];
 
 // Paths
-const SOURCE_IMAGE = path.join(__dirname, '../assets/logos/logo-acb-inkythuatso/logo-acb-inkythuatso.png');
+const SOURCE_IMAGE = path.join(__dirname, '../public/logo.png');
 const ICONS_DIR = path.join(__dirname, '../public/assets/logos');
 const SPLASH_DIR = path.join(__dirname, '../public/assets/splash');
 
