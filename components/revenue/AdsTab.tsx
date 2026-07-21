@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { adminStoreRequest } from '../../services/adminStoreApi';
 import { translateError } from '../../services/errorMessages';
-import { TableSkeleton } from '../ui/Skeleton';
+import { TableSkeleton } from '../shared/ui/Skeleton';
 
 interface DayMetrics {
   impression: number;

@@ -19,7 +19,7 @@ import {
   RevenueDelta,
 } from '../types';
 import { AppThemeId } from '../constants/themes';
-import { CardSkeleton, TableSkeleton } from './ui/Skeleton';
+import { CardSkeleton, TableSkeleton } from './shared/ui/Skeleton';
 import ErrorBoundary from './ui/ErrorBoundary';
 import {
   processPlaceOrder,
