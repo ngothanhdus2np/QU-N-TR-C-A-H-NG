@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { POSProduct } from '../../types';
+import { useProductSearchIndex } from '../pos/useProductSearchIndex';
 import {
   Plus, Search, X, Check, RefreshCw, Globe, ExternalLink,
   Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, Save, Loader2, Package, ImageIcon,
   Tag, Link2, FileText, SearchIcon, LayoutGrid, List,
 } from 'lucide-react';
-import { supabase } from '../../services/supabase';
 import { translateError } from '../../services/errorMessages';
 import { adminStoreRequest } from '../../services/adminStoreApi';
 import { useToast } from '../ui/Toast';
@@ -12,6 +13,7 @@ import { GoodsPagination } from '../pos/GoodsPagination';
 
 interface Props {
   navigationSlot?: React.ReactNode;
+  posProducts?: POSProduct[];
 }
 
 interface StoreProduct {
@@ -50,14 +52,6 @@ interface StoreVariant {
   is_published: boolean;
   display_order: number;
   website_price_override: number | null;
-}
-
-interface PosProduct {
-  id: string;
-  sku: string;
-  name: string;
-  sale_price: number;
-  stock: number;
 }
 
 interface VariantDraft {
@@ -195,54 +189,42 @@ function MediaUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
   return <div className="mt-2 flex flex-wrap items-center gap-2"><input value={altText} onChange={e => setAltText(e.target.value)} placeholder="Alt text ảnh" className="w-40 rounded border border-slate-200 px-2 py-1.5 text-xs"/><label className="cursor-pointer rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"><input type="file" accept="image/webp,image/jpeg,image/png,image/avif" className="hidden" disabled={uploading} onChange={e => upload(e.target.files?.[0])}/>{uploading ? 'Đang upload…' : 'Upload store-media'}</label></div>;
 }
 
-// ─── SKU search hook ──────────────────────────────────────────────────────────
-function useSkuSearch() {
-  const [skuSearch, setSkuSearch] = useState('');
-  const [skuResults, setSkuResults] = useState<PosProduct[]>([]);
-  const [skuLoading, setSkuLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const searchSku = useCallback((q: string) => {
-    setSkuSearch(q);
-    clearTimeout(timerRef.current);
-    if (!q.trim()) { setSkuResults([]); return; }
-    setSkuLoading(true);
-    timerRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('pos_products')
-        .select('id, sku, name, sale_price, stock')
-        .ilike('sku', `%${q}%`)
-        .eq('status', 'Active')
-        .order('sku')
-        .limit(20);
-      setSkuResults((data as PosProduct[]) ?? []);
-      setSkuLoading(false);
-    }, 300);
-  }, []);
-
-  const clearSearch = useCallback((_unused?: string) => {
-    setSkuSearch('');
-    setSkuResults([]);
-  }, []);
-
-  return { skuSearch, skuResults, skuLoading, searchSku, clearSearch };
-}
-
 // ─── Variants editor ──────────────────────────────────────────────────────────
+// Tìm mã hàng giống ô tìm kiếm ở máy tính tiền (POS): client-side, theo tên/SKU,
+// không dấu (useProductSearchIndex), hiện ảnh + tồn kho để chọn nhanh.
+const parseSizeFromSku = (sku: string): string => {
+  const m = /-(\d{2,3})$/.exec(sku || '');
+  return m ? m[1] : '';
+};
+
 function VariantsEditor({
   drafts,
   onChange,
+  posProducts,
 }: {
   drafts: VariantDraft[];
   onChange: (drafts: VariantDraft[]) => void;
+  posProducts: POSProduct[];
 }) {
-  const { skuSearch, skuResults, skuLoading, searchSku, clearSearch } = useSkuSearch();
+  const [skuSearch, setSkuSearch] = useState('');
+  const searchable = useMemo(
+    () => posProducts.filter(p => p.status === 'Active' && !p.isParent),
+    [posProducts],
+  );
+  const { searchProducts } = useProductSearchIndex(searchable);
+  const skuResults = useMemo(
+    () => (skuSearch.trim().length >= 2 ? searchProducts(skuSearch).slice(0, 20) : []),
+    [skuSearch, searchProducts],
+  );
+  const skuLoading = false;
+  const searchSku = setSkuSearch;
+  const clearSearch = useCallback(() => setSkuSearch(''), []);
 
-  const addVariant = (pos: PosProduct) => {
+  const addVariant = (pos: POSProduct) => {
     if (drafts.some(v => v.pos_product_id === pos.id)) return;
     onChange([...drafts, {
       pos_product_id: pos.id, sku: pos.sku,
-      size: '', color_name: '', color_hex: '', compare_at_price: '', website_price_override: '',
+      size: parseSizeFromSku(pos.sku), color_name: '', color_hex: '', compare_at_price: '', website_price_override: '',
     }]);
     clearSearch();
   };
@@ -280,10 +262,13 @@ function VariantsEditor({
                     disabled={already}
                     className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
                   >
-                    <div className="flex items-center gap-2">
-                      {already && <Check size={13} className="text-green-500" />}
-                      <span className="font-medium text-slate-700">{pos.sku}</span>
-                      <span className="text-slate-500 truncate max-w-[140px]">{pos.name}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {already && <Check size={13} className="text-green-500 shrink-0" />}
+                      {pos.images?.[0]
+                        ? <img src={pos.images[0]} alt="" className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0" />
+                        : <span className="w-8 h-8 rounded bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0"><ImageIcon size={13} className="text-slate-300" /></span>}
+                      <span className="font-medium text-slate-700 shrink-0">{pos.sku}</span>
+                      <span className="text-slate-500 truncate">{pos.name}</span>
                     </div>
                     <span className="text-xs text-slate-400 shrink-0 ml-2">{pos.stock} tồn</span>
                   </button>
@@ -389,10 +374,12 @@ function DetailPanel({
   product,
   onClose,
   onSaved,
+  posProducts,
 }: {
   product: StoreProduct;
   onClose: () => void;
   onSaved: () => void;
+  posProducts: POSProduct[];
 }) {
   const { showToast } = useToast();
   const [tab, setTab] = useState<DetailTab>('info');
@@ -767,6 +754,7 @@ function DetailPanel({
             <VariantsEditor
               drafts={form.variantDrafts}
               onChange={drafts => setF({ variantDrafts: drafts })}
+              posProducts={posProducts}
             />
           </div>
         )}
@@ -839,7 +827,7 @@ function DetailPanel({
 }
 
 // ─── Create modal ─────────────────────────────────────────────────────────────
-function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CreateModal({ onClose, onSaved, posProducts }: { onClose: () => void; onSaved: () => void; posProducts: POSProduct[] }) {
   const { showToast } = useToast();
   const [form, setForm] = useState<EditForm>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
@@ -994,6 +982,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
             <VariantsEditor
               drafts={form.variantDrafts}
               onChange={drafts => setF({ variantDrafts: drafts })}
+              posProducts={posProducts}
             />
           )}
         </div>
@@ -1077,7 +1066,7 @@ const WebsiteGridCard = memo(function WebsiteGridCard({
 });
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-export default function WebsiteProductsPage({ navigationSlot }: Props) {
+export default function WebsiteProductsPage({ navigationSlot, posProducts = [] }: Props) {
   const { showToast } = useToast();
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1312,6 +1301,7 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                               product={selectedProduct}
                               onClose={() => setSelectedId(null)}
                               onSaved={loadProducts}
+                              posProducts={posProducts}
                             />
                           </td>
                         </tr>
@@ -1335,7 +1325,7 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
       </div>
 
       {showCreate && (
-        <CreateModal onClose={() => setShowCreate(false)} onSaved={loadProducts} />
+        <CreateModal onClose={() => setShowCreate(false)} onSaved={loadProducts} posProducts={posProducts} />
       )}
 
       {/* Grid popup */}
@@ -1396,6 +1386,7 @@ export default function WebsiteProductsPage({ navigationSlot }: Props) {
                 product={gridPopupProduct}
                 onClose={closeGridPopup}
                 onSaved={loadProducts}
+                posProducts={posProducts}
               />
             </div>
           </div>

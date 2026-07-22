@@ -1107,7 +1107,7 @@ const MainContent: React.FC<MainContentProps> = ({
       case 'website-products':
         return (
           <React.Suspense fallback={<CardSkeleton />}>
-            <WebsiteProductsPage navigationSlot={renderOnlineNav()} />
+            <WebsiteProductsPage navigationSlot={renderOnlineNav()} posProducts={data.posProducts || []} />
           </React.Suspense>
         );
       case 'website-orders':
