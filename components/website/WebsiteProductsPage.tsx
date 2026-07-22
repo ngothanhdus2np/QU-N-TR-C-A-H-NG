@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { POSProduct } from '../../types';
 import { useProductSearchIndex } from '../pos/useProductSearchIndex';
 import {
-  Plus, Search, X, Check, RefreshCw, Globe, ExternalLink,
+  Plus, Search, X, RefreshCw, Globe, ExternalLink,
   Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, Save, Loader2, Package, ImageIcon,
   Tag, Link2, FileText, SearchIcon, LayoutGrid, List,
 } from 'lucide-react';
@@ -57,12 +57,12 @@ interface StoreVariant {
 interface VariantDraft {
   pos_product_id: string;
   sku: string;
-  size: string;
-  color_name: string;
-  color_hex: string;
   compare_at_price: string;
   website_price_override: string;
 }
+
+const formatVnd = (n: number | null | undefined) =>
+  n == null ? '—' : n.toLocaleString('vi-VN');
 
 type DetailTab = 'info' | 'media' | 'detail' | 'labels' | 'variants' | 'seo';
 
@@ -128,9 +128,6 @@ function makeEditForm(p: StoreProduct): EditForm {
       .map(v => ({
         pos_product_id: v.pos_product_id,
         sku: v.sku,
-        size: v.size ?? '',
-        color_name: v.color_name ?? '',
-        color_hex: v.color_hex ?? '',
         compare_at_price: v.compare_at_price != null ? String(v.compare_at_price) : '',
         website_price_override: v.website_price_override != null ? String(v.website_price_override) : '',
       })),
@@ -189,14 +186,97 @@ function MediaUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
   return <div className="mt-2 flex flex-wrap items-center gap-2"><input value={altText} onChange={e => setAltText(e.target.value)} placeholder="Alt text ảnh" className="w-40 rounded border border-slate-200 px-2 py-1.5 text-xs"/><label className="cursor-pointer rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"><input type="file" accept="image/webp,image/jpeg,image/png,image/avif" className="hidden" disabled={uploading} onChange={e => upload(e.target.files?.[0])}/>{uploading ? 'Đang upload…' : 'Upload store-media'}</label></div>;
 }
 
-// ─── Variants editor ──────────────────────────────────────────────────────────
-// Tìm mã hàng giống ô tìm kiếm ở máy tính tiền (POS): client-side, theo tên/SKU,
-// không dấu (useProductSearchIndex), hiện ảnh + tồn kho để chọn nhanh.
-const parseSizeFromSku = (sku: string): string => {
-  const m = /-(\d{2,3})$/.exec(sku || '');
-  return m ? m[1] : '';
-};
+// ─── Ô "Mã hàng" — tìm & liên kết POS ngay tại dòng (giống ô tìm ở máy tính tiền) ──
+function MaHangCell({
+  posProductId,
+  linkedPos,
+  searchProducts,
+  onLink,
+}: {
+  posProductId: string;
+  linkedPos: POSProduct | undefined;
+  searchProducts: (term: string) => POSProduct[];
+  onLink: (pos: POSProduct) => void;
+}) {
+  const [editing, setEditing] = useState(!posProductId);
+  const [term, setTerm] = useState('');
+  const results = useMemo(
+    () => (term.trim().length >= 2 ? searchProducts(term).slice(0, 15) : []),
+    [term, searchProducts],
+  );
+  const broken = !!posProductId && !linkedPos;
 
+  useEffect(() => { if (linkedPos) setEditing(false); }, [linkedPos?.id]);
+
+  if (!editing && linkedPos) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-2 min-w-0 text-left hover:opacity-75"
+        title="Bấm để đổi mã hàng liên kết"
+      >
+        {linkedPos.images?.[0]
+          ? <img src={linkedPos.images[0]} alt="" className="w-7 h-7 rounded object-cover border border-slate-200 shrink-0" />
+          : <span className="w-7 h-7 rounded bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0"><ImageIcon size={12} className="text-slate-300" /></span>}
+        <span className="min-w-0">
+          <span className="block font-medium text-slate-700 truncate">{linkedPos.sku}</span>
+          <span className="block text-slate-400 truncate text-[11px]">{linkedPos.name}</span>
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {broken && !editing ? (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-red-600 text-xs underline decoration-dotted"
+          title="Mã hàng liên kết không còn tồn tại — bấm để chọn lại"
+        >
+          ⚠ Mã hàng bị mất — chọn lại
+        </button>
+      ) : (
+        <input
+          autoFocus={editing}
+          value={term}
+          onChange={e => setTerm(e.target.value)}
+          onBlur={() => { if (linkedPos) setEditing(false); }}
+          placeholder="Tìm tên/mã hàng..."
+          className="w-40 px-2 py-1 border border-blue-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+      )}
+      {results.length > 0 && (
+        <div className="absolute z-30 left-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto w-64">
+          {results.map(pos => (
+            <button
+              key={pos.id}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onLink(pos); setTerm(''); setEditing(false); }}
+              className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-xs hover:bg-slate-50 text-left"
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                {pos.images?.[0]
+                  ? <img src={pos.images[0]} alt="" className="w-6 h-6 rounded object-cover border border-slate-200 shrink-0" />
+                  : <span className="w-6 h-6 rounded bg-slate-100 border border-slate-200 shrink-0" />}
+                <span className="font-medium text-slate-700 shrink-0">{pos.sku}</span>
+                <span className="text-slate-500 truncate">{pos.name}</span>
+              </span>
+              <span className="text-slate-400 shrink-0">{pos.stock} tồn</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Variants editor ──────────────────────────────────────────────────────────
+// Bảng chỉnh sửa trực tiếp: mỗi dòng SKU có ô "Mã hàng" tự tìm/liên kết (không
+// cần ô tìm kiếm rời phía trên). Giá vốn hiện từ mã hàng đã liên kết (chỉ đọc).
 function VariantsEditor({
   drafts,
   onChange,
@@ -206,165 +286,108 @@ function VariantsEditor({
   onChange: (drafts: VariantDraft[]) => void;
   posProducts: POSProduct[];
 }) {
-  const [skuSearch, setSkuSearch] = useState('');
   const searchable = useMemo(
     () => posProducts.filter(p => p.status === 'Active' && !p.isParent),
     [posProducts],
   );
   const { searchProducts } = useProductSearchIndex(searchable);
-  const skuResults = useMemo(
-    () => (skuSearch.trim().length >= 2 ? searchProducts(skuSearch).slice(0, 20) : []),
-    [skuSearch, searchProducts],
-  );
-  const skuLoading = false;
-  const searchSku = setSkuSearch;
-  const clearSearch = useCallback(() => setSkuSearch(''), []);
+  const posById = useMemo(() => new Map(posProducts.map(p => [p.id, p])), [posProducts]);
 
-  const addVariant = (pos: POSProduct) => {
-    if (drafts.some(v => v.pos_product_id === pos.id)) return;
-    onChange([...drafts, {
-      pos_product_id: pos.id, sku: pos.sku,
-      size: parseSizeFromSku(pos.sku), color_name: '', color_hex: '', compare_at_price: '', website_price_override: '',
-    }]);
-    clearSearch();
-  };
+  const addRow = () =>
+    onChange([...drafts, { pos_product_id: '', sku: '', compare_at_price: '', website_price_override: '' }]);
 
-  const removeVariant = (posId: string) =>
-    onChange(drafts.filter(v => v.pos_product_id !== posId));
+  const removeRow = (idx: number) => onChange(drafts.filter((_, i) => i !== idx));
 
-  const updateVariant = (posId: string, field: keyof Omit<VariantDraft, 'pos_product_id' | 'sku'>, value: string) =>
-    onChange(drafts.map(v => v.pos_product_id === posId ? { ...v, [field]: value } : v));
-
+  const updateRow = (idx: number, patch: Partial<VariantDraft>) =>
+    onChange(drafts.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
 
   return (
     <div className="space-y-3">
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        <input
-          value={skuSearch}
-          onChange={e => searchSku(e.target.value)}
-          placeholder="Tìm SKU trong POS để thêm..."
-          className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {(skuResults.length > 0 || skuLoading) && (
-          <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-            {skuLoading ? (
-              <div className="p-3 text-sm text-slate-400 flex items-center gap-2">
-                <Loader2 size={14} className="animate-spin" /> Đang tìm...
-              </div>
-            ) : (
-              skuResults.map(pos => {
-                const already = drafts.some(v => v.pos_product_id === pos.id);
-                return (
-                  <button
-                    key={pos.id}
-                    onClick={() => addVariant(pos)}
-                    disabled={already}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {already && <Check size={13} className="text-green-500 shrink-0" />}
-                      {pos.images?.[0]
-                        ? <img src={pos.images[0]} alt="" className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0" />
-                        : <span className="w-8 h-8 rounded bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0"><ImageIcon size={13} className="text-slate-300" /></span>}
-                      <span className="font-medium text-slate-700 shrink-0">{pos.sku}</span>
-                      <span className="text-slate-500 truncate">{pos.name}</span>
-                    </div>
-                    <span className="text-xs text-slate-400 shrink-0 ml-2">{pos.stock} tồn</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        )}
-      </div>
-
       {drafts.length === 0 ? (
         <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
-          Chưa có SKU nào được liên kết. Tìm và thêm ở trên.
+          Chưa có SKU nào. Bấm &quot;+ Thêm SKU&quot; bên dưới để bắt đầu.
         </p>
       ) : (
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <div className="border border-slate-200 rounded-xl overflow-visible">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-3 py-2 font-medium text-slate-500">SKU</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Size</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Tên màu</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Mã màu HEX</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá gốc</th>
-                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá web</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Mã hàng</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá vốn</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá niêm yết</th>
+                <th className="text-left px-3 py-2 font-medium text-slate-500">Giá sau giảm</th>
                 <th className="px-2 py-2 w-8" />
               </tr>
             </thead>
             <tbody>
-              {drafts.map(v => (
-                <tr key={v.pos_product_id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 text-slate-700 font-medium">{v.sku}</td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={v.size}
-                      onChange={e => updateVariant(v.pos_product_id, 'size', e.target.value)}
-                      placeholder="40"
-                      className="w-14 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={v.color_name}
-                      onChange={e => updateVariant(v.pos_product_id, 'color_name', e.target.value)}
-                      placeholder="Đen"
-                      className="w-20 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      {v.color_hex && (
-                        <span
-                          className="w-4 h-4 rounded-full border border-slate-200 shrink-0"
-                          style={{ backgroundColor: v.color_hex }}
-                        />
-                      )}
+              {drafts.map((v, idx) => {
+                const linkedPos = posById.get(v.pos_product_id);
+                return (
+                  <tr key={idx} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2">
                       <input
-                        value={v.color_hex}
-                        onChange={e => updateVariant(v.pos_product_id, 'color_hex', e.target.value)}
-                        placeholder="#000000"
+                        value={v.sku}
+                        onChange={e => updateRow(idx, { sku: e.target.value })}
+                        placeholder="Mã SKU trên web"
+                        className="w-32 px-2 py-1 border border-slate-200 rounded text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <MaHangCell
+                        posProductId={v.pos_product_id}
+                        linkedPos={linkedPos}
+                        searchProducts={searchProducts}
+                        onLink={pos => updateRow(idx, {
+                          pos_product_id: pos.id,
+                          sku: v.sku || pos.sku,
+                        })}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">{formatVnd(linkedPos?.importPrice)}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={v.compare_at_price}
+                        onChange={e => updateRow(idx, { compare_at_price: e.target.value })}
+                        placeholder="Giá niêm yết"
                         className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      value={v.compare_at_price}
-                      onChange={e => updateVariant(v.pos_product_id, 'compare_at_price', e.target.value)}
-                      placeholder="Giá gốc"
-                      className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      value={v.website_price_override}
-                      onChange={e => updateVariant(v.pos_product_id, 'website_price_override', e.target.value)}
-                      placeholder="Giá POS"
-                      className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <button
-                      onClick={() => removeVariant(v.pos_product_id)}
-                      className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
-                    >
-                      <X size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={v.website_price_override}
+                        onChange={e => updateRow(idx, { website_price_override: e.target.value })}
+                        placeholder="0 = không giảm"
+                        className="w-24 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        onClick={() => removeRow(idx)}
+                        className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+                      >
+                        <X size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+      <button
+        type="button"
+        onClick={addRow}
+        className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1"
+      >
+        <Plus size={14} /> Thêm SKU
+      </button>
+      <p className="text-[11px] text-slate-400">
+        Giá sau giảm để trống hoặc 0 → web chỉ hiện giá niêm yết. Nhập giá sau giảm → web hiện giá niêm yết bị gạch và giá sau giảm là giá bán.
+      </p>
     </div>
   );
 }

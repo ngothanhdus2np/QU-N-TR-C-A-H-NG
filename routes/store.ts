@@ -31,14 +31,22 @@ function mapVariant(v: RawVariant, stockMap: Record<string, PosProductSafe>) {
   // size lưu trong SKU biến thể (vd "DBD21-Đen-38"); cột size thường null → parse hậu tố số.
   const sizeMatch = /-(\d{2,3})$/.exec(v.sku || '');
   const size = v.size ?? (sizeMatch ? Number(sizeMatch[1]) : null);
+
+  // Giá bán: Giá sau giảm → Giá niêm yết → giá bán POS (fallback khi admin chưa nhập đủ trên web).
+  const listedPrice = v.compare_at_price != null && v.compare_at_price > 0 ? v.compare_at_price : null;
+  const discountedPrice = v.website_price_override != null && v.website_price_override > 0 ? v.website_price_override : null;
+  const hasDiscount = discountedPrice != null && listedPrice != null;
+  const price = discountedPrice ?? listedPrice ?? pos.sale_price;
+
   return {
     id: v.id,
     sku: v.sku,
     size,
     color_name: v.color_name,
     color_hex: v.color_hex,
-    price: v.website_price_override ?? pos.sale_price,
-    compare_at_price: v.compare_at_price,
+    price,
+    // Chỉ trả compare_at_price khi THỰC SỰ có giảm giá — web dùng field này để quyết định gạch giá.
+    compare_at_price: hasDiscount ? listedPrice : null,
     in_stock: realStock > 0,
     // Cap ở 10 để không lộ tồn kho lớn ra public; số nhỏ (1-9) chính xác cho cảnh báo khan hiếm.
     stock: Math.min(realStock, 10),
