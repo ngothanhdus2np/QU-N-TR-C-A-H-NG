@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { appDataCache } from '../../../services/appDataCache';
 import type { AppData } from '../../../types';
 import { assertSafeExcelBuffer, assertSafeExcelFile, EXCEL_MAX_ROWS } from '../../../src/lib/excelSafety';
+import ConfirmDialog from '../../ui/ConfirmDialog';
 import {
   Upload,
   Trash2,
@@ -13,14 +14,45 @@ import {
   XCircle,
   Loader2,
   AlertTriangle,
-  ChevronRight,
   FileText,
   Users,
   Building2,
 } from 'lucide-react';
 
 type ImportStatus = { status: 'running' | 'done' | 'error'; message: string };
-type DeleteState = 'idle' | 'confirm' | 'running' | 'done';
+
+const DELETE_DOMAINS = [
+  {
+    key: 'products' as const,
+    label: 'Hàng hóa',
+    icon: Package,
+    endpoint: '/api/admin/reset-products',
+    cacheKeys: ['posProducts', 'inventoryTransactions'] as (keyof AppData)[],
+  },
+  {
+    key: 'revenue' as const,
+    label: 'Doanh thu',
+    icon: BarChart3,
+    endpoint: '/api/admin/reset-revenue',
+    cacheKeys: ['revenue', 'posOrders', 'productGroups', 'productGroupRevenue'] as (keyof AppData)[],
+  },
+  {
+    key: 'suppliers' as const,
+    label: 'Nhà cung cấp',
+    icon: Building2,
+    endpoint: '/api/admin/reset-suppliers',
+    cacheKeys: ['suppliers', 'supplierDebts'] as (keyof AppData)[],
+  },
+  {
+    key: 'customers' as const,
+    label: 'Khách hàng',
+    icon: Users,
+    endpoint: '/api/admin/reset-customers',
+    cacheKeys: ['posCustomers'] as (keyof AppData)[],
+  },
+];
+
+type DeleteDomainKey = (typeof DELETE_DOMAINS)[number]['key'];
 
 const readImportResponse = async (res: Response) => {
   const text = await res.text();
@@ -85,61 +117,6 @@ const StatusBanner: React.FC<{ status: ImportStatus; onClose: () => void }> = ({
   </div>
 );
 
-const DeleteRow: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  state: DeleteState;
-  onDelete: () => void;
-  onCancel: () => void;
-}> = ({ icon, label, state, onDelete, onCancel }) => (
-  <div className="flex items-center justify-between gap-4 rounded-xl border border-rose-100 bg-rose-50/40 p-3">
-    <div className="flex items-center gap-3">
-      {icon}
-      <span className="text-sm font-normal text-slate-700">{label}</span>
-    </div>
-    <div className="flex items-center gap-2">
-      {state === 'confirm' && (
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-normal text-slate-400 hover:text-slate-600"
-        >
-          Hủy
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={state === 'running'}
-        className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-normal transition-colors disabled:opacity-50 ${
-          state === 'confirm'
-            ? 'bg-rose-600 text-white hover:bg-rose-700'
-            : state === 'done'
-              ? 'bg-emerald-100 text-emerald-700'
-              : 'border border-rose-200 bg-white text-rose-600 hover:bg-rose-50'
-        }`}
-      >
-        {state === 'running' ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : state === 'done' ? (
-          <>
-            <CheckCircle2 className="h-3.5 w-3.5" /> Đã xóa
-          </>
-        ) : state === 'confirm' ? (
-          <>
-            <Trash2 className="h-3.5 w-3.5" /> Xác nhận xóa
-          </>
-        ) : (
-          <>
-            <Trash2 className="h-3.5 w-3.5" /> Xóa
-            <ChevronRight className="h-3 w-3 opacity-50" />
-          </>
-        )}
-      </button>
-    </div>
-  </div>
-);
-
 const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const productsFileRef = useRef<HTMLInputElement>(null);
   const purchaseDetailsFileRef = useRef<HTMLInputElement>(null);
@@ -152,10 +129,12 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const [invoicesStatus, setInvoicesStatus] = useState<ImportStatus | null>(null);
   const [customersStatus, setCustomersStatus] = useState<ImportStatus | null>(null);
   const [suppliersStatus, setSuppliersStatus] = useState<ImportStatus | null>(null);
-  const [deleteProductsState, setDeleteProductsState] = useState<DeleteState>('idle');
-  const [deleteRevenueState, setDeleteRevenueState] = useState<DeleteState>('idle');
-  const [deleteSuppliersState, setDeleteSuppliersState] = useState<DeleteState>('idle');
-  const [deleteCustomersState, setDeleteCustomersState] = useState<DeleteState>('idle');
+  const [checkedDomains, setCheckedDomains] = useState<Record<DeleteDomainKey, boolean>>({
+    products: false, revenue: false, suppliers: false, customers: false,
+  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<ImportStatus | null>(null);
 
   const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -279,39 +258,42 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
     }
   };
 
-  const createDeleteHandler =
-    (state: DeleteState, setState: (s: DeleteState) => void, endpoint: string, cacheKeys: (keyof AppData)[]) =>
-    async () => {
-      if (state === 'idle') {
-        setState('confirm');
-        return;
-      }
-      if (state === 'confirm') {
-        setState('running');
-        try {
-          const res = await fetch(endpoint, { method: 'DELETE' });
-          if (!res.ok) throw new Error();
-          await appDataCache.clearDataKeys(cacheKeys);
-          setState('done');
-          onRefresh?.();
-        } catch {
-          setState('idle');
-        }
-      }
-    };
+  const selectedDomains = DELETE_DOMAINS.filter(d => checkedDomains[d.key]);
+  const allDomainsSelected = selectedDomains.length === DELETE_DOMAINS.length;
 
-  const handleDeleteProducts = createDeleteHandler(
-    deleteProductsState, setDeleteProductsState,
-    '/api/admin/reset-products', ['posProducts', 'inventoryTransactions']
-  );
-  const handleDeleteSuppliers = createDeleteHandler(
-    deleteSuppliersState, setDeleteSuppliersState,
-    '/api/admin/reset-suppliers', ['suppliers', 'supplierDebts']
-  );
-  const handleDeleteCustomers = createDeleteHandler(
-    deleteCustomersState, setDeleteCustomersState,
-    '/api/admin/reset-customers', ['posCustomers']
-  );
+  const handleConfirmDelete = async () => {
+    setDeleteDialogOpen(false);
+    setIsDeleting(true);
+    setDeleteStatus({ status: 'running', message: `Đang xóa: ${selectedDomains.map(d => d.label).join(', ')}...` });
+    try {
+      const results = await Promise.all(
+        selectedDomains.map(d => fetch(d.endpoint, { method: 'DELETE' }))
+      );
+      if (results.some(r => !r.ok)) throw new Error('Xóa dữ liệu thất bại ở ít nhất 1 mục.');
+
+      if (allDomainsSelected) {
+        const auditRes = await fetch('/api/admin/reset-audit-logs', { method: 'DELETE' });
+        if (!auditRes.ok) throw new Error('Xóa dữ liệu thành công nhưng xóa nhật ký hoạt động thất bại.');
+      }
+
+      await appDataCache.clearDataKeys(selectedDomains.flatMap(d => d.cacheKeys));
+      setDeleteStatus({
+        status: 'done',
+        message: `Đã xóa xong: ${selectedDomains.map(d => d.label).join(', ')}.${
+          allDomainsSelected ? ' Đã xóa toàn bộ nhật ký hoạt động.' : ''
+        }`,
+      });
+      setCheckedDomains({ products: false, revenue: false, suppliers: false, customers: false });
+      onRefresh?.();
+    } catch (err) {
+      setDeleteStatus({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Lỗi không xác định',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleImportInvoices = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -352,11 +334,6 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
       onRefresh?.();
     }
   };
-
-  const handleDeleteRevenue = createDeleteHandler(
-    deleteRevenueState, setDeleteRevenueState,
-    '/api/admin/reset-revenue', ['revenue', 'posOrders', 'productGroups', 'productGroupRevenue']
-  );
 
   return (
     <div className="space-y-6">
@@ -613,42 +590,56 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
           </h3>
         </div>
         <p className="mb-4 text-xs font-normal text-slate-500">
-          Chỉ dùng khi cần xóa sạch dữ liệu đang test trước khi import dữ liệu thật. Hành động này
-          không thể hoàn tác.
+          Chọn mục cần xóa sạch trước khi import dữ liệu thật. Hành động này không thể hoàn tác.
+          Chọn đủ cả 4 mục sẽ tự động xóa luôn toàn bộ nhật ký hoạt động.
         </p>
-        <div className="space-y-3">
-          <DeleteRow
-            icon={<Package className="h-4 w-4 text-rose-400" />}
-            label="Xóa tất cả hàng hóa"
-            state={deleteProductsState}
-            onDelete={handleDeleteProducts}
-            onCancel={() => setDeleteProductsState('idle')}
-          />
-          <DeleteRow
-            icon={<BarChart3 className="h-4 w-4 text-rose-400" />}
-            label="Xóa tất cả doanh thu"
-            state={deleteRevenueState}
-            onDelete={handleDeleteRevenue}
-            onCancel={() => setDeleteRevenueState('idle')}
-          />
-          <DeleteRow
-            icon={<Building2 className="h-4 w-4 text-rose-400" />}
-            label="Xóa tất cả nhà cung cấp"
-            state={deleteSuppliersState}
-            onDelete={handleDeleteSuppliers}
-            onCancel={() => setDeleteSuppliersState('idle')}
-          />
-          <DeleteRow
-            icon={<Users className="h-4 w-4 text-rose-400" />}
-            label="Xóa tất cả khách hàng"
-            state={deleteCustomersState}
-            onDelete={handleDeleteCustomers}
-            onCancel={() => setDeleteCustomersState('idle')}
-          />
+        <div className="space-y-2">
+          {DELETE_DOMAINS.map(({ key, label, icon: Icon }) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center gap-3 rounded-xl border border-rose-100 bg-rose-50/40 p-3"
+            >
+              <input
+                type="checkbox"
+                checked={checkedDomains[key]}
+                onChange={e => setCheckedDomains(prev => ({ ...prev, [key]: e.target.checked }))}
+                className="h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+              />
+              <Icon className="h-4 w-4 text-rose-400" />
+              <span className="text-sm font-normal text-slate-700">{label}</span>
+            </label>
+          ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setDeleteDialogOpen(true)}
+          disabled={selectedDomains.length === 0 || isDeleting}
+          className="mt-4 flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-normal uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isDeleting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+          Xóa dữ liệu đã chọn
+        </button>
+        {deleteStatus && (
+          <StatusBanner status={deleteStatus} onClose={() => setDeleteStatus(null)} />
+        )}
       </section>
 
-
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        variant="danger"
+        title="Xác nhận xóa dữ liệu"
+        message={`Sắp xóa vĩnh viễn: ${selectedDomains.map(d => d.label).join(', ')}.${
+          allDomainsSelected ? ' Toàn bộ nhật ký hoạt động cũng sẽ bị xóa.' : ''
+        } Hành động này không thể hoàn tác.`}
+        confirmLabel="Xóa vĩnh viễn"
+        cancelLabel="Hủy"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+      />
     </div>
   );
 };

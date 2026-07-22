@@ -2325,17 +2325,21 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     }
   });
 
+  // Xóa sạch danh sách bảng + audit_logs khớp table_name — dùng chung cho các nút "Xóa dữ liệu test".
+  // Xóa audit_logs cùng domain để nhật ký hoạt động không còn tham chiếu tới bản ghi đã xóa.
+  const resetTablesWithAuditLog = async (tables: string[]) => {
+    const results = await Promise.all(
+      tables.map(table => supabase.from(table).delete().not('id', 'is', null))
+    );
+    const auditResult = await supabase.from('audit_logs').delete().in('table_name', tables);
+    const err = results.find(r => r.error)?.error || auditResult.error;
+    if (err) throw err;
+  };
+
   // Xóa toàn bộ hàng hóa + giao dịch kho + lịch sử giá vốn (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-products', requireAuth, async (_req, res) => {
     try {
-      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
-      const [r1, r2, r3] = await Promise.all([
-        del('inventory_transactions'),
-        del('pos_products'),
-        del('product_cost_history'),
-      ]);
-      const err = r1.error || r2.error || r3.error;
-      if (err) throw err;
+      await resetTablesWithAuditLog(['inventory_transactions', 'pos_products', 'product_cost_history']);
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });
@@ -2345,15 +2349,9 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
   // Xóa toàn bộ doanh thu + đơn hàng POS + nhóm hàng (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-revenue', requireAuth, async (_req, res) => {
     try {
-      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
-      const [r1, r2, r3, r4] = await Promise.all([
-        del('pos_orders'),
-        del('revenue_records'),
-        del('product_group_revenue'),
-        del('product_groups'),
+      await resetTablesWithAuditLog([
+        'pos_orders', 'revenue_records', 'product_group_revenue', 'product_groups',
       ]);
-      const err = r1.error || r2.error || r3.error || r4.error;
-      if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });
@@ -2363,10 +2361,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
   // Xóa toàn bộ nhà cung cấp + công nợ NCC (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-suppliers', requireAuth, async (_req, res) => {
     try {
-      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
-      const [r1, r2] = await Promise.all([del('supplier_debts'), del('suppliers')]);
-      const err = r1.error || r2.error;
-      if (err) throw err;
+      await resetTablesWithAuditLog(['supplier_debts', 'suppliers']);
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });
@@ -2376,10 +2371,20 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
   // Xóa toàn bộ khách hàng + công nợ khách hàng (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-customers', requireAuth, async (_req, res) => {
     try {
-      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
-      const [r1, r2] = await Promise.all([del('customer_debt_history'), del('pos_customers')]);
-      const err = r1.error || r2.error;
-      if (err) throw err;
+      await resetTablesWithAuditLog(['customer_debt_history', 'pos_customers']);
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa TOÀN BỘ nhật ký hoạt động (audit_logs) — dùng khi người dùng chọn xóa đủ cả 4 mục
+  // dữ liệu test trong Migration tab, coi như reset sạch hoàn toàn trước khi import thật.
+  // Không đụng bất kỳ bảng dữ liệu/cài đặt nào khác.
+  router.delete('/api/admin/reset-audit-logs', requireAuth, async (_req, res) => {
+    try {
+      const { error } = await supabase.from('audit_logs').delete().not('id', 'is', null);
+      if (error) throw error;
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: getErrorMessage(error) });
