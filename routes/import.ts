@@ -1279,8 +1279,9 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
       }
 
       // ── Format "Danh sách khách hàng" KiotViet ──
-      // col0=Loại khách, col1=Chi nhánh tạo, col2=Mã khách hàng, col3=Tên,
-      // col4=SĐT, col5=Địa chỉ, col6=Nhóm, col8=Điểm, col14=Tổng bán, col15=Tổng bán trừ trả
+      // col0=Loại khách, col1=Chi nhánh tạo, col2=Mã khách hàng, col3=Tên, col4=SĐT,
+      // col5=Địa chỉ, col17=Điểm hiện tại, col21=Ngày giao dịch cuối, col22=Nợ cần thu hiện tại,
+      // col23=Tổng bán, col24=Tổng bán trừ trả hàng — xác nhận đúng theo file KiotViet thật (2026-07-22).
       if (col0Header === 'Loại khách') {
         const toUpsert = rows.slice(1)
           .filter(row => {
@@ -1292,9 +1293,10 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             const name = String(row[3] || '').trim();
             const phone = String(row[4] || '').trim();
             const address = String(row[5] || '').trim();
-            const points = Number(row[8] || 0);
-            const net = Number(row[15] || row[14] || 0);
-            const lastVisit = excelDateToIsoDate(row[12]) || null;
+            const points = Number(row[17] || 0);
+            const net = Number(row[24] || row[23] || 0);
+            const debt = Number(row[22] || 0);
+            const lastVisit = excelDateToIsoDate(row[21]) || null;
             return {
               id: customerIdFromKiotVietCode(code),
               name: name || code,
@@ -1302,6 +1304,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
               address: address || null,
               points: Math.round(points),
               total_spent: Math.round(net),
+              debt_amount: Math.round(debt),
               last_visit: lastVisit,
               tier: tierFromNetSpent(net),
             };
@@ -1915,7 +1918,8 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         OPTIONAL_SUPPLIER_COLUMNS
       );
 
-      // Xác định phiếu MỚI (chưa có trong DB) để sau upsert chỉ cộng stock cho chúng
+      // Xác định phiếu MỚI (chưa có trong DB) để chỉ tạo sản phẩm thiếu cho chúng
+      // (không cộng tồn kho — xem ghi chú ở khối bên dưới)
       const allTransactionIds = Array.from(purchases.keys()).map(code =>
         stableUuidFromKey(`kiotviet-purchase:${code}`)
       );
@@ -1988,20 +1992,19 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         }
       }
 
-      // Cộng stock cho phiếu MỚI — phiếu cũ (re-import) không cộng để tránh double-count
+      // [MIGRATION-STOCK-01] KHÔNG cộng tồn kho từ phiếu nhập: import "Hàng hóa" đã lấy
+      // tồn kho hiện tại trực tiếp từ cột "Tồn kho" của KiotViet (đã phản ánh sẵn toàn bộ
+      // lịch sử nhập/bán tính đến ngày export) — cộng thêm số lượng phiếu nhập ở đây sẽ
+      // đếm trùng lịch sử đó, thổi phồng tồn kho. Chỉ tạo sản phẩm còn thiếu (SKU xuất hiện
+      // trong phiếu nhập nhưng chưa có trong danh sách hàng hoá), tồn kho khởi tạo = 0.
       let newProductsCreated = 0;
       const newPurchases = Array.from(purchases.values()).filter(
         p => !existingIdsInDb.has(stableUuidFromKey(`kiotviet-purchase:${p.code}`))
       );
       if (newPurchases.length > 0) {
-        const stockDeltaByProductId = new Map<string, number>();
         const itemDataByProductId = new Map<string, { sku: string; name: string; price: number; unit?: string; brand?: string }>();
         for (const p of newPurchases) {
           for (const item of p.items.values()) {
-            stockDeltaByProductId.set(
-              item.productId,
-              (stockDeltaByProductId.get(item.productId) || 0) + item.quantity
-            );
             if (!itemDataByProductId.has(item.productId)) {
               itemDataByProductId.set(item.productId, {
                 sku: item.sku,
@@ -2013,26 +2016,14 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
             }
           }
         }
-        const productIdsToUpdate = Array.from(stockDeltaByProductId.keys());
-        for (let i = 0; i < productIdsToUpdate.length; i += BATCH) {
-          const batch = productIdsToUpdate.slice(i, i + BATCH);
+        const productIdsToCheck = Array.from(itemDataByProductId.keys());
+        for (let i = 0; i < productIdsToCheck.length; i += BATCH) {
+          const batch = productIdsToCheck.slice(i, i + BATCH);
           const { data: currentProducts } = await supabase
             .from('pos_products')
-            .select('id, stock')
+            .select('id')
             .in('id', batch);
           const existingProductIds = new Set((currentProducts || []).map((p: { id: string }) => p.id));
-          // Cộng stock cho sản phẩm đã tồn tại
-          if (currentProducts?.length) {
-            await Promise.all(
-              (currentProducts as { id: string; stock: number }[]).map(prod =>
-                supabase
-                  .from('pos_products')
-                  .update({ stock: Math.max(0, (Number(prod.stock) || 0) + (stockDeltaByProductId.get(prod.id) || 0)) })
-                  .eq('id', prod.id)
-              )
-            );
-          }
-          // Tạo mới sản phẩm chưa có trong danh sách hàng hoá
           const newProductIds = batch.filter(id => !existingProductIds.has(id));
           if (newProductIds.length > 0) {
             const newProducts = newProductIds.map(productId => {
@@ -2044,7 +2035,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
                 category_id: 'Khác',
                 import_price: d.price,
                 sale_price: 0,
-                stock: stockDeltaByProductId.get(productId) || 0,
+                stock: 0,
                 unit: d.unit || 'Cái',
                 brand: d.brand || null,
                 status: 'Active',
@@ -2061,7 +2052,7 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
               console.error('[Import] Lỗi tạo sản phẩm mới từ phiếu nhập:', newProductsErr.message);
             } else {
               newProductsCreated += newProductIds.length;
-              console.log(`[Import] Đã tạo ${newProductIds.length} sản phẩm mới từ phiếu nhập.`);
+              console.log(`[Import] Đã tạo ${newProductIds.length} sản phẩm mới từ phiếu nhập (tồn kho = 0, không tự cộng).`);
             }
           }
         }
@@ -2334,12 +2325,16 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
     }
   });
 
-  // Xóa toàn bộ hàng hóa + giao dịch kho (dùng khi chuyển từ app test sang app thật)
+  // Xóa toàn bộ hàng hóa + giao dịch kho + lịch sử giá vốn (dùng khi chuyển từ app test sang app thật)
   router.delete('/api/admin/reset-products', requireAuth, async (_req, res) => {
     try {
       const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
-      const [r1, r2] = await Promise.all([del('inventory_transactions'), del('pos_products')]);
-      const err = r1.error || r2.error;
+      const [r1, r2, r3] = await Promise.all([
+        del('inventory_transactions'),
+        del('pos_products'),
+        del('product_cost_history'),
+      ]);
+      const err = r1.error || r2.error || r3.error;
       if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
@@ -2358,6 +2353,32 @@ export function createImportRouter(supabase: SupabaseClient, requireAuth: Reques
         del('product_groups'),
       ]);
       const err = r1.error || r2.error || r3.error || r4.error;
+      if (err) throw err;
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa toàn bộ nhà cung cấp + công nợ NCC (dùng khi chuyển từ app test sang app thật)
+  router.delete('/api/admin/reset-suppliers', requireAuth, async (_req, res) => {
+    try {
+      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
+      const [r1, r2] = await Promise.all([del('supplier_debts'), del('suppliers')]);
+      const err = r1.error || r2.error;
+      if (err) throw err;
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Xóa toàn bộ khách hàng + công nợ khách hàng (dùng khi chuyển từ app test sang app thật)
+  router.delete('/api/admin/reset-customers', requireAuth, async (_req, res) => {
+    try {
+      const del = (table: string) => supabase.from(table).delete().not('id', 'is', null);
+      const [r1, r2] = await Promise.all([del('customer_debt_history'), del('pos_customers')]);
+      const err = r1.error || r2.error;
       if (err) throw err;
       res.json({ success: true });
     } catch (error: unknown) {
