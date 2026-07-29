@@ -7,7 +7,6 @@ import type {
   SupplierAlias,
   TaxFilingPeriod,
   VatAllocation,
-  VatAllocationProposal,
   VatCoverageRow,
   VatDocument,
   VatDocumentItem,
@@ -347,69 +346,6 @@ export const buildVatCoverageByGroup = (
   return Array.from(byGroup.values())
     .map(({ receiptIds: _receiptIds, missingReceiptIds: _missingReceiptIds, supplierSet: _supplierSet, maxAge: _maxAge, allVatMapped: _allVatMapped, ...row }) => row)
     .sort((a, b) => b.missingAmount - a.missingAmount || a.vatGroupName.localeCompare(b.vatGroupName, 'vi'));
-};
-
-export const suggestVatAllocations = (
-  documentItem: VatDocumentItem,
-  receipts: InventoryTransaction[],
-  products: POSProduct[],
-  groups: VatGroup[],
-  mappings: SkuVatGroupMapping[],
-  allocations: VatAllocation[],
-  supplierId?: string,
-  invoiceDate?: string
-): VatAllocationProposal[] => {
-  const vatGroupId = documentItem.confirmedVatGroupId || documentItem.suggestedVatGroupId;
-  if (!vatGroupId) return [];
-
-  const rows = getReceiptVatGroupRows(receipts, products, mappings, groups)
-    .filter(row => row.vatGroupId === vatGroupId)
-    .filter(row => !supplierId || row.receipt.supplierId === supplierId)
-    .filter(row => !invoiceDate || row.receipt.date <= invoiceDate)
-    .sort((a, b) => b.receipt.date.localeCompare(a.receipt.date));
-
-  const allocatedByReceiptItem = new Map<string, { quantity: number; amount: number }>();
-  allocations
-    .filter(allocation => (allocation.status || 'active') === 'active' && allocation.vatGroupId === vatGroupId)
-    .forEach(allocation => {
-      const key = allocation.purchaseReceiptItemId || allocation.purchaseReceiptId;
-      const current = allocatedByReceiptItem.get(key) ?? { quantity: 0, amount: 0 };
-      current.quantity += safeNumber(allocation.allocatedQuantity);
-      current.amount += safeNumber(allocation.allocatedAmount);
-      allocatedByReceiptItem.set(key, current);
-    });
-
-  let remainingQuantity = safeNumber(documentItem.quantity) - safeNumber(documentItem.allocatedQuantity);
-  let remainingAmount = safeNumber(documentItem.amountBeforeTax) - safeNumber(documentItem.allocatedAmount);
-  const proposals: VatAllocationProposal[] = [];
-
-  for (const row of rows) {
-    if (remainingQuantity <= 0 && remainingAmount <= 0) break;
-    const allocated = allocatedByReceiptItem.get(row.purchaseReceiptItemId) ?? { quantity: 0, amount: 0 };
-    const missingQuantity = Math.max(0, row.quantity - allocated.quantity);
-    const missingAmount = Math.max(0, row.amount - allocated.amount);
-    if (missingQuantity <= 0 && missingAmount <= 0) continue;
-
-    const allocatedQuantity = remainingQuantity > 0 ? Math.min(remainingQuantity, missingQuantity) : 0;
-    const allocatedAmount = remainingAmount > 0 ? Math.min(remainingAmount, missingAmount) : 0;
-    if (allocatedQuantity <= 0 && allocatedAmount <= 0) continue;
-
-    proposals.push({
-      id: `${documentItem.id}:${row.purchaseReceiptItemId}`,
-      vatDocumentItemId: documentItem.id,
-      purchaseReceiptId: row.receipt.id,
-      purchaseReceiptItemId: row.purchaseReceiptItemId,
-      vatGroupId,
-      allocatedQuantity,
-      allocatedAmount,
-      allocationMethod: 'auto',
-    });
-
-    remainingQuantity -= allocatedQuantity;
-    remainingAmount -= allocatedAmount;
-  }
-
-  return proposals;
 };
 
 const getReconciliationStageLabel = (stage: VatReconciliationStage) =>

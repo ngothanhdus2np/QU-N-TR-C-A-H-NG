@@ -45,10 +45,6 @@ export const shouldCutAttendanceAllowanceByLeave = (attendance: AttendanceRecord
   return authorizedLeaveDays > 1 || unauthorizedLeaveDays > 0;
 };
 
-export const getPolicyLogicDescription = (_policies: SalaryPolicy[]): string => {
-  return "Hệ thống áp dụng logic 'Top-Down Range Matching': Ưu tiên mốc Bắt đầu cao nhất trước. Mốc kết thúc 0 được hiểu là Vô cực (∞).";
-};
-
 export const calculateSeniority = (joinDateStr: string, asOfDateStr?: string): number => {
   if (!joinDateStr) return 0;
   const joinDate = new Date(joinDateStr);

@@ -18,8 +18,7 @@
     "test:watch": "vitest",
     "security:audit": "tsx scripts/security-audit.ts",
     "generate:icons": "node scripts/generate-pwa-icons.cjs",
-    "pwa:test": "npx serve dist -p 3000",
-    "help:capture": "node scripts/capture-help-screenshots.cjs"
+    "pwa:test": "npx serve dist -p 3000"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",

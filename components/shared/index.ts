@@ -21,6 +21,3 @@ export * from './staff';
 
 // AI
 export { AiInsightPanel } from './AiInsightPanel';
-
-// Filter pickers
-export { ProductGroupFilter } from './ProductGroupFilter';

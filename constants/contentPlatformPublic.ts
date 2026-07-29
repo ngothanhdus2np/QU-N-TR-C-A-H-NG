@@ -74,10 +74,6 @@ export const CONTENT_PLATFORMS: PlatformPublicConfig[] = [
   },
 ];
 
-export const CONTENT_PLATFORM_MAP: Record<string, PlatformPublicConfig> = Object.fromEntries(
-  CONTENT_PLATFORMS.map(p => [p.id, p])
-);
-
 export const OBJECTIVE_LABELS: Record<ContentObjective, string> = {
   sell_fast: 'Bán nhanh',
   clearance: 'Xả hàng',

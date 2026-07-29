@@ -68,12 +68,3 @@ export const CardSkeleton: React.FC = () => (
     <Skeleton className="h-3 w-20" />
   </div>
 );
-
-/** Skeleton cho filter sidebar */
-export const SidebarSkeleton: React.FC = () => (
-  <div className="p-4 space-y-4">
-    {[40, 60, 80, 50, 70].map((w, i) => (
-      <Skeleton key={i} className={`h-4 w-[${w}%]`} />
-    ))}
-  </div>
-);

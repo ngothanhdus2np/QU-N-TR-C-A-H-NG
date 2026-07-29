@@ -91,31 +91,3 @@ export const Modal: React.FC<ModalProps> = ({
     </div>
   );
 };
-
-export interface ModalHeaderProps {
-  children: React.ReactNode;
-}
-
-export const ModalHeader: React.FC<ModalHeaderProps> = ({ children }) => {
-  return <div className="mb-4">{children}</div>;
-};
-
-export interface ModalBodyProps {
-  children: React.ReactNode;
-}
-
-export const ModalBody: React.FC<ModalBodyProps> = ({ children }) => {
-  return <div className="space-y-4">{children}</div>;
-};
-
-export interface ModalFooterProps {
-  children: React.ReactNode;
-}
-
-export const ModalFooter: React.FC<ModalFooterProps> = ({ children }) => {
-  return (
-    <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
-      {children}
-    </div>
-  );
-};

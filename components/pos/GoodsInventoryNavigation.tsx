@@ -3,12 +3,6 @@ import { Search } from 'lucide-react';
 
 type GoodsTab = 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty' | 'audit_form' | 'product_form';
 
-interface GoodsInventoryTabBarProps {
-  activeTab: GoodsTab;
-  setActiveTab: React.Dispatch<React.SetStateAction<GoodsTab>>;
-  setShowPurchaseForm: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
 interface GoodsInventorySecondaryToolbarProps {
   activeTab: GoodsTab;
   showPurchaseForm: boolean;
@@ -17,36 +11,6 @@ interface GoodsInventorySecondaryToolbarProps {
   onStartAudit: (mode: 'actual' | 'damaged') => void;
   setShowPurchaseForm: React.Dispatch<React.SetStateAction<boolean>>;
 }
-
-export const GoodsInventoryTabBar: React.FC<GoodsInventoryTabBarProps> = ({
-  activeTab,
-  setActiveTab,
-  setShowPurchaseForm,
-}) => (
-  <div className="flex bg-white rounded-2xl shadow-sm border border-slate-200 p-1.5 w-fit shrink-0 gap-1">
-    <button
-      onClick={() => setActiveTab('goods')}
-      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'goods' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-    >
-      Danh mục hàng
-    </button>
-    <button
-      onClick={() => {
-        setActiveTab('purchase');
-        setShowPurchaseForm(false);
-      }}
-      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'purchase' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-    >
-      Nhập hàng (F2)
-    </button>
-    <button
-      onClick={() => setActiveTab('kho')}
-      className={`px-6 py-2.5 rounded-xl text-xs font-normal uppercase tracking-widest transition-all ${activeTab === 'kho' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-    >
-      Số dư tồn kho
-    </button>
-  </div>
-);
 
 export const GoodsInventorySecondaryToolbar: React.FC<GoodsInventorySecondaryToolbarProps> = ({
   activeTab,

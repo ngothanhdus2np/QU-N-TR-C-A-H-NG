@@ -184,15 +184,3 @@ export const errorHandler = (err: Error, req: any, res: any, next: any) => {
     ...(isProduction ? {} : { stack: err.stack }),
   });
 };
-
-/**
- * React error boundary helper
- */
-export const logReactError = (error: Error, errorInfo: { componentStack: string }) => {
-  errorTracking.captureError(error, {
-    action: 'React Error Boundary',
-    metadata: {
-      componentStack: errorInfo.componentStack,
-    },
-  });
-};

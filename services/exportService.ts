@@ -22,24 +22,6 @@ export function exportToExcel(rows: ExportRow[], fileName: string, sheetName = '
   XLSX.writeFile(wb, `${fileName}_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
 }
 
-// Xuất nhiều sheet trong cùng 1 file Excel
-export function exportToExcelMultiSheet(
-  sheets: { name: string; rows: ExportRow[] }[],
-  fileName: string
-): void {
-  const wb = XLSX.utils.book_new();
-  for (const sheet of sheets) {
-    const ws = XLSX.utils.json_to_sheet(sheet.rows);
-    const colWidths = Object.keys(sheet.rows[0] ?? {}).map(key => {
-      const maxLen = Math.max(key.length, ...sheet.rows.map(r => String(r[key] ?? '').length));
-      return { wch: Math.min(maxLen + 2, 50) };
-    });
-    ws['!cols'] = colWidths;
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-  }
-  XLSX.writeFile(wb, `${fileName}_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
-}
-
 // Mở cửa sổ in PDF — nhận HTML content, tự print & đóng
 export function printToPDF(title: string, htmlBody: string): void {
   const win = window.open('', '_blank');
@@ -64,9 +46,4 @@ export function printToPDF(title: string, htmlBody: string): void {
   </head><body>${htmlBody}</body></html>`);
   win.document.close();
   win.onload = () => { win.print(); setTimeout(() => win.close(), 500); };
-}
-
-// Format số tiền VND
-export function fmtVND(n: number): string {
-  return Number(n || 0).toLocaleString('vi-VN') + 'đ';
 }

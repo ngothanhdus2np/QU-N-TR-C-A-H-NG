@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * Tự động chụp màn hình từng bước cho trang Hướng dẫn sử dụng.
+ * Cần cài tạm: npm i -D @playwright/test (đã gỡ khỏi package.json vì không dùng cho E2E)
  * Chạy: node scripts/capture-help-screenshots.cjs [tên-bài]
  * Ảnh lưu tại: public/help/images/{tên-bài}/01-name.jpg
  */

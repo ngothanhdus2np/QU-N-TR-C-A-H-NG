@@ -156,15 +156,6 @@ export const getWorseReconciliationRisk = (
   next: VatReconciliationRow['riskStatus']
 ) => (RECONCILIATION_RISK_PRIORITY[next] > RECONCILIATION_RISK_PRIORITY[current] ? next : current);
 
-export function VatRiskBadge({ risk }: { risk: VatCoverageRow['riskStatus'] }) {
-  const cfg = VAT_RISK_CONFIG[risk] ?? VAT_RISK_CONFIG.missing;
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-normal ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  );
-}
-
 export function ReconciliationRiskBadge({ risk }: { risk: VatReconciliationRow['riskStatus'] }) {
   const cfg = VAT_RISK_CONFIG[risk] ?? VAT_RISK_CONFIG.missing;
   return (

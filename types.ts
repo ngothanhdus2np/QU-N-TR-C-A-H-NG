@@ -27,13 +27,6 @@ export interface DashboardFinancialInsights {
   ledgerCogs: number;
 }
 
-export interface DashboardPreviousInsights {
-  rev: number;
-  profit: number;
-  gross: number;
-  exp: number;
-}
-
 export interface DashboardBreakEvenAnalysis {
   dailyFixedCost: number;
   avgGrossMargin: number;
@@ -1241,11 +1234,6 @@ export interface StrategicAdvice {
   holidays: string[];
   marketInsight: string;
   suggestedDistribution: { strategyId: string; percentage: number }[];
-}
-
-export interface GenerationRequest {
-  duration: 'week' | 'month';
-  startDate: string;
 }
 
 export interface ChatMessage {

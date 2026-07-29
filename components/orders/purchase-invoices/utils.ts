@@ -34,13 +34,6 @@ export const normalizeVatDateValue = (value?: string | null) => {
   return raw;
 };
 
-export const isDateInVatScope = (value: string | undefined, filingDate: string, scope: 'post' | 'pre') => {
-  const date = normalizeVatDateValue(value);
-  const startDate = normalizeVatDateValue(filingDate);
-  if (!date || !startDate) return false;
-  return scope === 'post' ? date >= startDate : date < startDate;
-};
-
 export const formatVatDate = (value?: string) => {
   const normalized = normalizeVatDateValue(value);
   if (!normalized) return 'Chưa có';

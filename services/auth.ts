@@ -42,30 +42,11 @@ export const signOut = async (): Promise<{ error: AuthError | null }> => {
 };
 
 /**
- * Get current user
- */
-export const getCurrentUser = async (): Promise<User | null> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
-/**
  * Get current session
  */
 export const getCurrentSession = async (): Promise<Session | null> => {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
-};
-
-/**
- * Refresh session
- */
-export const refreshSession = async (): Promise<{ session: Session | null; error: AuthError | null }> => {
-  const { data, error } = await supabase.auth.refreshSession();
-  return {
-    session: data.session,
-    error,
-  };
 };
 
 // Đã xóa (code chết, không nơi nào gọi → loại bỏ rủi ro bảo mật BUG-SEC):

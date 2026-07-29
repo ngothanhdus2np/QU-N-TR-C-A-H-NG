@@ -71,20 +71,6 @@ export function getHistoricalCost(
   return last ?? fallback;
 }
 
-export function buildCurrentWACMap(
-  transactions: InventoryTransaction[],
-  products: POSProduct[]
-): Map<string, number> {
-  const history = buildCostHistory(transactions);
-  const result = new Map<string, number>();
-  const farFuture = '9999-12-31';
-  for (const product of products) {
-    const wac = getHistoricalCost(history, product.id, farFuture, 0);
-    result.set(product.id, wac > 0 ? wac : Number(product.importPrice) || 0);
-  }
-  return result;
-}
-
 export interface DateRange {
   startDate: string;
   endDate: string;
@@ -165,16 +151,6 @@ export interface OrderedGoodsReportRow {
   value: number;
 }
 
-export interface EndOfDayReportRow {
-  kind: 'invoice' | 'return';
-  label: string;
-  count: number;
-  quantity: number;
-  revenue: number;
-  discount: number;
-  actual: number;
-}
-
 export interface CustomerReportRow extends ReportAmountSummary {
   key: string;
   customerId: string;
@@ -209,16 +185,6 @@ const UNKNOWN_STAFF = 'Không xác định';
 const WALK_IN_SUPPLIER = 'NCC vãng lai';
 
 export const toReportDate = (date: Date) => date.toLocaleDateString('en-CA');
-
-export const getCurrentWeekRange = (): DateRange => {
-  const today = new Date();
-  const day = today.getDay() || 7;
-  const start = new Date(today);
-  start.setDate(today.getDate() - day + 1);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { startDate: toReportDate(start), endDate: toReportDate(end) };
-};
 
 export const isDateInRange = (value: string | Date, range: DateRange) => {
   const date = toReportDate(value instanceof Date ? value : new Date(value));
@@ -294,29 +260,6 @@ export const getReportTotals = <T extends ReportAmountSummary>(rows: T[]): Repor
     }),
     { revenue: 0, returned: 0, netRevenue: 0 }
   );
-
-export const getSalesRowsByHour = (
-  orders: POSOrder[],
-  range: DateRange,
-  filters: OrderReportFilters = {}
-): SalesTimeRow[] => {
-  const map = new Map<string, SalesTimeRow>();
-
-  filterOrdersByDateRange(orders, range).forEach(order => {
-    if (!orderMatchesReportFilters(order, filters)) return;
-    const hour = new Date(order.date).toLocaleTimeString('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-    const key = `${hour.slice(0, 2)}:00`;
-    const row = map.get(key) ?? { hour: key, revenue: 0, returned: 0, netRevenue: 0 };
-    addOrderAmount(row, order);
-    map.set(key, row);
-  });
-
-  return Array.from(map.values()).sort((a, b) => a.hour.localeCompare(b.hour));
-};
 
 export const getSalesRowsByDate = (
   orders: POSOrder[],
@@ -647,58 +590,6 @@ export const getOrderedGoodsReportRows = (
   });
 
   return Array.from(map.values()).sort((a, b) => b.quantity - a.quantity || b.value - a.value);
-};
-
-export const getEndOfDayReportRows = (
-  orders: POSOrder[],
-  selectedDate: string,
-  filters: OrderReportFilters & { fromTime?: string; toTime?: string } = {}
-): EndOfDayReportRow[] => {
-  const dayOrders = orders.filter(order => {
-    if (toReportDate(new Date(order.date)) !== selectedDate) return false;
-    if (!orderMatchesReportFilters(order, filters)) return false;
-    if (filters.fromTime || filters.toTime) {
-      const hhmm = new Date(order.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-      if (filters.fromTime && hhmm < filters.fromTime) return false;
-      if (filters.toTime && hhmm > filters.toTime) return false;
-    }
-    return true;
-  });
-  if (dayOrders.length === 0) return [];
-
-  const invoices = dayOrders.filter(order => !order.isReturn);
-  const returns = dayOrders.filter(order => order.isReturn);
-  const sumQuantity = (rows: POSOrder[]) =>
-    rows.reduce(
-      (sum, order) =>
-        sum +
-        order.items.reduce((itemSum, item) => {
-          if (order.isReturn && item.lineType === 'exchange') return itemSum;
-          return itemSum + (Number(item.quantity) || 0);
-        }, 0),
-      0
-    );
-
-  return [
-    {
-      kind: 'invoice',
-      label: 'Hóa đơn',
-      count: invoices.length,
-      quantity: sumQuantity(invoices),
-      revenue: invoices.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0),
-      discount: invoices.reduce((sum, order) => sum + Math.max(0, (Number(order.totalAmount) || 0) - (Number(order.finalAmount) || 0)), 0),
-      actual: invoices.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0),
-    },
-    {
-      kind: 'return',
-      label: 'Trả hàng',
-      count: returns.length,
-      quantity: sumQuantity(returns),
-      revenue: -returns.reduce((sum, order) => sum + Math.abs(Number(order.totalAmount) || 0), 0),
-      discount: -returns.reduce((sum, order) => sum + Math.max(0, Math.abs(Number(order.totalAmount) || 0) - Math.abs(Number(order.finalAmount) || 0)), 0),
-      actual: -returns.reduce((sum, order) => sum + Math.abs(Number(order.finalAmount) || 0), 0),
-    },
-  ];
 };
 
 export const getCustomerReportRows = (
