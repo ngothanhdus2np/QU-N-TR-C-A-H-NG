@@ -7,6 +7,16 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 CLEANUP-0729 — Audit dọn dẹp codebase lần 3, 5 giai đoạn *(xong 2026-07-29)*
+
+> User yêu cầu audit toàn diện lần 3 tìm code thừa/lỗi thời/trùng lặp. Khảo sát + knip + kiểm chứng chéo grep in-file usage từng phát hiện (rút kinh nghiệm: nhiều hàm/type knip báo "unused export" thực ra vẫn được gọi NỘI BỘ trong chính file, chỉ là export thừa — không phải dead code thật; đã soát lại kỹ trước khi xóa để tránh xóa nhầm). Stash 40 file tính năng "Trắng hóa hệ thống" đang dở (FACTORY-RESET-0723) trước khi làm, pop lại sau khi xong. 5 giai đoạn, mỗi giai đoạn verify `tsc`+`npm test` 448/448+`npm run build`+browser (giới hạn: sandbox không có Supabase, không vào sâu được tab VAT/Hàng hóa) rồi commit riêng.
+> **GĐ1**: xóa dead code an toàn — hàm/component/type export không còn reference nào (services/auth.ts, exportService.ts, errorTracking.ts, reportCalculations.ts, vatCoverage.ts, ProductGroupFilter.tsx + 7 sub-component chết, cụm OCR/VAT cũ, 2 type mồ côi). Bỏ npm script `help:capture` (phụ thuộc playwright đã gỡ đợt trước). ~765 dòng.
+> **GĐ2**: xóa 6 hàm chết trong `vatCoverageService.ts` (parseVatXml, createVatDocumentFromParsedInvoice, createOpeningStockItem, confirmVatAllocations, voidVatAllocation, saveVatKeyword) — loại trừ `uploadVatFile` khỏi danh sách xóa sau khi phát hiện vẫn được `createVatDocumentFromPdf` gọi nội bộ dù knip báo unused.
+> **GĐ3**: bỏ `export` thừa khỏi ~28 hàm/type chỉ dùng nội bộ (không xóa function, chỉ thu hẹp API bề mặt) + dọn duplicate export (POSQuickPage, GoodsPurchaseReturnForm) + hợp nhất `supabaseAdmin`/`supabase` thành 1 tên `supabase` trong `services/supabase.ts` (5 file + 1 dynamic import cập nhật theo).
+> **GĐ4**: move `assets/` (22MB logo ngân hàng .eps/.ai/.cdr, ảnh tmp, Excel KiotViet — 0 code reference) ra `_archive-ngoai-repo/assets-20260729/`, thêm `assets/` vào `.gitignore`.
+> **GĐ5**: gộp `formatNumber`/`formatDate` trùng lặp y hệt ở 8 trang báo cáo (không phải 6 như audit trước bỏ sót StaffReportPage/SupplierReportPage) về `src/lib/formatCurrency.ts` (`formatReportNumber`/`formatReportDate`). Phát hiện thêm 4/8 trang có `formatAxis` trùng `formatCurrencyAxis` sẵn có (đợt trước chỉ gộp 2/8) — gộp nốt, tiện sửa luôn bug `GoodsReportPage.tsx` thiếu nhánh "tỷ" (giống lớp bug OrderReportPage đã sửa trước).
+> **Còn để ngỏ, chưa làm (cần user quyết)**: 2 thư mục tài liệu Word/PDF ở root ("BIỂU MẪU HỖ TRỢ VẬN HÀNH", "HỆ THỐNG NỘI QUY - QUY ĐỊNH CHÍNH", ~12MB) — giữ nguyên hay gộp vào `docs/business-knowledge/`; `.kiro/`/`.agents/`/`.codex/` còn dùng hay archive; `npm run cf` (cloudflare-tunnel.mjs) còn cần không. `CLEANUP-0721-B` (tách 2 God file) + `CLEANUP-0721-C` (test route thiếu) vẫn còn nguyên, không thuộc phạm vi đợt này.
+
 ### [x] 🟢 CLEANUP-0721 — Audit dọn dẹp codebase 5 giai đoạn (senior engineer review) *(xong 2026-07-21)*
 
 > User yêu cầu audit toàn diện tìm code thừa/lỗi thời/trùng lặp. Khảo sát + knip + kiểm chứng chéo grep từng phát hiện → trình báo cáo đầy đủ cho user duyệt từng phần trước khi làm (không tự động xóa). Thực thi 5 giai đoạn, mỗi giai đoạn verify `tsc`+`npm test`+browser thật trước khi commit. Chi tiết đầy đủ: HISTORY.md.
