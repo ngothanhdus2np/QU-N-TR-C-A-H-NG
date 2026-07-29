@@ -18,7 +18,11 @@ import {
 import type { ExpenseRecord, InventoryTransaction, PayrollRecord, POSOrder, POSProduct } from '../../types';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import { calcOrderRevenue } from '../../src/lib/reportCalculations';
-import { formatCurrency } from '../../src/lib/formatCurrency';
+import {
+  formatCurrency,
+  formatReportNumber as formatNumber,
+  formatReportDate as formatDate,
+} from '../../src/lib/formatCurrency';
 import ReportDropdownFilter from './ReportDropdownFilter';
 
 interface FinanceReportPageProps {
@@ -59,15 +63,7 @@ type ViewMode = 'chart' | 'report';
 type DateMode = 'month' | 'custom';
 
 const BLUE = '#0f5bed';
-const formatNumber = (value: number) => value.toLocaleString('vi-VN');
 const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
-
-const formatDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
 const monthKeyFromDate = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value);

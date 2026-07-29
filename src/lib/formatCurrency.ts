@@ -21,3 +21,18 @@ export function formatCurrencyAxis(value: number): string {
   if (value >= 1000) return `${Math.round(value / 1000)}k`;
   return String(value);
 }
+
+// Định dạng số nguyên (không hậu tố) kiểu VN, dùng cho các trang báo cáo
+// (số lượng, doanh thu hiển thị trong bảng không cần 'đ'). Ví dụ: 1234567 → "1.234.567".
+export function formatReportNumber(value: number): string {
+  return value.toLocaleString('vi-VN');
+}
+
+// Định dạng ngày kiểu VN dd/mm/yyyy, dùng chung cho các trang báo cáo.
+export function formatReportDate(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}

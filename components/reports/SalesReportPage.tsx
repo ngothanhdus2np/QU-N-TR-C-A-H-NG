@@ -15,7 +15,11 @@ import {
   type SalesStaffReportRow,
   type SalesTimeRow,
 } from '../../src/lib/reportCalculations';
-import { formatCurrencyAxis } from '../../src/lib/formatCurrency';
+import {
+  formatCurrencyAxis,
+  formatReportNumber as formatNumber,
+  formatReportDate as formatDate,
+} from '../../src/lib/formatCurrency';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
 
@@ -45,15 +49,6 @@ interface DropdownOption {
   value: string;
   label: string;
 }
-
-const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-
-const formatDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
 const getUniqueOptions = (values: Array<string | undefined>): DropdownOption[] =>
   Array.from(new Set(values.map(value => value?.trim()).filter(Boolean) as string[]))

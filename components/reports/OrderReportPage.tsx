@@ -10,7 +10,11 @@ import {
   getOrderedGoodsReportRows,
   type OrderedGoodsReportRow,
 } from '../../src/lib/reportCalculations';
-import { formatCurrencyAxis } from '../../src/lib/formatCurrency';
+import {
+  formatCurrencyAxis,
+  formatReportNumber as formatNumber,
+  formatReportDate as formatDate,
+} from '../../src/lib/formatCurrency';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import ReportDropdownFilter, { getReportDropdownOptions } from './ReportDropdownFilter';
 import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
@@ -25,15 +29,6 @@ type ProductRow = OrderedGoodsReportRow;
 
 type ViewMode = 'chart' | 'report';
 type DateMode = 'week' | 'custom';
-
-const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-
-const formatDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
 const SelectButton: React.FC<{
   children: React.ReactNode;

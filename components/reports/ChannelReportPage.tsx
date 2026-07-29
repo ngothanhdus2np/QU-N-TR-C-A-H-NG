@@ -13,6 +13,7 @@ import {
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
 import ReportDropdownFilter, { getReportDropdownOptions } from './ReportDropdownFilter';
 import { getLatestOrderDate, getWeekRange, hasOrdersInDateRange } from './reportDateDefaults';
+import { formatReportNumber as formatNumber, formatReportDate as formatDate } from '../../src/lib/formatCurrency';
 
 interface ChannelReportPageProps {
   orders: POSOrder[];
@@ -24,15 +25,6 @@ type ChannelRow = ChannelReportRow;
 
 type ViewMode = 'chart' | 'report';
 type DateMode = 'week' | 'custom';
-
-const formatNumber = (value: number) => value.toLocaleString('vi-VN');
-
-const formatDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
 const CHART_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#059669'];
 
