@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, Copy, Tag, MoreHorizontal, Ban, ExternalLink, Save, RotateCcw } from 'lucide-react';
 import { InventoryTransaction } from '../../types';
-import { supabaseAdmin as supabase } from '../../services/supabase';
+import { supabase } from '../../services/supabase';
 
 interface PurchaseOrderInlineDetailProps {
   transaction: InventoryTransaction;

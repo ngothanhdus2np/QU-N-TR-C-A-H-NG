@@ -8,7 +8,7 @@ const DB_NAME = 'cfo_brain_pos_queue';
 const DB_VERSION = 1;
 const STORE_NAME = 'pending_ops';
 
-export type PendingOpType =
+type PendingOpType =
   | 'pushBatch'
   | 'upsertItem'
   | 'deleteItem'

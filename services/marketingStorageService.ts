@@ -1,5 +1,5 @@
 
-import { supabaseAdmin as supabase } from './supabase';
+import { supabase } from './supabase';
 
 /**
  * Uploads a base64 or blob image to Supabase Storage and returns the public URL.

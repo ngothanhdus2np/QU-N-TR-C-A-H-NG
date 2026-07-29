@@ -81,7 +81,7 @@ const getReceiptAmount = (receipt: InventoryTransaction) =>
     return sum + safeNumber(item.quantity) * Math.max(0, price - discount);
   }, 0);
 
-export const getPurchaseItemAmount = (receipt: InventoryTransaction, item: InventoryTransaction['items'][number]) => {
+const getPurchaseItemAmount = (receipt: InventoryTransaction, item: InventoryTransaction['items'][number]) => {
   const price = safeNumber(item.price);
   const discount = safeNumber(item.discount);
   const quantity = safeNumber(item.quantity);
@@ -179,7 +179,7 @@ export const matchVatGroupForInvoiceLine = (
   };
 };
 
-export const buildSkuVatGroupLookup = (products: POSProduct[], mappings: SkuVatGroupMapping[]) => {
+const buildSkuVatGroupLookup = (products: POSProduct[], mappings: SkuVatGroupMapping[]) => {
   const lookup = new Map<string, SkuVatGroupMapping>();
   const mappingByProductId = new Map<string, SkuVatGroupMapping>();
   const mappingBySku = new Map<string, SkuVatGroupMapping>();

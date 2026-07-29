@@ -1,7 +1,7 @@
 import { AppData, AppDataItem, AppDataListKey, AppDataSurgicalUpdate, ChatMessage, BrandProfile, DiagnosisRange } from '../types';
 
 export type AppListKey = AppDataListKey;
-export type AppListItem = AppDataItem<AppListKey>;
+type AppListItem = AppDataItem<AppListKey>;
 
 export type AppAction =
   | { type: 'SET_DATA'; payload: Partial<AppData> }

@@ -1,4 +1,4 @@
-import { supabaseAdmin as supabase } from './supabase';
+import { supabase } from './supabase';
 import { AppData, CustomerDebtRecord, InventoryTransaction, POSOrder, RevenueDelta } from '../types';
 import { buildVariantProductName, isUUID } from '../src/lib';
 

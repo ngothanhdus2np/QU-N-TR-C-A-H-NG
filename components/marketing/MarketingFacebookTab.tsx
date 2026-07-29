@@ -14,7 +14,7 @@ export interface FacebookPage {
   access_token?: string;
 }
 
-export interface AutoPostLog {
+interface AutoPostLog {
   id: string;
   type: 'success' | 'error' | string;
   time: string;

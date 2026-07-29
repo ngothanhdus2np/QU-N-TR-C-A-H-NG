@@ -1,6 +1,6 @@
 
 import { useState, useMemo } from 'react';
-import { supabaseAdmin as supabase } from '../services/supabase';
+import { supabase } from '../services/supabase';
 
 type MarketingUserSession = {
   user?: {

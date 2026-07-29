@@ -1,7 +1,7 @@
 // Static province → district mapping (offline-safe)
 // Wards are fetched from provinces.open-api.vn API (cached in localStorage)
 
-export const VIETNAM_DISTRICTS: Record<string, string[]> = {
+const VIETNAM_DISTRICTS: Record<string, string[]> = {
   "Thành phố Hà Nội": [
     "Quận Ba Đình","Quận Hoàn Kiếm","Quận Tây Hồ","Quận Long Biên",
     "Quận Cầu Giấy","Quận Đống Đa","Quận Hai Bà Trưng","Quận Hoàng Mai",

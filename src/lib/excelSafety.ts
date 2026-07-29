@@ -1,7 +1,7 @@
 const XLSX_ZIP_SIGNATURE = [0x50, 0x4b];
 const XLS_OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0];
 
-export const EXCEL_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const EXCEL_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 export const EXCEL_MAX_ROWS = 50000;
 
 const getBytes = (input: ArrayBuffer | Uint8Array): Uint8Array =>

@@ -4,7 +4,7 @@
 
 import { parseVNDate } from '../src/lib';
 
-export type SpreadsheetCell = string | number | boolean | Date | null;
+type SpreadsheetCell = string | number | boolean | Date | null;
 export type SpreadsheetRow = SpreadsheetCell[];
 
 // Tổng hợp doanh thu 1 ngày cho revenue_records (khớp shape dùng trong import.ts).

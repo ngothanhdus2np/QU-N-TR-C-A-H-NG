@@ -301,7 +301,7 @@ const toOpeningStockItem = (row: OpeningStockItemRow): OpeningStockItem => ({
   updatedAt: row.updated_at || undefined,
 });
 
-export async function uploadVatFile(file: File, documentId: string) {
+async function uploadVatFile(file: File, documentId: string) {
   const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
   const path = `${documentId}/${generateId()}.${ext}`;
   const { error } = await supabase.storage.from(VAT_BUCKET).upload(path, file, { upsert: false });

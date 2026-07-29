@@ -1,6 +1,6 @@
 import type { POSProduct } from '../../../types';
 
-export const BARCODE_LABEL_TEMPLATE_STORAGE_KEY = 'barcode_label_template_settings';
+const BARCODE_LABEL_TEMPLATE_STORAGE_KEY = 'barcode_label_template_settings';
 
 export interface BarcodeLabelTemplateSettings {
   widthMm: number;
@@ -12,7 +12,7 @@ export interface BarcodeLabelTemplateSettings {
   showBorder: boolean;
 }
 
-export const DEFAULT_BARCODE_LABEL_TEMPLATE: BarcodeLabelTemplateSettings = {
+const DEFAULT_BARCODE_LABEL_TEMPLATE: BarcodeLabelTemplateSettings = {
   widthMm: 35,
   heightMm: 22,
   columns: 2,

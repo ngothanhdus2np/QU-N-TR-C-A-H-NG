@@ -784,5 +784,3 @@ export const POSQuickPage: React.FC = () => {
     </div>
   );
 };
-
-export default POSQuickPage;

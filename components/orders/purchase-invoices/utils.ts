@@ -42,7 +42,7 @@ export const formatVatDate = (value?: string) => {
   return parsed.toLocaleDateString('vi-VN');
 };
 
-export const fileToBase64 = (file: File) =>
+const fileToBase64 = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
@@ -50,7 +50,7 @@ export const fileToBase64 = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-export const extractJsonObject = (value: string) => {
+const extractJsonObject = (value: string) => {
   const trimmed = value.trim();
   if (trimmed.startsWith('{')) return trimmed;
   return trimmed.match(/\{[\s\S]*\}/)?.[0] || trimmed;

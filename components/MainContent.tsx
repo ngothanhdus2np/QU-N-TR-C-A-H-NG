@@ -31,7 +31,7 @@ import {
   recalcSalesRecordsForDate,
   getOrderLocalDateKey,
 } from '../services/posOrderService';
-import { supabaseAdmin as supabase } from '../services/supabase';
+import { supabase } from '../services/supabase';
 import { apiService } from '../services/apiService';
 
 const HelpCenter = React.lazy(() => import('./help/HelpCenter'));

@@ -346,7 +346,7 @@ export interface StaffPerformanceRecord {
   rank?: number;
 }
 
-export interface CashFlowRecord {
+interface CashFlowRecord {
   id: string;
   date: string;
   inflow: number;
@@ -455,7 +455,7 @@ export type UpdateAppData = <K extends keyof AppData>(
   idToRemove?: string
 ) => void;
 
-export interface POSProductUnit {
+interface POSProductUnit {
   id: string;
   name: string;
   factor: number;
@@ -529,7 +529,7 @@ export interface POSOrderItem {
   maxQuantity?: number;
 }
 
-export type POSOrderChannel = 'direct' | 'online' | 'marketplace' | 'other';
+type POSOrderChannel = 'direct' | 'online' | 'marketplace' | 'other';
 export type POSOrderStatus = 'completed' | 'pending' | 'cancelled' | 'draft';
 
 export interface POSOrder {
@@ -820,13 +820,13 @@ export interface InventoryTransaction {
   decreaseCount?: number; // Number of items with stock decrease
 }
 
-export type VatDocumentStatus = 'unallocated' | 'partial' | 'completed' | 'over_allocated' | 'void';
-export type VatMappingStatus = 'suggested' | 'confirmed' | 'needs_confirmation';
-export type VatSupplierMatchStatus = 'matched' | 'needs_confirmation' | 'unmatched';
-export type VatAllocationMethod = 'auto' | 'manual';
-export type VatAllocationStatus = 'active' | 'void';
-export type VatAllocationTargetType = 'purchase_receipt' | 'opening_stock';
-export type TaxFilingPeriodStatus = 'draft' | 'locked' | 'archived';
+type VatDocumentStatus = 'unallocated' | 'partial' | 'completed' | 'over_allocated' | 'void';
+type VatMappingStatus = 'suggested' | 'confirmed' | 'needs_confirmation';
+type VatSupplierMatchStatus = 'matched' | 'needs_confirmation' | 'unmatched';
+type VatAllocationMethod = 'auto' | 'manual';
+type VatAllocationStatus = 'active' | 'void';
+type VatAllocationTargetType = 'purchase_receipt' | 'opening_stock';
+type TaxFilingPeriodStatus = 'draft' | 'locked' | 'archived';
 export type OpeningStockVatStatus =
   | 'has_vat'
   | 'waiting_vat'
@@ -1030,7 +1030,7 @@ export interface VatReconciliationSummary {
   overAllocatedAmount: number;
 }
 
-export interface VatAllocationEvent {
+interface VatAllocationEvent {
   id: string;
   allocationId?: string;
   vatDocumentId?: string;
@@ -1096,7 +1096,7 @@ export interface DailyBreakEvenConfig {
   grossMarginPercent: number; // e.g., 35 for 35%
 }
 
-export interface ShopeeSourceShop {
+interface ShopeeSourceShop {
   name: string;
   link: string;
 }
@@ -1115,7 +1115,7 @@ export interface ShopeeSourceItem {
   shops?: ShopeeSourceShop[];
 }
 
-export interface ShopeeCostItem {
+interface ShopeeCostItem {
   id: string;
   name: string;
   quantity: number;

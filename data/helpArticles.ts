@@ -1,4 +1,4 @@
-export interface HelpSection {
+interface HelpSection {
   id: string;
   title: string;
 }

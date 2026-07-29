@@ -3,14 +3,14 @@ import { Plus, Trash2, X } from 'lucide-react';
 import { generateId } from '../../src/lib';
 import { POSProduct } from '../../types';
 
-export type ViewModeAttribute = {
+type ViewModeAttribute = {
   id: string;
   type: string;
   values: string[];
   currentValue: string;
 };
 
-export type PreviewVariant = {
+type PreviewVariant = {
   id: string;
   name: string;
   attributes: Record<string, string>;

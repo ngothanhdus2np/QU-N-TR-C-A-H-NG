@@ -50,7 +50,7 @@ interface GoodsPurchaseReturnFormProps {
   staffLabel?: string;
 }
 
-export const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = ({
+const GoodsPurchaseReturnForm: React.FC<GoodsPurchaseReturnFormProps> = ({
   showReturnForm,
   setShowReturnForm,
   returnItems,

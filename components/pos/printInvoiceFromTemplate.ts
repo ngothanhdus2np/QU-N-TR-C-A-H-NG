@@ -108,7 +108,7 @@ interface ExpandedLine {
   itemData?: { price: number; discount: number; quantity: number; total: number; lineType?: string };
 }
 
-export function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | null {
+function printInvoiceFromTemplate(opts: PrintInvoiceOptions): string | null {
   const { order, storeName, storeAddress, storePhone, customerPhone, customerAddress, staffName } = opts;
   const orderDate = new Date(order.date);
   const cashGiven = order.cashReceived || Math.abs(order.finalAmount);

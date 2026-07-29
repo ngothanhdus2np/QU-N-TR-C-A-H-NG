@@ -3,7 +3,7 @@
 // Việc đổi ngày (excelDateToLocalIsoDateTime) và sinh UUID (productIdFromSku...) vẫn do
 // handler thực hiện trên giá trị thô do các hàm này trả về.
 
-export type SpreadsheetCell = string | number | boolean | Date | null;
+type SpreadsheetCell = string | number | boolean | Date | null;
 export type SpreadsheetRow = SpreadsheetCell[];
 
 const num = (v: SpreadsheetCell): number => Number(v || 0);
@@ -19,7 +19,7 @@ const str = (v: SpreadsheetCell): string => String(v ?? '').trim();
 //   61=Giá bán, 62=Thành tiền
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface ParsedInvoiceItem {
+interface ParsedInvoiceItem {
   sku: string;
   name: string;
   quantity: number;

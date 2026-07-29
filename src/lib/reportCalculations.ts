@@ -3,7 +3,7 @@ import { calcEffectiveUnitPrice, calculateNextImportPrice } from './businessLogi
 
 // Tính giá vốn bình quân gia quyền (WAC) cho từng sản phẩm qua từng lần nhập hàng.
 // Phân bổ chiết khấu NCC toàn đơn theo tỷ lệ giá trị từng dòng (giống KiotViet).
-export function buildCostHistory(
+function buildCostHistory(
   transactions: InventoryTransaction[]
 ): Map<string, Array<{ date: string; price: number }>> {
   const imports = transactions
@@ -55,7 +55,7 @@ export function buildCostHistory(
 }
 
 // Lấy giá vốn tại thời điểm gần nhất trước hoặc bằng saleDate
-export function getHistoricalCost(
+function getHistoricalCost(
   costHistory: Map<string, Array<{ date: string; price: number }>>,
   productId: string,
   saleDate: string,
@@ -184,14 +184,14 @@ const WALK_IN_LABEL = 'Khách lẻ';
 const UNKNOWN_STAFF = 'Không xác định';
 const WALK_IN_SUPPLIER = 'NCC vãng lai';
 
-export const toReportDate = (date: Date) => date.toLocaleDateString('en-CA');
+const toReportDate = (date: Date) => date.toLocaleDateString('en-CA');
 
 export const isDateInRange = (value: string | Date, range: DateRange) => {
   const date = toReportDate(value instanceof Date ? value : new Date(value));
   return date >= range.startDate && date <= range.endDate;
 };
 
-export const filterOrdersByDateRange = (orders: POSOrder[], range: DateRange) =>
+const filterOrdersByDateRange = (orders: POSOrder[], range: DateRange) =>
   orders.filter(order => isDateInRange(order.date, range));
 
 export const getOrderChannelName = (order: POSOrder) => order.channelName || 'Bán trực tiếp';
@@ -200,7 +200,7 @@ export const getOrderCreatedBy = (order: POSOrder) => order.staffName || order.c
 export const getOrderPriceBookText = (order: POSOrder) =>
   `${order.priceBookId || ''} ${order.priceBookName || ''}`.trim() || 'Bảng giá chung';
 
-export const orderMatchesReportFilters = (
+const orderMatchesReportFilters = (
   order: POSOrder,
   filters: OrderReportFilters = {}
 ) => {
@@ -242,7 +242,7 @@ export const calcOrderRevenue = (order: POSOrder): number => {
   return totalAmount - discount;
 };
 
-export const addOrderAmount = <T extends ReportAmountSummary>(target: T, order: POSOrder) => {
+const addOrderAmount = <T extends ReportAmountSummary>(target: T, order: POSOrder) => {
   if (order.isReturn) {
     target.returned += Math.abs(Number(order.totalAmount) || 0);
   } else {

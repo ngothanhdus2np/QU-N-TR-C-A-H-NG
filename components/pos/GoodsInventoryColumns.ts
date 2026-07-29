@@ -1,5 +1,5 @@
 // Tăng version khi thêm/xóa cột để user thấy cột mới tự động
-export const COLUMN_PREFS_VERSION = 'v4';
+const COLUMN_PREFS_VERSION = 'v4';
 export const COLUMN_PREFS_KEY = `goods_visible_columns_${COLUMN_PREFS_VERSION}`;
 
 export const ALL_COLUMNS: { key: string; label: string; defaultVisible: boolean }[] = [

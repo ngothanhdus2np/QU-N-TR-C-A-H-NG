@@ -8,7 +8,7 @@ export const KNOWLEDGE_SECTION_LABELS: Record<KnowledgeSection, string> = {
   templates: 'Biểu mẫu',
 };
 
-export const KNOWLEDGE_SECTION_MARKER = 'knowledge-section';
+const KNOWLEDGE_SECTION_MARKER = 'knowledge-section';
 const KNOWLEDGE_SUMMARY_MARKER = 'knowledge-summary';
 
 export const stripKnowledgeMeta = (content = '') =>
@@ -31,7 +31,7 @@ export const getKnowledgeSection = (
   return 'standards';
 };
 
-export const getKnowledgeSummary = (content = '') => {
+const getKnowledgeSummary = (content = '') => {
   const marker = content.match(/<!--\s*knowledge-summary:\s*([\s\S]*?)\s*-->/i);
   if (marker?.[1]?.trim()) return marker[1].trim();
   return 'Tài liệu này chưa có phần tóm tắt nội dung. Vui lòng đọc bản xem trước hoặc cập nhật lại tóm tắt cho tài liệu.';

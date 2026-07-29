@@ -19,7 +19,7 @@ export type TabKey = 'all' | 'full' | 'partial' | 'none';
 export type VatCenterTab = 'groups' | 'receipts' | 'suppliers' | 'warehouse' | 'tasks';
 export type FilingTab = 'group_supplier' | 'supplier_need' | 'opening_stock' | 'vat_warehouse' | 'alerts';
 export type ReportMode = 'filing' | 'coverage' | 'legacy';
-export type VatPeriodScope = 'post' | 'pre';
+type VatPeriodScope = 'post' | 'pre';
 export type PurchasePeriodScope = VatPeriodScope | 'all';
 export type VatCoverageData = Awaited<ReturnType<typeof fetchVatCoverageData>>;
 
@@ -136,7 +136,7 @@ export const OPENING_VAT_STATUS_OPTIONS: { value: OpeningStockVatStatus; label: 
   { value: 'pending_supplement', label: 'Chờ bổ sung VAT' },
 ];
 
-export const RECONCILIATION_RISK_PRIORITY: Record<VatReconciliationRow['riskStatus'], number> = {
+const RECONCILIATION_RISK_PRIORITY: Record<VatReconciliationRow['riskStatus'], number> = {
   covered: 0,
   partial: 1,
   needs_allocation: 2,

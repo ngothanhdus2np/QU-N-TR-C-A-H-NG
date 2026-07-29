@@ -1,7 +1,7 @@
 import React from 'react';
 import { Grid3X3 } from 'lucide-react';
 
-export type GoodsColumn = {
+type GoodsColumn = {
   key: string;
   label: string;
   defaultVisible: boolean;

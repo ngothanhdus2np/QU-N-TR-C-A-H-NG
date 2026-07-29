@@ -3,7 +3,7 @@ import type { AppAlert, AlertConfig } from '../../types';
 
 const ALERT_CONFIG_KEY = 'alert-config';
 
-export const DEFAULT_ALERT_CONFIG: AlertConfig = {
+const DEFAULT_ALERT_CONFIG: AlertConfig = {
   defaultMinStock: 5,
   debtOverdueDays: 30,
   revenueDropPct: 50,

@@ -361,7 +361,7 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
 
       if (iCode === -1) throw new Error('Không tìm thấy cột "Mã hóa đơn" trong file.');
 
-      const { supabaseAdmin } = await import('../../services/supabase');
+      const { supabase: supabaseAdmin } = await import('../../services/supabase');
       let inserted = 0, skipped = 0;
 
       for (let i = 1; i < lines.length; i++) {

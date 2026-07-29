@@ -53,7 +53,7 @@ const addLine = (
   });
 };
 
-export const calculateOrderStaffSales = (
+const calculateOrderStaffSales = (
   order: POSOrder,
   employees: Employee[] = []
 ): StaffSalesSummary[] => {

@@ -2,8 +2,8 @@
 // KHÔNG chứa system prompt, rules chi tiết, hay forbidden claims
 // Các thông tin nhạy cảm đó nằm trong services/agents/contentPrompts.ts (backend only)
 
-export type ContentPlatform = 'shopee' | 'facebook' | 'website' | 'blog';
-export type ContentTask = 'product_description' | 'product_caption' | 'seo_article' | 'web_product';
+type ContentPlatform = 'shopee' | 'facebook' | 'website' | 'blog';
+type ContentTask = 'product_description' | 'product_caption' | 'seo_article' | 'web_product';
 export type ContentObjective = 'sell_fast' | 'clearance' | 'new_arrival' | 'seo';
 
 export interface PlatformPublicConfig {

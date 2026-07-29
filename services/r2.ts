@@ -41,7 +41,7 @@ export function isR2Configured(): boolean {
 }
 
 /** URL công khai của một object key trên R2 (qua custom domain). */
-export function r2PublicUrl(key: string): string {
+function r2PublicUrl(key: string): string {
   const base = (R2_PUBLIC_BASE as string).replace(/\/+$/, '');
   const path = key.split('/').map(encodeURIComponent).join('/');
   return `${base}/${path}`;

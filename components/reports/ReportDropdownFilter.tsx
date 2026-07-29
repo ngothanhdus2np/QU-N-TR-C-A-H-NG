@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-export interface ReportDropdownOption {
+interface ReportDropdownOption {
   value: string;
   label: string;
 }
