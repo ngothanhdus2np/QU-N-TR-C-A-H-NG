@@ -1,7 +1,0 @@
-{
-  "name": "Remix: CFO Brain 4.0 - Hệ thống MIS Doanh nghiệp",
-  "description": "Nền tảng quản trị tài chính, nhân sự và vận hành thông minh dành cho doanh nghiệp bán lẻ. Tích hợp AI Chẩn đoán, Quản lý đa kênh và Sổ cái tự động.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}

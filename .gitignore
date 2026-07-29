@@ -46,5 +46,10 @@ tmpImage*.JPG
 tmpImage*.PNG
 tmp*
 
+# Tài sản thiết kế gốc (logo ngân hàng .eps/.ai/.cdr, ảnh mẫu) — không được
+# code tham chiếu (chỉ public/ được serve), lưu ngoài repo tại
+# _archive-ngoai-repo/assets-20260729
+assets/
+
 # Help Center screenshots — lưu trên iMac tại ~/cfobrain-assets/help/images/
 public/help/images/
