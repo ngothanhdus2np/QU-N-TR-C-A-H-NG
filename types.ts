@@ -1058,18 +1058,6 @@ export interface VatCoverageRow {
   riskStatus: VatRiskStatus;
 }
 
-export interface VatAllocationProposal {
-  id: string;
-  vatDocumentItemId: string;
-  purchaseReceiptId: string;
-  purchaseReceiptItemId?: string;
-  vatGroupId: string;
-  allocatedQuantity: number;
-  allocatedAmount: number;
-  allocationMethod: VatAllocationMethod;
-  warning?: 'over_allocated' | 'supplier_mismatch';
-}
-
 export interface Supplier {
   id: string;
   name: string;

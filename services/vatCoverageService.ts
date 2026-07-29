@@ -1,21 +1,14 @@
 import { generateId } from '../src/lib';
-import {
-  matchSupplierForVatDocument,
-  matchVatGroupForInvoiceLine,
-  normalizeVatText,
-} from '../src/lib/vatCoverage';
+import { normalizeVatText } from '../src/lib/vatCoverage';
 import type {
   OpeningStockItem,
   POSProduct,
   SkuVatGroupMapping,
-  Supplier,
   SupplierAlias,
   TaxFilingPeriod,
   VatAllocation,
-  VatAllocationProposal,
   VatDocument,
   VatDocumentItem,
-  VatGroup,
   VatGroupKeyword,
 } from '../types';
 import { supabase } from './supabase';
@@ -165,40 +158,6 @@ type OpeningStockItemRow = {
   updated_at?: string | null;
 };
 
-export interface ParsedVatInvoiceLine {
-  descriptionOnInvoice: string;
-  quantity: number;
-  amountBeforeTax: number;
-  vatAmount: number;
-  totalAmount: number;
-}
-
-export interface ParsedVatInvoice {
-  invoiceNo: string;
-  invoiceDate: string;
-  supplierNameOnInvoice: string;
-  supplierTaxCode?: string;
-  totalBeforeTax: number;
-  vatAmount: number;
-  totalAmount: number;
-  lines: ParsedVatInvoiceLine[];
-}
-
-const asNumber = (value: string | null | undefined) => {
-  if (!value) return 0;
-  const parsed = Number(value.replace(/,/g, '').trim());
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const firstText = (root: Document | Element, names: string[]) => {
-  for (const name of names) {
-    const element = root.getElementsByTagName(name)[0];
-    const value = element?.textContent?.trim();
-    if (value) return value;
-  }
-  return '';
-};
-
 const toVatDocument = (row: VatDocumentRow): VatDocument => ({
   id: row.id,
   supplierId: row.supplier_id || undefined,
@@ -342,41 +301,6 @@ const toOpeningStockItem = (row: OpeningStockItemRow): OpeningStockItem => ({
   updatedAt: row.updated_at || undefined,
 });
 
-export const parseVatXml = (xmlText: string): ParsedVatInvoice => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, 'application/xml');
-  const parserError = doc.getElementsByTagName('parsererror')[0];
-  if (parserError) throw new Error('File XML hóa đơn không hợp lệ.');
-
-  const lineElements = Array.from(doc.getElementsByTagName('HHDVu'));
-  const lines = lineElements.map(line => {
-    const amountBeforeTax = asNumber(firstText(line, ['ThTien', 'ThTienHHDVu', 'TgTCThue']));
-    const vatAmount = asNumber(firstText(line, ['TThue', 'TThueHHDVu']));
-    return {
-      descriptionOnInvoice: firstText(line, ['THHDVu', 'TenHHDVu', 'description']) || 'Dòng hàng chưa có tên',
-      quantity: asNumber(firstText(line, ['SLuong', 'SoLuong', 'quantity'])),
-      amountBeforeTax,
-      vatAmount,
-      totalAmount: amountBeforeTax + vatAmount,
-    };
-  });
-
-  const totalBeforeTax = asNumber(firstText(doc, ['TgTCThue', 'TgTThue']));
-  const vatAmount = asNumber(firstText(doc, ['TgTThue', 'TgThue']));
-  const totalAmount = asNumber(firstText(doc, ['TgTTTBSo', 'TgTTTBChu', 'TgTTT']));
-
-  return {
-    invoiceNo: firstText(doc, ['SHDon', 'SoHoaDon', 'invoiceNo']) || `VAT-${Date.now()}`,
-    invoiceDate: firstText(doc, ['NLap', 'NgayLap', 'invoiceDate']) || new Date().toLocaleDateString('en-CA'),
-    supplierNameOnInvoice: firstText(doc, ['Ten', 'NBan', 'TenNBan', 'supplierName']),
-    supplierTaxCode: firstText(doc, ['MST', 'MSTNBan', 'supplierTaxCode']),
-    totalBeforeTax,
-    vatAmount,
-    totalAmount: totalAmount || totalBeforeTax + vatAmount,
-    lines,
-  };
-};
-
 export async function uploadVatFile(file: File, documentId: string) {
   const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
   const path = `${documentId}/${generateId()}.${ext}`;
@@ -412,87 +336,6 @@ export async function createVatDocumentFromPdf(file: File, createdBy?: string) {
   if (documentError) throw documentError;
 
   return toVatDocument(documentRows?.[0] as VatDocumentRow);
-}
-
-export async function createVatDocumentFromParsedInvoice({
-  parsed,
-  suppliers,
-  aliases,
-  groups,
-  keywords,
-  pdfPath,
-  xmlPath,
-  createdBy,
-}: {
-  parsed: ParsedVatInvoice;
-  suppliers: Supplier[];
-  aliases: SupplierAlias[];
-  groups: VatGroup[];
-  keywords: VatGroupKeyword[];
-  pdfPath?: string;
-  xmlPath?: string;
-  createdBy?: string;
-}) {
-  const documentId = generateId();
-  const supplierMatch = matchSupplierForVatDocument(
-    parsed.supplierNameOnInvoice,
-    parsed.supplierTaxCode,
-    suppliers,
-    aliases
-  );
-
-  const documentPayload = {
-    id: documentId,
-    supplier_id: supplierMatch.supplier?.id || null,
-    supplier_name_on_invoice: parsed.supplierNameOnInvoice,
-    supplier_tax_code: parsed.supplierTaxCode || null,
-    supplier_match_confidence: supplierMatch.confidence,
-    supplier_match_status: supplierMatch.status,
-    invoice_no: parsed.invoiceNo,
-    invoice_date: parsed.invoiceDate,
-    total_before_tax: parsed.totalBeforeTax,
-    vat_amount: parsed.vatAmount,
-    total_amount: parsed.totalAmount,
-    file_pdf_url: pdfPath || null,
-    file_xml_url: xmlPath || null,
-    status: 'unallocated',
-    created_by: createdBy || null,
-  };
-
-  const itemPayloads = parsed.lines.map(line => {
-    const groupMatch = matchVatGroupForInvoiceLine(line.descriptionOnInvoice, groups, keywords);
-    return {
-      id: generateId(),
-      vat_document_id: documentId,
-      description_on_invoice: line.descriptionOnInvoice,
-      suggested_vat_group_id: groupMatch.vatGroup?.id || null,
-      confirmed_vat_group_id: groupMatch.status === 'suggested' ? groupMatch.vatGroup?.id || null : null,
-      quantity: line.quantity,
-      amount_before_tax: line.amountBeforeTax,
-      vat_amount: line.vatAmount,
-      total_amount: line.totalAmount,
-      allocated_quantity: 0,
-      allocated_amount: 0,
-      confidence_score: groupMatch.confidence,
-      mapping_status: groupMatch.status,
-    };
-  });
-
-  const { data: documentRows, error: documentError } = await supabase
-    .from('vat_documents')
-    .insert(documentPayload)
-    .select('*');
-  if (documentError) throw documentError;
-
-  if (itemPayloads.length > 0) {
-    const { error: itemError } = await supabase.from('vat_document_items').insert(itemPayloads);
-    if (itemError) throw itemError;
-  }
-
-  return {
-    document: toVatDocument(documentRows?.[0] as VatDocumentRow),
-    items: itemPayloads.map(row => toVatDocumentItem(row as VatDocumentItemRow)),
-  };
 }
 
 export async function fetchVatCoverageData() {
@@ -571,35 +414,6 @@ export async function saveTaxFilingPeriod(input: {
     .single();
   if (error) throw error;
   return toTaxFilingPeriod(data as TaxFilingPeriodRow);
-}
-
-export async function createOpeningStockItem(input: Omit<OpeningStockItem, 'id' | 'createdAt' | 'updatedAt'>) {
-  const payload = {
-    id: generateId(),
-    filing_period_id: input.filingPeriodId,
-    sku: input.sku,
-    product_id: input.productId || null,
-    product_name: input.productName,
-    product_group_name: input.productGroupName || null,
-    vat_group_id: input.vatGroupId || null,
-    supplier_id: input.supplierId || null,
-    supplier_name: input.supplierName || null,
-    quantity: input.quantity,
-    unit_cost: input.unitCost,
-    total_amount: input.totalAmount,
-    vat_status: input.vatStatus,
-    note: input.note || null,
-    branch_id: input.branchId || 'main',
-    tenant_id: input.tenantId || 'phuc-sang',
-    created_by: input.createdBy || null,
-  };
-  const { data, error } = await supabase
-    .from('opening_stock_items')
-    .insert(payload)
-    .select('*')
-    .single();
-  if (error) throw error;
-  return toOpeningStockItem(data as OpeningStockItemRow);
 }
 
 export async function updateOpeningStockItem(input: {
@@ -858,78 +672,3 @@ export async function allocateVatToPurchaseReceipt({
   return toVatAllocation(data as VatAllocationRow);
 }
 
-export async function confirmVatAllocations(proposals: VatAllocationProposal[], createdBy?: string) {
-  if (proposals.length === 0) return [];
-
-  const payloads = proposals.map(proposal => ({
-    id: generateId(),
-    vat_document_item_id: proposal.vatDocumentItemId,
-    purchase_receipt_id: proposal.purchaseReceiptId,
-    purchase_receipt_item_id: proposal.purchaseReceiptItemId || null,
-    vat_group_id: proposal.vatGroupId,
-    allocated_quantity: proposal.allocatedQuantity,
-    allocated_amount: proposal.allocatedAmount,
-    created_by: createdBy || null,
-    allocation_method: proposal.allocationMethod,
-    status: 'active',
-  }));
-
-  const { data, error } = await supabase.from('vat_allocations').insert(payloads).select('*');
-  if (error) throw error;
-
-  const eventPayloads = (data || []).map((allocation: VatAllocation & { vat_document_item_id?: string }) => ({
-    id: generateId(),
-    allocation_id: allocation.id,
-    action: 'created',
-    snapshot: allocation,
-    created_by: createdBy || null,
-  }));
-  if (eventPayloads.length > 0) {
-    const { error: eventError } = await supabase.from('vat_allocation_events').insert(eventPayloads);
-    if (eventError) throw eventError;
-  }
-
-  return data || [];
-}
-
-export async function voidVatAllocation(allocationId: string, reason: string, voidedBy?: string) {
-  const patch = {
-    status: 'void',
-    void_reason: reason,
-    voided_at: new Date().toISOString(),
-    voided_by: voidedBy || null,
-  };
-  const { data, error } = await supabase
-    .from('vat_allocations')
-    .update(patch)
-    .eq('id', allocationId)
-    .select('*');
-  if (error) throw error;
-
-  const allocation = data?.[0];
-  const { error: eventError } = await supabase.from('vat_allocation_events').insert({
-    id: generateId(),
-    allocation_id: allocationId,
-    action: 'voided',
-    reason,
-    snapshot: allocation,
-    created_by: voidedBy || null,
-  });
-  if (eventError) throw eventError;
-  return allocation;
-}
-
-export async function saveVatKeyword(vatGroupId: string, keyword: string, createdBy?: string) {
-  const { data, error } = await supabase
-    .from('vat_group_keywords')
-    .insert({
-      id: generateId(),
-      vat_group_id: vatGroupId,
-      keyword,
-      normalized_keyword: normalizeVatText(keyword),
-      created_by: createdBy || null,
-    })
-    .select('*');
-  if (error) throw error;
-  return data?.[0];
-}
