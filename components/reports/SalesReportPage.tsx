@@ -285,6 +285,7 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
       { value: 'Card', label: 'Thẻ' },
       { value: 'Momo', label: 'Momo' },
       { value: 'Other', label: 'Khác' },
+      { value: 'Split', label: 'Kết hợp nhiều PT' },
     ],
     []
   );

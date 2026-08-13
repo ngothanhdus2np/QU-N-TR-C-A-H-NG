@@ -542,7 +542,7 @@ export interface POSOrder {
   totalAmount: number;
   discount: number;
   finalAmount: number;
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
+  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card' | 'Split';
   staffId: string;
   staffName?: string;
   createdBy?: string;

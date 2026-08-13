@@ -36,6 +36,7 @@ const PAYMENT_LABELS: Record<POSOrder['paymentMethod'], string> = {
   Card: 'Thẻ',
   Momo: 'Momo',
   Other: 'Khác',
+  Split: 'Kết hợp nhiều PT',
 };
 
 const PAYMENT_METHODS: POSOrder['paymentMethod'][] = ['Cash', 'Bank', 'Card', 'Momo', 'Other'];

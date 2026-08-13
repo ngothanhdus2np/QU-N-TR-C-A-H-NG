@@ -64,8 +64,24 @@ const CONFIG_KEYS = new Set([
   'pos_inventory_settings',
 ]);
 
+// [FIX] Lỗi từ supabase.rpc() là PostgrestError (plain object {message,details,hint,code}),
+// KHÔNG phải instance Error chuẩn — nhánh cũ chỉ bắt `instanceof Error` nên mọi lỗi RPC
+// (kể cả lỗi nghiệp vụ như "không đủ tồn kho") đều rơi về "Unknown error", mất hết message
+// thật. Áp dụng cùng pattern đã có sẵn ở routes/import.ts.
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const parts = [record.message, record.details, record.hint, record.code]
+      .filter(Boolean)
+      .map(String);
+    if (parts.length > 0) return parts.join(' | ');
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
   return 'Unknown error';
 };
 

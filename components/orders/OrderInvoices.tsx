@@ -47,6 +47,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   Card: 'Thẻ',
   Momo: 'Momo',
   Other: 'Khác',
+  Split: 'Kết hợp nhiều PT',
 };
 
 const PAYMENT_METHODS = ['Cash', 'Bank', 'Card', 'Momo', 'Other'] as const;

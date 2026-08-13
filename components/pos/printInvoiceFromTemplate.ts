@@ -9,6 +9,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   Momo: 'Ví MoMo',
   Wallet: 'Ví',
   Other: 'Khác',
+  Split: 'Kết hợp nhiều PT',
 };
 
 const escapeHtml = (str: string) =>

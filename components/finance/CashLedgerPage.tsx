@@ -37,7 +37,7 @@ interface LedgerEntry {
   person: string;
   amount: number;
   status: 'active' | 'cancelled';
-  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card';
+  paymentMethod: 'Cash' | 'Bank' | 'Momo' | 'Other' | 'Card' | 'Split';
 }
 
 const PAGE_SIZE_OPTIONS = [15, 30, 50, 100];

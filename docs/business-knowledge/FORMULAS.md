@@ -69,6 +69,16 @@ revenue = totalAmount - discount        (đơn bán)
 revenue = -totalAmount                  (đơn trả)
 ```
 
+**Nguồn `totalAmount`/`discount` tại POS** (Source: `components/pos/POSComputer.tsx`, hàm dựng `newOrder`):
+
+```
+itemsDiscountTotal = Σ (item.discount × item.quantity)     — giảm giá áp riêng từng dòng sản phẩm
+totalAmount = Σ item.total (đã net item-discount) + itemsDiscountTotal   — TỔNG GỘP TRƯỚC mọi giảm giá
+discount    = (giảm giá hóa đơn + khuyến mãi tự động) + itemsDiscountTotal — TỔNG CẢ 2 loại giảm giá
+```
+
+Trước 2026-08-13, `totalAmount`/`discount` chỉ tính phần giảm giá HÓA ĐƠN (nút "Giảm giá" bên phải khung thanh toán) — giảm giá áp riêng từng sản phẩm (click vào ô đơn giá trong giỏ) bị bỏ sót hoàn toàn, khiến `revenue_records.discount` luôn thiếu/sai khi nhân viên chỉ dùng giảm giá theo sản phẩm (`netRevenue`/lợi nhuận gộp không bị ảnh hưởng, chỉ riêng khoản mục "Giảm giá" báo cáo sai). Đã sửa để cộng dồn đủ cả 2 loại — xem HISTORY.md 2026-08-13.
+
 ### 2.2 Doanh thu thuần
 
 > Source: `reportCalculations.ts` → `addOrderAmount()`

@@ -28,7 +28,7 @@ interface CheckoutBody {
   cart: CartItem[];
   customerId?: string;
   customerName?: string;
-  paymentMethod: 'Cash' | 'Bank' | 'Card' | 'Momo' | 'Other';
+  paymentMethod: 'Cash' | 'Bank' | 'Card' | 'Momo' | 'Other' | 'Split';
   splitPayments?: { cash?: number; bank?: number; card?: number; momo?: number };
   cashReceived?: number;
   isDebtMode?: boolean;

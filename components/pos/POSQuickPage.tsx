@@ -316,7 +316,8 @@ export const POSQuickPage: React.FC = () => {
           cart,
           customerId: selectedCustomer?.id,
           customerName: selectedCustomer?.name,
-          paymentMethod: useSplitPayment ? 'Cash' : paymentMethod,
+          // [FIX] Cùng lỗi đã sửa ở POSComputer.tsx: chia nhiều PT trước đây bị ghi cứng 'Cash'.
+          paymentMethod: useSplitPayment ? 'Split' : paymentMethod,
           splitPayments: useSplitPayment ? splitPayments : undefined,
           cashReceived: cashRcv || undefined,
           isDebtMode,

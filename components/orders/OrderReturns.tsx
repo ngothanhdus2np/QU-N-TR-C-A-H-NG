@@ -41,6 +41,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   Bank: 'Chuyển khoản',
   Momo: 'Momo',
   Other: 'Khác',
+  Split: 'Kết hợp nhiều PT',
 };
 
 function fmt(n: number) {

@@ -672,6 +672,14 @@ const POSComputer: React.FC<POSComputerProps> = ({
 
   const totalBeforeDiscount = cart.reduce((acc, item) => acc + item.total, 0);
 
+  // [FIX] item.total đã trừ sẵn giảm giá theo từng sản phẩm (POSCart onDiscountClick) —
+  // itemsDiscountTotal tách riêng phần đó để cộng vào tổng "Giảm giá" hiển thị/lưu đơn,
+  // tránh giảm giá theo sản phẩm "biến mất" khỏi báo cáo doanh thu (chỉ totalDiscount cũ
+  // — giảm giá tổng hóa đơn — được ghi nhận, item-level luôn ra 0 dù khách đã được giảm).
+  // KHÔNG dùng để tính netPayable/discountRatio/điểm tích lũy — các giá trị đó vẫn đúng
+  // vì totalBeforeDiscount (= sum item.total) đã net sẵn theo đúng ý nghĩa gốc.
+  const itemsDiscountTotal = cart.reduce((acc, item) => acc + (item.discount || 0) * item.quantity, 0);
+
   const manualDiscountAmount = useMemo(() => {
     if (discountType === 'percent') {
       return Math.round((totalBeforeDiscount * discountValue) / 100);
@@ -974,10 +982,19 @@ const POSComputer: React.FC<POSComputerProps> = ({
       customerId: selectedCustomer?.id,
       customerName: selectedCustomer?.name,
       items: cartWithSalesperson,
-      totalAmount: totalBeforeDiscount,
-      discount: totalDiscount,
+      // [FIX] totalAmount = tổng gộp TRƯỚC mọi giảm giá (item-level + hóa đơn); discount =
+      // tổng CẢ HAI loại giảm giá — trước đây chỉ ghi giảm giá hóa đơn, giảm giá theo từng
+      // sản phẩm bị bỏ sót nên báo cáo "Giảm giá" luôn thiếu khi NV giảm giá theo sản phẩm.
+      // netRevenue = totalAmount - discount vẫn ra đúng số cũ (không đổi số tiền thực thu).
+      totalAmount: totalBeforeDiscount + itemsDiscountTotal,
+      discount: totalDiscount + itemsDiscountTotal,
       finalAmount: netPayable,
-      paymentMethod: paymentMethod,
+      // [FIX] Trước đây luôn ghi nguyên `paymentMethod` (giá trị chọn cuối cùng trên UI, gần
+      // như luôn là "Cash") ngay cả khi khách trả bằng NHIỀU phương thức — báo cáo/lọc theo
+      // phương thức thanh toán vì vậy hiểu sai đơn là thuần tiền mặt. Chi tiết từng phương
+      // thức đã có sẵn trong `splitPayments` bên dưới — đánh dấu rõ 'Split' để không đánh
+      // đồng với 1 phương thức duy nhất.
+      paymentMethod: useSplitPayment && mode === 'sales' ? 'Split' : paymentMethod,
       staffId: currentStaffId,
       staffName: defaultSalespersonName,
       createdBy: currentStaffId,
@@ -1336,8 +1353,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
           onClose={() => setShowCheckoutSheet(false)}
           cart={cart}
           netPayable={netPayable}
-          totalBeforeDiscount={totalBeforeDiscount}
-          totalDiscount={totalDiscount}
+          // [FIX] Hiện đúng tổng gộp trước giảm giá + tổng giảm giá thật (item-level + hóa
+          // đơn) cho thu ngân thấy, thay vì "Giảm giá" luôn -0 dù đã giảm theo sản phẩm.
+          totalBeforeDiscount={totalBeforeDiscount + itemsDiscountTotal}
+          totalDiscount={totalDiscount + itemsDiscountTotal}
           paymentMethod={paymentMethod}
           onPaymentMethodChange={method => updateActiveTab({ paymentMethod: method })}
           cashReceived={cashReceived}
@@ -1498,8 +1517,10 @@ const POSComputer: React.FC<POSComputerProps> = ({
           cart={cart}
           returnCart={returnCart}
           products={products}
-          totalBeforeDiscount={totalBeforeDiscount}
-          totalDiscount={totalDiscount}
+          // [FIX] Hiện đúng tổng gộp trước giảm giá + tổng giảm giá thật (item-level + hóa
+          // đơn) cho thu ngân thấy, thay vì "Giảm giá" luôn -0 dù đã giảm theo sản phẩm.
+          totalBeforeDiscount={totalBeforeDiscount + itemsDiscountTotal}
+          totalDiscount={totalDiscount + itemsDiscountTotal}
           netPayable={netPayable}
           otherFees={otherFees}
           totalReturnBeforeDiscount={totalReturnBeforeDiscount}

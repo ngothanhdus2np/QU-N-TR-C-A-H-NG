@@ -7,6 +7,15 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 POS-QA-0813 — QA trang POS bán hàng: sửa 3 lỗi (giảm giá item-level mất khỏi báo cáo, "Unknown error", payment_method hardcode "Cash") *(xong 2026-08-13)*
+
+> Test thật trên Supabase local dựng riêng (`~/supabase-dev/docker`) với dữ liệu thật. Đã sửa + verify DB thật cả 3 vấn đề — chi tiết đầy đủ: HISTORY.md 2026-08-13. `tsc`+`npm test` 448/448 sạch. **Chưa deploy dev/prod** — chỉ mới sửa + verify trên local, cần deploy riêng khi user yêu cầu (theo quy tắc mặc định chỉ đụng dev, prod khi được yêu cầu riêng).
+
+### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
+
+> Đã sửa: nhân viên đã "Chốt & Lưu" lương tháng nào thì vẫn hiện đầy đủ ở 4 tab Chấm công/Tăng ca/Doanh số/Khấu trừ (bỏ cơ chế ẩn cũ) nhưng input bị khóa (view-only) + badge "Đã chốt". Chi tiết: HISTORY.md 2026-08-05. `tsc`+`npm test` 448/448 sạch, đã deploy `dev.phucsang.com.vn` (health 200 OK).
+> **Còn lại**: user tự test trên dev (thử sửa 1 ô của nhân viên đã chốt → phải bị khóa; nhân viên chưa chốt vẫn sửa bình thường) → nếu ổn báo lại để đẩy `app.phucsang.com.vn` (prod) — theo quy tắc mới chỉ đụng dev trước, prod khi được yêu cầu riêng.
+
 ### [x] 🟢 CLEANUP-0729 — Audit dọn dẹp codebase lần 3, 5 giai đoạn *(xong 2026-07-29)*
 
 > User yêu cầu audit toàn diện lần 3 tìm code thừa/lỗi thời/trùng lặp. Khảo sát + knip + kiểm chứng chéo grep in-file usage từng phát hiện (rút kinh nghiệm: nhiều hàm/type knip báo "unused export" thực ra vẫn được gọi NỘI BỘ trong chính file, chỉ là export thừa — không phải dead code thật; đã soát lại kỹ trước khi xóa để tránh xóa nhầm). Stash 40 file tính năng "Trắng hóa hệ thống" đang dở (FACTORY-RESET-0723) trước khi làm, pop lại sau khi xong. 5 giai đoạn, mỗi giai đoạn verify `tsc`+`npm test` 448/448+`npm run build`+browser (giới hạn: sandbox không có Supabase, không vào sâu được tab VAT/Hàng hóa) rồi commit riêng.
@@ -57,6 +66,16 @@
 > **ĐÃ SỬA (2 thay đổi, an toàn tuyệt đối với prod vì IF NOT EXISTS = no-op)**: (1) thêm `CREATE TABLE IF NOT EXISTS revenue_records` (cột lấy đúng từ RPC: id UUID PK, date DATE, 7 numeric) trước block ALTER branch_id; (2) đổi constraint block sang `DROP IF EXISTS` cả 2 tên + dedup `GROUP BY date` + `ADD CONSTRAINT uq_revenue_records_date UNIQUE(date)`.
 > **VERIFY end-to-end trên Postgres 16 SẠCH**: chạy đúng DDL đã sửa theo thứ tự rebuild-from-scratch → CREATE+ALTER chạy sạch (không còn fail), `ON CONFLICT (date)` cộng dồn đúng (2 đơn cùng ngày → net 150, 1 dòng), chạy lại constraint block idempotent (chỉ NOTICE, 0 ERROR), `psql` exit 0. `npm test` vẫn 1045/1045.
 > **Còn sót (nhỏ) — [ ] AUDIT-0721-C**: `expense_records` + `payroll_records` cũng chỉ được ALTER, chưa có CREATE trong repo. CHƯA bổ sung vì chưa xác minh chắc đủ cột (không bịa schema tài chính). Đường DR chính (restore pg_dump) không ảnh hưởng. Cần: lấy schema thật 2 bảng này (từ `\d` trên prod hoặc types.ts) rồi thêm `CREATE TABLE IF NOT EXISTS` tương tự.
+> **Cập nhật 2026-08-03**: đúng dự đoán — drift này gây bug thật (xem PAYROLL-CALC-NOTE-0803 bên dưới). Đã lấy `\d payroll_records` thật trên prod, có thể dùng để viết `CREATE TABLE IF NOT EXISTS payroll_records` đầy đủ khi làm AUDIT-0721-C (chưa làm, chỉ mới vá cột thiếu `calculation_note`).
+
+### [x] 🔴 PAYROLL-CALC-NOTE-0803 — `payroll_records` thiếu cột `calculation_note` → "Chốt & Lưu" bảng lương fail 100% trên prod *(xong 2026-08-03)*
+
+> User báo bấm "Chốt & Lưu" ở tab Bảng lương báo lỗi "Không thể ghi dữ liệu" rồi app chuyển offline, Sổ cái lương trống. SSH vào iMac đọc `/tmp/cfobrain-app.log` (server không lộ chi tiết lỗi Supabase ra client) → `PGRST204: Could not find the 'calculation_note' column of 'payroll_records'`. Bảng `payroll_records` chưa từng có cột này dù `apiService.ts` đã gửi field từ lâu — PostgREST chặn cả payload nếu 1 key không khớp cột nào, nên chặn TOÀN BỘ lượt chốt lương, không phải lỗi riêng nhân viên nào.
+> **Đã sửa (fix #1)**: `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS calculation_note TEXT;` trên cả prod và dev + `NOTIFY pgrst, 'reload schema'`.
+> **User test lại vẫn fail** → phát hiện **lỗi #2 chồng lên**: `staff_performance.employee_id` bị tạo sai kiểu `uuid` (đúng ra phải `text` như `employees.id` và mọi bảng liên quan khác) → ghi `EMP-441676` bị PostgreSQL từ chối `22P02`, kéo theo `updateSurgical` tự rollback xóa luôn `payroll_records` vừa ghi thành công trong cùng batch (payroll → expenses → staffPerformance ghi chung 1 transaction client-side).
+> **Đã sửa (fix #2)**: `ALTER TABLE staff_performance ALTER COLUMN employee_id TYPE TEXT;` trên cả prod và dev. Verify **end-to-end thật** bằng INSERT/DELETE qua REST API đúng payload app gửi (không chỉ SELECT) → 201/204 sạch cả 2 môi trường.
+> **User đã tự test lại trên UI thật (2026-08-05) và xác nhận "Chốt & Lưu" đã lưu thành công vào Sổ cái lương** — đóng hẳn bug này.
+> **Còn để ngỏ**: chưa làm nốt AUDIT-0721-C (CREATE TABLE đầy đủ cho payroll_records/expense_records/staff_performance — nên tranh thủ chốt luôn kiểu cột `text` cho staff_performance khi làm).
 
 ### [x] 🟢 AUDIT-0719 — Audit QA production-readiness + fix delta IMPORT-02 (trừ backup) *(xong 2026-07-19 — báo cáo `docs/06-evaluation/PRODUCTION_AUDIT_2026-07-19.md`)*
 

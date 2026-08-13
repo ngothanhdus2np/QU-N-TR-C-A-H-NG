@@ -53,7 +53,9 @@ export const useEditOrderFlow = ({
           // Quy hết giảm giá hóa đơn về dạng tiền cố định — không suy luận lại % gốc
           discountValue: order.discount || 0,
           discountType: 'fixed',
-          paymentMethod: order.paymentMethod,
+          // Tab chỉ có 1 ô chọn phương thức đơn (radio) — đơn gốc 'Split' (chia nhiều) không có
+          // ô tương ứng, về mặc định 'Cash'; số tiền chia thật vẫn nạp đủ vào splitPayment bên dưới.
+          paymentMethod: order.paymentMethod === 'Split' ? 'Cash' : order.paymentMethod,
           orderNote: order.notes || '',
           otherFees: Math.max(
             0,

@@ -155,7 +155,7 @@ const POSReceiptModal: React.FC<POSReceiptModalProps> = ({ order, cashReceived, 
                 <div className="flex justify-between items-center text-xs pt-2">
                   <span className="font-normal text-slate-400 uppercase tracking-widest">Phương thức:</span>
                   <span className="font-normal text-slate-700 uppercase">
-                    {({ Cash: 'Tiền mặt', Bank: 'Chuyển khoản', Card: 'Thẻ', Momo: 'Ví', Other: 'Khác' } as Record<string, string>)[order.paymentMethod] || order.paymentMethod}
+                    {({ Cash: 'Tiền mặt', Bank: 'Chuyển khoản', Card: 'Thẻ', Momo: 'Ví', Other: 'Khác', Split: 'Kết hợp nhiều PT' } as Record<string, string>)[order.paymentMethod] || order.paymentMethod}
                   </span>
                 </div>
               )}
