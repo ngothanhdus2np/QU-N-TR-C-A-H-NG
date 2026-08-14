@@ -395,7 +395,7 @@ const POSComputer: React.FC<POSComputerProps> = ({
       customers.map(customer => ({
         customer,
         name: customer.name.toLowerCase(),
-        phone: customer.phone,
+        phone: customer.phone || '',
       })),
     [customers]
   );

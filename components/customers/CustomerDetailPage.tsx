@@ -118,10 +118,13 @@ const CustomerDetailPage: React.FC<Props> = ({
     const debt = finalAmt - cashRecv;
     return sum + (o.isReturn ? -debt : debt);
   }, 0);
-  const recordDelta = debtRecords.reduce(
-    (sum, r) => sum + (r.type === 'repay' ? -r.amount : r.amount),
-    0
-  );
+  // Bản ghi 'debt' gắn với 1 đơn còn tồn tại đã được tính qua orderDebt ở trên — bỏ qua để
+  // tránh đếm trùng, chỉ cộng điều chỉnh nợ thủ công (không gắn đơn) + mọi khoản thu nợ.
+  const orderIdSet = new Set(customerOrders.map(o => o.id));
+  const recordDelta = debtRecords.reduce((sum, r) => {
+    if (r.type === 'debt' && r.orderId && orderIdSet.has(r.orderId)) return sum;
+    return sum + (r.type === 'repay' ? -r.amount : r.amount);
+  }, 0);
   const customerDebt = Math.max(0, orderDebt + recordDelta);
 
   const handleOpenPaymentModal = () => {
@@ -1053,6 +1056,7 @@ const DebtTab: React.FC<{ orders: POSOrder[]; records: CustomerDebtRecord[] }> =
   };
 
   // Build unified rows from orders + manual records
+  const orderIdSet = new Set(orders.map(o => o.id));
   const orderRows = orders.map(o => {
     const delta = Math.max(0, (Number(o.finalAmount) || 0) - (Number(o.cashReceived) || 0));
     return {
@@ -1064,19 +1068,23 @@ const DebtTab: React.FC<{ orders: POSOrder[]; records: CustomerDebtRecord[] }> =
     };
   });
 
-  const manualRows = records.map(r => {
-    const prefix = r.type === 'repay' ? 'TN' : 'DC';
-    const datePart = r.date.replace(/-/g, '').slice(2);
-    const shortId = r.id.replace(/-/g, '').slice(0, 4).toUpperCase();
-    return {
-      id: r.id,
-      date: r.date,
-      refCode: `${prefix}-${datePart}-${shortId}`,
-      type: (r.type === 'repay' ? 'repay' : 'debt_manual') as DebtRowType,
-      delta: r.type === 'repay' ? -r.amount : r.amount,
-      note: r.note,
-    };
-  });
+  // Bỏ bản ghi 'debt' gắn với 1 đơn đã có ở orderRows (dòng "Đơn hàng") — nếu giữ sẽ ra 2 dòng
+  // (Đơn hàng + Ghi nợ) cho cùng 1 khoản tiền, cộng trùng vào công nợ.
+  const manualRows = records
+    .filter(r => !(r.type === 'debt' && r.orderId && orderIdSet.has(r.orderId)))
+    .map(r => {
+      const prefix = r.type === 'repay' ? 'TN' : 'DC';
+      const datePart = r.date.replace(/-/g, '').slice(2);
+      const shortId = r.id.replace(/-/g, '').slice(0, 4).toUpperCase();
+      return {
+        id: r.id,
+        date: r.date,
+        refCode: `${prefix}-${datePart}-${shortId}`,
+        type: (r.type === 'repay' ? 'repay' : 'debt_manual') as DebtRowType,
+        delta: r.type === 'repay' ? -r.amount : r.amount,
+        note: r.note,
+      };
+    });
 
   const allRows = [...orderRows, ...manualRows]
     .filter(r => r.delta !== 0)

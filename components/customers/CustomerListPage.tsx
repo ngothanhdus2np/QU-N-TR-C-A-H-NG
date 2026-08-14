@@ -174,8 +174,10 @@ const CustomerListPage: React.FC<Props> = ({
   // Per-customer debt from orders: debt = finalAmount - cashReceived, floored at 0 (no negative/credit)
   const debtStats = useMemo(() => {
     const raw = new Map<string, number>();
+    const orderIds = new Set<string>();
     allOrders.forEach(o => {
       if (!o.customerId) return;
+      orderIds.add(o.id);
       const finalAmt = Number(o.finalAmount) || 0;
       const cashRecv = Number(o.cashReceived) || 0;
       const orderDebt = o.isReturn ? -(finalAmt - cashRecv) : (finalAmt - cashRecv);
@@ -185,6 +187,11 @@ const CustomerListPage: React.FC<Props> = ({
     });
     customerDebtHistory.forEach(r => {
       if (!r.customerId) return;
+      // Bản ghi 'debt' phát sinh từ 1 đơn hàng cụ thể (orderId khớp đơn còn tồn tại) đã được
+      // tính qua finalAmount - cashReceived ở trên — cộng thêm ở đây sẽ đếm trùng khoản nợ đó.
+      // Chỉ cộng: điều chỉnh nợ thủ công (không gắn đơn) và mọi khoản thu nợ (repay không được
+      // phản ánh lại vào order.cashReceived nên chỉ nằm ở customerDebtHistory).
+      if (r.type === 'debt' && r.orderId && orderIds.has(r.orderId)) return;
       const delta = r.type === 'repay' ? -r.amount : r.amount;
       raw.set(r.customerId, (raw.get(r.customerId) || 0) + delta);
     });

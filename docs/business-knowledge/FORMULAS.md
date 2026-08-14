@@ -596,17 +596,22 @@ Trong đó:
 
 ### 8.7 Nợ hiện tại của khách hàng (Customer Debt)
 
-> Source: `CustomerListPage.tsx` → `debtStats`; `CustomerDetailPage.tsx` → `customerDebt`
-> **Hai nơi PHẢI dùng đúng cùng công thức này** — nếu lệch, danh sách và chi tiết hiện 2 số khác nhau.
+> Source: `CustomerListPage.tsx` → `debtStats`; `CustomerDetailPage.tsx` → `customerDebt` + `DebtTab`
+> **Ba nơi PHẢI dùng đúng cùng công thức này** — nếu lệch, danh sách/chi tiết/bảng lịch sử hiện số khác nhau.
 
 ```
-recordDelta  = Σ ( type === 'repay' ? -amount : +amount )   trên customer_debt_history của khách
+recordDelta  = Σ ( type === 'repay' ? -amount : +amount )
+               trên customer_debt_history của khách,
+               LOẠI bản ghi type='debt' có orderId khớp 1 đơn còn tồn tại
 customerDebt = max(0, Σ orderDebt + recordDelta)            cho tất cả đơn + bản ghi của khách đó
 ```
 
 Quy tắc:
 - Nợ tính từ **toàn bộ đơn hàng** (all-time) **cộng** các bản ghi điều chỉnh thủ công (`customer_debt_history`)
 - Bản ghi `customer_debt_history`: "Thu nợ" và "Ghi giảm nợ" là `type='repay'` (trừ nợ); "Điều chỉnh" có thể `repay` hoặc `debt` tùy chênh lệch so với nợ hiện tại
+- **[FIX 2026-08-14] Tránh đếm trùng**: khi bán nợ qua POS (Ghi nợ khách hàng), hệ thống ghi CẢ HAI: (1) đơn hàng với `cashReceived=0` → đã cộng đủ vào `orderDebt`, VÀ (2) 1 bản ghi `customer_debt_history` type='debt' cùng `orderId`, `amount` = đúng khoản chưa thu đó (dùng để hiển thị lịch sử/audit). Nếu cộng cả 2 → nợ hiển thị gấp đôi thực tế. Bản ghi `debt` có `orderId` trỏ tới đơn edit (khi sửa đơn tăng nợ) cũng bị loại theo cùng lý do — `finalAmount`/`cashReceived` sau khi sửa đã phản ánh đúng số nợ mới nhất của đơn đó.
+  - Chỉ **điều chỉnh nợ thủ công** (không có `orderId`, tạo từ trang Chi tiết khách hàng — "Điều chỉnh", "Ghi giảm nợ") và **mọi khoản thu nợ** (`type='repay'`, không phản ánh lại vào `cashReceived` của đơn) mới được cộng từ `customer_debt_history`.
+  - Nếu đơn hàng gắn với 1 bản ghi `debt` bị xóa khỏi hệ thống (huỷ đơn...), bản ghi đó không còn bị loại nữa (orderId không khớp đơn nào còn tồn tại) → tự động được tính lại từ `customer_debt_history`, tránh mất nợ khi đơn gốc biến mất.
 - Nợ **không được âm** (floor ở 0) — khách trả thừa / ghi giảm quá tay không tạo credit, khớp logic KiotViet
 - Chỉ tính đơn + bản ghi có `customerId` khớp với `pos_customers.id`
 

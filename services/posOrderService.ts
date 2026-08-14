@@ -361,9 +361,15 @@ export async function processPlaceOrder({
   await applyRevenueDeltaLocal(orderDate, revenueDelta);
 
   // 5) Cập nhật khách hàng (điểm/tổng chi tiêu/tier) — KHÔNG nằm trong RPC (tier đọc cấu
-  // hình localStorage), vẫn 1 lời gọi mạng thật riêng.
+  // hình localStorage), vẫn 1 lời gọi mạng thật riêng. best-effort: đơn/kho/nợ/doanh thu đã
+  // commit qua RPC ở trên — lỗi ở đây không được làm cả checkout báo fail (cashier bấm lại
+  // sẽ tạo đơn trùng thật vì phần cốt lõi đã lưu thành công).
   if (updatedCustomer) {
-    await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+    try {
+      await updateSurgical([{ key: 'posCustomers', item: updatedCustomer }]);
+    } catch (customerErr) {
+      console.error('[processPlaceOrder] Cập nhật khách hàng thất bại (non-critical):', customerErr);
+    }
   }
 
   // 6) Tự động ghi doanh số nhân viên — best-effort, không nằm trong RPC, vẫn qua mạng thật.

@@ -11,6 +11,10 @@
 
 > Test thật trên Supabase local dựng riêng (`~/supabase-dev/docker`) với dữ liệu thật. Đã sửa + verify DB thật cả 3 vấn đề — chi tiết đầy đủ: HISTORY.md 2026-08-13. `tsc`+`npm test` 448/448 sạch. **Chưa deploy dev/prod** — chỉ mới sửa + verify trên local, cần deploy riêng khi user yêu cầu (theo quy tắc mặc định chỉ đụng dev, prod khi được yêu cầu riêng).
 
+### [x] 🟢 POS-QA-0814 — QA Trả/đổi hàng, Sửa đơn, Công nợ khách hàng: sửa 3 lỗi (crash tìm khách hàng, tạo đơn trùng khi bán nợ, "Nợ hiện tại" đếm trùng) *(xong 2026-08-14)*
+
+> Tiếp nối POS-QA-0813. Trả/đổi hàng + Sửa đơn verify đúng, không lỗi. Phát hiện + sửa 3 lỗi thật khi test Công nợ khách hàng — chi tiết đầy đủ: HISTORY.md 2026-08-14. `tsc`+`npm test` 448/448 sạch. **Chưa deploy dev/prod** — chỉ mới sửa + verify trên local.
+
 ### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
 
 > Đã sửa: nhân viên đã "Chốt & Lưu" lương tháng nào thì vẫn hiện đầy đủ ở 4 tab Chấm công/Tăng ca/Doanh số/Khấu trừ (bỏ cơ chế ẩn cũ) nhưng input bị khóa (view-only) + badge "Đã chốt". Chi tiết: HISTORY.md 2026-08-05. `tsc`+`npm test` 448/448 sạch, đã deploy `dev.phucsang.com.vn` (health 200 OK).
