@@ -23,7 +23,8 @@
 
 > QA Báo cáo/Phân tích tài chính phát hiện: bug import KiotViet (đã sửa ở commit `eb34d9b` 29/06/2026) khiến `pos_orders.discount=0` sai cho các đơn import TRƯỚC ngày đó — code đã đúng cho đơn mới, nhưng dữ liệu cũ chưa được backfill. Điều tra thêm xác định đa số/toàn bộ là đơn đổi hàng liên kết (không phải thiếu giảm giá thật), nhưng công thức backfill `discount = total_amount - final_amount` đúng trong cả 2 trường hợp. Chi tiết đầy đủ: HISTORY.md 2026-08-14 (3) và (4).
 > Đã chạy UPDATE (kèm backup bảng `backfill_discount_backup_0814`) trên **Supabase local** (1.602 dòng), **Supabase dev** (`dev.phucsang.com.vn`, 1.624 dòng), và **Supabase prod** (`app.phucsang.com.vn`, 1.624 dòng, user xác nhận qua AskUserQuestion trước khi chạy) — verify SQL 0 lệch còn lại ở cả 3 nơi, verify thêm qua UI trên local (khớp chính xác báo cáo Tài chính). Không có thay đổi code.
-> **Còn để ngỏ**: 13 đơn trên prod dính lỗi tương tự nhưng phát sinh SAU ngày fix import (30/06–09/07/2026) — đã backfill cùng đợt nhưng CHƯA điều tra nguyên nhân vì sao vẫn phát sinh sau fix. Bảng backup `backfill_discount_backup_0814` còn giữ ở cả 3 nơi (local/dev/prod), chưa dọn.
+> Đã điều tra thêm 13 đơn trên prod phát sinh SAU ngày fix import (30/06–09/07/2026): nguyên nhân là **deploy trễ** (fix merge git 29/06 nhưng chỉ lên prod thật 22/07) — không phải lỗi logic mới, đã nằm trong 1.624 đơn backfill rồi, không cần sửa thêm. Chi tiết: HISTORY.md 2026-08-14 (4).
+> Còn lại: bảng backup `backfill_discount_backup_0814` còn giữ ở cả 3 nơi (local/dev/prod), chưa dọn — giữ 1 thời gian để rollback nếu cần rồi mới xoá.
 
 ### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
 
