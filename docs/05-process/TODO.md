@@ -15,6 +15,16 @@
 
 > Tiếp nối POS-QA-0813. Trả/đổi hàng + Sửa đơn verify đúng, không lỗi. Phát hiện + sửa 3 lỗi thật khi test Công nợ khách hàng — chi tiết đầy đủ: HISTORY.md 2026-08-14. `tsc`+`npm test` 448/448 sạch. **Chưa deploy dev/prod** — chỉ mới sửa + verify trên local.
 
+### [x] 🟢 PURCHASE-QA-0814 — QA Mua hàng / Nhập kho / Nhà cung cấp — không phát hiện lỗi *(xong 2026-08-14)*
+
+> Test 4 luồng bằng giao dịch thật + đối chiếu DB: tạo phiếu nhập (kể cả công thức AVCO), thanh toán nợ NCC, trả hàng nhập, nhập hàng nhanh (đường ghi 2 bước khác — cũng test riêng vì rủi ro kiến trúc khác). Cả 4 đều đúng — chi tiết đầy đủ: HISTORY.md 2026-08-14 (2). Không có thay đổi code.
+
+### [x] 🟡 REPORT-DISCOUNT-BACKFILL-0814 — Backfill discount cho đơn lịch sử lệch Doanh thu/Thực thu — ĐÃ LÊN LOCAL + DEV, CHỜ USER DUYỆT ĐẨY PROD *(local+dev xong 2026-08-14)*
+
+> QA Báo cáo/Phân tích tài chính phát hiện: bug import KiotViet (đã sửa ở commit `eb34d9b` 29/06/2026) khiến `pos_orders.discount=0` sai cho các đơn import TRƯỚC ngày đó — code đã đúng cho đơn mới, nhưng dữ liệu cũ chưa được backfill. Điều tra thêm xác định đa số/toàn bộ là đơn đổi hàng liên kết (không phải thiếu giảm giá thật), nhưng công thức backfill `discount = total_amount - final_amount` đúng trong cả 2 trường hợp. Chi tiết đầy đủ: HISTORY.md 2026-08-14 (3) và (4).
+> Đã chạy UPDATE (kèm backup bảng `backfill_discount_backup_0814`) trên **Supabase local** (1.602 dòng) và **Supabase dev** (`dev.phucsang.com.vn`, 1.624 dòng) — verify SQL 0 lệch còn lại ở cả 2 nơi, verify thêm qua UI trên local (khớp chính xác báo cáo Tài chính). Không có thay đổi code.
+> **Còn lại**: **CHƯA chạy trên prod thật** — cần user duyệt riêng trước khi đẩy (theo quy tắc mặc định chỉ đụng dev, prod khi được yêu cầu riêng). Nên giữ bảng backup ở cả 2 nơi cho tới khi user xác nhận ổn.
+
 ### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
 
 > Đã sửa: nhân viên đã "Chốt & Lưu" lương tháng nào thì vẫn hiện đầy đủ ở 4 tab Chấm công/Tăng ca/Doanh số/Khấu trừ (bỏ cơ chế ẩn cũ) nhưng input bị khóa (view-only) + badge "Đã chốt". Chi tiết: HISTORY.md 2026-08-05. `tsc`+`npm test` 448/448 sạch, đã deploy `dev.phucsang.com.vn` (health 200 OK).
@@ -29,6 +39,19 @@
 > **GĐ4**: move `assets/` (22MB logo ngân hàng .eps/.ai/.cdr, ảnh tmp, Excel KiotViet — 0 code reference) ra `_archive-ngoai-repo/assets-20260729/`, thêm `assets/` vào `.gitignore`.
 > **GĐ5**: gộp `formatNumber`/`formatDate` trùng lặp y hệt ở 8 trang báo cáo (không phải 6 như audit trước bỏ sót StaffReportPage/SupplierReportPage) về `src/lib/formatCurrency.ts` (`formatReportNumber`/`formatReportDate`). Phát hiện thêm 4/8 trang có `formatAxis` trùng `formatCurrencyAxis` sẵn có (đợt trước chỉ gộp 2/8) — gộp nốt, tiện sửa luôn bug `GoodsReportPage.tsx` thiếu nhánh "tỷ" (giống lớp bug OrderReportPage đã sửa trước).
 > **Còn để ngỏ, chưa làm (cần user quyết)**: 2 thư mục tài liệu Word/PDF ở root ("BIỂU MẪU HỖ TRỢ VẬN HÀNH", "HỆ THỐNG NỘI QUY - QUY ĐỊNH CHÍNH", ~12MB) — giữ nguyên hay gộp vào `docs/business-knowledge/`; `.kiro/`/`.agents/`/`.codex/` còn dùng hay archive; `npm run cf` (cloudflare-tunnel.mjs) còn cần không. `CLEANUP-0721-B` (tách 2 God file) + `CLEANUP-0721-C` (test route thiếu) vẫn còn nguyên, không thuộc phạm vi đợt này.
+
+### [ ] 🟠 FACTORY-RESET-0723 — Deploy tính năng "Trắng hóa toàn bộ hệ thống" lên prod *(xong build+test trên dev 2026-07-23, CHỜ user quyết định deploy prod)*
+
+> Tính năng mới cho phép xóa sạch toàn bộ dữ liệu + tài khoản đăng nhập để bàn giao app cho 1 cửa hàng khác hoàn toàn. Đã build (`routes/factoryReset.ts`, `routes/auth.ts` bootstrap-owner, `LoginPage.tsx` màn hình thiết lập lần đầu, `MigrationTab.tsx` UI) và **test thật trên dev.phucsang.com.vn** (sync bản sao prod → gọi API trắng hóa thật → verify DB rỗng + tài khoản mới hoạt động → sync lại prod để khôi phục). Test thật phát hiện và sửa 3 bug (xóa song song vi phạm khóa ngoại, thiếu 9 bảng VAT trong danh sách xóa, bảng `store_product_collections` khóa kép không có cột `id`).
+> Sau đó rà soát + genericize toàn bộ hardcode nhận diện Phúc Sang trong source code (tên nhân viên/chủ cửa hàng mặc định, tài khoản ngân hàng thật, nội dung Knowledge Base, brand mặc định, AI system prompt, nhãn kênh bán, phiếu lương in — ~30 vị trí). Domain CORS/CSP chuyển sang đọc từ env `ALLOWED_ORIGINS`/`ALLOWED_CONNECT_HOSTS` (không set thì giữ nguyên mặc định Phúc Sang, không phá vỡ deploy hiện tại). Chi tiết đầy đủ: HISTORY.md.
+> **Còn lại**: (1) User quyết định commit+push+deploy prod hay không. (2) File logo vật lý (`public/logo.png`, `favicon.png`) không sửa được qua code — cần thay tay trước khi bàn giao thật. (3) `routes/shopeeSync.ts` mapping shop↔port bot + `constants/marketing.ts` DEFAULT_INVENTORY (nội dung ngành giày) chưa đụng — cố ý để nguyên, thuộc phạm vi hạ tầng/ngành hàng chứ không phải "dữ liệu cũ".
+
+### [ ] 🔴 SHOPEE-RELOGIN-0722 — Đăng nhập lại 2 bot Shopee (session hết hạn thật, đang crash-loop) *(phát hiện 2026-07-22)*
+
+> **Bối cảnh**: nút "Đăng nhập lại" ở Bán online → Liên kết kênh bán không hoạt động vì `pm2` không được cài trên iMac — lệnh `execAsync('pm2 ...')` trong `routes/channelManagement.ts` thất bại âm thầm (`.catch(() => {})`), API vẫn báo `{ok:true}` giả. Đã sửa hạ tầng: cài `pm2` (`/Users/mac/.npm-global/bin/pm2`, symlink `/usr/local/bin/pm2` để khớp PATH launchd dùng), chuyển 2 tiến trình `monitor.js` từ chạy mồ côi sang quản lý bởi `pm2`, `pm2 save`. Chi tiết đầy đủ: memory `shopee-bot-pm2-fix.md`.
+> **Còn lại — CẦN LÀM**: cả 2 bot (`shopee-shop1` port 3001 phuc_sang_store, `shopee-shop2` port 3002 giaydepphucsang) đang **crash-loop thật** ~90s/lần: vào trang đơn hàng → không bấm được tab nào → tự phát hiện `SESSION HẾT HẠN` → restart → lặp lại, xử lý được **0 đơn/lần**. Session Shopee đã hết hạn thật, không tự phục hồi được.
+> **Cách làm**: (1) Bật Screen Sharing trên iMac (System Settings → General → Sharing) — làm 1 lần. (2) Từ MacBook: Finder → `Cmd+K` → `vnc://192.168.1.2`, đăng nhập user "mac". (3) Trên màn hình iMac (qua VNC): app → Bán online → Liên kết kênh bán → bấm "Đăng nhập lại" từng shop → Chrome headed hiện ra thật (pm2 đã hoạt động) → đăng nhập Shopee + OTP → bấm "Hoàn thành" để bot về chạy ngầm bình thường.
+> **Rủi ro nếu để lâu**: đơn hàng Shopee mới không được đồng bộ/xử lý tự động (0 đơn/chu kỳ hiện tại); crash-loop liên tục tốn CPU/RAM iMac không cần thiết.
 
 ### [x] 🟢 CLEANUP-0721 — Audit dọn dẹp codebase 5 giai đoạn (senior engineer review) *(xong 2026-07-21)*
 
