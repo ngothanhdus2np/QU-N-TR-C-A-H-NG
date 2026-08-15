@@ -19,11 +19,11 @@
 
 > Test 4 luồng bằng giao dịch thật + đối chiếu DB: tạo phiếu nhập (kể cả công thức AVCO), thanh toán nợ NCC, trả hàng nhập, nhập hàng nhanh (đường ghi 2 bước khác — cũng test riêng vì rủi ro kiến trúc khác). Cả 4 đều đúng — chi tiết đầy đủ: HISTORY.md 2026-08-14 (2). Không có thay đổi code.
 
-### [x] 🟡 REPORT-DISCOUNT-BACKFILL-0814 — Backfill discount cho đơn lịch sử lệch Doanh thu/Thực thu — ĐÃ LÊN LOCAL + DEV, CHỜ USER DUYỆT ĐẨY PROD *(local+dev xong 2026-08-14)*
+### [x] 🟢 REPORT-DISCOUNT-BACKFILL-0814 — Backfill discount cho đơn lịch sử lệch Doanh thu/Thực thu — ĐÃ LÊN LOCAL + DEV + PROD *(xong 2026-08-14)*
 
 > QA Báo cáo/Phân tích tài chính phát hiện: bug import KiotViet (đã sửa ở commit `eb34d9b` 29/06/2026) khiến `pos_orders.discount=0` sai cho các đơn import TRƯỚC ngày đó — code đã đúng cho đơn mới, nhưng dữ liệu cũ chưa được backfill. Điều tra thêm xác định đa số/toàn bộ là đơn đổi hàng liên kết (không phải thiếu giảm giá thật), nhưng công thức backfill `discount = total_amount - final_amount` đúng trong cả 2 trường hợp. Chi tiết đầy đủ: HISTORY.md 2026-08-14 (3) và (4).
-> Đã chạy UPDATE (kèm backup bảng `backfill_discount_backup_0814`) trên **Supabase local** (1.602 dòng) và **Supabase dev** (`dev.phucsang.com.vn`, 1.624 dòng) — verify SQL 0 lệch còn lại ở cả 2 nơi, verify thêm qua UI trên local (khớp chính xác báo cáo Tài chính). Không có thay đổi code.
-> **Còn lại**: **CHƯA chạy trên prod thật** — cần user duyệt riêng trước khi đẩy (theo quy tắc mặc định chỉ đụng dev, prod khi được yêu cầu riêng). Nên giữ bảng backup ở cả 2 nơi cho tới khi user xác nhận ổn.
+> Đã chạy UPDATE (kèm backup bảng `backfill_discount_backup_0814`) trên **Supabase local** (1.602 dòng), **Supabase dev** (`dev.phucsang.com.vn`, 1.624 dòng), và **Supabase prod** (`app.phucsang.com.vn`, 1.624 dòng, user xác nhận qua AskUserQuestion trước khi chạy) — verify SQL 0 lệch còn lại ở cả 3 nơi, verify thêm qua UI trên local (khớp chính xác báo cáo Tài chính). Không có thay đổi code.
+> **Còn để ngỏ**: 13 đơn trên prod dính lỗi tương tự nhưng phát sinh SAU ngày fix import (30/06–09/07/2026) — đã backfill cùng đợt nhưng CHƯA điều tra nguyên nhân vì sao vẫn phát sinh sau fix. Bảng backup `backfill_discount_backup_0814` còn giữ ở cả 3 nơi (local/dev/prod), chưa dọn.
 
 ### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
 
