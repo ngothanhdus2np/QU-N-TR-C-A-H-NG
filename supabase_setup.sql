@@ -957,6 +957,26 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS carry_forward_debt NUMERIC DEFAUL
 ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS carry_forward_deduction NUMERIC DEFAULT 0;
 ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS carry_forward_debt_out NUMERIC DEFAULT 0;
 
+-- BUGFIX 2026-08-03: payroll_records thiếu cột calculation_note (PGRST204) — code đã gửi
+-- field này từ lâu (apiService.ts sanitizeItem) nhưng cột chưa từng được tạo trên Supabase
+-- thật, khiến MỌI lần "Chốt & Lưu" bảng lương bị chặn 100% (PostgREST từ chối cả payload
+-- nếu có key không khớp cột nào trong schema). Đã ALTER trực tiếp trên cả prod + dev.
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS calculation_note TEXT;
+
+-- BUGFIX 2026-08-03 (2): staff_performance.employee_id bị tạo sai kiểu UUID trong khi
+-- employees.id và MỌI bảng liên quan khác (attendance_records, payroll_records,
+-- sales_records...) đều dùng TEXT (mã nhân viên dạng "EMP-xxxxxx", không phải UUID) —
+-- gây lỗi 22P02 "invalid input syntax for type uuid" mỗi khi chốt lương ghi hồ sơ hiệu
+-- năng, kéo theo rollback xóa luôn cả payroll_records vừa ghi thành công trong cùng batch.
+ALTER TABLE staff_performance ALTER COLUMN employee_id TYPE TEXT;
+
+-- BUGFIX 2026-08-16: employees thiếu cột email (PGRST204) — `types.ts` khai báo field
+-- `email?: string` và `components/StaffManager.tsx` (tạo mới + sửa hồ sơ) luôn gửi field
+-- này, nhưng cột chưa từng được tạo trên Supabase thật, khiến MỌI lần tạo/sửa nhân sự bị
+-- chặn 100% (PostgREST từ chối cả payload) — UI vẫn báo "thành công" (cache offline-first),
+-- dữ liệu không hề vào DB, mất vĩnh viễn nếu xoá cache trình duyệt.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT;
+
 -- ============================================================
 -- Product Cost History — 2026-05-31
 -- Lưu lịch sử giá vốn theo thời gian để tính COGS chính xác

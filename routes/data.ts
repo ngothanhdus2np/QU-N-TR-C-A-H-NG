@@ -133,6 +133,61 @@ const validateDataPayload = (tableName: string, payload: Record<string, unknown>
   return null;
 };
 
+// Bảng chấm công/lương bị khoá khi nhân viên ĐÃ "Chốt & Lưu" lương tháng đó (tồn tại dòng
+// payroll_records cho employee_id+month). QA 2026-08-16 phát hiện khoá cũ chỉ chặn ở UI
+// (input disabled) — gọi thẳng API vẫn ghi/xoá được dữ liệu của nhân viên đã chốt lương,
+// không để lại dấu vết audit. Chặn thêm ở đây để không phụ thuộc UI.
+const PAYROLL_LOCKED_TABLES = new Set([
+  'attendance_records',
+  'overtime_records',
+  'sales_records',
+  'shortage_records',
+  'advance_records',
+]);
+
+const monthFromDate = (value: unknown): string | null => {
+  const str = typeof value === 'string' ? value : '';
+  return str.length >= 7 ? str.slice(0, 7) : null;
+};
+
+// Trả về thông báo lỗi nếu BẤT KỲ dòng nào thuộc nhân viên đã chốt lương tháng đó, hoặc null
+// nếu tất cả hợp lệ. Gộp 1 query cho cả batch (upsert-many) để tránh N+1.
+async function findPayrollLockViolation(
+  supabase: SupabaseClient,
+  tableName: string,
+  rows: Record<string, unknown>[]
+): Promise<string | null> {
+  if (!PAYROLL_LOCKED_TABLES.has(tableName)) return null;
+
+  const pairs = new Map<string, { employeeId: string; month: string }>();
+  for (const row of rows) {
+    const employeeId = getTextField(row, 'employee_id');
+    const month = monthFromDate(row.date);
+    if (!employeeId || !month) continue;
+    pairs.set(`${employeeId}|${month}`, { employeeId, month });
+  }
+  if (pairs.size === 0) return null;
+
+  const employeeIds = Array.from(new Set(Array.from(pairs.values()).map(p => p.employeeId)));
+  const months = Array.from(new Set(Array.from(pairs.values()).map(p => p.month)));
+  const { data, error } = await supabase
+    .from('payroll_records')
+    .select('employee_id, month')
+    .in('employee_id', employeeIds)
+    .in('month', months);
+  if (error) throw error;
+
+  const lockedKeys = new Set(
+    ((data || []) as Array<{ employee_id: string; month: string }>).map(r => `${r.employee_id}|${r.month}`)
+  );
+  for (const [key, { employeeId, month }] of pairs) {
+    if (lockedKeys.has(key)) {
+      return `Nhân viên (mã ${employeeId}) đã chốt lương tháng ${month} — không thể sửa chấm công/tăng ca/doanh số/khấu trừ của tháng này.`;
+    }
+  }
+  return null;
+}
+
 const getErrorCode = (error: unknown): string | null => {
   if (error && typeof error === 'object' && 'code' in error) {
     const code = (error as { code?: unknown }).code;
@@ -557,6 +612,9 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
 
     try {
+      const lockError = await findPayrollLockViolation(supabase, tableName, [payload as Record<string, unknown>]);
+      if (lockError) return res.status(409).json({ error: lockError });
+
       const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
       if (error) throw error;
       await auditLog(supabase, tableName, recordId, 'upsert', payload, await resolveActor(supabase, req));
@@ -598,6 +656,9 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     }
 
     try {
+      const lockError = await findPayrollLockViolation(supabase, tableName, payload as Record<string, unknown>[]);
+      if (lockError) return res.status(409).json({ error: lockError });
+
       const chunkSize = 100;
       for (let i = 0; i < payload.length; i += chunkSize) {
         const chunk = payload.slice(i, i + chunkSize);
@@ -619,6 +680,10 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
 
     try {
       const { data: snapshot } = await supabase.from(tableName).select('*').eq('id', id).single();
+      if (snapshot) {
+        const lockError = await findPayrollLockViolation(supabase, tableName, [snapshot as Record<string, unknown>]);
+        if (lockError) return res.status(409).json({ error: lockError });
+      }
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
       await auditLog(supabase, tableName, id, 'delete', snapshot, await resolveActor(supabase, req));

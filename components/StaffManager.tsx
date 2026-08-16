@@ -577,7 +577,7 @@ const StaffManager: React.FC<Props> = ({
       assignedPolicyId: isFixedPosition ? formData.assignedPolicyId : undefined,
       photoUrl: formData.photoUrl || undefined,
       email: formData.email,
-      dob: formData.dob,
+      dob: formData.dob || undefined,
     };
     onUpdate([newEmployee, ...list]);
     setFormData({
@@ -604,7 +604,8 @@ const StaffManager: React.FC<Props> = ({
       );
       return;
     }
-    onUpdate(list.map(emp => (emp.id === editingEmployee.id ? editingEmployee : emp)));
+    const sanitizedEmployee: Employee = { ...editingEmployee, dob: editingEmployee.dob || undefined };
+    onUpdate(list.map(emp => (emp.id === sanitizedEmployee.id ? sanitizedEmployee : emp)));
     setEditingEmployee(null);
   };
 

@@ -3,6 +3,41 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-16 (2) — Sửa 3 bug Payroll đã phát hiện + deploy dev.phucsang.com.vn
+
+- User xác nhận sửa cả 3 bug tìm được ở QA Payroll và deploy dev. Đã sửa, verify local, deploy dev — **chưa lên prod**.
+- **Bug 2 (khoá lương bypass) — sửa ở `routes/data.ts`**: thêm `findPayrollLockViolation()` — kiểm tra `payroll_records` đã tồn tại cho `employee_id+month` trước khi cho ghi/xoá `attendance_records`/`overtime_records`/`sales_records`/`shortage_records`/`advance_records`. Áp dụng ở cả 3 endpoint `/api/data/upsert`, `/api/data/upsert-many`, `/api/data/delete` (kể cả xoá — cùng lớp bypass). Trả `409` kèm thông báo rõ ràng nếu vi phạm. Verify: dựng nhanh 1 nhân viên + payroll_records giả lập "đã chốt" qua SQL (không qua UI, tiết kiệm thời gian) → gọi lại đúng request bypass đã dùng để phát hiện bug → nhận `409`, DB không bị ghi. Verify thêm: nhân viên **chưa** chốt lương (Phạm Thị Vui, dùng đúng `employee_id` thật `EMP-441676`) vẫn ghi bình thường (`200`) — không phá luồng cũ.
+- **Bug 3 (dob rỗng) — sửa ở `components/StaffManager.tsx`**: `handleAdd`/`handleUpdateEmployee` gửi `dob: undefined` thay vì `''` khi để trống (JSON.stringify tự loại field `undefined`, Postgres không nhận được key này thay vì nhận `""`). Verify: tạo nhân sự chỉ điền Họ tên (không điền Ngày sinh) → lưu thành công, `dob` = NULL trong DB.
+- **Bug 1 (thiếu cột `email`) — sửa bằng migration mới**: `supabase_migrations/037_employees_email_column.sql` (`ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT`), đồng bộ thêm vào `supabase_setup.sql` (tài liệu baseline). Áp dụng qua `scripts/apply-migrations.sh --staging` (nằm trong `deploy-imac-dev.sh`) — xác nhận cột `email` đã có trên `supabase-db-dev`, migration `037` đã ghi sổ `schema_migrations`.
+- `npx tsc --noEmit` sạch, `npm test` 448/448 pass. Deploy qua `scripts/deploy-imac-dev.sh`: rsync code + chạy migration 037 + build + restart `com.cfobrain.app.dev`. Script tự thoát mã lỗi 7 ở bước healthcheck cuối (curl chạy quá sớm, app chưa kịp khởi động lại trong 3s) — không phải deploy lỗi, verify thủ công `curl http://localhost:3010/health` → `OK`, log `/tmp/cfobrain-app-dev.log` không có lỗi khởi động.
+- **CHƯA deploy prod** — cần user xác nhận riêng trước khi đẩy `app.phucsang.com.vn` (theo quy tắc mặc định chỉ đụng dev, prod khi được yêu cầu riêng).
+- Files: `routes/data.ts`, `components/StaffManager.tsx`, `supabase_setup.sql`, `supabase_migrations/037_employees_email_column.sql` (mới).
+
+### 2026-08-16 — QA Lương & Thưởng (Payroll) — phát hiện 3 bug, 1 rất nghiêm trọng (khoá sau chốt lương bị bypass 100%)
+
+- Khảo sát kiến trúc trước (agent Explore): luồng Chấm công/Tăng ca/Doanh số/Khấu trừ → `usePayrollState.draftPayrolls` tính draft real-time → `handleFinalizeIndividual` ("Chốt & Lưu") → in phiếu. Công thức chính `businessLogic.payroll.ts:119-494`. Ghi dữ liệu qua REST `/api/data/upsert*` (không RPC atomic). `auditLog()` chỉ áp dụng `payroll_records`/`expense_records`/`advance_records`/`shortage_records` — **thiếu** cho `attendance_records`/`overtime_records`/`sales_records`/vi phạm kỷ luật (vi phạm 1 phần quy tắc `codebase.md`).
+- Tạo nhân viên test "NV TEST QA PAYROLL" để không đụng dữ liệu thật, đã dọn sạch sau khi xong (kể cả `audit_logs` liên quan).
+
+**Bug 1 (P0, đã tự sửa trên local, CHƯA lên dev/prod)** — Tạo/sửa BẤT KỲ nhân sự nào qua "Danh sách nhân sự" thất bại 100%, âm thầm, mất dữ liệu vĩnh viễn:
+  - `components/StaffManager.tsx:579,606` luôn gửi field `email` (khai báo `types.ts:165` nhưng **chưa từng có cột DB** — xác nhận thiếu trên CẢ local/dev/prod, không phải lệch schema riêng) → Supabase từ chối cả payload ở tầng schema cache (`PGRST204`).
+  - Tái hiện: tạo nhân viên → UI báo thành công, nhân viên hiện trong danh sách, nhập 10 ngày chấm công → UI hiện đúng "Tổng: 110" → nhưng server log lỗi 500 liên tục (`Could not find the 'email' column`, sau đó `attendance_records` vi phạm FK vì nhân viên chưa hề tồn tại trong DB) — **0 dòng thật trong DB**. Dữ liệu vẫn hiển thị đúng sau khi tải lại trang (cache `cfo_brain_app_cache`) — **không có bất kỳ thông báo lỗi nào cho người dùng**. Mất hoàn toàn nếu xoá cache/đổi máy.
+  - Phạm vi: chặn toàn bộ tạo/sửa nhân sự (không riêng payroll) vì `onUpdate` gửi lại cả mảng nhân sự — sửa 1 trường của 1 nhân viên bất kỳ cũng lỗi tương tự.
+  - Đã sửa trên Supabase **local**: `ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT;`. **CHƯA áp dụng dev/prod** — chờ user xác nhận (bug đang sống thật trên dev/prod).
+
+**Bug 2 (P1, CHƯA sửa — lỗi code)** — Trường "Ngày sinh" (`dob`) để trống gửi lên là chuỗi rỗng `""` thay vì `null` (`StaffManager.tsx:580,590`), Postgres từ chối vì cột `dob` kiểu `date` (`invalid input syntax for type date: ""`). Kết hợp với Bug 1: tạo nhân viên chỉ thành công khi vừa có cột `email` vừa bắt buộc điền Ngày sinh — hầu hết người dùng thực tế sẽ không điền DOB khi tạo nhanh, nên vẫn thất bại âm thầm dù đã vá Bug 1. `routes/data.ts` không có bước sanitize `''`→`null` cho cột kiểu date ở handler `upsert-many` chung — rủi ro tương tự có thể xảy ra ở bảng/trường ngày khác.
+
+**Phát hiện phụ (môi trường, không phải bug mới)**: local Supabase thiếu 2 fix đã áp dụng dev/prod từ 2026-08-03 (`payroll_records.calculation_note`, `staff_performance.employee_id` kiểu TEXT — có sẵn trong `supabase_setup.sql`, chỉ chưa chạy lại trên bản copy local) — khiến "Chốt & Lưu" ban đầu lỗi 500. Đã áp dụng lại 2 ALTER này trên local để tiếp tục test (không cần sửa gì thêm, SQL đã có sẵn từ trước).
+
+**Bug 3 (P1, CHƯA sửa — nghiêm trọng nhất, đúng trọng tâm PAYROLL-LOCK-0805)** — Khoá dữ liệu sau "Chốt & Lưu" **chỉ chặn ở UI, hoàn toàn không chặn ở server**:
+  - Verify: UI đúng — nhân viên đã chốt lương thì input Chấm công bị `disabled=true`.
+  - Verify bypass: gọi thẳng `fetch('/api/data/upsert-many', {key:'attendance', payload:[{employee_id: <nhân viên đã chốt>, date: '2026-08-15', hours: 999, ...}]})` từ console trình duyệt (không qua UI) → server trả `{"ok":true}` (200), **DB thực sự ghi `hours=999`** cho nhân viên đã chốt lương tháng đó. Không có cột `is_locked` trên DB, không có validate "tháng này đã chốt chưa" ở `routes/data.ts`, `archivedEmployeeIds` chỉ tính client-side.
+  - Rủi ro: bất kỳ ai có quyền truy cập DevTools/console (hoặc script tự động, hoặc bug ở nơi khác gọi nhầm API) đều có thể sửa chấm công/tăng ca/doanh số/khấu trừ của nhân viên **sau khi đã chốt và trả lương**, không để lại dấu vết audit (các bảng này không nằm trong `AUDITED_TABLES`).
+  - Chưa sửa — cần quyết định hướng khắc phục (cột `is_locked`/kiểm tra tháng đã chốt ở tầng `routes/data.ts` cho các bảng payroll-related) trước khi làm.
+
+**Chưa test được (giới hạn setup, không phải bug)**: case "trả hàng không trừ hoa hồng" — nhân viên test rơi vào bậc "Thử việc 2" (hoa hồng 0%) do thâm niên quá ngắn, nhóm lương "Nhân viên" tự động theo thâm niên không sửa tay được qua UI edit hiện có. Case "khấu trừ vượt lương → nợ chuyển kỳ" cũng chưa test do giới hạn thời gian.
+- Verify riêng: tăng ca **âm** (-30 phút) được chấp nhận không chặn (đúng như code review dự đoán), nhưng cộng dồn đúng đại số vào tổng OT (60+90-30=120 phút=2h, tính lương đúng theo tổng đó) — không gây crash/sai số, chỉ là thiếu validate đầu vào.
+- Files: không sửa code app. Chỉ chạy SQL trực tiếp trên Supabase local (`ALTER TABLE employees ADD COLUMN email`, áp dụng lại 2 ALTER cũ từ `supabase_setup.sql`). `supabase_setup.sql` trong repo CHƯA được cập nhật thêm dòng ALTER `email` mới — cần làm nếu user xác nhận đây đúng là bug cần vá lên dev/prod.
+
 ### 2026-08-14 (4) — Backfill discount cho 1.602/1.624 đơn lịch sử lệch Doanh thu/Thực thu — đã chạy trên local + dev.phucsang.com.vn
 
 - Tiếp nối phát hiện ở mục (3). User xác nhận chạy backfill `discount = total_amount - final_amount` cho các đơn `discount=0 AND total_amount>final_amount AND is_return=false AND status != 'cancelled'`.
