@@ -7,20 +7,20 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
-### [x] 🟡 PAYROLL-EMAIL-COL-0816 — Tạo/sửa nhân sự thất bại 100% âm thầm — thiếu cột `employees.email` — ĐÃ LÊN DEV, CHỜ DUYỆT PROD *(local+dev xong 2026-08-16)*
+### [x] 🟢 PAYROLL-EMAIL-COL-0816 — Tạo/sửa nhân sự thất bại 100% âm thầm — thiếu cột `employees.email` — ĐÃ LÊN LOCAL + DEV + PROD *(xong 2026-08-16)*
 
 > QA Lương & Thưởng phát hiện: `components/StaffManager.tsx:579,606` luôn gửi field `email` (có trong `types.ts` nhưng chưa từng có cột DB tương ứng) → mọi lần tạo/sửa nhân sự bị Supabase từ chối (PGRST204), nhưng UI KHÔNG báo lỗi — vẫn hiện "thành công". **Xác nhận thiếu cột trên CẢ dev VÀ prod lúc phát hiện**. Chi tiết: HISTORY.md 2026-08-16.
-> Đã sửa: migration `supabase_migrations/037_employees_email_column.sql` (`ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT`), đồng bộ vào `supabase_setup.sql`. Áp dụng local + dev (qua `apply-migrations.sh --staging`, ghi sổ `schema_migrations`). Verify: tạo nhân sự thành công cả 2 nơi. **CHƯA áp dụng prod** — cần user xác nhận riêng trước khi đẩy.
+> Đã sửa: migration `supabase_migrations/037_employees_email_column.sql` (`ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT`), đồng bộ vào `supabase_setup.sql`. Áp dụng local + dev + **prod** (qua `apply-migrations.sh --staging`/`--prod`, ghi sổ `schema_migrations`, user xác nhận qua AskUserQuestion trước khi chạy prod). Verify: tạo nhân sự thành công cả 3 nơi, cột `email` xác nhận có trên `supabase-db` (prod thật).
 
 ### [x] 🟢 PAYROLL-LOCK-BYPASS-0816 — Khoá dữ liệu sau "Chốt & Lưu" lương bị bypass qua API — ĐÃ SỬA, LÊN DEV *(xong 2026-08-16)*
 
 > QA Lương & Thưởng verify bằng thực nghiệm: nhân viên đã "Chốt & Lưu" lương tháng → UI đúng (input `disabled`), nhưng gọi thẳng API bỏ qua UI vẫn ghi được dữ liệu tuỳ ý, server không từ chối. Đây chính là task PAYROLL-LOCK-0805 cũ — kết quả test trước khi sửa: chưa đạt yêu cầu khoá thật. Chi tiết: HISTORY.md 2026-08-16.
-> Đã sửa `routes/data.ts`: thêm `findPayrollLockViolation()` — chặn ghi/xoá `attendance_records`/`overtime_records`/`sales_records`/`shortage_records`/`advance_records` cho nhân viên đã có `payroll_records` tháng đó, áp dụng ở cả `/api/data/upsert`, `/api/data/upsert-many`, `/api/data/delete` (trả `409`). Verify: tái hiện đúng request bypass cũ → nhận `409`, DB không ghi; nhân viên chưa chốt vẫn ghi bình thường (không phá luồng cũ). `tsc`+`npm test` 448/448 sạch. Đã deploy dev.
+> Đã sửa `routes/data.ts`: thêm `findPayrollLockViolation()` — chặn ghi/xoá `attendance_records`/`overtime_records`/`sales_records`/`shortage_records`/`advance_records` cho nhân viên đã có `payroll_records` tháng đó, áp dụng ở cả `/api/data/upsert`, `/api/data/upsert-many`, `/api/data/delete` (trả `409`). Verify: tái hiện đúng request bypass cũ → nhận `409`, DB không ghi; nhân viên chưa chốt vẫn ghi bình thường (không phá luồng cũ). `tsc`+`npm test` 448/448 sạch. Đã deploy dev + prod.
 
 ### [x] 🟢 PAYROLL-DOB-EMPTY-0816 — Tạo/sửa nhân sự lỗi nếu để trống "Ngày sinh" — ĐÃ SỬA, LÊN DEV *(xong 2026-08-16)*
 
 > `StaffManager.tsx:580,590` gửi `dob: formData.dob` (mặc định `''`) thẳng lên Postgres cột kiểu `date` → `invalid input syntax for type date: ""`. Chi tiết: HISTORY.md 2026-08-16.
-> Đã sửa: `handleAdd`/`handleUpdateEmployee` gửi `dob: undefined` thay vì `''` khi trống (JSON tự loại field `undefined`). Verify: tạo nhân sự không điền Ngày sinh → lưu thành công, `dob` = NULL. Đã deploy dev.
+> Đã sửa: `handleAdd`/`handleUpdateEmployee` gửi `dob: undefined` thay vì `''` khi trống (JSON tự loại field `undefined`). Verify: tạo nhân sự không điền Ngày sinh → lưu thành công, `dob` = NULL. Đã deploy dev + prod.
 
 ### [x] 🟢 POS-QA-0813 — QA trang POS bán hàng: sửa 3 lỗi (giảm giá item-level mất khỏi báo cáo, "Unknown error", payment_method hardcode "Cash") *(xong 2026-08-13)*
 
