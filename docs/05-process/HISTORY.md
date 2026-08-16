@@ -3,6 +3,16 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-16 (3) — Rà soát 44 file bị rsync-deploy kèm theo + vá lỗ hổng bảo mật factory-reset
+
+- User hỏi "app đã ổn định cho hoạt động bán tại cửa hàng chưa" → khi trả lời, phát hiện: script `deploy-imac.sh`/`deploy-imac-dev.sh` dùng `rsync` toàn bộ thư mục code (không phải deploy theo git), nên 2 lần deploy 3 fix payroll hôm nay đã vô tình đẩy kèm **44 file khác đang sửa dở, chưa commit từ trước** lên cả dev VÀ prod.
+- Rà soát toàn bộ 44 file (đọc diff từng file, không suy đoán). Kết luận: 43/44 file an toàn, thuộc 3 nhóm việc đã biết — (1) tính năng "Trắng hóa hệ thống" (FACTORY-RESET-0723, gỡ hardcode "Phúc Sang" khỏi UI/AI prompt, verify dữ liệu thật đã lưu luôn được ưu tiên qua merge pattern nên không phá cửa hàng đang chạy), (2) khoá lương sau chốt (PAYROLL-LOCK-0805, UI đã biết từ QA payroll sáng nay), (3) màn hình thiết lập owner lần đầu (`LoginPage.tsx`+`routes/auth.ts` — endpoint `bootstrap-owner` đã tự chặn đúng ở server nếu hệ thống đã có tài khoản).
+- **Phát hiện 1 lỗ hổng bảo mật thật, nghiêm trọng**: `routes/factoryReset.ts` (file mới, chưa từng commit, cũng bị rsync đẩy theo) chứa `DELETE /api/admin/factory-reset` — xoá vĩnh viễn toàn bộ dữ liệu kinh doanh + toàn bộ tài khoản đăng nhập, không backup. `requireAuth` chỉ xác nhận đã đăng nhập, **không phân biệt vai trò** — bất kỳ nhân viên nào (kể cả thu ngân) hoặc ai gọi thẳng API (bỏ qua ô xác nhận gõ "XÓA TOÀN BỘ" ở `MigrationTab.tsx`, chỉ chặn UI) đều kích hoạt được. Đang chạy thật trên cả dev và prod tại thời điểm phát hiện.
+- **Đã vá + deploy ngay** (user xác nhận "vá và deploy luôn"): thêm `requireOwner()` ở `routes/factoryReset.ts` — kiểm tra vai trò `owner` từ JWT trước khi cho chạy, cùng pattern đã dùng ở `/api/data/audit-logs`. `tsc`+`npm test` 448/448 sạch. Verify: gửi token không hợp lệ → vẫn bị `requireAuth` chặn ở lớp ngoài (401) như cũ; không thể test nhánh "owner thật bị từ chối" bằng tài khoản cashier thật vì không có mật khẩu, và không thể test nhánh "owner được phép" vì sẽ xoá thật dữ liệu — verify dừng ở mức code review + tsc/test pass cho logic so sánh role đơn giản, theo đúng pattern đã có sẵn trong codebase.
+- Deploy dev (`deploy-imac-dev.sh`, health `OK` sau khi verify thủ công — script tự thoát mã 7 do healthcheck chạy sớm, không phải lỗi) rồi prod (`deploy-imac.sh`, health-check tự động pass, không cần rollback). Xác nhận file đã lên prod thật (`grep requireOwner ~/cfobrain/routes/factoryReset.ts` → có).
+- Files: `routes/factoryReset.ts` (thêm `requireOwner()`).
+- **Còn để ngỏ**: 43 file thuộc FACTORY-RESET-0723 (trắng hóa) + phần còn lại của PAYROLL-LOCK-0805 vẫn ở trạng thái **chưa commit** dù đã lên dev+prod qua rsync — nên commit lại cho khớp trạng thái thật đang chạy, tránh lần deploy sau bị `rsync --delete` xoá mất nếu ai đó `git checkout`/`stash` nhầm. Chưa hỏi user về việc này.
+
 ### 2026-08-16 (2) — Sửa 3 bug Payroll đã phát hiện + deploy dev.phucsang.com.vn
 
 - User xác nhận sửa cả 3 bug tìm được ở QA Payroll và deploy dev. Đã sửa, verify local, deploy dev — **chưa lên prod**.
