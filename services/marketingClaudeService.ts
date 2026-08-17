@@ -84,7 +84,7 @@ RÀNG BUỘC:
 - Chỉ tạo đúng ${count} phần tử JSON.
 - Type chỉ được dùng các giá trị: ${allowedTypes}
 
-VỀ THƯƠNG HIỆU "GIÀY DÉP PHÚC SANG":
+VỀ THƯƠNG HIỆU "${brandProfile.name || 'cửa hàng'}":
 - Câu chuyện & Giá trị: ${brandProfile.story}
 - Giọng văn & Phong cách: ${brandProfile.voice}
 - Khách hàng trọng tâm: ${brandProfile.targetAudience}

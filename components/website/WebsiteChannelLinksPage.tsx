@@ -138,7 +138,7 @@ function AddChannelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="VD: Phúc Sang Shop 3"
+              placeholder="VD: Shop 3"
               className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100"
               required
             />

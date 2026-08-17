@@ -69,7 +69,7 @@ Tóm tắt ngắn gọn kết quả ngày hôm nay cho chủ cửa hàng, nhận
 
   const summary = await callClaude({
     model: 'claude-haiku-4-5',
-    system: 'Bạn là trợ lý tài chính thân thiện của cửa hàng giày dép Phúc Sang. Tóm tắt kết quả kinh doanh cuối ngày ngắn gọn, trực quan, bằng Tiếng Việt.',
+    system: 'Bạn là trợ lý tài chính thân thiện của cửa hàng. Tóm tắt kết quả kinh doanh cuối ngày ngắn gọn, trực quan, bằng Tiếng Việt.',
     userMessage: contextData,
     temperature: 0.3,
     maxTokens: 512,

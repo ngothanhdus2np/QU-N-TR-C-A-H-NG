@@ -62,6 +62,52 @@ export function createAuthRouter(supabase: SupabaseClient, requireAuth: RequestH
   };
 
   /**
+   * GET /api/auth/has-accounts
+   * Không cần đăng nhập — cho frontend biết hệ thống đã có tài khoản nào chưa, để quyết định
+   * hiện màn hình đăng nhập bình thường hay màn hình "Thiết lập lần đầu" (sau khi trắng hóa).
+   */
+  router.get('/api/auth/has-accounts', async (_req, res) => {
+    const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1 });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ hasAccounts: (data?.users?.length ?? 0) > 0 });
+  });
+
+  /**
+   * POST /api/auth/bootstrap-owner
+   * Không cần đăng nhập (chicken-and-egg: sau khi trắng hóa không còn ai đăng nhập được) —
+   * NHƯNG chỉ hoạt động khi hệ thống thật sự chưa có tài khoản nào (kiểm tra phía server,
+   * không tin client) — nếu đã có tài khoản, từ chối ngay để tránh bị lợi dụng chiếm quyền.
+   */
+  router.post('/api/auth/bootstrap-owner', async (req, res) => {
+    const { data: existing, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1 });
+    if (listErr) return res.status(500).json({ error: listErr.message });
+    if ((existing?.users?.length ?? 0) > 0) {
+      return res.status(403).json({ error: 'Hệ thống đã có tài khoản — không thể thiết lập lại.' });
+    }
+
+    const { email, password, displayName } = req.body as {
+      email?: string;
+      password?: string;
+      displayName?: string;
+    };
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Thiếu email hoặc mật khẩu.' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự.' });
+    }
+
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: email.trim().toLowerCase(),
+      password,
+      email_confirm: true,
+      user_metadata: { role: 'owner', display_name: displayName || email.split('@')[0] },
+    });
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, userId: data.user?.id });
+  });
+
+  /**
    * POST /api/auth/register
    * Tạo user mới bằng Admin API — bỏ qua xác nhận email hoàn toàn.
    * Thu ngân: { username, password, role: 'cashier' }

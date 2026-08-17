@@ -251,7 +251,7 @@ const ShopeeInventoryInForm: React.FC<Props> = ({ shopeeSourceData, shopeeInvent
               <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center">
                 <User className="h-4 w-4 text-indigo-600" />
               </div>
-              <span className="text-sm font-semibold text-slate-700">Admin CFO</span>
+              <span className="text-sm font-semibold text-slate-700">Người nhập hàng</span>
             </div>
             <span className="text-xs font-semibold text-slate-600">
               {date.split('-').reverse().join('/')}

@@ -42,6 +42,7 @@ import { createChannelLinksRouter } from './routes/channelLinks';
 import { createChannelManagementRouter } from './routes/channelManagement';
 import { createDataRouter } from './routes/data';
 import { createFacebookRouter } from './routes/facebook';
+import { createFactoryResetRouter } from './routes/factoryReset';
 import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
 import { createStoreRouter } from './routes/store';
@@ -392,6 +393,18 @@ server.on('error', (err: Error) => {
 async function startServer() {
   try {
     app.set('trust proxy', 1);
+    // Domain riêng của cửa hàng hiện tại (Phúc Sang) — khi bàn giao app cho cửa hàng khác,
+    // set biến môi trường ALLOWED_ORIGINS (danh sách domain cách nhau bởi dấu phẩy) thay vì sửa
+    // code. Không set thì dùng mặc định hiện tại để không phá vỡ deploy đang chạy.
+    const extraOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+      : [
+          'https://phucsang.com.vn',
+          'https://www.phucsang.com.vn',
+          'https://cfobrain.phucsang.com.vn',
+          'https://app.phucsang.com.vn',
+          'https://dev.phucsang.com.vn',
+        ];
     const allowedOrigins = [
       `http://localhost:${PORT}`,
       `http://127.0.0.1:${PORT}`,
@@ -401,13 +414,22 @@ async function startServer() {
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       process.env.APP_URL,
-      'https://phucsang.com.vn',
-      'https://www.phucsang.com.vn',
-      'https://cfobrain.phucsang.com.vn',
-      'https://app.phucsang.com.vn',
-      'https://dev.phucsang.com.vn',
+      ...extraOrigins,
       ...(!IS_PROD ? getLocalIPs().map(ip => `http://${ip}:${PORT}`) : []),
     ].filter(Boolean) as string[];
+
+    // Hostname riêng (không kèm protocol) của cửa hàng hiện tại — dùng để build cả https:// và
+    // wss:// cho CSP connectSrc bên dưới. Set ALLOWED_CONNECT_HOSTS (cách nhau bởi dấu phẩy) khi
+    // bàn giao cho cửa hàng khác; không set thì dùng mặc định hiện tại (Phúc Sang).
+    const extraConnectHosts = process.env.ALLOWED_CONNECT_HOSTS
+      ? process.env.ALLOWED_CONNECT_HOSTS.split(',').map(s => s.trim()).filter(Boolean)
+      : ['app.phucsang.com.vn', 'supabase.phucsang.com.vn', 'dev.phucsang.com.vn', 'supabase-dev.phucsang.com.vn'];
+    // http/ws (không TLS) — chỉ IP LAN nội bộ mới cần, domain thật luôn dùng https/wss.
+    const extraConnectHostsPlain = process.env.ALLOWED_CONNECT_HOSTS ? [] : ['192.168.1.2:8000'];
+    const extraConnectSrc = [
+      ...extraConnectHosts.flatMap(host => [`https://${host}`, `wss://${host}`]),
+      ...extraConnectHostsPlain.flatMap(host => [`http://${host}`, `ws://${host}`]),
+    ];
 
     // Security: Helmet middleware for security headers
     app.use(helmet({
@@ -417,7 +439,7 @@ async function startServer() {
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-eval
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "http://192.168.1.2:8000", "ws://192.168.1.2:8000", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", "https://app.phucsang.com.vn", "wss://app.phucsang.com.vn", "https://supabase.phucsang.com.vn", "wss://supabase.phucsang.com.vn", "https://dev.phucsang.com.vn", "wss://dev.phucsang.com.vn", "https://supabase-dev.phucsang.com.vn", "wss://supabase-dev.phucsang.com.vn", "https://static.cloudflareinsights.com"],
+          connectSrc: ["'self'", "https://api.anthropic.com", "https://*.supabase.co", "http://localhost:3001", "ws://localhost:3001", "http://localhost:3002", "ws://localhost:3002", "https://*.trycloudflare.com", "wss://*.trycloudflare.com", "ws://localhost:24678", ...extraConnectSrc, "https://static.cloudflareinsights.com"],
           upgradeInsecureRequests: null,
           fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
           objectSrc: ["'self'", "blob:"],
@@ -591,6 +613,7 @@ async function startServer() {
     app.use(createDataRouter(supabase, requireAuth));
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
+    app.use(createFactoryResetRouter(supabase, requireAuth));
     app.use(createStoreRouter(supabase));
     app.use(createAdminStoreRouter(supabase, requireAuth));
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));

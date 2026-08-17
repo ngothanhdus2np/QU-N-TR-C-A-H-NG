@@ -19,8 +19,8 @@ import { adminStoreRequest } from '../../services/adminStoreApi';
 // Đi qua proxy backend (routes/shopeeSync.ts) — bot monitor chỉ nghe localhost
 // trên server, gọi thẳng localhost:3001/3002 chỉ chạy được trên chính máy đó.
 const SHOPS = [
-  { id: 1, api: '/api/shopee-orders/1', label: 'Giày Dép Da Phúc Sang',      badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
-  { id: 2, api: '/api/shopee-orders/2', label: 'Phúc Sang_Đồ Da Cao Cấp 93', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
+  { id: 1, api: '/api/shopee-orders/1', label: 'Shopee Shop 1', badgeClass: 'bg-indigo-50 text-indigo-700',  dotClass: 'bg-indigo-400' },
+  { id: 2, api: '/api/shopee-orders/2', label: 'Shopee Shop 2', badgeClass: 'bg-violet-50 text-violet-700', dotClass: 'bg-violet-400' },
 ];
 
 interface ShopeeOrderItemRaw {

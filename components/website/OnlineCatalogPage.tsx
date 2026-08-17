@@ -1092,7 +1092,7 @@ function DetailPanel({ product, platforms, activeTab, onTabChange, onClose, bord
         {activeTab === 'channels' && (
           <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-3">
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
-              <span className="flex items-center gap-2 text-sm text-slate-700"><Globe className="h-4 w-4 text-indigo-600" /> Website PHÚC SANG</span>
+              <span className="flex items-center gap-2 text-sm text-slate-700"><Globe className="h-4 w-4 text-indigo-600" /> Website</span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${platforms.includes('website') ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
                 {platforms.includes('website') ? 'Đang bán' : 'Chưa liên kết'}
               </span>

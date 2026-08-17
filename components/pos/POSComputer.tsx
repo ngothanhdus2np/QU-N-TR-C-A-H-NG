@@ -81,6 +81,10 @@ function computeNewTier(newTotalSpentVnd: number, currentTier: POSCustomer['tier
   }
 }
 const EMPTY_SPLIT_PAYMENT = { cash: 0, bank: 0, card: 0, momo: 0 } as const;
+// Chỉ dùng để hiển thị đúng tên nhân viên trên các đơn hàng CŨ của Phúc Sang (trước khi có
+// bảng employees) khi xem báo cáo cuối ngày — KHÔNG dùng làm danh sách nhân viên mặc định cho
+// ô chọn người bán (ô đó đọc thẳng từ bảng employees thật, xem salespersonOptions bên dưới).
+// Sau khi trắng hóa dữ liệu (không còn đơn hàng cũ nào khớp id/legacyId này), mảng này vô hại.
 const DEFAULT_POS_STAFF = [
   { id: 'ngo-thanh-du', name: 'Ngô Thành Du', legacyId: '3458a3f9-2a12-551f-88b5-3b710078f807' },
   { id: 'pham-thi-vui', name: 'Phạm Thị Vui', legacyId: '50e28d1c-e011-5dac-acf2-7a84c9e1b48a' },
@@ -285,36 +289,17 @@ const POSComputer: React.FC<POSComputerProps> = ({
   const salesAdvisorEnabled = inventorySettings?.showSalesAdvisor !== false;
   const [currentStaffId, setCurrentStaffId] = useState(() => {
     const stored = getCurrentStaffId();
-    return stored === 'unknown' ? DEFAULT_POS_STAFF[0].id : stored;
+    return stored === 'unknown' ? '' : stored;
   });
   const activeEmployees = useMemo(
     () => employees.filter(employee => !employee.resignedDate),
     [employees]
   );
-  const fixedStaffOptions = useMemo(
-    () =>
-      DEFAULT_POS_STAFF.map(staff => {
-        const matchedEmployee = employees.find(employee => employee.name === staff.name);
-        return {
-          id: matchedEmployee?.id || staff.id,
-          name: staff.name,
-          position: matchedEmployee?.position || '',
-          joinDate: matchedEmployee?.joinDate || '',
-        };
-      }),
-    [employees]
-  );
-  const defaultStaffByFallbackId = DEFAULT_POS_STAFF.find(staff => staff.id === currentStaffId);
+  const salespersonOptions = activeEmployees;
   const currentSalesperson =
-    fixedStaffOptions.find(employee => employee.id === currentStaffId) ||
-    (defaultStaffByFallbackId
-      ? fixedStaffOptions.find(employee => employee.name === defaultStaffByFallbackId.name)
-      : undefined) ||
     activeEmployees.find(employee => employee.id === currentStaffId) ||
     employees.find(employee => employee.id === currentStaffId);
-  const defaultSalespersonName =
-    currentSalesperson?.name || (currentStaffId === 'unknown' ? 'Nhân viên' : currentStaffId);
-  const salespersonOptions = fixedStaffOptions;
+  const defaultSalespersonName = currentSalesperson?.name || (currentStaffId ? currentStaffId : 'Nhân viên');
 
   const withDefaultSalesperson = React.useCallback(
     (items: POSOrderItem[], lineType: POSOrderItem['lineType'] = 'sale') =>
@@ -328,18 +313,16 @@ const POSComputer: React.FC<POSComputerProps> = ({
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !currentStaffId) return;
     STAFF_STORAGE_KEYS.forEach(key => localStorage.setItem(key, currentStaffId));
   }, [currentStaffId]);
 
+  // currentStaffId rỗng khi mở POS lần đầu / chưa chọn — tự chọn nhân viên đang hoạt động
+  // đầu tiên ngay khi danh sách nhân viên load xong (tránh checkout với salespersonId rỗng).
   useEffect(() => {
-    const fallbackStaff = DEFAULT_POS_STAFF.find(staff => staff.id === currentStaffId);
-    if (!fallbackStaff) return;
-    const matchedEmployeeOption = fixedStaffOptions.find(staff => staff.name === fallbackStaff.name);
-    if (matchedEmployeeOption && matchedEmployeeOption.id !== currentStaffId) {
-      setCurrentStaffId(matchedEmployeeOption.id);
-    }
-  }, [currentStaffId, fixedStaffOptions]);
+    if (currentStaffId || activeEmployees.length === 0) return;
+    setCurrentStaffId(activeEmployees[0].id);
+  }, [currentStaffId, activeEmployees]);
 
   // Refs for DOM and stale closure fixes
   const tabsRef = useRef(tabs);

@@ -34,7 +34,7 @@ export const StrategyBadge: React.FC<StrategyBadgeProps> = ({ type, strategies }
   );
 };
 
-export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: string }> = ({ post, brandLogo }) => (
+export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: string, brandName?: string }> = ({ post, brandLogo, brandName }) => (
   <div className="w-full max-w-[550px] bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden text-[#050505]">
     <div className="p-4 flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -42,7 +42,7 @@ export const FacebookPreview: React.FC<{ post: ContentPlanItem, brandLogo?: stri
           {brandLogo ? <img src={brandLogo} className="w-full h-full object-cover" /> : "PS"}
         </div>
         <div className="flex flex-col">
-          <span className="text-[14px] font-normal leading-tight">Giày Dép Phúc Sang</span>
+          <span className="text-[14px] font-normal leading-tight">{brandName || 'Cửa hàng của bạn'}</span>
           <div className="flex items-center gap-1 text-xs text-[#65676b] font-normal">
             <span>{post.date.split('-').reverse().join('/')}</span> • <Globe size={12}/>
           </div>

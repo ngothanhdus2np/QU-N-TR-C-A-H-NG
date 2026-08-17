@@ -25,8 +25,8 @@ export const APP_THEMES: AppTheme[] = [
   },
   {
     id: 'phuc-sang',
-    name: 'Phúc Sang',
-    description: 'Giao diện thương hiệu Giày Dép Phúc Sang — đỏ chủ đạo, trắng sạch, chuẩn cảm ứng.',
+    name: 'Đỏ Cam',
+    description: 'Giao diện đỏ chủ đạo, trắng sạch, chuẩn cảm ứng.',
     previewBg: '#E63329',
     previewAccent: '#F8C21C',
   },

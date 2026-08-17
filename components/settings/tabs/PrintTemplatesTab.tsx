@@ -487,7 +487,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
         'THỰC NHẬN: {Thuc_Nhan}',
         '',
         'Cảm ơn bạn đã đồng hành!',
-        'Hệ thống Quản trị Phúc Sang',
+        'Hệ thống Quản trị CFO Brain',
       ].join('\n'),
     [brandProfile.name]
   );
@@ -528,11 +528,11 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
   // Preview tokens
   const invoicePreviewTokens = useMemo(
     () => ({
-      '{Ten_Cua_Hang}': brandProfile.name || 'GIÀY DÉP PHÚC SANG',
-      '{Ten_Chi_Nhanh}': brandProfile.name || 'GIÀY DÉP PHÚC SANG',
+      '{Ten_Cua_Hang}': brandProfile.name || '',
+      '{Ten_Chi_Nhanh}': brandProfile.name || '',
       '{Dia_Chi_Chi_Nhanh}':
-        brandProfile.address || 'Số nhà 14 đường NC2 - Mỹ Phước 2 - Bến Cát, Bình Dương',
-      '{Dien_Thoai}': brandProfile.phone || '033.571.3423 - 096.886.7411',
+        brandProfile.address || '',
+      '{Dien_Thoai}': brandProfile.phone || '',
       '{Ma_Don_Hang}': 'HD003362',
       '{Ngay}': '08',
       '{Thang}': '05',
@@ -556,11 +556,11 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
 
   const exchangePreviewTokens = useMemo(
     () => ({
-      '{Ten_Cua_Hang}': brandProfile.name || 'GIÀY DÉP PHÚC SANG',
-      '{Ten_Chi_Nhanh}': brandProfile.name || 'GIÀY DÉP PHÚC SANG',
+      '{Ten_Cua_Hang}': brandProfile.name || '',
+      '{Ten_Chi_Nhanh}': brandProfile.name || '',
       '{Dia_Chi_Chi_Nhanh}':
-        brandProfile.address || 'Số nhà 14 đường NC2 - Mỹ Phước 2 - Bến Cát, Bình Dương',
-      '{Dien_Thoai}': brandProfile.phone || '033.571.3423 - 096.886.7411',
+        brandProfile.address || '',
+      '{Dien_Thoai}': brandProfile.phone || '',
       '{Ma_Don_Hang}': 'DH003363',
       '{Ngay}': '08',
       '{Thang}': '05',
@@ -602,7 +602,7 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
 
   const payrollPreviewTokens = useMemo(
     () => ({
-      '{Ten_Cua_Hang}': brandProfile.name || 'PHÚC SANG',
+      '{Ten_Cua_Hang}': brandProfile.name || '',
       '{Thang_Luong}': '2026-05',
       '{Nhan_Vien}': 'Nguyễn Thị Mai',
       '{Chuc_Vu}': 'Nhân viên bán hàng',
@@ -872,9 +872,9 @@ const PrintTemplatesTab: React.FC<PrintTemplatesTabProps> = ({ brandProfile }) =
       };
       const ok = openPrintInvoice({
         order: sampleOrder,
-        storeName: brandProfile.name || 'GIÀY DÉP PHÚC SANG',
-        storeAddress: brandProfile.address || 'Số nhà 14 đường NC2 - Mỹ Phước 2 - Bến Cát, Bình Dương',
-        storePhone: brandProfile.phone || '033.571.3423 - 096.886.7411',
+        storeName: brandProfile.name || '',
+        storeAddress: brandProfile.address || '',
+        storePhone: brandProfile.phone || '',
         customerPhone: '0901 234 567',
         customerAddress: 'Số 10, Phổ Quang, Tân Bình, TP.HCM',
         staffName: 'Thu ngân POS',

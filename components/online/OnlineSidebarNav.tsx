@@ -39,7 +39,7 @@ const mainItems = [
   { id: 'online-orders', label: 'Đơn hàng Online', icon: ShoppingBag },
   { id: 'online-catalog', label: 'Catalog sản phẩm', icon: Globe },
   { id: 'shopee-revenue', label: 'Doanh Thu Shopee', icon: ShoppingCart },
-  { id: 'website-phuc-sang', label: 'Website PHÚC SANG', icon: Globe },
+  { id: 'website-phuc-sang', label: 'Website', icon: Globe },
   { id: 'channel-connections', label: 'Liên kết kênh bán', icon: Link2 },
 ];
 

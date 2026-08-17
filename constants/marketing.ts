@@ -28,13 +28,13 @@ export const DEFAULT_FOCUS_PRODUCTS: ProductLine[] = [
 ];
 
 export const DEFAULT_BRAND: BrandProfile = {
-  name: "Giày Dép Phúc Sang",
-  story: "Giày Dép Phúc Sang ra đời với mong muốn mang lại những đôi giày bền bỉ, giá cả bình dân cho mọi gia đình Việt.",
+  name: "",
+  story: "",
   voice: "Thân thiện, chân thành, bình dân, sử dụng ngôn ngữ đời thường gần gũi.",
   targetAudience: "Các bà nội trợ, người lao động, học sinh sinh viên.",
   competitiveAdvantage: "Sản phẩm siêu bền, giá thành rẻ nhất khu vực.",
   inventory: DEFAULT_INVENTORY,
   phone: "090xxxxxxx",
   address: "Địa chỉ cửa hàng của bạn",
-  hashtags: "#GiayDepPhucSang #GiayDepGiaRe #BenDep"
+  hashtags: ""
 };

@@ -83,7 +83,7 @@ export default function WebsiteOperationsPage({ navigationSlot }: { navigationSl
     <aside className="flex h-full min-h-0 flex-col gap-4">{navigationSlot}</aside>
     <main className="min-w-0 overflow-auto rounded-xl border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-        <div><h1 className="text-lg font-semibold text-slate-800">Quản lý Website PHÚC SANG</h1><p className="mt-0.5 text-xs text-slate-500">Inbox, newsletter và cấu hình riêng cho Website</p></div>
+        <div><h1 className="text-lg font-semibold text-slate-800">Quản lý Website</h1><p className="mt-0.5 text-xs text-slate-500">Inbox, newsletter và cấu hình riêng cho Website</p></div>
         <button onClick={load} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><RefreshCw size={16} /></button>
       </div>
       <div className="flex flex-wrap gap-1 border-b border-slate-100 px-5 pt-3">

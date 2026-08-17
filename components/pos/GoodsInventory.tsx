@@ -708,7 +708,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
         }
         setPlatformProductIds(idMap);
         const platforms: { key: string; label: string }[] = [
-          { key: 'website', label: 'Website PHÚC SANG' },
+          { key: 'website', label: 'Website' },
           ...data.shops.map(s => ({ key: `shopee:${s.id}`, label: `Shopee — ${s.name}` })),
         ];
         setAvailablePlatforms(platforms);

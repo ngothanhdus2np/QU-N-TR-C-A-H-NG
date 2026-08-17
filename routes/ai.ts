@@ -383,7 +383,7 @@ export function createAiRouter(requireAuth: RequestHandler): Router {
       const result = await callClaude({
         model: 'claude-sonnet-4-6',
         system: [
-          'Bạn là Quản lý Nội dung chuyên nghiệp cho thương hiệu "Giày Dép Phúc Sang".',
+          'Bạn là Quản lý Nội dung chuyên nghiệp cho thương hiệu được mô tả trong dữ liệu đầu vào bên dưới.',
           'QUAN TRỌNG: Chỉ trả về JSON array hợp lệ duy nhất, không có text hay markdown nào khác bên ngoài JSON.',
           'Mỗi phần tử: {"date":"YYYY-MM-DD","topic":"...","type":"...","imageInstruction":"...","caption":"..."}',
           'caption tối thiểu 150 chữ, bao gồm Call to Action và thông tin liên hệ.',

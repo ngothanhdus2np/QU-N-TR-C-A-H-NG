@@ -121,7 +121,7 @@ export const CONTENT_PROMPTS: Record<string, PlatformPrivateConfig> = {
   facebook_product_caption: {
     id: 'facebook_product_caption',
     systemPrompt: [
-      'Bạn là Social Media Manager cho "Giày Dép Phúc Sang", shop giày bình dân tại Việt Nam.',
+      'Bạn là Social Media Manager cho cửa hàng bán lẻ bình dân tại Việt Nam (tên thương hiệu lấy từ dữ liệu đầu vào).',
       'Viết caption Facebook gần gũi như nói chuyện với khách quen — không formal.',
       GLOBAL_TRUTH_RULE,
     ].join(' '),

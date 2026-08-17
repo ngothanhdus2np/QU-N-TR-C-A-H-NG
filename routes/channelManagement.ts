@@ -95,7 +95,7 @@ export function createChannelManagementRouter(
   const router = Router();
 
   // GET /api/channels — danh sách tất cả kênh: Shopee shops + website
-  router.get('/api/channels', requireAuth, async (_req, res) => {
+  router.get('/api/channels', requireAuth, async (req, res) => {
     try {
       const [shopsRes, websiteRes] = await Promise.all([
         supabase.from('shopee_shops').select('*').order('display_order', { ascending: true }),
@@ -136,15 +136,18 @@ export function createChannelManagementRouter(
       );
 
       // Website channel — luôn tồn tại, lấy số sản phẩm từ store_products
+      // Domain lấy từ APP_URL (.env) hoặc suy ra từ chính request — không hardcode 1 cửa hàng cụ thể.
+      const websiteBaseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const websiteHost = websiteBaseUrl.replace(/^https?:\/\//, '');
       const storeProducts  = websiteRes.data ?? [];
       const totalProducts  = storeProducts.length;
       const publishedCount = storeProducts.filter((p: { is_published: boolean }) => p.is_published).length;
       const websiteChannel = {
         id: 'website',
         type: 'website',
-        name: 'Website PHÚC SANG',
-        slug: 'phucsang.com.vn',
-        shop_url: 'https://phucsang.com.vn',
+        name: `Website ${websiteHost}`,
+        slug: websiteHost,
+        shop_url: websiteBaseUrl,
         liveStatus: 'running' as const,
         totalProducts,
         publishedProducts: publishedCount,

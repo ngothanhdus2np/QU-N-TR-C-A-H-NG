@@ -149,7 +149,7 @@ export function BulkChannelLinkModal({ isOpen, onClose, selectedIds, products, o
                     <Globe size={15} className="text-indigo-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-800">Website PHÚC SANG</p>
+                    <p className="text-sm font-medium text-slate-800">Website</p>
                     <p className="text-xs text-slate-400">{websiteOn ? 'Đang bật bán' : 'Chưa liên kết'}</p>
                   </div>
                 </div>

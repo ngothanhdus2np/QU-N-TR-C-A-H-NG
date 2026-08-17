@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Eye, EyeOff, ShoppingCart, LayoutDashboard, LogOut } from 'lucide-react';
 import { signIn, signOut } from '../services/auth';
@@ -27,6 +27,56 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loggedIn, setLoggedIn] = useState<{ displayName: string; role: string } | null>(null);
+
+  // Sau khi "trắng hóa" toàn bộ hệ thống, không còn tài khoản nào — hiện màn hình thiết lập
+  // owner đầu tiên thay vì form đăng nhập bình thường. Mặc định false (không chớp UI đăng
+  // nhập trong lúc chờ) — chỉ bật khi server xác nhận thật sự chưa có tài khoản.
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(true);
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupDisplayName, setSetupDisplayName] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupLoading, setSetupLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/has-accounts')
+      .then(r => r.json())
+      .then(data => { if (mounted) setNeedsSetup(data.hasAccounts === false); })
+      .catch(() => { /* lỗi mạng — coi như đã có tài khoản, không chặn đăng nhập bình thường */ })
+      .finally(() => { if (mounted) setCheckingSetup(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSetupOwner = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSetupError(null);
+    if (!setupEmail.trim()) { setSetupError('Vui lòng nhập email.'); return; }
+    if (setupPassword.length < 6) { setSetupError('Mật khẩu phải có ít nhất 6 ký tự.'); return; }
+    setSetupLoading(true);
+    try {
+      const res = await fetch('/api/auth/bootstrap-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: setupEmail.trim(),
+          password: setupPassword,
+          displayName: setupDisplayName.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Thiết lập thất bại');
+      const result = await signIn({ email: setupEmail.trim().toLowerCase(), password: setupPassword });
+      if (result.error) throw new Error('Tạo tài khoản thành công nhưng đăng nhập tự động thất bại — vui lòng đăng nhập lại thủ công.');
+      setNeedsSetup(false);
+      setLoggedIn({ displayName: setupDisplayName.trim() || setupEmail.split('@')[0], role: 'owner' });
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Lỗi không xác định');
+    } finally {
+      setSetupLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -143,6 +193,80 @@ export default function LoginPage() {
                 Đăng xuất
               </button>
             </div>
+          ) : checkingSetup ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
+            </div>
+          ) : needsSetup ? (
+            <>
+              <h1 className="text-2xl font-bold text-slate-800 mb-1">Thiết lập lần đầu</h1>
+              <p className="text-sm text-slate-400 mb-6">
+                Hệ thống chưa có tài khoản nào — tạo tài khoản chủ cửa hàng (owner) đầu tiên để bắt đầu.
+              </p>
+
+              <form onSubmit={handleSetupOwner} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={setupEmail}
+                    onChange={e => setSetupEmail(e.target.value)}
+                    placeholder="chuquan@cuahang.com"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Tên hiển thị
+                  </label>
+                  <input
+                    type="text"
+                    value={setupDisplayName}
+                    onChange={e => setSetupDisplayName(e.target.value)}
+                    placeholder="vd: Nguyễn Văn A"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all"
+                    autoComplete="name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Mật khẩu
+                  </label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={setupPassword}
+                    onChange={e => setSetupPassword(e.target.value)}
+                    placeholder="Ít nhất 6 ký tự"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition-all"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+
+                {setupError && (
+                  <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600 border border-red-100">{setupError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={setupLoading}
+                  className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-60 active:scale-[0.98]"
+                  style={{ background: 'linear-gradient(135deg, #fb7185 0%, #f43f5e 100%)' }}
+                >
+                  {setupLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Tạo tài khoản chủ cửa hàng
+                </button>
+              </form>
+            </>
           ) : (
             <>
               <h1 className="text-2xl font-bold text-slate-800 mb-1">Chào mừng trở lại</h1>

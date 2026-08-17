@@ -22,7 +22,7 @@ import { adminStoreRequest } from '../../services/adminStoreApi';
 const SHOPS = [
   {
     id: 1,
-    label: 'Giày Dép Da Phúc Sang',
+    label: 'Shopee Shop 1',
     api: '/api/shopee-orders/1',
     refreshApi: '/api/shopee-orders/1/refresh',
     ws: 'ws://localhost:3001/ws',
@@ -32,7 +32,7 @@ const SHOPS = [
   },
   {
     id: 2,
-    label: 'Phúc Sang_Đồ Da Cao Cấp 93',
+    label: 'Shopee Shop 2',
     api: '/api/shopee-orders/2',
     refreshApi: '/api/shopee-orders/2/refresh',
     ws: 'ws://localhost:3002/ws',

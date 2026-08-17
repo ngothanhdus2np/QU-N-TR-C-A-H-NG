@@ -53,12 +53,20 @@ interface TopNavProps {
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
   onSignOut?: () => void;
+  currentUserName?: string;
+  currentUserRole?: string;
 }
 
 const ALERT_ICONS: Record<string, React.ElementType> = {
   low_stock: PackageX,
   overdue_debt: AlertTriangle,
   revenue_drop: TrendingDown,
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  cashier: 'Thu ngân',
+  manager: 'Quản lý',
+  owner: 'Chủ cửa hàng',
 };
 
 const TopNav: React.FC<TopNavProps> = ({
@@ -78,6 +86,8 @@ const TopNav: React.FC<TopNavProps> = ({
   activeThemeId,
   onThemeChange,
   onSignOut,
+  currentUserName = '',
+  currentUserRole = 'owner',
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -404,10 +414,10 @@ const TopNav: React.FC<TopNavProps> = ({
               >
                 <div className="hidden xl:block text-right">
                   <p className="text-xs font-normal text-slate-900 tracking-tight leading-none">
-                    Ngô Thành Du
+                    {currentUserName || 'Người dùng'}
                   </p>
                   <p className="text-[9px] text-indigo-500 font-normal uppercase tracking-widest mt-0.5">
-                    Admin CFO
+                    {ROLE_LABEL[currentUserRole] || currentUserRole}
                   </p>
                 </div>
                 <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden">

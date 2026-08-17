@@ -72,7 +72,7 @@ interface AppLoadingScreenProps {
 export default function AppLoadingScreen({
   visible,
   stageLabel,
-  brandName = 'Phúc Sang',
+  brandName = 'CFO Brain',
 }: AppLoadingScreenProps) {
   const [shouldRender, setShouldRender] = useState(false);
   const shownAtRef = useRef<number | null>(null);

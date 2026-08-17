@@ -234,7 +234,7 @@ export function GoodsChannelLinksTab({ product }: Props) {
               <Globe className="h-5 w-5 text-indigo-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-900">Website PHÚC SANG</p>
+              <p className="text-sm font-medium text-slate-900">Website</p>
               <p className="text-xs text-slate-400 mt-0.5">
                 {product.isParent && childCount
                   ? childCount.website > 0

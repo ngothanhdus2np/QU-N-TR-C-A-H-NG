@@ -112,7 +112,7 @@ export const buildPayrollPayslipHtml = ({
         <body>
           <div class="receipt">
             <div class="center dashed-border" style="padding-bottom: 10px; margin-bottom: 10px;">
-              <h1 style="font-size: 14px; font-weight: 900; margin: 0;">PHÚC SANG</h1>
+              <h1 style="font-size: 14px; font-weight: 900; margin: 0;">${data.brandProfile?.name || 'CỬA HÀNG'}</h1>
               <p style="font-size: 10px; margin: 2px 0;">PHIẾU THANH TOÁN LƯƠNG</p>
               <p style="font-size: 12px; font-weight: 700; margin: 2px 0;">Tháng: ${payroll.month}</p>
             </div>
@@ -277,7 +277,7 @@ export const buildPayrollPayslipHtml = ({
 
             <div class="center" style="font-size: 9px; margin-top: 10px; border-top: 1px dashed #000; padding-top: 5px;">
               <p class="margin-y-2">Cảm ơn bạn đã đồng hành!</p>
-              <p class="margin-y-2" style="font-style: italic;">Hệ thống Quản trị Phúc Sang</p>
+              <p class="margin-y-2" style="font-style: italic;">Hệ thống Quản trị CFO Brain</p>
               <p style="margin: 5px 0 0 0;">Ngày in: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           </div>

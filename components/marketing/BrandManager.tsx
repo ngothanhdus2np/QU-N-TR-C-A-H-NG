@@ -94,18 +94,18 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 h-64">
                 <span className="text-2xs font-normal uppercase text-red-600 tracking-widest flex items-center gap-2"><MessageSquare size={14}/> Giọng văn thương hiệu</span>
-                <p className="text-2xs text-slate-400 font-normal leading-relaxed">Mô tả cách Phúc Sang trò chuyện với khách hàng (thân thiện, bình dân, chân thành...)</p>
+                <p className="text-2xs text-slate-400 font-normal leading-relaxed">Mô tả cách cửa hàng trò chuyện với khách hàng (thân thiện, bình dân, chân thành...)</p>
                 <textarea value={brandProfile.voice} onChange={e => onUpdate({...brandProfile, voice: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-colors" />
              </div>
              <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 h-64">
                 <span className="text-2xs font-normal uppercase text-green-600 tracking-widest flex items-center gap-2"><Users size={14}/> Khách hàng mục tiêu</span>
-                <p className="text-2xs text-slate-400 font-normal leading-relaxed">Ai là người thường xuyên mua sắm tại Phúc Sang? (Nội trợ, học sinh, công nhân...)</p>
+                <p className="text-2xs text-slate-400 font-normal leading-relaxed">Ai là người thường xuyên mua sắm tại cửa hàng? (Nội trợ, học sinh, công nhân...)</p>
                 <textarea value={brandProfile.targetAudience} onChange={e => onUpdate({...brandProfile, targetAudience: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-colors" />
              </div>
           </div>
           <div className="bg-white p-8 rounded-[2rem] border shadow-sm flex flex-col gap-4 flex-1">
              <span className="text-2xs font-normal uppercase text-amber-600 tracking-widest flex items-center gap-2"><Sparkles size={14}/> Câu chuyện thương hiệu</span>
-             <p className="text-2xs text-slate-400 font-normal leading-relaxed">Lý do Phúc Sang ra đời và giá trị cốt lõi mà bạn mang lại cho khách hàng.</p>
+             <p className="text-2xs text-slate-400 font-normal leading-relaxed">Lý do cửa hàng ra đời và giá trị cốt lõi mà bạn mang lại cho khách hàng.</p>
              <textarea value={brandProfile.story} onChange={e => onUpdate({...brandProfile, story: e.target.value})} className="flex-1 bg-slate-50 p-4 rounded-xl text-xs font-normal outline-none resize-none border border-slate-100 focus:border-indigo-300 transition-colors" />
           </div>
         </div>

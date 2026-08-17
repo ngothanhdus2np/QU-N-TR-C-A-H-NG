@@ -17,9 +17,12 @@ import {
   FileText,
   Users,
   Building2,
+  Skull,
 } from 'lucide-react';
 
 type ImportStatus = { status: 'running' | 'done' | 'error'; message: string };
+
+const FACTORY_RESET_CONFIRM_PHRASE = 'XÓA TOÀN BỘ';
 
 const DELETE_DOMAINS = [
   {
@@ -53,6 +56,11 @@ const DELETE_DOMAINS = [
 ];
 
 type DeleteDomainKey = (typeof DELETE_DOMAINS)[number]['key'];
+
+// Mũi tên nối các bước — bước đầu cạnh trái phẳng, các bước sau khoét khấc để lồng vào nhau
+const CHEVRON_CLIP_FIRST = 'polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%)';
+const CHEVRON_CLIP_NEXT = 'polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%, 18% 50%)';
+const CHEVRON_COLORS = ['bg-indigo-500', 'bg-indigo-600', 'bg-indigo-700', 'bg-indigo-800', 'bg-indigo-900'];
 
 const readImportResponse = async (res: Response) => {
   const text = await res.text();
@@ -135,6 +143,11 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteStatus, setDeleteStatus] = useState<ImportStatus | null>(null);
+
+  const [factoryResetInput, setFactoryResetInput] = useState('');
+  const [factoryResetDialogOpen, setFactoryResetDialogOpen] = useState(false);
+  const [isFactoryResetting, setIsFactoryResetting] = useState(false);
+  const [factoryResetStatus, setFactoryResetStatus] = useState<ImportStatus | null>(null);
 
   const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -295,6 +308,38 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
     }
   };
 
+  const handleFactoryReset = async () => {
+    setFactoryResetDialogOpen(false);
+    setIsFactoryResetting(true);
+    setFactoryResetStatus({ status: 'running', message: 'Đang trắng hóa toàn bộ hệ thống...' });
+    try {
+      const res = await fetch('/api/admin/factory-reset', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Trắng hóa thất bại');
+      setFactoryResetStatus({
+        status: 'done',
+        message: `Đã xóa sạch ${data.tablesCleared} bảng dữ liệu và ${data.accountsDeleted} tài khoản. Hệ thống sẽ đăng xuất sau vài giây — tạo lại tài khoản chủ cửa hàng ở màn hình đăng nhập.`,
+      });
+      setFactoryResetInput('');
+      // Xóa cache phía trình duyệt (staffId, session Supabase cũ...) — không thì dù DB đã sạch,
+      // trình duyệt vẫn có thể hiển thị nhầm dữ liệu cũ từ localStorage/sessionStorage.
+      setTimeout(() => {
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch { /* Safari private mode có thể chặn — bỏ qua, không chặn redirect */ }
+        window.location.href = '/login';
+      }, 4000);
+    } catch (err) {
+      setFactoryResetStatus({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Lỗi không xác định',
+      });
+    } finally {
+      setIsFactoryResetting(false);
+    }
+  };
+
   const handleImportInvoices = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -335,250 +380,121 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
     }
   };
 
+  const importSteps: {
+    key: string;
+    label: string;
+    desc: string;
+    icon: typeof Package;
+    status: ImportStatus | null;
+    setStatus: (s: ImportStatus | null) => void;
+    fileRef: React.RefObject<HTMLInputElement>;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    multiple?: boolean;
+  }[] = [
+    {
+      key: 'products', label: 'Hàng hóa', desc: 'Sản phẩm, danh mục, tồn kho',
+      icon: Package, status: productsStatus, setStatus: setProductsStatus,
+      fileRef: productsFileRef, onChange: handleImportProducts,
+    },
+    {
+      key: 'invoices', label: 'Hoá đơn', desc: 'Khách hàng, đơn hàng, doanh thu',
+      icon: FileText, status: invoicesStatus, setStatus: setInvoicesStatus,
+      fileRef: invoicesFileRef, onChange: handleImportInvoices, multiple: true,
+    },
+    {
+      key: 'purchases', label: 'Phiếu nhập hàng', desc: 'Nhà cung cấp, công nợ NCC',
+      icon: Truck, status: purchaseDetailsStatus, setStatus: setPurchaseDetailsStatus,
+      fileRef: purchaseDetailsFileRef, onChange: handleImportPurchaseDetails,
+    },
+    {
+      key: 'customers', label: 'Khách hàng', desc: 'Điểm, hạng, công nợ (sau bước Hoá đơn)',
+      icon: Users, status: customersStatus, setStatus: setCustomersStatus,
+      fileRef: customersFileRef, onChange: handleImportCustomers,
+    },
+    {
+      key: 'suppliers', label: 'Nhà cung cấp', desc: 'Đối chiếu công nợ (sau bước Phiếu nhập)',
+      icon: Building2, status: suppliersStatus, setStatus: setSuppliersStatus,
+      fileRef: suppliersFileRef, onChange: handleImportSuppliers,
+    },
+  ];
+  const activeImportStatuses = importSteps.filter(s => s.status);
+
   return (
     <div className="space-y-6">
 
-      {/* Hướng dẫn quy trình */}
-      <section id="migration-guide" className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-800">
-          Quy trình chuyển dữ liệu từ KiotViet
-        </h3>
-        <ol className="space-y-3">
-          {[
-            {
-              step: '1',
-              label: 'Xóa dữ liệu test (nếu có)',
-              desc: 'Xóa hàng hóa và doanh thu đang test trước khi import dữ liệu thật.',
-            },
-            {
-              step: '2',
-              label: 'Import hàng hóa',
-              desc: 'Xuất file "Danh sách hàng hóa" từ KiotViet → Hàng hóa → Xuất file. Cần import trước để sản phẩm có đúng nhóm hàng.',
-            },
-            {
-              step: '3',
-              label: 'Import hoá đơn',
-              desc: 'Xuất file "Danh sách chi tiết hoá đơn" từ KiotViet → Bán hàng. Tự động tạo khách hàng, đơn hàng và doanh thu — kể cả đơn trả (mã TH).',
-            },
-            {
-              step: '4',
-              label: 'Import phiếu nhập hàng',
-              desc: 'Xuất file "Danh sách chi tiết nhập hàng" từ KiotViet → Nhập hàng. Tự động tạo nhà cung cấp và công nợ NCC.',
-            },
-            {
-              step: '5',
-              label: 'Import khách hàng (làm SAU bước hoá đơn)',
-              desc: 'Xuất file "Danh sách khách hàng" từ KiotViet → Khách hàng → Xuất file. Cập nhật đúng điểm tích lũy, hạng thành viên và công nợ hiện tại — ghi đè lên khách hàng đã tạo ở bước 3.',
-            },
-            {
-              step: '6',
-              label: 'Import nhà cung cấp (làm SAU bước phiếu nhập)',
-              desc: 'Xuất file "Danh sách nhà cung cấp" từ KiotViet → Nhà cung cấp → Xuất file. Đối chiếu và tự động điều chỉnh công nợ NCC theo đúng số liệu KiotViet.',
-            },
-          ].map(({ step, label, desc }) => (
-            <li key={step} className="flex items-start gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white">
-                {step}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{label}</p>
-                <p className="text-xs font-normal text-slate-500">{desc}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* Import dữ liệu */}
+      {/* Quy trình nhập dữ liệu — timeline mũi tên */}
       <section id="migration-import" className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-800">
-          Import dữ liệu
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-800">
+          Quy trình nhập dữ liệu từ KiotViet
         </h3>
-        <div className="space-y-4">
-          {/* Import hàng hóa */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-                  <Package className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Hàng hóa</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách hàng hóa" xuất từ KiotViet (.xlsx)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => productsFileRef.current?.click()}
-                disabled={productsStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {productsStatus && (
-              <StatusBanner status={productsStatus} onClose={() => setProductsStatus(null)} />
-            )}
-            <input
-              ref={productsFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportProducts}
-            />
-          </div>
+        <p className="mb-5 text-xs font-normal text-slate-500">
+          Có dữ liệu test cần dọn? Xóa ở khung "Xóa dữ liệu test" bên dưới trước khi bắt đầu.
+        </p>
 
-          {/* Import hoá đơn — tự động tạo khách + đơn hàng + doanh thu */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Hoá đơn</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách chi tiết hoá đơn" — tự động tạo khách hàng, đơn hàng, doanh thu và đơn trả (TH)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => invoicesFileRef.current?.click()}
-                disabled={invoicesStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-violet-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-violet-600 shadow-sm transition-colors hover:bg-violet-50 disabled:opacity-50"
+        <div className="flex">
+          {importSteps.map((step, i) => (
+            <div key={step.key} className={`flex-1 text-center ${i > 0 ? '-ml-4' : ''}`}>
+              <step.icon className="mx-auto h-8 w-8 text-indigo-700" />
+              <div
+                className={`mt-2.5 flex h-16 items-center justify-center text-xs font-semibold uppercase tracking-wide text-white ${CHEVRON_COLORS[i]}`}
+                style={{ clipPath: i === 0 ? CHEVRON_CLIP_FIRST : CHEVRON_CLIP_NEXT }}
               >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {invoicesStatus && (
-              <StatusBanner status={invoicesStatus} onClose={() => setInvoicesStatus(null)} />
-            )}
-            <input
-              ref={invoicesFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              multiple
-              onChange={handleImportInvoices}
-            />
-          </div>
-
-          {/* Import phiếu nhập chi tiết */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-                  <Truck className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Phiếu nhập hàng</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách chi tiết nhập hàng" — tự động tạo nhà cung cấp và công nợ NCC
-                  </p>
-                </div>
+                Bước {i + 1}
               </div>
-              <button
-                type="button"
-                onClick={() => purchaseDetailsFileRef.current?.click()}
-                disabled={purchaseDetailsStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-amber-600 shadow-sm transition-colors hover:bg-amber-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
             </div>
-            {purchaseDetailsStatus && (
-              <StatusBanner
-                status={purchaseDetailsStatus}
-                onClose={() => setPurchaseDetailsStatus(null)}
-              />
-            )}
-            <input
-              ref={purchaseDetailsFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportPurchaseDetails}
-            />
-          </div>
-
-          {/* Import khách hàng — điểm, hạng, công nợ */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
-                  <Users className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Khách hàng</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách khách hàng" — cập nhật điểm tích lũy, hạng thành viên và công nợ. Làm SAU bước Hoá đơn.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => customersFileRef.current?.click()}
-                disabled={customersStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-sky-600 shadow-sm transition-colors hover:bg-sky-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {customersStatus && (
-              <StatusBanner status={customersStatus} onClose={() => setCustomersStatus(null)} />
-            )}
-            <input
-              ref={customersFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportCustomers}
-            />
-          </div>
-
-          {/* Import nhà cung cấp — đối chiếu công nợ */}
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Nhà cung cấp</p>
-                  <p className="text-xs font-normal text-slate-500">
-                    File "Danh sách nhà cung cấp" — đối chiếu và tự động điều chỉnh công nợ theo KiotViet. Làm SAU bước Phiếu nhập hàng.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => suppliersFileRef.current?.click()}
-                disabled={suppliersStatus?.status === 'running'}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-teal-200 bg-white px-3 py-2 text-2xs font-normal uppercase tracking-wide text-teal-600 shadow-sm transition-colors hover:bg-teal-50 disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Chọn file
-              </button>
-            </div>
-            {suppliersStatus && (
-              <StatusBanner status={suppliersStatus} onClose={() => setSuppliersStatus(null)} />
-            )}
-            <input
-              ref={suppliersFileRef}
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleImportSuppliers}
-            />
-          </div>
+          ))}
         </div>
+
+        <div className="mt-3 flex">
+          {importSteps.map(step => (
+            <div key={step.key} className="flex-1 px-1.5 text-center">
+              <p className="text-xs font-semibold text-slate-800">{step.label}</p>
+              <p className="mt-0.5 text-2xs font-normal leading-snug text-slate-500">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex">
+          {importSteps.map(step => (
+            <div key={step.key} className="flex-1 px-1.5">
+              <button
+                type="button"
+                onClick={() => step.fileRef.current?.click()}
+                disabled={step.status?.status === 'running'}
+                className="mx-auto flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-2xs font-normal uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                {step.status?.status === 'running' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : step.status?.status === 'done' ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {step.status?.status === 'running' ? 'Đang xử lý' : step.status?.status === 'done' ? 'Đã xong' : 'Chọn file'}
+              </button>
+              <input
+                ref={step.fileRef}
+                type="file"
+                className="hidden"
+                accept=".xlsx,.xls"
+                multiple={step.multiple}
+                onChange={step.onChange}
+              />
+            </div>
+          ))}
+        </div>
+
+        {activeImportStatuses.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {activeImportStatuses.map(step => (
+              <StatusBanner
+                key={step.key}
+                status={{ ...step.status!, message: `${step.label}: ${step.status!.message}` }}
+                onClose={() => step.setStatus(null)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Xóa dữ liệu */}
@@ -593,11 +509,11 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
           Chọn mục cần xóa sạch trước khi import dữ liệu thật. Hành động này không thể hoàn tác.
           Chọn đủ cả 4 mục sẽ tự động xóa luôn toàn bộ nhật ký hoạt động.
         </p>
-        <div className="space-y-2">
+        <div className="flex flex-wrap gap-3">
           {DELETE_DOMAINS.map(({ key, label, icon: Icon }) => (
             <label
               key={key}
-              className="flex cursor-pointer items-center gap-3 rounded-xl border border-rose-100 bg-rose-50/40 p-3"
+              className="flex cursor-pointer items-center gap-2 rounded-xl border border-rose-100 bg-rose-50/40 px-4 py-2.5"
             >
               <input
                 type="checkbox"
@@ -639,6 +555,67 @@ const MigrationTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
         cancelLabel="Hủy"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialogOpen(false)}
+      />
+
+      {/* Trắng hóa toàn bộ hệ thống — bàn giao cho cửa hàng khác */}
+      <section id="migration-factory-reset" className="rounded-2xl border-2 border-slate-900 bg-slate-900 p-6">
+        <div className="mb-2 flex items-center gap-2">
+          <Skull className="h-4 w-4 text-rose-400" />
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-rose-400">
+            Trắng hóa toàn bộ hệ thống
+          </h3>
+        </div>
+        <p className="mb-4 text-xs font-normal leading-relaxed text-slate-300">
+          Dùng khi bàn giao app này cho <strong className="text-white">1 cửa hàng khác hoàn toàn</strong> —
+          xóa sạch toàn bộ dữ liệu nghiệp vụ (hàng hóa, doanh thu, khách hàng, nhà cung cấp,
+          nhân sự, lương, chi phí, bán online/Shopee), reset thương hiệu về mặc định, và
+          xóa toàn bộ tài khoản đăng nhập. Sau khi xóa xong, hệ thống đăng xuất và yêu cầu
+          tạo tài khoản chủ cửa hàng mới. <strong className="text-white">Không thể hoàn tác.</strong>
+        </p>
+        <p className="mb-4 text-xs font-normal leading-relaxed text-amber-300">
+          Lưu ý: thao tác này chỉ xóa <strong>dữ liệu</strong>. File logo (<code className="text-amber-200">public/logo.png</code>,{' '}
+          <code className="text-amber-200">favicon.png</code>) vẫn cần thay thủ công trước khi bàn giao —
+          nút này không tự đổi được file ảnh vật lý trong code.
+        </p>
+        <label className="mb-2 block text-xs font-normal text-slate-300">
+          Gõ chính xác <span className="font-semibold text-white">"{FACTORY_RESET_CONFIRM_PHRASE}"</span> để mở khóa nút xóa
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            value={factoryResetInput}
+            onChange={e => setFactoryResetInput(e.target.value)}
+            placeholder={FACTORY_RESET_CONFIRM_PHRASE}
+            className="w-64 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-900"
+          />
+          <button
+            type="button"
+            onClick={() => setFactoryResetDialogOpen(true)}
+            disabled={factoryResetInput !== FACTORY_RESET_CONFIRM_PHRASE || isFactoryResetting}
+            className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-normal uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            {isFactoryResetting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Skull className="h-3.5 w-3.5" />
+            )}
+            Trắng hóa vĩnh viễn
+          </button>
+        </div>
+        {factoryResetStatus && (
+          <StatusBanner status={factoryResetStatus} onClose={() => setFactoryResetStatus(null)} />
+        )}
+      </section>
+
+      <ConfirmDialog
+        isOpen={factoryResetDialogOpen}
+        variant="danger"
+        title="Xác nhận trắng hóa toàn bộ hệ thống"
+        message="Toàn bộ dữ liệu nghiệp vụ, cấu hình và tài khoản đăng nhập sẽ bị xóa vĩnh viễn — kể cả tài khoản bạn đang dùng. Hành động này KHÔNG thể hoàn tác. Bạn có chắc chắn muốn tiếp tục?"
+        confirmLabel="Trắng hóa vĩnh viễn"
+        cancelLabel="Hủy"
+        onConfirm={handleFactoryReset}
+        onCancel={() => setFactoryResetDialogOpen(false)}
       />
     </div>
   );

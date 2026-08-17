@@ -1160,7 +1160,7 @@ const MarketingManager: React.FC<MarketingManagerProps> = ({
               </div>
             </div>
             <div className="flex-1 bg-[#f0f2f5] p-12 overflow-y-auto hidden md:flex justify-center items-start">
-              <FacebookPreview post={selectedPost} brandLogo={brandProfile.logo} />
+              <FacebookPreview post={selectedPost} brandLogo={brandProfile.logo} brandName={brandProfile.name} />
             </div>
           </div>
         </div>

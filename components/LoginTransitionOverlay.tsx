@@ -100,7 +100,7 @@ export default function LoginTransitionOverlay() {
   return (
     <div style={overlayStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap }}>
-        <img src="/logo.png" style={{ width: logoWidth, objectFit: 'contain' }} alt="Phúc Sang" />
+        <img src="/logo.png" style={{ width: logoWidth, objectFit: 'contain' }} alt="Logo cửa hàng" />
         <div style={{ width: 1, height: divH, background: '#e5e7eb', flexShrink: 0 }} />
         <div style={{ width: textWidth }}>
           <SlidingLabel text={featureLabel} lineHeight={lineHeight} fontSize={fontSize} />

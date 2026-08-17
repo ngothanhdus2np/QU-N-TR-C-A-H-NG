@@ -1057,7 +1057,7 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
               value={brandProfile.story}
               onChange={e => onUpdateBrand({ ...brandProfile, story: e.target.value })}
               className="min-h-32 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-indigo-300"
-              placeholder="Lý do Phúc Sang ra đời và giá trị mang lại cho khách hàng."
+              placeholder="Lý do cửa hàng ra đời và giá trị mang lại cho khách hàng."
             />
           </label>
         </div>

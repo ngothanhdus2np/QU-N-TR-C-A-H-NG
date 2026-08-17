@@ -107,7 +107,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
             className="bg-white shadow-xl p-5 text-xs text-black leading-tight border border-slate-200"
           >
             <div className="text-center border-b border-dashed border-black pb-3 mb-3">
-              <h1 className="text-[14px] font-semibold m-0">PHÚC SANG</h1>
+              <h1 className="text-[14px] font-semibold m-0">{data.brandProfile?.name || 'CỬA HÀNG'}</h1>
               <p className="text-2xs my-0.5">PHIẾU THANH TOÁN LƯƠNG</p>
               <p className="text-xs font-normal my-0.5">Tháng: {payroll.month}</p>
             </div>
@@ -296,7 +296,7 @@ export const PayrollPrintPreviewModal: React.FC<PayrollPrintPreviewModalProps> =
 
             <div className="text-center text-[9px] mt-3 border-t border-dashed border-black pt-2">
               <p className="my-0.5">Cảm ơn bạn đã đồng hành!</p>
-              <p className="my-0.5 italic">Hệ thống Quản trị Phúc Sang</p>
+              <p className="my-0.5 italic">Hệ thống Quản trị CFO Brain</p>
             </div>
           </div>
         </div>

@@ -104,6 +104,7 @@ const App: React.FC = () => {
   const { themeId, setThemeId } = useTheme();
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
   const [userRole, setUserRole] = useState<string>('owner');
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
   const [managerUnlocked, setManagerUnlocked] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -117,6 +118,7 @@ const App: React.FC = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const meta = session?.user?.user_metadata || {};
       setUserRole(meta.role || 'owner');
+      setUserDisplayName(meta.display_name || session?.user?.email || '');
     });
   }, []);
 
@@ -233,6 +235,8 @@ const App: React.FC = () => {
               activeThemeId={themeId}
               onThemeChange={setThemeId}
               onSignOut={() => signOut()}
+              currentUserName={userDisplayName}
+              currentUserRole={userRole}
             />
           </motion.div>
         )}
