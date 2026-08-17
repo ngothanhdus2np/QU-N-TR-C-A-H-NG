@@ -12,10 +12,10 @@
 > Rà soát 44 file bị rsync-deploy kèm theo lúc đẩy fix payroll phát hiện `routes/factoryReset.ts` (`DELETE /api/admin/factory-reset` — xoá vĩnh viễn toàn bộ dữ liệu + tài khoản, không backup) chỉ được chặn bởi `requireAuth` (đăng nhập là đủ, không phân biệt vai trò) — bất kỳ nhân viên nào cũng gọi được, kể cả bằng cách gọi thẳng API bỏ qua ô xác nhận UI. Đang chạy thật trên dev+prod. Chi tiết: HISTORY.md 2026-08-16 (3).
 > Đã sửa: thêm `requireOwner()` kiểm tra vai trò owner từ JWT, cùng pattern `/api/data/audit-logs`. `tsc`+`npm test` 448/448 sạch. Đã deploy dev + prod, xác nhận fix có mặt trên file thật ở prod.
 
-### [ ] 🟡 UNCOMMITTED-WIP-COMMIT-0816 — 43 file (Trắng hóa hệ thống + phần còn lại khoá lương) đã lên dev+prod qua rsync nhưng vẫn chưa commit
+### [x] 🟢 UNCOMMITTED-WIP-COMMIT-0816 — Commit 43 file (Trắng hóa hệ thống + khoá lương) cho khớp trạng thái đang chạy thật *(xong 2026-08-16)*
 
-> Phát hiện khi rà soát: `deploy-imac.sh`/`deploy-imac-dev.sh` dùng rsync toàn thư mục (không theo git), nên 43 file WIP (FACTORY-RESET-0723 trắng hóa UI/AI prompt, phần còn lại PAYROLL-LOCK-0805) đã thực sự chạy trên dev+prod dù chưa commit — rà soát xác nhận an toàn (chi tiết: HISTORY.md 2026-08-16 (3)). Rủi ro: nếu ai `git checkout`/`stash`/clone lại repo, code đang chạy thật trên prod sẽ khác code trong git — dễ nhầm lẫn, và lần deploy sau nếu working tree bị reset sẽ vô tình rollback các tính năng này khỏi dev/prod.
-> Cần user quyết định: commit các file này (theo đúng tên tính năng — FACTORY-RESET-0723 và PAYROLL-LOCK-0805) để git khớp với trạng thái đang chạy thật, hay có lý do cố tình để chưa commit (đang dở phần nào đó chưa test hết)?
+> Phát hiện khi rà soát: `deploy-imac.sh`/`deploy-imac-dev.sh` dùng rsync toàn thư mục (không theo git), nên 43 file WIP đã thực sự chạy trên dev+prod dù chưa commit — rà soát xác nhận an toàn (chi tiết: HISTORY.md 2026-08-16 (3)).
+> Đã commit gọn theo 2 nhóm tính năng: `fe3eab0` (PAYROLL-LOCK-0805, 6 file khoá lương sau chốt) và `0cdf318` (FACTORY-RESET-0723, 38 file trắng hóa hệ thống — gỡ hardcode "Phúc Sang"). Working tree sạch hoàn toàn (0 file uncommitted). Đã push.
 
 ### [x] 🟢 PAYROLL-EMAIL-COL-0816 — Tạo/sửa nhân sự thất bại 100% âm thầm — thiếu cột `employees.email` — ĐÃ LÊN LOCAL + DEV + PROD *(xong 2026-08-16)*
 
