@@ -1,10 +1,11 @@
 import React from 'react';
 import { Employee } from '../../types';
-import { ListChecks } from 'lucide-react';
+import { ListChecks, Lock } from 'lucide-react';
 import { isStaffActive } from '../../src/lib';
 
 interface Props {
   employees: Employee[];
+  archivedEmployeeIds: Set<string>;
   daysArray: number[];
   selectedMonth: string;
   isHoliday: (day: number) => boolean;
@@ -18,6 +19,7 @@ interface AttendanceCellProps {
   day: number;
   value: string;
   isHolidayDay: boolean;
+  isLocked: boolean;
   onChange: (emp: Employee, day: number, value: string) => void;
 }
 
@@ -34,6 +36,7 @@ const AttendanceCell: React.FC<AttendanceCellProps> = ({
   day,
   value,
   isHolidayDay,
+  isLocked,
   onChange,
 }) => {
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -91,17 +94,19 @@ const AttendanceCell: React.FC<AttendanceCellProps> = ({
       <button
         ref={triggerRef}
         type="button"
+        disabled={isLocked}
         onClick={() => {
+          if (isLocked) return;
           updatePopupPosition();
           setIsOpen(prev => !prev);
         }}
-        className={`h-full w-full bg-transparent text-center text-xs font-normal outline-none transition-colors focus:bg-white ${
-          isShortWorkday(value) ? 'text-red-600 font-bold' : 'text-slate-700'
-        }`}
+        className={`h-full w-full bg-transparent text-center text-xs font-normal outline-none transition-colors ${
+          isLocked ? 'cursor-not-allowed opacity-70' : 'focus:bg-white'
+        } ${isShortWorkday(value) ? 'text-red-600 font-bold' : 'text-slate-700'}`}
       >
         {value}
       </button>
-      {isOpen && (
+      {isOpen && !isLocked && (
         <div
           ref={popupRef}
           style={{
@@ -148,7 +153,7 @@ const AttendanceCell: React.FC<AttendanceCellProps> = ({
 };
 
 const AttendanceTab: React.FC<Props> = ({
-  employees, daysArray, selectedMonth, isHoliday,
+  employees, archivedEmployeeIds, daysArray, selectedMonth, isHoliday,
   getAttendanceCellValue, handleAttendanceInputChange, calculateTotalHours,
 }) => (
   <div className="animate-in fade-in duration-300 space-y-4">
@@ -180,10 +185,18 @@ const AttendanceTab: React.FC<Props> = ({
           </thead>
           <tbody className="divide-y divide-slate-50">
             {employees.map(emp => {
+              const isLocked = archivedEmployeeIds.has(emp.id);
               return (
-                <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
+                <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors ${isLocked ? 'bg-slate-50/60' : ''}`}>
                   <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                    <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                      {isLocked && (
+                        <span title="Đã chốt lương — chỉ xem" className="flex items-center gap-0.5 text-[8px] font-normal text-slate-400 uppercase">
+                          <Lock className="w-2.5 h-2.5" /> Đã chốt
+                        </span>
+                      )}
+                    </div>
                     <p className="text-2xs text-slate-400 truncate">{emp.position}</p>
                   </td>
                   {daysArray.map(day => (
@@ -193,6 +206,7 @@ const AttendanceTab: React.FC<Props> = ({
                         day={day}
                         value={getAttendanceCellValue(emp.id, day)}
                         isHolidayDay={isHoliday(day)}
+                        isLocked={isLocked}
                         onChange={handleAttendanceInputChange}
                       />
                     </td>

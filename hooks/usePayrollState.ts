@@ -61,14 +61,14 @@ export const usePayrollState = ({ data, showResigned, requestedTab }: UsePayroll
     return data.payroll.filter(p => p.month === selectedMonth);
   }, [data.payroll, selectedMonth]);
 
-  // Computed: Employees (filtered by resigned status and archived)
+  // Computed: Employees (filtered by resigned status — nhân viên đã chốt lương vẫn hiển thị,
+  // chỉ khóa sửa dữ liệu qua archivedEmployeeIds bên dưới, không ẩn khỏi các tab nữa)
   const employees = useMemo(() => {
     return data.employees.filter(emp => {
-      const alreadyArchived = archivedPayrolls.some(p => p.employeeId === emp.id);
       const isResigned = emp.resignedDate && String(emp.resignedDate).trim() !== '';
 
       if (!showResigned) {
-        if (isResigned || alreadyArchived) return false;
+        if (isResigned) return false;
         return true;
       }
 
@@ -76,7 +76,15 @@ export const usePayrollState = ({ data, showResigned, requestedTab }: UsePayroll
       const isResignedInPast = resDate && resDate < `${selectedMonth}-01`;
       return !isResignedInPast;
     });
-  }, [data.employees, selectedMonth, showResigned, archivedPayrolls]);
+  }, [data.employees, selectedMonth, showResigned]);
+
+  // Computed: ID nhân viên đã chốt lương tháng hiện tại — dùng để khóa (view-only) các ô nhập
+  // Chấm công/Tăng ca/Doanh số/Khấu trừ, tránh sửa dữ liệu đầu vào sau khi lương đã chốt lệch
+  // khỏi số đã lưu trong Sổ cái lương.
+  const archivedEmployeeIds = useMemo(
+    () => new Set(archivedPayrolls.map(p => p.employeeId)),
+    [archivedPayrolls]
+  );
 
   // Computed: Draft Payrolls
   const draftPayrolls = useMemo(() => {
@@ -218,6 +226,7 @@ export const usePayrollState = ({ data, showResigned, requestedTab }: UsePayroll
 
     // Computed values
     archivedPayrolls,
+    archivedEmployeeIds,
     employees,
     draftPayrolls,
     staffRankings,

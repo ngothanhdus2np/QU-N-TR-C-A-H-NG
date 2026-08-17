@@ -96,6 +96,7 @@ const PayrollManager: React.FC<Props> = ({
     advances,
     tet,
     archivedPayrolls,
+    archivedEmployeeIds,
     employees,
     draftPayrolls,
     staffRankings,
@@ -934,6 +935,7 @@ const PayrollManager: React.FC<Props> = ({
       {subTab === 'attendance' && (
         <AttendanceTab
           employees={employees}
+          archivedEmployeeIds={archivedEmployeeIds}
           daysArray={daysArray}
           selectedMonth={selectedMonth}
           isHoliday={isHoliday}
@@ -946,6 +948,7 @@ const PayrollManager: React.FC<Props> = ({
       {subTab === 'overtime' && (
         <OvertimeTab
           employees={employees}
+          archivedEmployeeIds={archivedEmployeeIds}
           daysArray={daysArray}
           selectedMonth={selectedMonth}
           isHoliday={isHoliday}
@@ -958,6 +961,7 @@ const PayrollManager: React.FC<Props> = ({
       {subTab === 'sales' && (
         <SalesTab
           employees={employees}
+          archivedEmployeeIds={archivedEmployeeIds}
           daysArray={daysArray}
           selectedMonth={selectedMonth}
           isHoliday={isHoliday}
@@ -970,6 +974,7 @@ const PayrollManager: React.FC<Props> = ({
       {subTab === 'penalties' && (
         <PenaltiesTab
           employees={employees}
+          archivedEmployeeIds={archivedEmployeeIds}
           daysArray={daysArray}
           selectedMonth={selectedMonth}
           isHoliday={isHoliday}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Employee } from '../../types';
-import { TrendingUp, Trophy, Crown, Medal } from 'lucide-react';
+import { TrendingUp, Trophy, Crown, Medal, Lock } from 'lucide-react';
 import { isStaffActive } from '../../src/lib';
 
 interface StaffRanking {
@@ -12,6 +12,7 @@ interface StaffRanking {
 
 interface Props {
   employees: Employee[];
+  archivedEmployeeIds: Set<string>;
   daysArray: number[];
   selectedMonth: string;
   isHoliday: (day: number) => boolean;
@@ -22,7 +23,7 @@ interface Props {
 }
 
 const SalesTab: React.FC<Props> = ({
-  employees, daysArray, selectedMonth, isHoliday,
+  employees, archivedEmployeeIds, daysArray, selectedMonth, isHoliday,
   staffRankings, getSalesCellValue, handleSalesInputChange, calculateTotalSalesAmount,
 }) => (
   <div className="animate-in fade-in duration-300 space-y-10">
@@ -86,15 +87,23 @@ const SalesTab: React.FC<Props> = ({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {employees.map(emp => {
+                const isLocked = archivedEmployeeIds.has(emp.id);
                 return (
-                  <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={emp.id} className={`hover:bg-slate-50/50 transition-colors ${isLocked ? 'bg-slate-50/60' : ''}`}>
                     <td className="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5_rgba(0,0,0,0.02)]">
-                      <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className={`text-sm font-normal truncate ${isStaffActive(emp) ? 'text-slate-800' : 'text-slate-400'}`}>{emp.name}</p>
+                        {isLocked && (
+                          <span title="Đã chốt lương — chỉ xem" className="flex items-center gap-0.5 text-[8px] font-normal text-slate-400 uppercase">
+                            <Lock className="w-2.5 h-2.5" /> Đã chốt
+                          </span>
+                        )}
+                      </div>
                       <p className="text-2xs text-slate-400 truncate">{emp.position}</p>
                     </td>
                     {daysArray.map(day => (
                       <td key={day} className={`p-0 text-center border-r border-slate-100/50 h-12 ${isHoliday(day) ? 'bg-amber-50/30' : ''}`}>
-                        <input type="text" defaultValue={getSalesCellValue(emp.id, day)} onBlur={(e) => handleSalesInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-2xs font-normal outline-none border-none focus:bg-amber-50/50" />
+                        <input type="text" disabled={isLocked} defaultValue={getSalesCellValue(emp.id, day)} onBlur={(e) => handleSalesInputChange(emp, day, e.target.value)} className="w-full h-full bg-transparent text-center text-2xs font-normal outline-none border-none focus:bg-amber-50/50 disabled:cursor-not-allowed disabled:opacity-70" />
                       </td>
                     ))}
                     <td className="bg-amber-50 text-center font-normal text-amber-700 text-xs border-l border-slate-200 sticky right-0 z-10 shadow-[-2px_0_5_rgba(0,0,0,0.02)] truncate">{(calculateTotalSalesAmount(emp.id) || 0).toLocaleString()}</td>
