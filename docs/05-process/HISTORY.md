@@ -3,6 +3,16 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-18 — Rà soát TODO.md trả lời "app dùng thực tế được chưa" + verify POS staff-selector trên dev
+
+- User hỏi tổng kết "app đã sử dụng thực tế được chưa" → đọc lại toàn bộ `TODO.md` (100+ mục) làm căn cứ thay vì chỉ dựa trí nhớ phiên. Phát hiện 2 mục đã thực tế xong (lên prod thật từ đợt rsync 2026-08-16) nhưng vẫn ghi trạng thái "chờ user" cũ — sửa lại `[ ]` → `[x]` cho khớp thực tế: `PAYROLL-LOCK-0805` (khoá server-side đã deploy dev+prod, commit `fe3eab0`) và `FACTORY-RESET-0723` (đã deploy dev+prod, vá thêm `requireOwner()` commit `872c443`).
+- Trả lời user: hoạt động tại cửa hàng (POS/nhập hàng/công nợ/lương) dùng thật được — các bug nặng phát hiện trong phiên đã vá + verify trên prod; rủi ro còn mở là **2 bot Shopee đang crash-loop** (0 đơn/chu kỳ, cần VNC vào iMac đăng nhập lại tay) — không phải lỗi code, cần thao tác vật lý.
+- User hỏi cách đăng nhập lại bot → hướng dẫn: bot chạy trên **iMac** (qua `pm2`), MacBook chỉ dùng để VNC (`vnc://192.168.1.2`) điều khiển từ xa vì cần nhìn thấy Chrome thật để nhập OTP Shopee.
+- User hỏi "hoạt động bán tại cửa hàng có cần test lại không" → rà lại 44 file đã review hôm 16/8, phát hiện 1 thay đổi hành vi thật đụng POS: `POSComputer.tsx` đổi nguồn danh sách nhân viên bán từ hardcode `DEFAULT_POS_STAFF` sang đọc thẳng bảng `employees`, ô chọn nhân viên không còn mặc định chọn sẵn ai trong state khởi tạo.
+- **Verify thật trên dev.phucsang.com.vn** (không phải chỉ đọc code): local Docker Supabase không chạy nên chuyển sang test trực tiếp trên dev đã có code mới. Reset tạm mật khẩu tài khoản QA `admin@cfobrain.local` qua Supabase Admin API (dev only) để đăng nhập thật. Mở màn hình Bán hàng → ô "Nhân viên" hiện đúng 1 nhân viên thật (Phạm Thị Vui) và đã tự chọn sẵn — đối chiếu code xác nhận đúng thiết kế: `useEffect` tự chọn `activeEmployees[0]` ngay khi có dữ liệu nếu `currentStaffId` đang rỗng, không để trống ô nhân viên khi có ít nhất 1 người đang hoạt động. Phần map `DEFAULT_POS_STAFF` cũ vẫn giữ nguyên trong `EndOfDayReport` để hiển thị đúng tên cho đơn hàng lịch sử — không mất dữ liệu báo cáo cũ.
+- Không test được bước tạo đơn + thanh toán thật vì dev hiện không có sản phẩm nào trong catalog POS (vấn đề dữ liệu riêng của môi trường dev, không liên quan thay đổi này).
+- Files: `docs/05-process/TODO.md` (cập nhật trạng thái 2 mục lạc hậu).
+
 ### 2026-08-16 (3) — Rà soát 44 file bị rsync-deploy kèm theo + vá lỗ hổng bảo mật factory-reset
 
 - User hỏi "app đã ổn định cho hoạt động bán tại cửa hàng chưa" → khi trả lời, phát hiện: script `deploy-imac.sh`/`deploy-imac-dev.sh` dùng `rsync` toàn bộ thư mục code (không phải deploy theo git), nên 2 lần deploy 3 fix payroll hôm nay đã vô tình đẩy kèm **44 file khác đang sửa dở, chưa commit từ trước** lên cả dev VÀ prod.

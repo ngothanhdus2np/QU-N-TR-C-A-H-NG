@@ -51,10 +51,10 @@
 > Đã điều tra thêm 13 đơn trên prod phát sinh SAU ngày fix import (30/06–09/07/2026): nguyên nhân là **deploy trễ** (fix merge git 29/06 nhưng chỉ lên prod thật 22/07) — không phải lỗi logic mới, đã nằm trong 1.624 đơn backfill rồi, không cần sửa thêm. Chi tiết: HISTORY.md 2026-08-14 (4).
 > Đã re-verify 0 lệch còn lại ở cả 3 nơi rồi mới xoá bảng backup `backfill_discount_backup_0814` (local/dev/prod) theo yêu cầu user. Task đóng hoàn toàn.
 
-### [ ] 🟠 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương — ĐÃ LÊN DEV, CHỜ USER TEST + DUYỆT ĐẨY PROD *(2026-08-05)*
+### [x] 🟢 PAYROLL-LOCK-0805 — Khóa Chấm công/Tăng ca/Doanh số/Khấu trừ sau chốt lương *(xong hẳn 2026-08-16)*
 
-> Đã sửa: nhân viên đã "Chốt & Lưu" lương tháng nào thì vẫn hiện đầy đủ ở 4 tab Chấm công/Tăng ca/Doanh số/Khấu trừ (bỏ cơ chế ẩn cũ) nhưng input bị khóa (view-only) + badge "Đã chốt". Chi tiết: HISTORY.md 2026-08-05. `tsc`+`npm test` 448/448 sạch, đã deploy `dev.phucsang.com.vn` (health 200 OK).
-> **Còn lại**: user tự test trên dev (thử sửa 1 ô của nhân viên đã chốt → phải bị khóa; nhân viên chưa chốt vẫn sửa bình thường) → nếu ổn báo lại để đẩy `app.phucsang.com.vn` (prod) — theo quy tắc mới chỉ đụng dev trước, prod khi được yêu cầu riêng.
+> Đã sửa: nhân viên đã "Chốt & Lưu" lương tháng nào thì vẫn hiện đầy đủ ở 4 tab Chấm công/Tăng ca/Doanh số/Khấu trừ (bỏ cơ chế ẩn cũ) nhưng input bị khóa (view-only) + badge "Đã chốt". Chi tiết: HISTORY.md 2026-08-05. `tsc`+`npm test` sạch.
+> **2026-08-16**: phát hiện qua QA payroll — khóa này ở FE (UI-only), có thể bypass bằng gọi thẳng API `/api/data/upsert*`. Đã thêm `findPayrollLockViolation()` chặn server-side ở `routes/data.ts` (upsert/upsert-many/delete, 5 bảng liên quan) → trả 409 nếu tháng đã chốt. Commit `fe3eab0`, đã deploy + verify cả dev lẫn prod.
 
 ### [x] 🟢 CLEANUP-0729 — Audit dọn dẹp codebase lần 3, 5 giai đoạn *(xong 2026-07-29)*
 
@@ -66,11 +66,11 @@
 > **GĐ5**: gộp `formatNumber`/`formatDate` trùng lặp y hệt ở 8 trang báo cáo (không phải 6 như audit trước bỏ sót StaffReportPage/SupplierReportPage) về `src/lib/formatCurrency.ts` (`formatReportNumber`/`formatReportDate`). Phát hiện thêm 4/8 trang có `formatAxis` trùng `formatCurrencyAxis` sẵn có (đợt trước chỉ gộp 2/8) — gộp nốt, tiện sửa luôn bug `GoodsReportPage.tsx` thiếu nhánh "tỷ" (giống lớp bug OrderReportPage đã sửa trước).
 > **Còn để ngỏ, chưa làm (cần user quyết)**: 2 thư mục tài liệu Word/PDF ở root ("BIỂU MẪU HỖ TRỢ VẬN HÀNH", "HỆ THỐNG NỘI QUY - QUY ĐỊNH CHÍNH", ~12MB) — giữ nguyên hay gộp vào `docs/business-knowledge/`; `.kiro/`/`.agents/`/`.codex/` còn dùng hay archive; `npm run cf` (cloudflare-tunnel.mjs) còn cần không. `CLEANUP-0721-B` (tách 2 God file) + `CLEANUP-0721-C` (test route thiếu) vẫn còn nguyên, không thuộc phạm vi đợt này.
 
-### [ ] 🟠 FACTORY-RESET-0723 — Deploy tính năng "Trắng hóa toàn bộ hệ thống" lên prod *(xong build+test trên dev 2026-07-23, CHỜ user quyết định deploy prod)*
+### [x] 🟢 FACTORY-RESET-0723 — Deploy tính năng "Trắng hóa toàn bộ hệ thống" lên prod *(xong hẳn 2026-08-16)*
 
 > Tính năng mới cho phép xóa sạch toàn bộ dữ liệu + tài khoản đăng nhập để bàn giao app cho 1 cửa hàng khác hoàn toàn. Đã build (`routes/factoryReset.ts`, `routes/auth.ts` bootstrap-owner, `LoginPage.tsx` màn hình thiết lập lần đầu, `MigrationTab.tsx` UI) và **test thật trên dev.phucsang.com.vn** (sync bản sao prod → gọi API trắng hóa thật → verify DB rỗng + tài khoản mới hoạt động → sync lại prod để khôi phục). Test thật phát hiện và sửa 3 bug (xóa song song vi phạm khóa ngoại, thiếu 9 bảng VAT trong danh sách xóa, bảng `store_product_collections` khóa kép không có cột `id`).
 > Sau đó rà soát + genericize toàn bộ hardcode nhận diện Phúc Sang trong source code (tên nhân viên/chủ cửa hàng mặc định, tài khoản ngân hàng thật, nội dung Knowledge Base, brand mặc định, AI system prompt, nhãn kênh bán, phiếu lương in — ~30 vị trí). Domain CORS/CSP chuyển sang đọc từ env `ALLOWED_ORIGINS`/`ALLOWED_CONNECT_HOSTS` (không set thì giữ nguyên mặc định Phúc Sang, không phá vỡ deploy hiện tại). Chi tiết đầy đủ: HISTORY.md.
-> **Còn lại**: (1) User quyết định commit+push+deploy prod hay không. (2) File logo vật lý (`public/logo.png`, `favicon.png`) không sửa được qua code — cần thay tay trước khi bàn giao thật. (3) `routes/shopeeSync.ts` mapping shop↔port bot + `constants/marketing.ts` DEFAULT_INVENTORY (nội dung ngành giày) chưa đụng — cố ý để nguyên, thuộc phạm vi hạ tầng/ngành hàng chứ không phải "dữ liệu cũ".
+> **2026-08-16**: file này bị rsync-deploy kèm theo (không qua git) lên cả dev lẫn prod cùng lúc với 1 fix payroll khác — rà soát lại phát hiện endpoint `DELETE /api/admin/factory-reset` chỉ có `requireAuth` (mọi tài khoản đăng nhập, kể cả thu ngân) chứ không phân biệt vai trò, bỏ qua hoàn toàn ô xác nhận gõ tên cửa hàng ở frontend (chỉ chặn được UI, không chặn gọi thẳng API). Đã vá `requireOwner()` chặn 403 nếu không phải role owner (commit `872c443`), deploy + verify cả dev lẫn prod. Từ đó tính năng coi như đã "lên prod" đầy đủ — chỉ còn việc thay logo vật lý (`public/logo.png`, `favicon.png`) bằng tay khi bàn giao thật cho cửa hàng khác, không phải việc code.
 
 ### [ ] 🔴 SHOPEE-RELOGIN-0722 — Đăng nhập lại 2 bot Shopee (session hết hạn thật, đang crash-loop) *(phát hiện 2026-07-22)*
 
