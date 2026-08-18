@@ -7,6 +7,24 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 PAYROLL-CELL-CLEAR-0818 — Không xoá được ô Chấm công/Tăng ca/Doanh số/Khấu trừ *(xong 2026-08-18)*
+
+> User báo không xoá được nội dung ô trong 4 bảng nhập liệu lương. Kiểm tra phát hiện **2 bug riêng biệt**:
+> **Bug A (Chấm công)**: popup chọn nhanh trong `AttendanceTab.tsx` — hàm `commitValue()` khi nhận chuỗi rỗng chỉ đóng popup rồi `return`, không hề gọi `onChange` xuống handler xoá. 100% không xoá được, mọi trường hợp.
+> **Bug B (Tăng ca/Doanh số/Khấu trừ)**: xoá vẫn hoạt động đúng (đi qua `/api/data/delete`, xoá đúng 1 dòng), nhưng **thêm/sửa** 1 ô lại gửi lên NGUYÊN MẢNG cả bảng qua `/api/data/upsert-many` — nếu nhân viên có bất kỳ tháng nào khác đã chốt lương lẫn trong mảng, cơ chế khoá lương (thêm hồi sáng cùng ngày, PAYROLL-LOCK-0805) chặn nhầm **cả request**, dù ô đang sửa thuộc tháng chưa chốt. Giao diện vẫn hiện giá trị vừa gõ do cache lạc quan, khiến tưởng đã lưu nhưng thực ra không xuống DB — lỗi im lặng.
+> **Đã sửa**: `AttendanceTab.tsx` bỏ nhánh return sớm, luôn gọi `onChange` kể cả rỗng. `PayrollManager.tsx` — cả 5 handler (chấm công/tăng ca/doanh số/thiếu hụt/tạm ứng) đổi nhánh thêm/sửa từ `onUpdateData` (upsert-many nguyên mảng) sang `onUpdateSurgical` (upsert đúng 1 dòng, cơ chế đã có sẵn trong `useAppData.ts`, dùng cho tồn kho/POS) — khoá lương giờ chỉ soi đúng dòng đang sửa, không còn va chạm dữ liệu lịch sử đã chốt của tháng khác.
+> `tsc`+`npm test` 448/448 sạch. Deploy dev, verify thật (không chỉ đọc code): xoá 1 ô chấm công thật → `DELETE 200`, xác nhận mất khỏi DB; thêm 1 ô tăng ca tháng 8 cho nhân viên có tháng 6 đã chốt → trước sửa bị 409 nhầm, sau sửa `upsert 200`, xác nhận có trong DB đúng giá trị. Dọn sạch dữ liệu test sau khi verify.
+> Files: `components/payroll/AttendanceTab.tsx`, `components/PayrollManager.tsx`.
+> Chưa deploy prod — chỉ dev theo quy ước.
+
+### [x] 🟢 PAYROLL-LEDGER-SPLIT-0818 — Tách rõ Sổ cái lương / Sổ cái hiệu năng *(xong 2026-08-18)*
+
+> User phản ánh "Sổ cái lương" trống vì mặc định lọc theo tháng hiện tại (chưa ai chốt lương tháng đó) — sau khi giải thích, user yêu cầu đổi hẳn: Sổ cái lương hiện **tất cả các tháng** (giống Sổ cái hiệu năng), breakdown đầy đủ 15 field lương để phân tích; Sổ cái hiệu năng chỉ giữ doanh số (bỏ cột liên quan lương).
+> Đã sửa: `components/payroll/LedgerTab.tsx` bỏ lọc `selectedMonth`, thêm cột "Tháng", mở 15 cột chi tiết (Lương CB/Phụ cấp/Trách nhiệm/Hoa hồng/Tăng ca/Thâm niên/Ngày lễ/Tết trước/Tết sau/Tạm ứng/Thiếu hụt/Phạt/Khấu trừ nợ kỳ trước/Nợ chuyển kỳ sau/Thực nhận), bỏ nút "Hủy chốt toàn bộ tháng" (không còn ngữ cảnh 1 tháng rõ ràng). `components/StaffManager.tsx` (tab Sổ cái hiệu năng) bỏ cột "Lương + ứng"/"MIS ROI", chỉ còn Tháng/Nhân viên/Doanh số/Rank.
+> **Bug thật phát hiện + sửa cùng lúc**: nút "Hủy chốt"/"In phiếu lương" từng dòng trong Sổ cái lương dùng `selectedMonth` toàn cục (biến sidebar) thay vì tháng của chính dòng đang bấm — nếu không sửa, bấm hủy chốt/in phiếu 1 dòng tháng cũ trong khi sidebar đang chọn tháng khác sẽ thao tác nhầm dữ liệu. Sửa `handleUndoPayroll(employeeId, month)` nhận tham số tháng tường minh; `handleConfirmPrint`/preview modal dùng `selectedPayrollForPrint.month` thay vì `selectedMonth`.
+> `tsc`+`npm test` 448/448 sạch. Verify thật trên dev.phucsang.com.vn (đăng nhập `admin@cfobrain.local`): Sổ cái lương hiện đủ 4 tháng có dữ liệu thật (02-04/2026) dù bộ lọc sidebar đang để tháng 8; Sổ cái hiệu năng chỉ còn 4 cột đúng yêu cầu; không còn nút bulk; console sạch.
+> Chưa deploy prod — chỉ dev theo quy ước.
+
 ### [x] 🟢 FACTORY-RESET-SECURITY-0816 — Chặn `factory-reset` chỉ cho owner (lỗ hổng xoá sạch dữ liệu) *(xong 2026-08-16)*
 
 > Rà soát 44 file bị rsync-deploy kèm theo lúc đẩy fix payroll phát hiện `routes/factoryReset.ts` (`DELETE /api/admin/factory-reset` — xoá vĩnh viễn toàn bộ dữ liệu + tài khoản, không backup) chỉ được chặn bởi `requireAuth` (đăng nhập là đủ, không phân biệt vai trò) — bất kỳ nhân viên nào cũng gọi được, kể cả bằng cách gọi thẳng API bỏ qua ô xác nhận UI. Đang chạy thật trên dev+prod. Chi tiết: HISTORY.md 2026-08-16 (3).

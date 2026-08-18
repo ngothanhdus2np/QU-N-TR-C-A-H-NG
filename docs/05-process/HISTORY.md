@@ -3,6 +3,29 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-18 (3) — Fix không xoá được ô Chấm công/Tăng ca/Doanh số/Khấu trừ
+
+- User báo không xoá được nội dung 4 bảng nhập liệu lương → điều tra bằng cả đọc code lẫn test trực tiếp trên dev (đồng bộ dữ liệu thật từ prod ngay trước đó nên có sẵn dữ liệu nhân viên có tháng đã chốt để test).
+- **Bug A (Chấm công)**: `AttendanceTab.tsx` — popup chọn nhanh, hàm `commitValue()` xoá hết chữ rồi Enter/blur chỉ đóng popup, không gọi `onChange`. Test live xác nhận: trước sửa không có request nào bắn ra; sau sửa → `POST /api/data/delete 200`, dòng chấm công ngày 1/8 biến mất khỏi DB thật.
+- **Bug B (Tăng ca/Doanh số/Khấu trừ)**: xoá vốn đã đúng (đi qua `/api/data/delete` xoá đúng 1 dòng). Nhưng test thêm mới 1 ô tăng ca tháng 8 (chưa chốt) cho nhân viên Phạm Thị Vui (có tháng 6 đã chốt lương, dữ liệu thật từ prod) → bị chặn `409 "đã chốt lương tháng 2026-06"` dù đang sửa tháng 8. Nguyên nhân: `onUpdateData(key, newList)` gửi NGUYÊN mảng cả bảng qua `upsert-many`, khoá lương (thêm sáng cùng ngày) soi cả mảng thấy có dòng tháng 6 đã chốt → chặn nhầm toàn bộ request. UI vẫn hiện giá trị vừa gõ (cache lạc quan) dù không hề lưu — lỗi im lặng, dễ khiến user tưởng app hỏng nặng hơn thực tế.
+- **Fix B**: đổi cả 5 handler (`handleAttendanceInputChange`/`handleOvertimeInputChange`/`handleSalesInputChange`/`handleShortageInputChange`/`handleAdvanceInputChange`) trong `PayrollManager.tsx`, nhánh thêm/sửa (không xoá) — chuyển từ `onUpdateData` sang `onUpdateSurgical` (cơ chế upsert đúng 1 dòng đã có sẵn trong `useAppData.ts`, vốn dùng cho tồn kho/POS, chưa từng dùng cho payroll input tabs). Giữ fallback `onUpdateData` nếu `onUpdateSurgical` không được truyền vào (an toàn kiểu, không đổi hành vi nơi khác).
+- Verify lại sau fix: thêm ô tăng ca tháng 8 cho đúng nhân viên có tháng 6 đã chốt → `POST /api/data/upsert 200`, xác nhận dòng mới đúng giá trị trong DB thật. Dọn sạch toàn bộ dữ liệu test (chấm công + tăng ca) sau khi verify.
+- `tsc`+`npm test` 448/448 sạch. Deploy dev (`deploy-imac-dev.sh`), verify trên dev.phucsang.com.vn thật, không chỉ đọc code.
+- Files: `components/payroll/AttendanceTab.tsx`, `components/PayrollManager.tsx`.
+- Chưa deploy prod.
+
+### 2026-08-18 (2) — Tách Sổ cái lương / Sổ cái hiệu năng + fix bug hủy chốt/in phiếu sai tháng
+
+- User báo "Sổ cái lương" trống — giải thích do mặc định lọc theo tháng hiện tại (2026-08), chưa ai chốt lương tháng đó, không phải bug.
+- User yêu cầu đổi thiết kế: Sổ cái lương hiện tất cả các tháng như Sổ cái hiệu năng, breakdown đầy đủ để phân tích; Sổ cái hiệu năng chỉ giữ doanh số, tách hẳn khỏi thông tin lương.
+- Đọc source xác nhận đây là 2 trang khác nhau (`StaffManager.tsx` tab `ledger` vs `PayrollManager.tsx` subTab `ledger`) cùng đọc chung `data.payroll`. Hỏi user 2 quyết định trước khi sửa (nút "Hủy chốt toàn bộ tháng" bulk và số lượng cột) — chọn phương án khuyến nghị cho cả 2.
+- Sửa `components/payroll/LedgerTab.tsx`: bỏ lọc `selectedMonth`, thêm cột "Tháng", mở rộng 5 cột gộp thành 15 cột tách riêng, bỏ nút bulk "Hủy chốt toàn bộ tháng".
+- Sửa `components/StaffManager.tsx` (Sổ cái hiệu năng): bỏ cột "Lương + ứng"/"MIS ROI", chỉ còn Tháng/Nhân viên/Doanh số/Rank; đổi mô tả phụ đề.
+- **Phát hiện + fix bug thật khi sửa**: `handleUndoPayroll`/`handleConfirmPrint`/preview modal trong `PayrollManager.tsx` dùng biến `selectedMonth` toàn cục (sidebar) thay vì tháng của chính dòng đang thao tác — sau khi bỏ lọc tháng, bấm hủy chốt/in phiếu 1 dòng khác tháng đang chọn ở sidebar sẽ thao tác nhầm dữ liệu. Sửa `handleUndoPayroll` nhận tham số `month` tường minh; in phiếu dùng `selectedPayrollForPrint.month`.
+- `tsc`+`npm test` 448/448 sạch. Deploy dev (`deploy-imac-dev.sh`) rồi verify thật trên `dev.phucsang.com.vn` (đăng nhập `admin@cfobrain.local`, không phải chỉ đọc code): Sổ cái lương hiện đủ 4 dòng thật thuộc 3 tháng khác nhau (02, 03, 04/2026) dù bộ lọc sidebar để tháng 8; cột "Tháng" đúng; 2 nút Thao tác (in phiếu/hủy chốt) có mặt trong DOM mỗi dòng (không click thử để tránh xoá dữ liệu thật); không còn nút bulk; Sổ cái hiệu năng chỉ còn 4 cột. Console sạch, không lỗi.
+- Files: `components/payroll/LedgerTab.tsx`, `components/PayrollManager.tsx`, `components/StaffManager.tsx`.
+- Chưa deploy prod — chỉ dev.
+
 ### 2026-08-18 — Rà soát TODO.md trả lời "app dùng thực tế được chưa" + verify POS staff-selector trên dev
 
 - User hỏi tổng kết "app đã sử dụng thực tế được chưa" → đọc lại toàn bộ `TODO.md` (100+ mục) làm căn cứ thay vì chỉ dựa trí nhớ phiên. Phát hiện 2 mục đã thực tế xong (lên prod thật từ đợt rsync 2026-08-16) nhưng vẫn ghi trạng thái "chờ user" cũ — sửa lại `[ ]` → `[x]` cho khớp thực tế: `PAYROLL-LOCK-0805` (khoá server-side đã deploy dev+prod, commit `fe3eab0`) và `FACTORY-RESET-0723` (đã deploy dev+prod, vá thêm `requireOwner()` commit `872c443`).

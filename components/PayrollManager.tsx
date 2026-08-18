@@ -120,7 +120,7 @@ const PayrollManager: React.FC<Props> = ({
     const printHtml = buildPayrollPayslipHtml({
       payroll: selectedPayrollForPrint,
       data,
-      selectedMonth,
+      selectedMonth: selectedPayrollForPrint.month,
       policies,
       violationOccurrences,
       violationTypes,
@@ -347,56 +347,28 @@ const PayrollManager: React.FC<Props> = ({
     }
   };
 
-  const handleUndoPayroll = (employeeId?: string) => {
-    if (employeeId) {
-      const payrollToUndo = data.payroll.find(
-        p => p.month === selectedMonth && p.employeeId === employeeId
-      );
-      if (payrollToUndo) {
-        const regularExpenseDesc = `Chi lương tháng ${selectedMonth.split('-').reverse().join('/')} - ${payrollToUndo.employeeName}`;
-        const settlementExpenseDesc = `Quyết toán lương nghỉ việc - ${payrollToUndo.employeeName}`;
-        onUpdateData(
-          'expenses',
-          data.expenses.filter(e => e.description !== regularExpenseDesc && e.description !== settlementExpenseDesc)
-        );
-        onUpdateData(
-          'staffPerformance',
-          (data.staffPerformance || []).filter(
-            pf => !(pf.month === selectedMonth && pf.employeeId === employeeId)
-          )
-        );
-      }
-      onUpdateData(
-        'payroll',
-        data.payroll.filter(p => !(p.month === selectedMonth && p.employeeId === employeeId))
-      );
-    } else {
-      if (
-        !confirm(
-          `Bạn có chắc muốn HỦY CHỐT toàn bộ bảng lương tháng ${selectedMonth}? Dữ liệu chi phí và hiệu năng tương ứng cũng sẽ bị xóa.`
-        )
-      )
-        return;
-
-      const monthPrefix = `Chi lương tháng ${selectedMonth.split('-').reverse().join('/')}`;
-      const settlementNamesThisMonth = data.payroll
-        .filter(p => p.month === selectedMonth)
-        .map(p => `Quyết toán lương nghỉ việc - ${p.employeeName}`);
+  const handleUndoPayroll = (employeeId: string, month: string) => {
+    const payrollToUndo = data.payroll.find(
+      p => p.month === month && p.employeeId === employeeId
+    );
+    if (payrollToUndo) {
+      const regularExpenseDesc = `Chi lương tháng ${month.split('-').reverse().join('/')} - ${payrollToUndo.employeeName}`;
+      const settlementExpenseDesc = `Quyết toán lương nghỉ việc - ${payrollToUndo.employeeName}`;
       onUpdateData(
         'expenses',
-        data.expenses.filter(
-          e => !e.description.startsWith(monthPrefix) && !settlementNamesThisMonth.includes(e.description)
-        )
+        data.expenses.filter(e => e.description !== regularExpenseDesc && e.description !== settlementExpenseDesc)
       );
       onUpdateData(
         'staffPerformance',
-        (data.staffPerformance || []).filter(pf => pf.month !== selectedMonth)
-      );
-      onUpdateData(
-        'payroll',
-        data.payroll.filter(p => p.month !== selectedMonth)
+        (data.staffPerformance || []).filter(
+          pf => !(pf.month === month && pf.employeeId === employeeId)
+        )
       );
     }
+    onUpdateData(
+      'payroll',
+      data.payroll.filter(p => !(p.month === month && p.employeeId === employeeId))
+    );
   };
 
   const toggleResponsibilityApproval = (employeeId: string) => {
@@ -417,12 +389,12 @@ const PayrollManager: React.FC<Props> = ({
     const existingIndex = data.attendance.findIndex(
       a => a.employeeId === employee.id && a.date === dateStr
     );
-    const newList = [...data.attendance];
     const val = value.trim().toUpperCase();
 
     if (val === '') {
       if (existingIndex > -1) {
         const deletedId = data.attendance[existingIndex].id;
+        const newList = [...data.attendance];
         newList.splice(existingIndex, 1);
         onUpdateData('attendance', newList, deletedId);
       }
@@ -452,19 +424,21 @@ const PayrollManager: React.FC<Props> = ({
 
     if (!status) return;
 
-    if (existingIndex > -1) {
-      newList[existingIndex] = { ...newList[existingIndex], status, hours };
+    // Chỉ gửi đúng 1 dòng vừa đổi qua updateSurgical (upsert đơn) thay vì gửi lại NGUYÊN
+    // MẢNG attendance qua onUpdateData (upsert-many) — nếu nhân viên có tháng khác đã chốt
+    // lương lẫn trong cùng mảng, khoá lương server chặn NHẦM cả request dù dòng đang sửa
+    // không liên quan tháng đã chốt (PAYROLL-CELL-CLEAR-0818).
+    const record: AttendanceRecord = existingIndex > -1
+      ? { ...data.attendance[existingIndex], status, hours }
+      : { id: generateId(), employeeId: employee.id, employeeName: employee.name, date: dateStr, status, hours };
+
+    if (onUpdateSurgical) {
+      onUpdateSurgical([{ key: 'attendance', item: record }]);
     } else {
-      newList.push({
-        id: generateId(),
-        employeeId: employee.id,
-        employeeName: employee.name,
-        date: dateStr,
-        status,
-        hours,
-      });
+      const newList = [...data.attendance];
+      if (existingIndex > -1) newList[existingIndex] = record; else newList.push(record);
+      onUpdateData('attendance', newList);
     }
-    onUpdateData('attendance', newList);
   };
 
   const handleOvertimeInputChange = (employee: Employee, day: number, value: string) => {
@@ -472,12 +446,12 @@ const PayrollManager: React.FC<Props> = ({
     const existingIndex = data.overtime.findIndex(
       ot => ot.employeeId === employee.id && ot.date === dateStr
     );
-    const newList = [...data.overtime];
     const val = value.trim().replace(',', '.');
 
     if (val === '') {
       if (existingIndex > -1) {
         const deletedId = data.overtime[existingIndex].id;
+        const newList = [...data.overtime];
         newList.splice(existingIndex, 1);
         onUpdateData('overtime', newList, deletedId);
       }
@@ -487,19 +461,19 @@ const PayrollManager: React.FC<Props> = ({
     if (!isNaN(Number(val)) && val !== '') {
       const minutes = Math.round(Number(val));
       const multiplier = 1.0;
-      if (existingIndex > -1) {
-        newList[existingIndex] = { ...newList[existingIndex], hours: minutes, multiplier };
+      // Gửi đúng 1 dòng qua updateSurgical — tránh gửi lại nguyên mảng overtime khiến
+      // khoá lương server chặn nhầm nếu nhân viên có tháng khác đã chốt (PAYROLL-CELL-CLEAR-0818).
+      const record = existingIndex > -1
+        ? { ...data.overtime[existingIndex], hours: minutes, multiplier }
+        : { id: generateId(), employeeId: employee.id, employeeName: employee.name, date: dateStr, hours: minutes, multiplier };
+
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'overtime', item: record }]);
       } else {
-        newList.push({
-          id: generateId(),
-          employeeId: employee.id,
-          employeeName: employee.name,
-          date: dateStr,
-          hours: minutes,
-          multiplier,
-        });
+        const newList = [...data.overtime];
+        if (existingIndex > -1) newList[existingIndex] = record; else newList.push(record);
+        onUpdateData('overtime', newList);
       }
-      onUpdateData('overtime', newList);
     }
   };
 
@@ -508,12 +482,12 @@ const PayrollManager: React.FC<Props> = ({
     const existingIndex = data.sales.findIndex(
       s => s.employeeId === employee.id && s.date === dateStr
     );
-    const newList = [...data.sales];
     const val = value.trim().replace(',', '.');
 
     if (val === '') {
       if (existingIndex > -1) {
         const deletedId = data.sales[existingIndex].id;
+        const newList = [...data.sales];
         newList.splice(existingIndex, 1);
         onUpdateData('sales', newList, deletedId);
       }
@@ -527,25 +501,27 @@ const PayrollManager: React.FC<Props> = ({
       const rate = currentPolicy?.commissionRate || 0;
       const earned = Math.round(amount * (rate / 100));
 
-      if (existingIndex > -1) {
-        newList[existingIndex] = {
-          ...newList[existingIndex],
-          salesAmount: amount,
-          commissionRate: rate,
-          commissionEarned: earned,
-        };
+      // Gửi đúng 1 dòng qua updateSurgical — tránh gửi lại nguyên mảng sales khiến khoá
+      // lương server chặn nhầm nếu nhân viên có tháng khác đã chốt (PAYROLL-CELL-CLEAR-0818).
+      const record = existingIndex > -1
+        ? { ...data.sales[existingIndex], salesAmount: amount, commissionRate: rate, commissionEarned: earned }
+        : {
+            id: generateId(),
+            employeeId: employee.id,
+            employeeName: employee.name,
+            date: dateStr,
+            salesAmount: amount,
+            commissionRate: rate,
+            commissionEarned: earned,
+          };
+
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'sales', item: record }]);
       } else {
-        newList.push({
-          id: generateId(),
-          employeeId: employee.id,
-          employeeName: employee.name,
-          date: dateStr,
-          salesAmount: amount,
-          commissionRate: rate,
-          commissionEarned: earned,
-        });
+        const newList = [...data.sales];
+        if (existingIndex > -1) newList[existingIndex] = record; else newList.push(record);
+        onUpdateData('sales', newList);
       }
-      onUpdateData('sales', newList);
     }
   };
 
@@ -554,12 +530,12 @@ const PayrollManager: React.FC<Props> = ({
     const existingIndex = shortages.findIndex(
       s => s.employeeId === employee.id && s.date === dateStr
     );
-    const newList = [...shortages];
     const val = value.trim().replace(',', '.');
 
     if (val === '') {
       if (existingIndex > -1) {
         const deletedId = shortages[existingIndex].id;
+        const newList = [...shortages];
         newList.splice(existingIndex, 1);
         onUpdateData('shortages', newList, deletedId);
       }
@@ -568,18 +544,19 @@ const PayrollManager: React.FC<Props> = ({
 
     if (!isNaN(Number(val)) && val !== '') {
       const amount = Number(val) * 1000;
-      if (existingIndex > -1) {
-        newList[existingIndex] = { ...newList[existingIndex], amount };
+      // Gửi đúng 1 dòng qua updateSurgical — tránh gửi lại nguyên mảng shortages khiến
+      // khoá lương server chặn nhầm nếu nhân viên có tháng khác đã chốt (PAYROLL-CELL-CLEAR-0818).
+      const record = existingIndex > -1
+        ? { ...shortages[existingIndex], amount }
+        : { id: generateId(), employeeId: employee.id, employeeName: employee.name, date: dateStr, amount };
+
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'shortages', item: record }]);
       } else {
-        newList.push({
-          id: generateId(),
-          employeeId: employee.id,
-          employeeName: employee.name,
-          date: dateStr,
-          amount,
-        });
+        const newList = [...shortages];
+        if (existingIndex > -1) newList[existingIndex] = record; else newList.push(record);
+        onUpdateData('shortages', newList);
       }
-      onUpdateData('shortages', newList);
     }
   };
 
@@ -588,12 +565,12 @@ const PayrollManager: React.FC<Props> = ({
     const existingIndex = advances.findIndex(
       ad => ad.employeeId === employee.id && ad.date === dateStr
     );
-    const newList = [...advances];
     const val = value.trim().replace(',', '.');
 
     if (val === '') {
       if (existingIndex > -1) {
         const deletedId = advances[existingIndex].id;
+        const newList = [...advances];
         newList.splice(existingIndex, 1);
         onUpdateData('advances', newList, deletedId);
       }
@@ -602,18 +579,19 @@ const PayrollManager: React.FC<Props> = ({
 
     if (!isNaN(Number(val)) && val !== '') {
       const amount = Number(val) * 1000;
-      if (existingIndex > -1) {
-        newList[existingIndex] = { ...newList[existingIndex], amount };
+      // Gửi đúng 1 dòng qua updateSurgical — tránh gửi lại nguyên mảng advances khiến
+      // khoá lương server chặn nhầm nếu nhân viên có tháng khác đã chốt (PAYROLL-CELL-CLEAR-0818).
+      const record = existingIndex > -1
+        ? { ...advances[existingIndex], amount }
+        : { id: generateId(), employeeId: employee.id, employeeName: employee.name, date: dateStr, amount };
+
+      if (onUpdateSurgical) {
+        onUpdateSurgical([{ key: 'advances', item: record }]);
       } else {
-        newList.push({
-          id: generateId(),
-          employeeId: employee.id,
-          employeeName: employee.name,
-          date: dateStr,
-          amount,
-        });
+        const newList = [...advances];
+        if (existingIndex > -1) newList[existingIndex] = record; else newList.push(record);
+        onUpdateData('advances', newList);
       }
-      onUpdateData('advances', newList);
     }
   };
 
@@ -1024,8 +1002,7 @@ const PayrollManager: React.FC<Props> = ({
       )}
       {subTab === 'ledger' && (
         <LedgerTab
-          archivedPayrolls={archivedPayrolls}
-          selectedMonth={selectedMonth}
+          payrolls={data.payroll}
           handleUndoPayroll={handleUndoPayroll}
           handlePrintPayslip={handlePrintPayslip}
         />
@@ -1034,7 +1011,7 @@ const PayrollManager: React.FC<Props> = ({
         <PayrollPrintPreviewModal
           payroll={selectedPayrollForPrint}
           data={data}
-          selectedMonth={selectedMonth}
+          selectedMonth={selectedPayrollForPrint.month}
           policies={policies}
           violationOccurrences={violationOccurrences}
           violationTypes={violationTypes}

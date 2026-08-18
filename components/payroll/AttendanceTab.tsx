@@ -80,11 +80,10 @@ const AttendanceCell: React.FC<AttendanceCellProps> = ({
   }, [isOpen, value]);
 
   const commitValue = (nextValue: string) => {
+    // Chuỗi rỗng cũng phải gửi xuống onChange — handleAttendanceInputChange tự nhận biết
+    // rỗng nghĩa là xoá ô. Trước đây return sớm ở đây khiến xoá hết chữ rồi Enter/blur
+    // chỉ đóng popup, không hề gọi onChange nên không xoá được (PAYROLL-CELL-CLEAR-0818).
     const normalizedNextValue = nextValue.trim();
-    if (!normalizedNextValue) {
-      setIsOpen(false);
-      return;
-    }
     onChange(employee, day, normalizedNextValue);
     setIsOpen(false);
   };

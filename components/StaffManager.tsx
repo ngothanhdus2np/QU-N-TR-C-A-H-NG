@@ -903,7 +903,7 @@ const StaffManager: React.FC<Props> = ({
                   Sổ Cái Hiệu Năng Nhân Sự
                 </h3>
                 <p className="text-2xs text-emerald-600 font-normal uppercase tracking-widest mt-1">
-                  Lịch sử snapshot doanh số & thu nhập nhân sự theo tháng
+                  Lịch sử snapshot doanh số bán hàng của nhân sự theo tháng
                 </p>
               </div>
             </div>
@@ -915,8 +915,6 @@ const StaffManager: React.FC<Props> = ({
                     <th className="px-8 py-5">Tháng</th>
                     <th className="px-8 py-5">Nhân viên</th>
                     <th className="px-8 py-5 text-right">Doanh số (Sales)</th>
-                    <th className="px-8 py-5 text-right">Lương + ứng</th>
-                    <th className="px-8 py-5 text-center">MIS ROI</th>
                     <th className="px-8 py-5 text-center">Rank</th>
                   </tr>
                 </thead>
@@ -924,7 +922,7 @@ const StaffManager: React.FC<Props> = ({
                   {performanceLedger.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={4}
                         className="py-20 text-center opacity-40 uppercase text-xs font-normal tracking-widest text-slate-400 italic"
                       >
                         Chưa có bảng lương đã chốt để tính hiệu năng.
@@ -939,16 +937,6 @@ const StaffManager: React.FC<Props> = ({
                         <td className="px-8 py-5 text-slate-900 uppercase">{pf.employeeName}</td>
                         <td className="px-8 py-5 text-right text-emerald-600">
                           {formatNumber(pf.totalSales)}đ
-                        </td>
-                        <td className="px-8 py-5 text-right text-rose-600">
-                          {formatNumber(pf.totalIncome)}đ
-                        </td>
-                        <td className="px-8 py-5 text-center">
-                          <span
-                            className={`px-4 py-1 rounded-full text-white ${pf.roi > 5 ? 'bg-emerald-500' : pf.roi > 2 ? 'bg-blue-500' : 'bg-rose-500'}`}
-                          >
-                            x{pf.roi.toFixed(1)}
-                          </span>
                         </td>
                         <td className="px-8 py-5 text-center">
                           {pf.rank ? (
