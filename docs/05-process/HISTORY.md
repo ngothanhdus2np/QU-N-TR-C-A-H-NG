@@ -3,6 +3,19 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-19 (8) — Điều tra mất dữ liệu doanh số/tăng ca tháng 7 trên prod + xác nhận PAYROLL-CELL-CLEAR-0818 đã vô tình lên prod
+
+- User báo không thấy dữ liệu Chấm công và Doanh số nhân viên tháng 7 khi xem trên `app.phucsang.com.vn`. Điều tra qua SQL trực tiếp trên DB prod (SSH iMac):
+  - **Chấm công tháng 7**: dữ liệu còn nguyên (31 dòng, đúng nhân viên PHẠM THỊ VUI) — lý do "không thấy" chỉ là UI PayrollManager mặc định lọc theo tháng hiện tại (tháng 8), không phải bug. Cần đổi ô "Tháng" trong Bộ lọc sang 07/2026.
+  - **Doanh số (`sales_records`) tháng 7**: **0 dòng** dù tháng 6 có 30, tháng 8 có 17. Nhưng `audit_logs` xác nhận chốt lương tháng 7 chạy lúc 2026-08-17 03:56 UTC và tính ra tổng doanh số 120.974.000đ — chứng tỏ dữ liệu vẫn còn tại thời điểm chốt, sau đó biến mất.
+  - **Tăng ca (`overtime_records`) tháng 7**: cũng 0 dòng — cùng kiểu mất với Doanh số.
+  - Không có audit log cho 2 bảng này (`sales_records`/`overtime_records` không nằm trong `AUDITED_TABLES`) nên không truy được chính xác thời điểm/nguyên nhân xóa.
+- **Giả thuyết nguyên nhân có căn cứ mạnh**: khớp chính xác với bug B đã ghi trong `PAYROLL-CELL-CLEAR-0818` (sửa trên dev 2026-08-18, lúc đó chưa deploy prod) — sửa/thêm 1 ô Doanh số/Tăng ca/Khấu trừ gửi nguyên mảng cả bảng lên server (`onUpdateData` bulk) thay vì đúng 1 dòng; nếu cache trình duyệt admin lúc đó thiếu dữ liệu tháng 7, thao tác sửa 1 ô tháng 8 có thể ghi đè xóa sạch tháng 7 trên server. Thời điểm khớp (chốt lương 7 xong 17/8, dữ liệu tháng 8 chỉ tới hết 17/8).
+- User yêu cầu deploy fix `PAYROLL-CELL-CLEAR-0818` để chặn tái diễn. Kiểm tra trước khi deploy: **fix đã vô tình có mặt trên prod từ lần deploy sớm hơn cùng ngày** (cho các fix checklist) — do `scripts/deploy-imac.sh` rsync nguyên trạng thư mục code hiện tại (không theo commit riêng lẻ), và commit `1c41751` (chứa cả `PAYROLL-CELL-CLEAR-0818` lẫn `PAYROLL-LEDGER-SPLIT-0818`, đã có sẵn trước khi phiên làm việc này bắt đầu) nằm trong lịch sử. Xác nhận trực tiếp: đọc file `PayrollManager.tsx`/`AttendanceTab.tsx` đang chạy thật trên iMac, thấy đúng `onUpdateSurgical` + comment tham chiếu `PAYROLL-CELL-CLEAR-0818`. **Không cần deploy lại** — không có gì mới để deploy (git status sạch).
+- Cập nhật TODO.md: 2 mục `PAYROLL-CELL-CLEAR-0818`, `PAYROLL-LEDGER-SPLIT-0818` đổi từ "Chưa deploy prod" → "Đã deploy prod (xác nhận 2026-08-19)".
+- **Việc còn lại chưa làm**: chưa khôi phục được 31 dòng `sales_records` + dòng `overtime_records` tháng 7 đã mất (tổng doanh số tháng 7 vẫn an toàn trong `staff_performance`/`payroll_records`, chỉ mất chi tiết theo ngày) — cần kiểm tra khả năng phục hồi từ backup Supabase point-in-time recovery nếu có, chờ user quyết định bước tiếp theo.
+- Files: `docs/05-process/TODO.md`.
+
 ### 2026-08-19 (7) — Commit + deploy dev, sau đó deploy prod (4 fix từ đợt test checklist)
 
 - Commit gộp 10 file (`6a3a3ea`): fix `DEBT-AMOUNT-COL-0818`, `PURCHASE-NCC-UUID-0819`, `SYNC-FORCE-RESURRECT-0819` (2 bước), `SYNC-TIMEOUT-COLD-0819`, cùng cập nhật checklist/TODO/HISTORY. Push lên `feat/online-audit-shopee`.
