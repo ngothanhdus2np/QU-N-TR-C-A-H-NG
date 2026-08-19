@@ -3,6 +3,95 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-19 (6) — Test nốt 5 mục checklist còn thiếu (giảm giá dòng SP, bán nợ cộng dồn, thu nợ, double-submit, đổi hàng) + phát hiện & sửa tạm SYNC-TIMEOUT-COLD-0819
+
+- Tiếp tục checklist `docs/06-evaluation/CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md` các mục còn dang dở từ trước: giảm giá theo % và số tiền cố định cho 1 dòng sản phẩm, bán nợ đơn thứ 2 cho cùng khách (cộng dồn), thu nợ một phần, double-submit khi bán nợ, đổi hàng có chênh giá. Cả 5 mục **PASS**, verify qua SQL trực tiếp (`docker exec supabase-db-dev psql` qua SSH iMac) và/hoặc UI trang Khách hàng thật.
+- Khi bắt đầu test, gặp lỗi thật: POS hiện "Hệ thống chưa có sản phẩm" do cache trình duyệt bị xóa sạch ở phiên trước (lúc verify `mergeBy`) khiến app phải cold-sync toàn bộ catalog — timeout 45s cũ không đủ (tái hiện 3/3 lần). Điều tra xác nhận nguyên nhân: `SUPABASE_PAGE_SIZE=5000` trong code không khớp giới hạn thật của server PostgREST dev (`PGRST_DB_MAX_ROWS=1000`), khiến số round-trip tải `pos_products` (15.015 dòng) gấp 4 lần dự tính. Đã hỏi user và được chọn phương án tăng tạm `FETCH_TIMEOUT_MS` lên 120s để tiếp tục test ngay — ghi `SYNC-TIMEOUT-COLD-0819` vào TODO.md (P1, chưa đóng hẳn, cần sửa gốc rễ sau).
+- Giảm giá dòng SP: test cả % (đơn HD-L3TLN, 100.000 -10% = 90.000) và VNĐ cố định (đơn HD-L5QVS, 70.000 -15.000 = 55.000) — khớp SQL `items[].discount`/`total`.
+- Bán nợ đơn thứ 2: khách "A ANH" nợ sẵn 35.000 → bán nợ thêm 100.000 (đơn HD-L8T6O) → tổng 135.000, khớp SQL và UI trang Khách hàng.
+- Thu nợ một phần: thu 50.000/135.000 qua modal "Thu nợ" trang Khách hàng → còn lại đúng 85.000, SQL ghi `customer_debt_history` dòng mới `type='repay'`.
+- Double-submit: dispatch 3 click liên tiếp không delay lên nút Thanh toán khi đang ghi nợ → chỉ tạo đúng 1 đơn (HD-LJAVM), đúng 1 dòng nợ, tồn kho chỉ trừ đúng 1 lần — xác nhận có chống double-submit.
+- Đổi hàng: trả SP012565 (90.000, đã giảm giá) đổi lấy SP012567 (70.000) → hoàn trả khách đúng 20.000; đơn TH-LROKJ có `items` với `lineType='return'` và `lineType='exchange'` đúng cả 2 chiều tồn kho.
+- Đã dọn sạch dữ liệu test tạo trong lượt này (5 đơn, `inventory_transactions`, `customer_debt_history` liên quan) — không đụng 2 đơn nợ có sẵn từ phiên trước (`HD-EMYAB`, `HD-EPAJQ`). Khôi phục tồn kho `SP012565`→47, `SP012567`→13 và nợ khách "A ANH"→35.000 đúng baseline trước khi test.
+- `npm test` sạch, `tsc --noEmit` sạch. Deploy dev xong (bundle mới có timeout 120s).
+- Files: `hooks/useAppData.ts` (`FETCH_TIMEOUT_MS`), `docs/06-evaluation/CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md`.
+- Chưa áp dụng prod.
+
+### 2026-08-19 (5) — Siết mergeBy() theo offline queue thật (bước 2/2, đóng hẳn SYNC-FORCE-RESURRECT-0819)
+
+- Tiếp nối phiên trước (bước 1: `updateData()` đã enqueue đúng khi lỗi mạng) — giờ mọi luồng ghi offline đều có queue, đủ an toàn để siết `mergeBy()` không tự giữ local-only vô điều kiện nữa.
+- Sửa `mergeBy()` (`services/dataMapper.ts`) nhận thêm `pendingIds?: Set<unknown>` — nhánh "local có, cloud không có" chỉ giữ lại nếu bản ghi thực sự đang pending trong `cfo_brain_pos_queue`, còn lại coi là đã bị xóa trên server và bỏ. Không xóa merge logic gốc, chỉ thêm điều kiện lọc (đúng rule dự án khóa `dataMapper.ts`).
+- Sửa `mapAllData()` nhận thêm `pendingIdsByKey?: Map<string, Set<unknown>>`; `fetchData()` (`hooks/useAppData.ts`) build map này từ `posOfflineQueue.getAll()` trước khi gọi `mapAllData`, map đúng field khóa từng bảng (`id` mặc định, `date` cho revenue/shopeeRevenue, `sku` cho shopeeSourceData). Cập nhật cả 26 lời gọi `mergeBy` bên trong `mapAllData` để truyền đúng `pending('<key>')`.
+- Verify thật trên dev (không mock): tạo 1 phiếu chi thật qua UI Sổ quỹ → xác nhận có trong `expense_records` qua SQL → xóa thẳng bằng SQL mô phỏng "server xóa ngoài luồng, cache local vẫn còn" → bấm "Tải lại dữ liệu" + reload trang → UI hiển thị đúng "Tổng chi: 0", bản ghi ma biến mất hẳn, không hồi sinh. SQL xác nhận sạch, không còn dữ liệu test.
+- `npm test` sạch, `tsc --noEmit` sạch. Deploy dev xong (bundle `index-hz_IhILJ.js`), health-check OK.
+- Còn lại (chưa quyết, ghi TODO): Sync Force (tự động khi mạng reconnect) vẫn đang tắt tạm — cần bàn với user có nên bật lại hay bỏ hẳn, vì giờ queue + mergeBy đã đủ xử lý đúng.
+- Files: `hooks/useAppData.ts`, `services/dataMapper.ts`.
+- Chưa áp dụng prod.
+
+### 2026-08-19 (4) — Sửa lỗ hổng offline queue trong updateData() (bước 2 của SYNC-FORCE-RESURRECT-0819)
+
+- Sau khi tắt "Sync Force" (phiên trước), verify lại thấy UI trang Khách hàng vẫn hiển thị sai "Nợ hiện tại" cho thiết bị có cache cũ dù server đã đúng — điều tra sâu xác định gốc rễ thật nằm ở `mergeBy()` (`services/dataMapper.ts:101-125`, code offline-first bị rule dự án khóa không được xóa): nhánh "local có, cloud không có → giữ lại" chạy vô điều kiện mỗi lần fetch, tự ghi lại vào `localStorage`/IndexedDB nên tự lặp vĩnh viễn.
+- Giao agent audit toàn bộ luồng ghi dữ liệu offline trong app để xác định có an toàn để siết `mergeBy` không. Kết quả: `updateData()` (`hooks/useAppData.ts:801-870`, dùng bởi ~10 module — chi phí, khuyến mãi, khách hàng POS, nhân sự, Shopee, cài đặt POS...) **không** đẩy vào offline queue `cfo_brain_pos_queue` khi ghi lỗi mạng (khác với `updateSurgical`/`applyRevenueDelta`/`pushBatch` đã làm đúng từ trước) — dữ liệu offline qua các module này đang phụ thuộc hoàn toàn vào `mergeBy` để không mất, nên chưa thể siết merge logic ngay.
+- Đã sửa `updateData()` thêm `enqueueOp(...)` khi gặp lỗi mạng retryable, cùng pattern 3 hàm kia (`deleteItem` khi xóa 1 bản ghi, `pushBatch` khi upsert hàng loạt).
+- Verify thật trên dev: mock lỗi mạng cho bảng `expenses` → thêm 1 phiếu chi qua UI Sổ quỹ → xác nhận op `pushBatch` vào đúng `cfo_brain_pos_queue` (IndexedDB) → khôi phục mạng + dispatch sự kiện `online` → queue tự động drain → SQL xác nhận bản ghi đã thực sự ghi vào server (`expense_records`). Dọn dữ liệu test.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Deploy dev xong, health-check OK.
+- Ghi nhận bước 2 (siết `mergeBy` không giữ local-only vô điều kiện nữa) là việc riêng còn lại, chưa làm — cần rà soát thêm các luồng ghi khác trước khi an toàn siết.
+- Files: `hooks/useAppData.ts`.
+- Chưa áp dụng prod.
+
+### 2026-08-19 (3) — Tắt bug nghiêm trọng "Sync Force" hồi sinh dữ liệu đã xóa (SYNC-FORCE-RESURRECT-0819)
+
+- Đang test tiếp các mục checklist còn thiếu (bán nợ đơn 2 cho cùng khách) — phát hiện trang Khách hàng hiện sai "Nợ hiện tại" của A ANH (185.000 thay vì 35.000 đúng theo SQL). Bấm nút "Tải lại dữ liệu và đồng bộ database" để điều tra → phát hiện 1 đơn hàng đã xóa từ phiên trước (`HD-SXR7W`) **sống lại trong DB thật** ngay sau khi bấm nút, không có audit log.
+- Giao agent con đọc code xác định chính xác nguyên nhân: khối "Sync Force" trong `hooks/useAppData.ts:539-643` — khi `fetchData(isManual=true)` chạy (nút Tải lại HOẶC tự động qua `silentSync` gắn vào sự kiện `online` của browser ở `App.tsx:172`, hoàn toàn im lặng không cần ai bấm gì), code so ID cache local với ID trên server cho 26 bảng, coi mọi ID "local có, server không có" là "gap chưa đồng bộ" rồi tự động đẩy lên Supabase — không phân biệt được "chưa từng gửi" với "đã bị xóa trên server". Rủi ro áp dụng cả khi xóa đúng quy trình qua UI, không riêng xóa qua SQL.
+- Đã tắt tạm: thêm `SYNC_FORCE_ENABLED: boolean = false` chặn khối này ở cả 4 điểm gọi (giữ nguyên code cũ để tham khảo, chưa xóa — cần thiết kế lại với cờ pending-sync/tombstone trước khi bật lại).
+- Verify fix: hard-refresh + bấm lại đúng nút từng gây lỗi → SQL xác nhận không còn dòng nào mới được tạo.
+- Dọn sạch dữ liệu ô nhiễm do bug gây ra trước khi tắt: 6 đơn hàng test cũ đã hồi sinh (`HD-SXR7W`, `HD-V17HD`, `HD-VMYFP`, `HD-W2I97`, `HD-WBEJX`, `TH-WEZ2Y`, tổng 770.000đ giả) + 10 `inventory_transactions` + 1 `customer_debt_history` liên quan. `revenue_records` không bị ảnh hưởng (so khớp theo `date`, không phải `id`). Xóa luôn IndexedDB cache cũ trên tab test (`cfo_brain_app_cache`, `cfo_brain_pos_queue`) để tránh nhiễu test tiếp theo.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Deploy dev xong, health-check OK.
+- Ghi `SYNC-FORCE-RESURRECT-0819` vào TODO.md P0 — đánh dấu "tắt tạm", chưa đóng hẳn (cần thiết kế lại cơ chế đồng bộ offline-first đúng).
+- Files: `hooks/useAppData.ts`.
+- Chưa áp dụng prod.
+> Agent cuối ca → thêm phiên mới lên **đầu file**.
+
+### 2026-08-19 (2) — Sửa 4 bug phát hiện qua test thực tế: DEBT-AMOUNT-COL-0818, PURCHASE-NCC-UUID-0819 + 2 bug ẩn (ambiguous id, tồn kho không hoàn khi xóa đơn)
+
+- Theo lựa chọn của user ("Sửa cả 2 bug luôn") sau khi hoàn thành checklist ở phiên trước: sửa cả `DEBT-AMOUNT-COL-0818` (P0) và `PURCHASE-NCC-UUID-0819` (P1) trên dev.
+- **PURCHASE-NCC-UUID-0819**: sửa `PurchaseOrdersContainer.tsx` (2 nhánh nhập hàng ~962, trả hàng nhập ~1137) — bỏ fallback `supplierId='ncc-le'`, không tạo `SupplierDebtRecord` khi không chọn NCC (guard `supplier &&`). Verify thật: tạo phiếu nhập không chọn NCC → lưu thành công, không phát sinh `supplier_debts` rác.
+- **DEBT-AMOUNT-COL-0818**: migration `038` bỏ dòng `debt_amount = ...` khỏi `UPDATE pos_customers` trong RPC `delete_pos_order_tx` + bỏ field `debt_amount` khỏi payload `apiService.ts:139`. Verify tạo khách hàng (blank phone) thành công qua SQL.
+- **2 bug ẩn phát hiện khi verify fix trên** (cùng function `delete_pos_order_tx`, trước đây bị lỗi debt_amount che mất, chưa từng lộ ra dù đã tồn tại từ migration 030): (1) migration `039` — `RETURNS TABLE (id UUID)` tạo biến PL/pgSQL `id` xung đột cột `id` của 4 bảng khác nhau trong hàm, gây lỗi `column reference "id" is ambiguous (42702)` khi xóa đơn có khách hàng/tồn kho thật — sửa bằng qualify tên bảng cho mọi `WHERE id = ...`. (2) migration `040` — vòng lặp hoàn tồn kho dùng `status <> 'cancelled'` nhưng `inventory_transactions` loại Sale có status mặc định NULL, `NULL <> 'cancelled'` cho kết quả NULL (không TRUE) nên **tồn kho không bao giờ được hoàn lại khi xóa đơn** dù hệ thống báo thành công — sửa bằng `COALESCE(status, '') <> 'cancelled'` (đúng pattern đã dùng ở `cancel_pos_return_tx`/`edit_pos_order_tx`).
+- Verify thật trên dev qua browser + SQL (2 vòng riêng biệt): bán nợ cho khách "A ANH" → xóa đơn → công nợ sạch; bán tiền mặt sản phẩm thật → xóa đơn → `pos_orders.status='cancelled'`, `inventory_transactions.status='cancelled'` (trước đó luôn NULL), tồn kho hoàn đúng về giá trị gốc.
+- `npm test` 448/448 sạch. Deploy dev (rsync+build+restart qua `deploy-imac-dev.sh`), health-check OK. Dọn sạch toàn bộ dữ liệu test (đơn, inventory_transactions, tồn kho khôi phục đúng, supplier_debts).
+- **Chưa áp dụng prod** — cả 3 migration (038/039/040) + code fix `PurchaseOrdersContainer.tsx`/`apiService.ts` cần chạy lại thủ công trên prod khi user yêu cầu (prod đang có nguyên cả 4 bug).
+- Files: `services/apiService.ts`, `components/purchase/PurchaseOrdersContainer.tsx`, `supabase_migrations/038_fix_delete_pos_order_debt_amount.sql`, `039_fix_delete_pos_order_ambiguous_id.sql`, `040_fix_delete_pos_order_null_status.sql`.
+
+### 2026-08-19 — Hoàn thành nốt checklist thay KiotViet (mục 3, 5-8, 10) + phát hiện bug P1 nhập hàng thiếu NCC
+
+- Tiếp nối phiên 2026-08-18 (4) theo lựa chọn của user ("Tiếp tục test hết checklist trước"): hoàn thành toàn bộ các mục còn lại (3, 5, 6, 7, 8, 10) trên `dev.phucsang.com.vn` qua trình duyệt thật, mục 9 đánh dấu không áp dụng (chỉ 1 quầy test).
+- **Mục 3 (Thanh toán)**: xác nhận tiền mặt, chuyển khoản (đúng `payment_method='Bank'`, QR VietQR hiển thị đúng), chia nhiều phương thức (đúng `payment_method='Split', split_payments={"bank":40000,"cash":60000}`) — cả 3 đều khớp SQL.
+- **Mục 5 (Trả hàng)**: trả một phần SL (mua 3 trả 1) qua màn "Đổi trả" → tồn kho cộng lại đúng, đơn trả `is_return=true` xác nhận qua SQL; báo cáo Tổng quan/Cuối ngày phản ánh đúng phần trả hàng.
+- **Mục 6 (Sửa đơn đã bán)**: tìm ra đường vào tính năng sửa đơn qua Đơn hàng → Hóa đơn → chọn dòng → nút "Chỉnh sửa" ("Mở lại đơn này trong máy tính tiền để sửa sản phẩm/số lượng/giá") — mở lại đơn trong POS ở chế độ "Sửa". Test cả 2 chiều: tăng SL (3→4, tồn giảm thêm đúng 1, tổng tiền tăng đúng) và giảm SL (4→2, tồn hoàn lại đúng 2, tổng tiền giảm đúng) — cả 2 đều cập nhật đúng ngay trong danh sách hóa đơn không cần refresh.
+- **Mục 7 (Tình huống biên)**: xác nhận hệ thống chặn bán vượt tồn kho ở cả 2 đường nhập liệu — bấm nút "+" nhiều lần dừng đúng ở SL=tồn kho, gõ trực tiếp số lớn hơn tồn vào ô SL cũng bị chặn về lại đúng số tồn. 2 mục con "mất mạng"/"đóng browser đột ngột" không test được vì môi trường sandbox không có quyền điều khiển mạng thật của trình duyệt.
+- **Mục 8 (Đối chiếu cuối ngày) — phát hiện quan trọng**: báo cáo "Xem báo cáo cuối ngày" đọc từ cache offline (IndexedDB) trên trình duyệt, không tự đồng bộ lại dù bấm nút "Đồng bộ". Phát hiện khi dọn dữ liệu test giữa chừng (xóa 1 đơn 150.000đ trực tiếp qua SQL) — báo cáo vẫn đếm dư đơn đã xóa (hiện 6 đơn/690.000đ trong khi DB thật chỉ có 4 đơn/540.000đ, chênh đúng 150.000đ). Không phải bug chặn vận hành bình thường (chỉ xảy ra khi có can thiệp DB ngoài luồng app), nhưng ghi lại làm rủi ro vận hành cần biết khi đối chiếu số liệu đa thiết bị.
+- **Mục 10 (Nhập hàng) — phát hiện bug P1 thật**: tạo phiếu nhập hàng cho sản phẩm test, điền đủ SL/đơn giá nhưng **không chọn Nhà cung cấp** → lưu thất bại toast "Không thể ghi dữ liệu" chung chung, rollback toàn bộ. SSH vào log server dev (`/tmp/cfobrain-app-dev.log`) xác định nguyên nhân: `[DataRoute] upsert failed [supplier_debts]: invalid input syntax for type uuid: "ncc-le"`. Đọc code xác nhận root cause: `components/purchase/PurchaseOrdersContainer.tsx:962` và `:1137` dùng fallback string `'ncc-le'` làm `supplierId` khi không chọn NCC, `services/apiService.ts:413` map thẳng vào cột `supplier_debts.supplier_id` (kiểu UUID) không qua validate. Verify lại golden path: chọn đúng NCC (HÀ LÊ) → lưu thành công, tồn kho cộng đúng (3→13), giá vốn bình quân gia quyền tính đúng ((3×40.000+10×50.000)/13=47.692đ, khớp SQL). Ghi vào TODO.md P1 `PURCHASE-NCC-UUID-0819`.
+- Trong lúc thao tác gặp nhiều khó khăn kỹ thuật với UI combobox tìm hàng hóa/nhà cung cấp trong form Nhập hàng — dropdown chỉ nhận sự kiện `mousedown` (không phải `click` đơn thuần) và bị đóng ngay khi input mất focus; giải quyết bằng cách dispatch chuỗi sự kiện chuột đầy đủ (mousedown→mouseup→click) qua JS trực tiếp trên phần tử dropdown, không qua thao tác chuột thông thường của công cụ trình duyệt.
+- **Dọn sạch toàn bộ dữ liệu test trên dev bằng SQL** sau khi hoàn thành: xóa 6 đơn hàng test (HD-V17HD, HD-WBEJX, TH-WEZ2Y, HD-VMYFP, HD-W2I97 và 1 đơn 150k cũ), phiếu nhập hàng test + công nợ NCC phát sinh, toàn bộ `inventory_transactions`/`revenue_records`/`product_cost_history` liên quan, và 3 sản phẩm test (SP012565/566/567). Xác nhận qua SQL: 0 đơn/0 sản phẩm test/0 revenue_records còn sót cho ngày 18/8.
+- Cập nhật đầy đủ `docs/06-evaluation/CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md` (tick toàn bộ mục đã verify thật kèm bằng chứng SQL, ghi rõ mục nào không test được và lý do) + `docs/05-process/TODO.md` (thêm `PURCHASE-NCC-UUID-0819`).
+- Không có thay đổi code trong phiên này (chỉ test + dọn dữ liệu SQL trên dev, không đụng prod). Bug `DEBT-AMOUNT-COL-0818` (P0, phiên trước) vẫn CHƯA sửa — vẫn đang chờ xác nhận hướng sửa từ user.
+- Files: `docs/06-evaluation/CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md`, `docs/05-process/TODO.md`.
+
+### 2026-08-18 (4) — Tự test thực tế checklist thay KiotViet trên dev + phát hiện bug P0 xóa đơn có khách hàng
+
+- User yêu cầu tự thực hiện checklist `CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md` (viết ở phiên trước) trên trình duyệt thật, không suy luận từ HISTORY. Quyết định chạy trên **dev** (không phải prod như checklist ghi gốc) theo đúng quy tắc mặc định dự án — nêu rõ lý do với user.
+- Đăng nhập `admin@cfobrain.local` trên `dev.phucsang.com.vn` qua trình duyệt thật. Tạo 3 sản phẩm test ("TEST QA CHECKLIST...") qua trang Hàng hóa để phục vụ test (tồn kho 20/15/0).
+- **Test tạo khách hàng mới (không SĐT) → phát hiện bug thật**: UI báo lưu thành công (đóng modal) nhưng network log cho thấy `POST /api/data/upsert → 500`, server log SSH vào iMac xác nhận `PGRST204: Could not find the 'debt_amount' column of 'pos_customers'`. Verify bằng SQL trực tiếp: khách hàng test **không hề có trong DB** dù UI báo thành công — lỗi âm thầm giống hệt lớp bug `PAYROLL-EMAIL-COL-0816` nhưng ở module Khách hàng.
+- Điều tra sâu bằng code + SSH prod thật: xác nhận cột `debt_amount` **thiếu trên CẢ dev VÀ prod** (`information_schema.columns` không có dòng nào), dù `supabase_setup.sql` có ghi ALTER TABLE. Đọc `pg_proc.prosrc` **trên prod thật** xác nhận RPC `delete_pos_order_tx` (đang chạy thật, từ migration 030) có `UPDATE pos_customers SET debt_amount = ...` chạy vô điều kiện khi đơn có `customer_id`.
+- **Tái hiện thật trên dev để xác nhận 100%**: đặt 1 đơn bán nợ (F9 → Ghi nợ khách hàng) cho khách có sẵn "A ANH" → đặt đơn thành công (RPC `place_pos_order_tx` không đụng `debt_amount`, chỉ ghi `customer_debt_history`, không lỗi). Thử xóa đơn đó qua UI (đã phải ghi đè `window.confirm` vì dialog native bị trình duyệt tự động chặn) → `POST /api/data/pos-orders/delete-tx` trả **500** `{"error":"column \"debt_amount\" does not exist | 42703"}` — đơn **không xóa được**, rollback toàn bộ (không mất dữ liệu nhưng thao tác thất bại hoàn toàn).
+- **Kết luận tác động**: xóa/hủy bất kỳ đơn hàng nào có gắn khách hàng (không riêng đơn bán nợ) đang **thất bại 100% trên cả dev và prod**. Đồng thời phát hiện phụ: bước cập nhật điểm/tổng chi tiêu khách hàng sau khi đặt đơn (best-effort, đã có try/catch nên không chặn bán hàng) cũng luôn fail cùng lý do — điểm/tổng chi tiêu khách hàng chưa bao giờ được cập nhật đúng.
+- Đề xuất hướng sửa (chưa làm, ghi vào TODO.md P0 `DEBT-AMOUNT-COL-0818`, chờ user xác nhận): bỏ dòng `debt_amount` khỏi `UPDATE pos_customers` trong RPC (cột tàn dư, nguồn sự thật thật sự là `customer_debt_history`) + bỏ field `debt_amount` khỏi payload `apiService.ts:139`.
+- **Dọn sạch dữ liệu test trên dev bằng SQL trực tiếp** (vì chính bug trên chặn xóa qua UI): xóa đơn `HD-SXR7W`, `customer_debt_history`, `inventory_transactions`, `revenue_records` liên quan ngày test, khôi phục tồn kho SP test, xóa 3 SP test. Xác nhận khách "A ANH" (khách thật) không bị ảnh hưởng số liệu (points/total_spent vẫn 0, đúng như trước test — vì bước cập nhật đã fail 500 nên không hề ghi đè).
+- Chưa hoàn thành hết toàn bộ checklist gốc (mục 5-10: trả hàng, sửa đơn, đối chiếu cuối ngày, nhập hàng...) — dừng lại báo cáo phát hiện P0 trước khi tiếp tục theo yêu cầu ưu tiên của user.
+- Không có thay đổi code trong phiên này (chỉ test + dọn dữ liệu SQL trên dev, không đụng prod).
+- Files: `docs/05-process/TODO.md` (thêm mục `DEBT-AMOUNT-COL-0818`).
+
 ### 2026-08-18 (3) — Fix không xoá được ô Chấm công/Tăng ca/Doanh số/Khấu trừ
 
 - User báo không xoá được nội dung 4 bảng nhập liệu lương → điều tra bằng cả đọc code lẫn test trực tiếp trên dev (đồng bộ dữ liệu thật từ prod ngay trước đó nên có sẵn dữ liệu nhân viên có tháng đã chốt để test).

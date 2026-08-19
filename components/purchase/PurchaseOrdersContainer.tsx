@@ -959,14 +959,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
         }),
       };
       const payableAmount = transaction.totalAmount || 0;
-      const debtSupplierId = supplier?.id || 'ncc-le';
-      const debtSupplierName = supplier?.name || 'NCC lẻ';
+      // Chỉ ghi công nợ NCC khi thực sự đã chọn nhà cung cấp từ danh sách (có supplier.id
+      // là UUID thật) — không tạo công nợ ảo cho NCC vãng lai/chưa chọn, tránh gửi giá trị
+      // không hợp lệ vào cột supplier_debts.supplier_id (kiểu UUID). Xem PURCHASE-NCC-UUID-0819.
       const debtRecord: SupplierDebtRecord | null =
-        payableAmount > 0
+        supplier && payableAmount > 0
           ? {
               id: generateId(),
-              supplierId: debtSupplierId,
-              supplierName: debtSupplierName,
+              supplierId: supplier.id,
+              supplierName: supplier.name,
               date: transaction.date,
               type: 'purchase',
               amount: payableAmount,
@@ -1134,15 +1135,15 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       const changedProducts = updatedProducts.filter(product =>
         returnItems.some(item => item.productId === product.id)
       );
-      const returnDebtSupplierId = supplier?.id || 'ncc-le';
-      const returnDebtSupplierName = supplier?.name || 'NCC lẻ';
+      // Chỉ ghi công nợ NCC khi thực sự đã chọn nhà cung cấp từ danh sách — xem
+      // PURCHASE-NCC-UUID-0819 (supplier_debts.supplier_id là UUID, không nhận giá trị ảo).
       // Ghi nhận phần NCC trả tiền mặt trực tiếp (nếu có)
       const cashPaymentRecord: SupplierDebtRecord | null =
-        returnSupplierPaidAmount > 0
+        supplier && returnSupplierPaidAmount > 0
           ? {
               id: generateId(),
-              supplierId: returnDebtSupplierId,
-              supplierName: returnDebtSupplierName,
+              supplierId: supplier.id,
+              supplierName: supplier.name,
               date: new Date().toISOString(),
               type: 'payment',
               amount: returnSupplierPaidAmount,
@@ -1151,11 +1152,11 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           : null;
       // Ghi nhận phần bù trừ vào công nợ cũ (nếu có)
       const debtOffsetRecord: SupplierDebtRecord | null =
-        returnApplySupplierDebt && remainingDebt > 0
+        supplier && returnApplySupplierDebt && remainingDebt > 0
           ? {
               id: generateId(),
-              supplierId: returnDebtSupplierId,
-              supplierName: returnDebtSupplierName,
+              supplierId: supplier.id,
+              supplierName: supplier.name,
               date: new Date().toISOString(),
               type: 'payment',
               amount: remainingDebt,

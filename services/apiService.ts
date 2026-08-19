@@ -136,7 +136,6 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       total_spent: n(item.totalSpent),
       last_visit: item.lastVisit,
       tier: item.tier,
-      debt_amount: n(item.debtAmount),
       ...(item.isStarred !== undefined ? { is_starred: !!item.isStarred } : {}),
     };
   }

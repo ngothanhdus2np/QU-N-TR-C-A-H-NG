@@ -98,10 +98,17 @@ export const dataMapper = {
     };
   },
 
+  // pendingIds: khi truyền vào (từ offline queue cfo_brain_pos_queue), bản ghi "local có,
+  // cloud không có" CHỈ được giữ lại nếu key của nó nằm trong tập này (đang thực sự chờ gửi
+  // lên server) — nếu không, coi là đã bị xóa trên server (kể cả xóa đúng quy trình qua UI ở
+  // thiết bị khác) và bỏ, tránh "hồi sinh" dữ liệu cũ (xem TODO.md SYNC-FORCE-RESURRECT-0819).
+  // Không truyền pendingIds (undefined) → giữ hành vi cũ (giữ lại vô điều kiện) cho các call
+  // site chưa cập nhật, tránh phá vỡ khi thiếu sót.
   mergeBy<T extends { id?: string; date?: string; sku?: string }>(
     cloud: T[],
     local: T[],
-    key: keyof T = 'id'
+    key: keyof T = 'id',
+    pendingIds?: Set<unknown>
   ): T[] {
     if (!cloud || cloud.length === 0) return local || [];
     if (!local || local.length === 0) return cloud || [];
@@ -113,8 +120,11 @@ export const dataMapper = {
       const k = l[key];
       const idx = cloudIndexMap.get(k);
       if (idx === undefined) {
-        // Local-only record (chưa sync lên cloud) → giữ lại
-        merged.push(l);
+        // Local-only record: chỉ giữ nếu đang pending trong offline queue (chưa từng sync
+        // thành công) — nếu không có gì đang chờ, đây là bản ghi đã bị xóa trên server.
+        if (!pendingIds || pendingIds.has(k)) {
+          merged.push(l);
+        }
       } else {
         // Cloud là source of truth — cloud fields thắng local.
         // Local chỉ bổ sung các field không có trên cloud (ví dụ: field frontend-only).
@@ -132,8 +142,18 @@ export const dataMapper = {
     };
   },
 
-  mapAllData(rawResults: unknown, localData: Partial<AppData> | null): Partial<AppData> {
+  mapAllData(
+    rawResults: unknown,
+    localData: Partial<AppData> | null,
+    pendingIdsByKey?: Map<string, Set<unknown>>
+  ): Partial<AppData> {
     const results = rawResults as DataMapperResults;
+    // pendingIdsByKey được truyền (dù rỗng) → bảng không có entry nghĩa là KHÔNG có gì đang
+    // chờ gửi, phải trả Set rỗng (không phải undefined) để mergeBy loại bản ghi local-only
+    // đúng ý định. Chỉ khi cả pendingIdsByKey không được truyền (undefined) mới rơi về hành
+    // vi cũ (giữ lại vô điều kiện) — dành cho call site chưa cập nhật.
+    const EMPTY_PENDING = new Set<unknown>();
+    const pending = (k: string) => (pendingIdsByKey ? pendingIdsByKey.get(k) || EMPTY_PENDING : undefined);
     const cloudEmployees = (results.employees || []).map(e => ({
       id: e.id,
       name: e.name,
@@ -190,14 +210,18 @@ export const dataMapper = {
         cloudEmployees,
         (localData?.employees || []).map(employee =>
           this.normalizeEmployee(employee as unknown as DbRow)
-        )
+        ),
+        'id',
+        pending('employees')
       ).map(employee => this.normalizeEmployee(employee as unknown as DbRow)),
       salaryPolicies:
         (cloudPolicies.length > 0 ? cloudPolicies : localData?.salaryPolicies || DEFAULT_POLICIES) as SalaryPolicy[],
-      revenue: this.mergeBy(cloudRevenue, localData?.revenue || [], 'date'),
+      revenue: this.mergeBy(cloudRevenue, localData?.revenue || [], 'date', pending('revenue')),
       productGroups: this.mergeBy(
         (results.pGroups || []).map(g => ({ id: g.id, name: g.name, target: g.target })),
-        localData?.productGroups || []
+        localData?.productGroups || [],
+        'id',
+        pending('productGroups')
       ),
       productGroupRevenue: this.mergeBy(
         (results.pGroupRev || []).map(r => ({
@@ -212,7 +236,9 @@ export const dataMapper = {
           netRevenue: Number(r.net_revenue || r.netRevenue || 0),
           cogs: Number(r.cogs || r.Cogs || 0),
         })),
-        localData?.productGroupRevenue || []
+        localData?.productGroupRevenue || [],
+        'id',
+        pending('productGroupRevenue')
       ),
       expenses: this.mergeBy(
         (results.expenses || []).map(e => ({
@@ -222,7 +248,9 @@ export const dataMapper = {
           amount: e.amount || 0,
           description: e.description,
         })),
-        localData?.expenses || []
+        localData?.expenses || [],
+        'id',
+        pending('expenses')
       ),
       attendance: this.mergeBy(
         (results.attendance || []).map(a => ({
@@ -233,7 +261,9 @@ export const dataMapper = {
           status: a.status,
           hours: a.hours || 0,
         })),
-        localData?.attendance || []
+        localData?.attendance || [],
+        'id',
+        pending('attendance')
       ),
       overtime: this.mergeBy(
         (results.overtime || []).map(o => ({
@@ -244,7 +274,9 @@ export const dataMapper = {
           hours: o.hours || 0,
           multiplier: o.multiplier || 1,
         })),
-        localData?.overtime || []
+        localData?.overtime || [],
+        'id',
+        pending('overtime')
       ),
       sales: this.mergeBy(
         (results.sales || []).map(s => ({
@@ -256,7 +288,9 @@ export const dataMapper = {
           commissionRate: s.commission_rate || s.commissionRate || 0,
           commissionEarned: s.commission_earned || s.commissionEarned || 0,
         })),
-        localData?.sales || []
+        localData?.sales || [],
+        'id',
+        pending('sales')
       ),
       shortages: this.mergeBy(
         (results.shortages || []).map(sh => ({
@@ -266,7 +300,9 @@ export const dataMapper = {
           date: sh.date,
           amount: sh.amount || 0,
         })),
-        localData?.shortages || []
+        localData?.shortages || [],
+        'id',
+        pending('shortages')
       ),
       advances: this.mergeBy(
         (results.advances || []).map(ad => ({
@@ -276,7 +312,9 @@ export const dataMapper = {
           date: ad.date,
           amount: ad.amount || 0,
         })),
-        localData?.advances || []
+        localData?.advances || [],
+        'id',
+        pending('advances')
       ),
       payroll: this.mergeBy(
         (results.payroll || []).map(p => ({
@@ -305,7 +343,9 @@ export const dataMapper = {
           carryForwardDeduction: p.carry_forward_deduction || p.carryForwardDeduction || 0,
           carryForwardDebtOut: p.carry_forward_debt_out || p.carryForwardDebtOut || 0,
         })),
-        localData?.payroll || []
+        localData?.payroll || [],
+        'id',
+        pending('payroll')
       ),
       staffPerformance: this.mergeBy(
         (results.perf || []).map(pf => ({
@@ -318,7 +358,9 @@ export const dataMapper = {
           roi: pf.roi || 0,
           rank: pf.rank,
         })),
-        localData?.staffPerformance || []
+        localData?.staffPerformance || [],
+        'id',
+        pending('staffPerformance')
       ),
       knowledgeBase: this.mergeBy(
         (results.kb || []).map(k => ({
@@ -334,7 +376,9 @@ export const dataMapper = {
           sourceFileSize: k.source_file_size || k.sourceFileSize,
           sourceFileData: k.source_file_data || k.sourceFileData,
         })),
-        localData?.knowledgeBase || []
+        localData?.knowledgeBase || [],
+        'id',
+        pending('knowledgeBase')
       ),
       promotions: this.mergeBy(
         (results.promotions || []).map(p => ({
@@ -353,7 +397,9 @@ export const dataMapper = {
           incrementalRevenue: p.incremental_revenue || p.incrementalRevenue || 0,
           actualRoi: p.actual_roi || p.actualRoi || 0,
         })),
-        localData?.promotions || []
+        localData?.promotions || [],
+        'id',
+        pending('promotions')
       ),
       violationTypes:
         (getConfigValue(results.configs, 'violation_types') || localData?.violationTypes || []) as ViolationType[],
@@ -402,7 +448,8 @@ export const dataMapper = {
           grossProfit: r.gross_profit || r.grossProfit || 0,
         })),
         localData?.shopeeRevenue || [],
-        'date'
+        'date',
+        pending('shopeeRevenue')
       ),
       shopeeProductGroupRevenue: this.mergeBy(
         (results.shopeeProductGroupRevenue || []).map(r => ({
@@ -417,7 +464,9 @@ export const dataMapper = {
           netRevenue: Number(r.net_revenue || r.netRevenue || 0),
           cogs: Number(r.cogs || r.Cogs || 0),
         })),
-        localData?.shopeeProductGroupRevenue || []
+        localData?.shopeeProductGroupRevenue || [],
+        'id',
+        pending('shopeeProductGroupRevenue')
       ),
       shopeeSourceData: this.mergeBy(
         (results.shopeeSourceData || []).map(r => ({
@@ -434,7 +483,8 @@ export const dataMapper = {
           shops: r.shops,
         })),
         localData?.shopeeSourceData || [],
-        'sku'
+        'sku',
+        pending('shopeeSourceData')
       ),
       shopeeCosts:
         (getConfigValue(results.configs, 'shopee_costs') ||
@@ -453,7 +503,9 @@ export const dataMapper = {
           importPrice: r.import_price || r.importPrice || 0,
           note: r.note,
         })),
-        localData?.shopeeInventoryIn || []
+        localData?.shopeeInventoryIn || [],
+        'id',
+        pending('shopeeInventoryIn')
       ),
       shopeeInventoryOut: (() => {
         const merged = this.mergeBy(
@@ -486,7 +538,9 @@ export const dataMapper = {
             productName: r.product_name || r.productName || '',
             profitStatus: r.profit_status || r.profitStatus || '',
           })),
-          localData?.shopeeInventoryOut || []
+          localData?.shopeeInventoryOut || [],
+          'id',
+          pending('shopeeInventoryOut')
         );
         // Dedup theo (orderId + sku) — 1 Shopee order có thể có nhiều SKU khác nhau.
         // Ưu tiên dòng có SKU/tên thật để dòng debug rỗng không che dữ liệu đúng.
@@ -572,7 +626,9 @@ export const dataMapper = {
           };
         });
         })(),
-        localData?.posProducts || []
+        localData?.posProducts || [],
+        'id',
+        pending('posProducts')
       ),
       posOrders: this.mergeBy(
         (results.posOrders || []).map(o => ({
@@ -608,7 +664,9 @@ export const dataMapper = {
           returnFee: (o.return_fee != null) ? Number(o.return_fee) : (o.returnFee != null ? Number(o.returnFee) : undefined),
           returnOtherRefund: (o.return_other_refund != null) ? Number(o.return_other_refund) : (o.returnOtherRefund != null ? Number(o.returnOtherRefund) : undefined),
         })),
-        localData?.posOrders || []
+        localData?.posOrders || [],
+        'id',
+        pending('posOrders')
       ),
       posCustomers: this.mergeBy(
         (results.posCustomers || []).map(c => ({
@@ -625,7 +683,9 @@ export const dataMapper = {
           tier: c.tier || 'Standard',
           isStarred: !!c.is_starred || !!c.isStarred,
         })),
-        localData?.posCustomers || []
+        localData?.posCustomers || [],
+        'id',
+        pending('posCustomers')
       ),
       inventoryTransactions: this.mergeBy(
         (results.inventoryTransactions || []).map(t => ({
@@ -659,7 +719,9 @@ export const dataMapper = {
               : Number(t.decrease_count ?? t.decreaseCount),
           allowNegativeStock: t.allow_negative_stock || t.allowNegativeStock || false,
         })),
-        localData?.inventoryTransactions || []
+        localData?.inventoryTransactions || [],
+        'id',
+        pending('inventoryTransactions')
       ),
       suppliers: this.mergeBy(
         (results.suppliers || []).map(s => ({
@@ -679,7 +741,9 @@ export const dataMapper = {
           invoicePhone: s.invoice_phone || s.invoicePhone,
           invoiceAddress: s.invoice_address || s.invoiceAddress,
         })),
-        localData?.suppliers || []
+        localData?.suppliers || [],
+        'id',
+        pending('suppliers')
       ),
       supplierDebts: this.mergeBy(
         (results.supplierDebts || []).map(d => ({
@@ -691,7 +755,9 @@ export const dataMapper = {
           amount: Number(d.amount || 0),
           description: d.description || '',
         })),
-        localData?.supplierDebts || []
+        localData?.supplierDebts || [],
+        'id',
+        pending('supplierDebts')
       ),
       customerDebtHistory: this.mergeBy(
         (results.customerDebtHistory || []).map(r => ({
@@ -703,7 +769,9 @@ export const dataMapper = {
           amount: Number(r.amount || 0),
           note: r.note || undefined,
         })),
-        localData?.customerDebtHistory || []
+        localData?.customerDebtHistory || [],
+        'id',
+        pending('customerDebtHistory')
       ),
     };
   },

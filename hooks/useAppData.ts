@@ -21,6 +21,7 @@ import { AppState } from './stateTypes';
 import { validationService } from '../services/validationService';
 import { incrementPending, getPendingCount, clearPending } from '../services/syncService';
 import { useOfflineSync } from './useOfflineSync';
+import { posOfflineQueue, PendingOp } from '../services/posOfflineQueue';
 import { appDataCache } from '../services/appDataCache';
 import { markLocalWrite } from './useRealtimeSync';
 
@@ -292,6 +293,43 @@ const isRetryableSyncError = (err: unknown): boolean => {
   );
 };
 
+// Khóa merge (theo dataMapper.mergeBy) của từng bảng — mặc định 'id', chỉ liệt kê ngoại lệ.
+const MERGE_KEY_BY_DATA_KEY: Record<string, string> = {
+  revenue: 'date',
+  shopeeRevenue: 'date',
+  shopeeSourceData: 'sku',
+};
+
+// Bước 2/SYNC-FORCE-RESURRECT-0819: dựng tập ID (hoặc date/sku tuỳ bảng) đang thực sự chờ
+// gửi lên server từ offline queue, để dataMapper.mergeBy chỉ giữ lại bản ghi "local có, cloud
+// không có" khi nó đang pending — không suy luận "chưa từng gửi" một cách mù quáng nữa.
+const buildPendingIdsByKey = (ops: PendingOp[]): Map<string, Set<unknown>> => {
+  const map = new Map<string, Set<unknown>>();
+  const add = (dataKey: string, value: unknown) => {
+    if (value === undefined || value === null || value === '') return;
+    if (!map.has(dataKey)) map.set(dataKey, new Set());
+    map.get(dataKey)!.add(value);
+  };
+  for (const op of ops) {
+    const mergeKey = MERGE_KEY_BY_DATA_KEY[op.dataKey] || 'id';
+    if (op.opType === 'pushBatch') {
+      const items = Array.isArray(op.payload) ? op.payload : [op.payload];
+      for (const item of items) {
+        if (item && typeof item === 'object') {
+          add(op.dataKey, (item as Record<string, unknown>)[mergeKey]);
+        }
+      }
+    } else if (op.opType === 'revenueDelta') {
+      const payload = op.payload as { dateKey?: string };
+      add(op.dataKey, payload?.dateKey);
+    } else {
+      const payload = op.payload as Record<string, unknown> | undefined;
+      add(op.dataKey, payload?.[mergeKey] ?? payload?.id);
+    }
+  }
+  return map;
+};
+
 const canReachLocalServer = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return true;
   try {
@@ -484,8 +522,11 @@ export function useAppData() {
         return;
       }
 
-      // Timeout 45s — shopee_inventory_out được fetch riêng (lazy) nên main load nhẹ hơn
-      const FETCH_TIMEOUT_MS = 45_000;
+      // Timeout 120s — cold sync (cache rỗng) phải phân trang tuần tự pos_products/pos_orders
+      // vì PostgREST giới hạn tối đa 1000 dòng/trang (PGRST_DB_MAX_ROWS=1000) bất kể
+      // SUPABASE_PAGE_SIZE=5000 code xin — 45s không đủ khi catalog lớn (~15k SP). Xem TODO.md
+      // SYNC-TIMEOUT-COLD-0819.
+      const FETCH_TIMEOUT_MS = 120_000;
       const fetchWithTimeout = Promise.race([
         apiService.fetchAllData({ skipPosProducts }),
         new Promise<never>((_, reject) =>
@@ -534,10 +575,32 @@ export function useAppData() {
         // bên dưới ghi đè brand_profile bằng DEFAULT_BRAND placeholder khi user gõ sớm.
       }
 
-      const newState = sanitizeAppDataSnapshot(dataMapper.mapAllData(results, localData));
+      // Bước 2/SYNC-FORCE-RESURRECT-0819: lấy danh sách thao tác đang chờ trong offline queue
+      // để mapAllData/mergeBy biết bản ghi "local có, cloud không có" nào THỰC SỰ đang chờ gửi
+      // (giữ lại) — còn lại coi là đã bị xóa trên server, không hồi sinh nhầm nữa.
+      let pendingIdsByKey: Map<string, Set<unknown>>;
+      try {
+        const pendingOps = await posOfflineQueue.getAll();
+        pendingIdsByKey = buildPendingIdsByKey(pendingOps);
+      } catch (e) {
+        console.error('[Sync] Không đọc được offline queue để merge:', e);
+        pendingIdsByKey = new Map();
+      }
+      const newState = sanitizeAppDataSnapshot(
+        dataMapper.mapAllData(results, localData, pendingIdsByKey)
+      );
 
       // "Sync Force" - Push local gaps to Cloud when triggered manually (e.g. Refresh button)
-      if (isManual && !hasFetchErrors) {
+      // TẠM TẮT (2026-08-19, xem TODO.md SYNC-FORCE-RESURRECT-0819): cơ chế này so ID cache
+      // local với ID trên server, coi mọi ID "local có, server không có" là "gap chưa đồng bộ"
+      // rồi tự động upsert lên Supabase — không phân biệt được "chưa từng gửi" (hợp lệ) với
+      // "đã có trên server rồi bị xóa" (không nên đồng bộ ngược). Hậu quả: dữ liệu đã xóa (kể cả
+      // xóa đúng quy trình qua UI) có thể "sống lại" trên server nếu 1 thiết bị/tab khác còn cache
+      // cũ và trigger fetchData(true, ...) — kể cả TỰ ĐỘNG qua silentSync khi mạng reconnect
+      // (App.tsx handleOnline), không cần ai bấm nút. Không audit log (posOrders/customerDebtHistory
+      // không nằm trong AUDITED_TABLES). Cần thiết kế lại với tombstone/cờ pending-sync trước khi bật lại.
+      const SYNC_FORCE_ENABLED: boolean = false;
+      if (SYNC_FORCE_ENABLED && isManual && !hasFetchErrors) {
         let totalPushed = 0;
         let totalErrors = 0;
         const pushErrors: string[] = [];
@@ -852,12 +915,36 @@ export function useAppData() {
         const errorMsg = `LỖI ĐỒNG BỘ [${key}]: ${message}`;
         dispatch({ type: 'SET_SYNC_ERRORS', payload: [errorMsg] });
         // DON'T throw - data is already saved locally
-        // throw err;
+
+        // Đẩy vào offline queue khi lỗi mạng — cùng pattern updateSurgical/pushBatch
+        // (xem TODO.md SYNC-FORCE-RESURRECT-0819). Trước bản sửa này, updateData() không
+        // enqueue gì cả — dữ liệu tạo/sửa lúc offline chỉ còn sống nhờ nhánh "giữ lại
+        // local-only" của dataMapper.mergeBy, nên nếu bản ghi đó thực ra đã bị xóa trên
+        // server (không phải do chưa gửi), mergeBy không phân biệt được và hồi sinh nhầm.
+        // Có queue đảm bảo gửi lại đúng cách thì merge mới có thể siết lại logic sau.
+        if (isRetryableSyncError(err)) {
+          try {
+            if (idToRemove) {
+              await enqueueOp({ opType: 'deleteItem', dataKey: key as string, payload: { id: idToRemove } });
+            } else if (
+              uniqueList &&
+              Array.isArray(uniqueList) &&
+              uniqueList.length > 0 &&
+              TABLE_MAP[key as string]
+            ) {
+              await enqueueOp({ opType: 'pushBatch', dataKey: key as string, payload: uniqueList });
+            }
+            // Trường hợp clearTable (newList rỗng) hiếm gặp lúc offline, chưa có opType
+            // riêng trong queue — giữ hành vi cũ (không enqueue) cho trường hợp này.
+          } catch (enqueueErr) {
+            console.error(`[Sync] Lỗi enqueue offline op cho ${String(key)}:`, enqueueErr);
+          }
+        }
       } finally {
         dispatch({ type: 'SET_SYNCING', payload: false });
       }
     },
-    []
+    [enqueueOp]
   );
 
   const mergeRemoteUpdate = useCallback(async (updates: AppDataSurgicalUpdate[]) => {
