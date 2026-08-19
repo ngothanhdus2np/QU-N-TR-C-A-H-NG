@@ -3,6 +3,18 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-19 (7) — Commit + deploy dev, sau đó deploy prod (4 fix từ đợt test checklist)
+
+- Commit gộp 10 file (`6a3a3ea`): fix `DEBT-AMOUNT-COL-0818`, `PURCHASE-NCC-UUID-0819`, `SYNC-FORCE-RESURRECT-0819` (2 bước), `SYNC-TIMEOUT-COLD-0819`, cùng cập nhật checklist/TODO/HISTORY. Push lên `feat/online-audit-shopee`.
+- User hỏi "sau khi test bạn trả lời tôi đã thay thế kiotviet được chưa" — trả lời trung thực theo đúng nguyên tắc checklist: **CHƯA sẵn sàng thay hẳn**, vì (1) toàn bộ test là trên dev không phải prod theo đúng chuẩn checklist yêu cầu, (2) các fix chưa hề deploy prod tính đến thời điểm đó, (3) còn vài mục chưa test được (in hóa đơn thật, mất mạng giữa chừng, đối chiếu giấy tay). Đề xuất lộ trình: deploy prod → chạy lại checklist thật bởi nhân viên trên prod → chạy song song KiotViet 5-7 ngày → mới ngắt hẳn.
+- User xác nhận deploy prod. Hỏi lại `AskUserQuestion` xác nhận rõ 2 bước (migration + code) trước khi chạy — user chọn "làm cả 2 bước".
+- Chạy `scripts/apply-migrations.sh --prod` → 3 migration 038-040 áp thành công vào DB prod thật (sửa RPC `delete_pos_order_tx`).
+- Chạy `scripts/deploy-imac.sh` → build + restart app prod thành công. Health-check `https://cfobrain.phucsang.com.vn/health` và `https://app.phucsang.com.vn/health` đều 200 OK.
+- Cập nhật TODO.md: 4 mục (`SYNC-FORCE-RESURRECT-0819`, `PURCHASE-NCC-UUID-0819`, `SYNC-TIMEOUT-COLD-0819`, `DEBT-AMOUNT-COL-0818`) đổi từ "Chưa áp dụng prod" → "Đã deploy prod 2026-08-19".
+- **Lưu ý quan trọng chưa làm**: fix đã sống trên prod nhưng **chưa có ai re-test thật trên prod** theo đúng nguyên tắc checklist gốc (chỉ tick khi nhân viên thật thao tác trên production). Đây là việc còn lại tiếp theo.
+- Files: `docs/05-process/TODO.md`.
+- Đã áp dụng prod (lần đầu trong đợt fix này).
+
 ### 2026-08-19 (6) — Test nốt 5 mục checklist còn thiếu (giảm giá dòng SP, bán nợ cộng dồn, thu nợ, double-submit, đổi hàng) + phát hiện & sửa tạm SYNC-TIMEOUT-COLD-0819
 
 - Tiếp tục checklist `docs/06-evaluation/CHECKLIST_TEST_THUC_TE_THAY_KIOTVIET.md` các mục còn dang dở từ trước: giảm giá theo % và số tiền cố định cho 1 dòng sản phẩm, bán nợ đơn thứ 2 cho cùng khách (cộng dồn), thu nợ một phần, double-submit khi bán nợ, đổi hàng có chênh giá. Cả 5 mục **PASS**, verify qua SQL trực tiếp (`docker exec supabase-db-dev psql` qua SSH iMac) và/hoặc UI trang Khách hàng thật.

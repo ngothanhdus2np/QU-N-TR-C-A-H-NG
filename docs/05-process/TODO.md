@@ -18,7 +18,7 @@
 > **CHƯA đóng hẳn — cần thiết kế lại đúng** trước khi bật lại: cần cờ "pending-sync"/tombstone cho từng bản ghi (đánh dấu rõ "được tạo lúc offline, chưa từng gửi lên server" khác với "đã đồng bộ rồi") thay vì suy luận từ việc so sánh ID hiện có trên server. Tắt tạm đồng nghĩa: nếu người dùng thao tác thật khi mất mạng, dữ liệu đó sẽ nằm im trong cache local và **không tự động đẩy lên khi có mạng lại** — cần cơ chế khác thay thế (ví dụ dựa vào queue `cfo_brain_pos_queue` sẵn có, vốn không có vấn đề này vì nó lưu đúng "thao tác cần gửi" chứa lệnh chưa hoàn thành, không phải "so khớp ID").
 > `npm test` 448/448 sạch, `tsc --noEmit` sạch. Đã deploy dev.
 > Files: `hooks/useAppData.ts` (dòng ~539-548, khối "Sync Force").
-> Chưa áp dụng prod.
+> **Đã deploy prod 2026-08-19** (code fix, không cần migration — Sync Force chỉ là client-side flag).
 >
 > **Phát hiện bổ sung khi verify (cùng buổi)**: sau khi tắt Sync Force, dữ liệu server đã an toàn nhưng UI trang Khách hàng vẫn hiển thị sai "Nợ hiện tại" (185.000 thay vì 35.000 đúng) cho thiết bị có cache cũ — điều tra sâu xác nhận gốc rễ THẬT SỰ nằm ở `mergeBy()` trong `services/dataMapper.ts:101-125` (code offline-first fallback, bị `.claude/rules/codebase.md` khóa không được xóa): nhánh "local có, cloud không có → giữ lại" chạy VÔ ĐIỀU KIỆN mỗi lần `fetchData` (không chỉ manual refresh như Sync Force), tự ghi lại vào cache (`localStorage['cfo_brain_local_data']` + IndexedDB) mỗi lần fetch nên tự lặp vĩnh viễn, không TTL. Audit tiếp xác nhận: **có 1 lỗ hổng thật khiến nhánh này cần thiết** — hàm `updateData()` (`hooks/useAppData.ts:801-870`, dùng bởi ~10 module: chi phí, khuyến mãi, khách hàng POS, nhân sự, Shopee, cài đặt POS...) **không** enqueue vào `cfo_brain_pos_queue` khi ghi lỗi mạng (khác với `updateSurgical`/`applyRevenueDelta`/`pushBatch` đã làm đúng) — dữ liệu tạo lúc offline qua các module này chỉ "sống" nhờ `mergeBy` giữ lại.
 > **Đã sửa (bước 1/2)**: `updateData()` giờ enqueue đúng khi gặp lỗi mạng (`isRetryableSyncError`) — `deleteItem` khi có `idToRemove`, `pushBatch` (toàn bộ `uniqueList`) khi upsert hàng loạt — cùng pattern với 3 hàm kia. Verify thật trên dev: mock lỗi mạng cho bảng `expenses` → thêm 1 phiếu chi qua UI Sổ quỹ → xác nhận op `pushBatch` xuất hiện đúng trong `cfo_brain_pos_queue` (IndexedDB) → khôi phục mạng thật + dispatch sự kiện `online` → queue tự động drain, rỗng lại → SQL xác nhận bản ghi **đã thực sự có trên server** (`expense_records`). Dọn dữ liệu test sau khi verify.
@@ -35,7 +35,7 @@
 > **Đã sửa**: Bỏ hẳn fallback `'ncc-le'` — khi không chọn NCC, không tạo `SupplierDebtRecord` (guard `supplier &&` trên cả 2 nhánh: nhập hàng và trả hàng nhập). Không tạo công nợ NCC ảo, phiếu nhập vẫn lưu bình thường (hiển thị "NCC vãng lai" — display fallback, không đụng).
 > **Verify thật trên dev**: tạo phiếu nhập 1 SP không chọn NCC → lưu thành công (mã `d990e5bb...`), `inventory_transactions` ghi đúng loại Import/completed, **không** phát sinh dòng nào trong `supplier_debts`. Đã verify golden path (có chọn NCC) trước đó vẫn đúng.
 > Files: `components/purchase/PurchaseOrdersContainer.tsx` (2 nhánh: nhập hàng ~962, trả hàng nhập ~1137).
-> Chưa deploy prod — chỉ dev theo quy ước.
+> **Đã deploy prod 2026-08-19.**
 
 ### [x] 🟡 SYNC-TIMEOUT-COLD-0819 — Cold-sync (cache rỗng) dễ timeout khi catalog lớn — POS hiện "Hệ thống chưa có sản phẩm" *(tăng timeout tạm 2026-08-19, dev — cần tối ưu đúng sau)*
 
@@ -45,7 +45,7 @@
 > **CHƯA đóng hẳn — cần tối ưu đúng**: 120s vẫn chỉ là tăng timeout, chưa giải quyết gốc rễ (số round-trip thật gấp ~4 lần dự tính do lệch `SUPABASE_PAGE_SIZE` vs `PGRST_DB_MAX_ROWS`). Hướng xử lý đúng: (1) sửa `SUPABASE_PAGE_SIZE` xuống 1000 để khớp giới hạn server thật (giảm code confusion, không giảm số round-trip), hoặc (2) tăng `PGRST_DB_MAX_ROWS` trên server nếu hạ tầng cho phép, hoặc (3) chạy các trang song song thay vì tuần tự trong `fetchAllRows`/`fetchRecentPosOrders`. Rủi ro vận hành thật nếu không sửa: nhân viên dùng máy/trình duyệt mới, hoặc cache bị xóa (crash, dọn trình duyệt) → có thể thấy POS trống liên tục nếu mạng chậm hơn dev.
 > `npm test` sạch, `tsc --noEmit` sạch. Đã deploy dev.
 > Files: `hooks/useAppData.ts` (dòng ~525-530, `FETCH_TIMEOUT_MS`).
-> Chưa áp dụng prod.
+> **Đã deploy prod 2026-08-19** (timeout tăng áp dụng chung, chưa tối ưu gốc rễ — xem mục "CHƯA đóng hẳn" ở trên).
 
 ### [x] 🔴 DEBT-AMOUNT-COL-0818 — Thiếu cột `pos_customers.debt_amount` — xóa đơn có khách hàng đính kèm THẤT BẠI 100% trên CẢ DEV LẪN PROD *(xong 2026-08-19, dev)*
 
@@ -59,7 +59,7 @@
 > **Đã dọn sạch dữ liệu test** trên dev (đơn test, `customer_debt_history`, `inventory_transactions`, tồn kho SP test — khôi phục đúng giá trị gốc 10). Không đụng dữ liệu thật.
 > Files: `supabase_migrations/038_fix_delete_pos_order_debt_amount.sql`, `039_fix_delete_pos_order_ambiguous_id.sql`, `040_fix_delete_pos_order_null_status.sql`, `services/apiService.ts:139`.
 > `npm test` 448/448 sạch. Deploy dev xong (rsync+build+restart), health-check OK.
-> Chưa áp dụng prod — cả 3 migration + code fix cần chạy lại thủ công trên prod khi user yêu cầu (prod đang có CẢ 3 bug y hệt).
+> **Đã deploy prod 2026-08-19**: chạy `scripts/apply-migrations.sh --prod` (3 migration 038-040 áp thành công) rồi `scripts/deploy-imac.sh` (code fix). Health-check `cfobrain.phucsang.com.vn` + `app.phucsang.com.vn` đều 200 OK. Chưa re-test thật trên prod sau deploy (cần chạy lại checklist thật trên prod bởi nhân viên theo đúng nguyên tắc checklist).
 
 ### [x] 🟢 PAYROLL-CELL-CLEAR-0818 — Không xoá được ô Chấm công/Tăng ca/Doanh số/Khấu trừ *(xong 2026-08-18)*
 
