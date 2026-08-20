@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-20 (6) — Commit + deploy prod (POS owner-staff, giữ giỏ hàng, UX, fix payroll hủy chốt lương)
+
+- Commit `27868f1` gộp 9 file: 4 việc POS trong phiên này (owner-staff pseudo, dropdown tự đóng, ẩn PTTT khi giỏ trống, fix mất giỏ hàng khi chuyển trang) + `components/PayrollManager.tsx` (fix hủy chốt lương không xóa được trên server — đã sửa từ trước phiên này, user xác nhận gộp chung). Push lên `feat/online-audit-shopee`.
+- User xác nhận qua `AskUserQuestion` trước khi deploy prod (không có migration SQL, chỉ code frontend).
+- Chạy `scripts/deploy-imac.sh` → build + restart thành công. Health-check `https://app.phucsang.com.vn/health` và `https://cfobrain.phucsang.com.vn/health` đều 200 OK.
+- Files: (xem commit `27868f1`).
+- Đã deploy prod 2026-08-20.
+
 ### 2026-08-20 (5) — Fix mất giỏ hàng/hóa đơn khi chuyển trang rồi quay lại POS
 
 - User báo lỗi: có sản phẩm trong giỏ (hoặc nhiều hóa đơn có sản phẩm) mà chuyển sang trang khác rồi quay lại POS thì mất sạch.
