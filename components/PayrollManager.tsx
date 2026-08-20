@@ -354,20 +354,33 @@ const PayrollManager: React.FC<Props> = ({
     if (payrollToUndo) {
       const regularExpenseDesc = `Chi lương tháng ${month.split('-').reverse().join('/')} - ${payrollToUndo.employeeName}`;
       const settlementExpenseDesc = `Quyết toán lương nghỉ việc - ${payrollToUndo.employeeName}`;
-      onUpdateData(
-        'expenses',
-        data.expenses.filter(e => e.description !== regularExpenseDesc && e.description !== settlementExpenseDesc)
+      // Phải truyền idToRemove để updateData() gọi đúng deleteItem — chỉ gửi lại mảng đã
+      // lọc bớt (không kèm id) chỉ upsert phần còn lại, KHÔNG xóa dòng cũ trên server
+      // (server không tự suy luận "thiếu trong mảng = cần xóa"). Bug thật: hủy chốt lương
+      // trước đây chỉ xóa được ở UI, dòng payroll/expense/staffPerformance vẫn sống trên
+      // server → khóa lương tháng đó vẫn còn hiệu lực dù giao diện báo đã hủy chốt.
+      const remainingExpenses = data.expenses.filter(
+        e => e.description !== regularExpenseDesc && e.description !== settlementExpenseDesc
+      );
+      data.expenses
+        .filter(e => e.description === regularExpenseDesc || e.description === settlementExpenseDesc)
+        .forEach(e => onUpdateData('expenses', remainingExpenses, e.id));
+
+      const perfToUndo = (data.staffPerformance || []).find(
+        pf => pf.month === month && pf.employeeId === employeeId
       );
       onUpdateData(
         'staffPerformance',
         (data.staffPerformance || []).filter(
           pf => !(pf.month === month && pf.employeeId === employeeId)
-        )
+        ),
+        perfToUndo?.id
       );
     }
     onUpdateData(
       'payroll',
-      data.payroll.filter(p => !(p.month === month && p.employeeId === employeeId))
+      data.payroll.filter(p => !(p.month === month && p.employeeId === employeeId)),
+      payrollToUndo?.id
     );
   };
 

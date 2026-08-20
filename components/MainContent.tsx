@@ -1134,6 +1134,12 @@ const MainContent: React.FC<MainContentProps> = ({
   };
 
   const isPosActive = activeTab === 'pos';
+  // Giữ POSComputer mounted sau lần đầu ghé trang — chỉ ẩn/hiện bằng CSS khi chuyển tab khác,
+  // để giỏ hàng/danh sách hóa đơn (state trong usePOSState) không bị mất khi quay lại POS.
+  const [hasMountedPos, setHasMountedPos] = useState(isPosActive);
+  useEffect(() => {
+    if (isPosActive) setHasMountedPos(true);
+  }, [isPosActive]);
   const isGoodsActive =
     activeTab === 'goods' || activeTab === 'goods-pricing' || activeTab === 'goods-warranty';
   const isStaffActive = activeTab === 'staff' || activeTab === 'staff-ledger';
@@ -1159,9 +1165,10 @@ const MainContent: React.FC<MainContentProps> = ({
           <DashboardEodBanner report={eodReport} onDismiss={() => setEodDismissed(true)} />
         </div>
       )}
-      {isPosActive && (
+      {hasMountedPos && (
         <div
           style={{
+            display: isPosActive ? 'flex' : 'none',
             flex: '1 1 0',
             minHeight: 0,
             flexDirection: 'column',

@@ -428,6 +428,8 @@ kpiMax = mean(top 20% performers)
 - `≥ kpiMin` → **Safety**
 - `< kpiMin` → **Under**
 
+**Attribution chủ cửa hàng**: ô chọn người bán trên POS có 1 lựa chọn giả `OWNER_STAFF_ID` = `'OWNER'` (tên hiển thị "Ngô Thành Du" — `OWNER_STAFF_NAME`, `components/shared/staff.ts`) — dùng khi chủ cửa hàng tự bán mà không muốn gắn doanh số cho một nhân viên thật. Đây KHÔNG phải bản ghi trong bảng `employees` nên không lọt vào `mean`/`variance`/`kpiMin`/`kpiMax` ở trên hay vào `totalStoreSales` ở mục 5.4 — `buildPosSalesRecordsForDate`/`buildPosSalesRecordUpsertsForDate` (`src/lib/posSalesAttribution.ts`) lọc bỏ các dòng `employeeId === OWNER_STAFF_ID` trước khi ghi vào bảng `sales_records`. Riêng báo cáo cuối ngày (`EndOfDayReport` → `calculateStaffSalesForDate`) vẫn hiển thị đúng dòng "Ngô Thành Du" để đối soát tổng doanh thu trong ngày.
+
 ### 5.4 Xếp hạng nhân viên
 
 > Source: `businessLogic.payroll.ts` → `calculateStaffRanking()`

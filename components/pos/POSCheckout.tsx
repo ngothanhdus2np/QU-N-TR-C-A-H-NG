@@ -412,6 +412,18 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
 }) => {
   const [showPaymentMore, setShowPaymentMore] = React.useState(false);
   const [showStaffDropdown, setShowStaffDropdown] = React.useState(false);
+  const staffDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showStaffDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (staffDropdownRef.current && !staffDropdownRef.current.contains(e.target as Node)) {
+        setShowStaffDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showStaffDropdown]);
   const resolvedPaymentSettings = normalizePOSPaymentSettings(paymentSettings);
   const canUseSplitPayment = resolvedPaymentSettings.allowSplitPayment;
   const isSplitPaymentActive = canUseSplitPayment && useSplitPayment;
@@ -507,7 +519,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
     >
       {/* Active User Header */}
       <div className="px-4 h-10 flex items-center justify-between bg-white border-b border-slate-100">
-        <div className="relative flex items-center gap-2 group">
+        <div ref={staffDropdownRef} className="relative flex items-center gap-2 group">
           <button
             type="button"
             onClick={() => setShowStaffDropdown(value => !value)}
@@ -830,6 +842,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
               </div>
             )}
 
+            {hasCheckoutItems && (
             <div className="pt-1 space-y-3">
               {/* Toggle Split Payment */}
               <div className="flex items-center justify-between px-2 py-1">
@@ -1060,6 +1073,7 @@ const POSCheckout: React.FC<POSCheckoutProps> = ({
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
       </div>

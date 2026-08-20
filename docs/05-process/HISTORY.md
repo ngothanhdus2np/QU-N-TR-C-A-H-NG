@@ -3,6 +3,45 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-20 (5) — Fix mất giỏ hàng/hóa đơn khi chuyển trang rồi quay lại POS
+
+- User báo lỗi: có sản phẩm trong giỏ (hoặc nhiều hóa đơn có sản phẩm) mà chuyển sang trang khác rồi quay lại POS thì mất sạch.
+- **Nguyên nhân**: `MainContent.tsx:1162` render `POSComputer` theo kiểu `{isPosActive && (<div>...</div>)}` — mỗi lần rời trang POS, component bị **unmount hoàn toàn**, state `tabs` (giỏ hàng, danh sách hóa đơn, ghi chú...) sống trong hook `usePOSState` (chỉ là `useState` nội bộ, không persist) bị hủy sạch. Quay lại POS = mount lại từ đầu = reset về 1 hóa đơn trống. Phát hiện thú vị: hạ tầng `isActive` (dùng để tạm dừng phím tắt `usePOSKeyboard.ts` khi không active) đã có sẵn — chỉ chưa được nối đúng ở điểm mount.
+- **Đã sửa**: `MainContent.tsx` thêm state `hasMountedPos` (latch — một khi đã ghé POS lần đầu thì luôn `true`), đổi render POS từ unmount/mount theo `isPosActive` sang **luôn giữ mounted sau lần đầu, chỉ ẩn/hiện bằng `display: isPosActive ? 'flex' : 'none'`**. Không mount ngay từ đầu app (giữ lazy-load như cũ) — chỉ ngừng unmount sau khi đã mount lần đầu.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev: gõ ghi chú test vào ô "Ghi chú đơn hàng" ở POS → chuyển qua "Tổng quan" → "Phân tích" → quay lại "Bán hàng" → xác nhận ghi chú còn nguyên (đại diện cho toàn bộ state `tabs` gồm giỏ hàng + danh sách hóa đơn, cùng cơ chế). Đã dọn dữ liệu test sau khi verify. Đã deploy dev.
+- Files: `components/MainContent.tsx`.
+
+### 2026-08-20 (4) — Ẩn "Phương thức thanh toán" khi giỏ hàng chưa có sản phẩm
+
+- User yêu cầu ẩn toàn bộ khối "Phương thức thanh toán" (radio Tiền mặt/Chuyển khoản/Thẻ/Ví, chia nhiều PTTT, gợi ý tiền mặt nhanh, tiền thừa, ghi nợ) khi giỏ hàng (`cart`) chưa có sản phẩm nào — trước đây luôn hiện dù trống.
+- `components/pos/POSCheckout.tsx`: wrap khối này (dòng ~845-1075) bằng điều kiện `hasCheckoutItems` (biến có sẵn, cùng biến đang dùng để disable nút "Thanh toán").
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev: giỏ hàng trống → xác nhận khối "Phương thức thanh toán" biến mất, chỉ còn "Khách đưa". **Chưa verify được chiều ngược lại** (có sản phẩm → hiện lại) vì catalog dev hiện trống ("Hệ thống chưa có sản phẩm"), không thêm được sản phẩm thật qua UI để test — độ tin cậy dựa trên việc dùng lại đúng `hasCheckoutItems` (đã được kiểm chứng qua các phiên test trước cho nút thanh toán). Đã deploy dev.
+- Files: `components/pos/POSCheckout.tsx`.
+
+### 2026-08-20 (3) — Dropdown chọn người bán POS tự đóng khi click ra ngoài
+
+- User yêu cầu dropdown chọn người bán (`POSCheckout.tsx`) tự đóng khi bấm ra ngoài thay vì giữ nguyên. Thêm `staffDropdownRef` + listener `mousedown` trên `document` (đóng khi click nằm ngoài vùng ref), theo đúng pattern đã dùng ở `components/marketing/ProductContentTab.tsx`.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev: mở dropdown → xác nhận hiện đủ 2 lựa chọn → click ra vùng sản phẩm ngoài dropdown → xác nhận dropdown tự đóng.
+- Files: `components/pos/POSCheckout.tsx`.
+
+### 2026-08-20 (2) — Đổi tên hiển thị pseudo-staff "Chủ cửa hàng" → "Ngô Thành Du"
+
+- User yêu cầu đổi tên hiển thị của lựa chọn người bán giả (thêm ở mục trước) từ "Chủ cửa hàng" thành "Ngô Thành Du". Chỉ đổi `OWNER_STAFF_NAME` (`components/shared/staff.ts`) — không đụng label "Chủ cửa hàng" ở hệ thống vai trò tài khoản đăng nhập (`LoginPage.tsx`/`TopNav.tsx`/`AccountsTab.tsx`, khác chức năng).
+- Cập nhật `docs/business-knowledge/FORMULAS.md` mục 5.3 khớp tên hiển thị mới.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev: xóa `localStorage`, reload `/pos` → mặc định hiện đúng "Ngô Thành Du". Đã deploy dev.
+- Files: `components/shared/staff.ts`, `docs/business-knowledge/FORMULAS.md`.
+
+### 2026-08-20 (1) — POS-OWNER-STAFF-0820: thêm "Chủ cửa hàng" làm người bán giả, tách khỏi KPI nhân viên
+
+- User hỏi vì sao đăng nhập tài khoản chủ (ADMIN) nhưng POS hiện tên "PHẠM THỊ VUI" ở ô chọn người bán. Điều tra: ô này tách biệt khỏi tài khoản đăng nhập, lưu `localStorage`; khi chưa chọn ai, code cũ tự gán về nhân viên hoạt động đầu tiên — hiện chỉ có 1 người (Phạm Thị Vui) nên mọi doanh số tự bán bị âm thầm tính nhầm cho cô ấy.
+- User hỏi thêm nhớ có "Ngô Thành Du" — tra SQL trực tiếp `employees` (dev + prod qua SSH iMac): chỉ có Phạm Thị Vui (đang làm) + Cẩm Tú (nghỉ 2026-02-10), không có Ngô Thành Du trong bảng. Tên đó chỉ tồn tại trong `DEFAULT_POS_STAFF` (`POSComputer.tsx`) — mapping legacy chỉ hiển thị tên đúng cho đơn hàng CŨ trước khi có bảng employees.
+- User xác nhận không muốn thêm "Ngô Thành Du" (chủ cửa hàng) vào bảng `employees` (sợ lệch KPI/lương nhân viên thật) → thống nhất hướng: thêm lựa chọn "Chủ cửa hàng" giả trong ô chọn người bán, không lưu vào bảng `employees`.
+- Đã implement: `OWNER_STAFF_ID`/`OWNER_STAFF_NAME` (`components/shared/staff.ts`); `POSComputer.tsx` thêm pseudo-option vào `salespersonOptions`, đổi mặc định tự chọn từ "nhân viên đầu tiên" sang "Chủ cửa hàng"; `posSalesAttribution.ts` lọc bỏ `OWNER_STAFF_ID` khỏi `sales_records` (KPI/lương) nhưng vẫn giữ trong báo cáo cuối ngày.
+- Verify thật trên dev: xóa `localStorage`, reload POS → mặc định đúng "Chủ cửa hàng"; dropdown đúng 2 lựa chọn (Cẩm Tú không hiện vì đã nghỉ); chọn Phạm Thị Vui → lưu đúng ID thật `EMP-441676`.
+- `npm test` 448/448 sạch, `tsc --noEmit` sạch. Cập nhật `docs/business-knowledge/FORMULAS.md` mục 5.3.
+- Files: `components/shared/staff.ts`, `components/pos/POSComputer.tsx`, `src/lib/posSalesAttribution.ts`, `docs/business-knowledge/FORMULAS.md`, `docs/05-process/TODO.md`.
+- Chưa deploy prod (chỉ dev, theo quy tắc mặc định).
+
 ### 2026-08-19 (8) — Điều tra mất dữ liệu doanh số/tăng ca tháng 7 trên prod + xác nhận PAYROLL-CELL-CLEAR-0818 đã vô tình lên prod
 
 - User báo không thấy dữ liệu Chấm công và Doanh số nhân viên tháng 7 khi xem trên `app.phucsang.com.vn`. Điều tra qua SQL trực tiếp trên DB prod (SSH iMac):

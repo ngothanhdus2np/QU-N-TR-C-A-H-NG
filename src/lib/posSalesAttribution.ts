@@ -1,4 +1,5 @@
 import type { Employee, POSOrder, POSOrderItem, SalesRecord } from '../../types';
+import { OWNER_STAFF_ID } from '../../components/shared/staff';
 
 export interface StaffSalesSummary {
   employeeId: string;
@@ -193,7 +194,11 @@ export const buildPosSalesRecordsForDate = (
   date: string,
   employees: Employee[] = []
 ): SalesRecord[] => {
-  const summaries = calculateStaffSalesForDate(orders, date, employees);
+  // Chủ cửa hàng (OWNER_STAFF_ID) không phải nhân viên thật — loại khỏi sổ doanh số dùng
+  // cho KPI/xếp hạng/lương, chỉ giữ lại cho báo cáo cuối ngày (calculateStaffSalesForDate).
+  const summaries = calculateStaffSalesForDate(orders, date, employees).filter(
+    row => row.employeeId !== OWNER_STAFF_ID
+  );
   const posRecordIds = new Set(summaries.map(row => `pos-sales-${date}-${row.employeeId}`));
   const preservedSales = existingSales.filter(
     record => !record.id.startsWith(`pos-sales-${date}-`) || posRecordIds.has(record.id)
@@ -216,7 +221,9 @@ export const buildPosSalesRecordUpsertsForDate = (
   date: string,
   employees: Employee[] = []
 ): SalesRecord[] =>
-  calculateStaffSalesForDate(orders, date, employees).map(row => ({
+  calculateStaffSalesForDate(orders, date, employees)
+    .filter(row => row.employeeId !== OWNER_STAFF_ID)
+    .map(row => ({
     id: `pos-sales-${date}-${row.employeeId}`,
     employeeId: row.employeeId,
     employeeName: row.employeeName,
