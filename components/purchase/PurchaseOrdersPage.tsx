@@ -16,12 +16,14 @@ import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
 } from '../shared';
-import { InventoryTransaction, Supplier } from '../../types';
+import { Employee, InventoryTransaction, Supplier } from '../../types';
 import { useToast } from '../ui/Toast';
+import { resolveStaffName } from '../shared/staff';
 
 interface PurchaseOrdersPageProps {
   transactions: InventoryTransaction[];
   suppliers: Supplier[];
+  employees?: Employee[];
   onCreatePurchase: () => void;
   onDeletePurchase: (id: string) => void | Promise<void>;
   onExportPurchases: (transactions: InventoryTransaction[]) => void;
@@ -36,6 +38,7 @@ type SortDirection = 'asc' | 'desc';
 const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
   transactions,
   suppliers,
+  employees = [],
   onCreatePurchase,
   onDeletePurchase,
   onExportPurchases,
@@ -383,7 +386,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
           label="Người tạo"
           options={uniqueCreators.map(creator => ({
             value: creator,
-            label: creator,
+            label: resolveStaffName(creator, employees) || creator,
             count: purchaseOrders.filter(o => o.staffId === creator).length,
           }))}
           selected={creatorFilter}
@@ -647,6 +650,7 @@ const PurchaseOrdersPage: React.FC<PurchaseOrdersPageProps> = ({
           expandedRowContent={viewingOrder ? (
             <PurchaseOrderInlineDetail
               transaction={viewingOrder}
+              employees={employees}
               onClose={() => setViewingOrderId(null)}
               onExport={onExportPurchases}
               onPrint={onPrintPurchase}

@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, X } from 'lucide-react';
-import { InventoryTransaction } from '../../types';
+import { Employee, InventoryTransaction } from '../../types';
+import { resolveStaffName } from '../shared/staff';
 
 interface PurchaseOrderDetailModalProps {
   transaction: InventoryTransaction;
+  employees?: Employee[];
   onClose: () => void;
   onExport: (transactions: InventoryTransaction[]) => void;
   onPrint: (transaction: InventoryTransaction) => void;
@@ -21,6 +23,7 @@ const getLineTotal = (item: InventoryTransaction['items'][number]) => {
 
 const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
   transaction,
+  employees = [],
   onClose,
   onExport,
   onPrint,
@@ -78,7 +81,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
             </div>
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
               <p className="text-[9px] font-normal uppercase text-slate-400">Người tạo</p>
-              <p className="text-sm font-normal text-slate-800 mt-1">{transaction.staffId || '—'}</p>
+              <p className="text-sm font-normal text-slate-800 mt-1">{resolveStaffName(transaction.staffId, employees) || '—'}</p>
             </div>
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
               <p className="text-[9px] font-normal uppercase text-slate-400">Số dòng</p>

@@ -27,7 +27,7 @@ import {
 } from '../../src/lib';
 import { EXCEL_MAX_ROWS, assertSafeExcelBuffer, assertSafeExcelFile } from '../../src/lib/excelSafety';
 import { useToast } from '../ui/Toast';
-import { getCurrentStaffId } from '../shared/staff';
+import { getCurrentStaffId, resolveStaffName } from '../shared/staff';
 import { exportToExcel, printToPDF } from '../../services/exportService';
 import { usePurchaseFormState } from '../../hooks/usePurchaseFormState';
 import { usePurchaseQuickModals } from '../../hooks/usePurchaseQuickModals';
@@ -175,7 +175,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           'Mã phiếu': purchase.referenceId || purchase.id,
           'Ngày tạo': new Date(purchase.date).toLocaleString('vi-VN'),
           'Nhà cung cấp': purchase.supplierName || 'NCC vãng lai',
-          'Người tạo': purchase.staffId || '',
+          'Người tạo': resolveStaffName(purchase.staffId, data.employees || []) || '',
           'Trạng thái': purchase.status || 'completed',
           SKU: item.sku || '',
           'Tên hàng': item.name || item.productId,
@@ -229,7 +229,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     printToPDF(
       `${title} ${documentCode}`,
       `<h1>${title} ${documentCode}</h1>
-       <p class="subtitle">Ngày tạo: ${new Date(transaction.date).toLocaleString('vi-VN')} | NCC: ${transaction.supplierName || 'NCC vãng lai'} | Người tạo: ${transaction.staffId || ''}</p>
+       <p class="subtitle">Ngày tạo: ${new Date(transaction.date).toLocaleString('vi-VN')} | NCC: ${transaction.supplierName || 'NCC vãng lai'} | Người tạo: ${resolveStaffName(transaction.staffId, data.employees || []) || ''}</p>
        <table>
         <thead><tr><th>SKU</th><th>Tên hàng</th><th class="text-right">SL</th><th class="text-right">Đơn giá</th><th class="text-right">Giảm</th><th class="text-right">Thành tiền</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1314,7 +1314,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             onCompletePurchase={handleCompletePurchase}
             onSaveDraft={handleSaveDraft}
             onDownloadTemplate={handleDownloadTemplate}
-            staffLabel={getCurrentStaffId()}
+            staffLabel={resolveStaffName(getCurrentStaffId(), data.employees || []) || getCurrentStaffId()}
             invoiceStatus={invoiceStatus}
             setInvoiceStatus={setInvoiceStatus}
             invoiceFile={invoiceFile}
@@ -1352,7 +1352,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             onCompleteReturn={handleCompleteReturn}
             onSaveDraft={handleSaveReturnDraft}
             onDownloadTemplate={handleDownloadReturnTemplate}
-            staffLabel={getCurrentStaffId()}
+            staffLabel={resolveStaffName(getCurrentStaffId(), data.employees || []) || getCurrentStaffId()}
           />
         )}
       </>
@@ -1366,6 +1366,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           <PurchaseOrdersPage
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
+            employees={data.employees || []}
             onCreatePurchase={() => setShowPurchaseForm(true)}
             onDeletePurchase={handleDeletePurchase}
             onExportPurchases={handleExportPurchases}
@@ -1377,6 +1378,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           <PurchaseReturnsPage
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
+            employees={data.employees || []}
             onCreateReturn={() => setShowPurchaseReturnForm(true)}
             onViewDetail={handleViewDetail}
             onDeleteReturn={handleDeleteReturn}
@@ -1387,6 +1389,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
       {selectedPurchaseDetail && selectedPurchaseDetail.type === 'PurchaseReturn' && (
         <PurchaseOrderDetailModal
           transaction={selectedPurchaseDetail}
+          employees={data.employees || []}
           onClose={() => setSelectedPurchaseDetail(null)}
           onExport={handleExportReturns}
           onPrint={handlePrintPurchase}

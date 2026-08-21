@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, Copy, Tag, MoreHorizontal, Ban, ExternalLink, Save, RotateCcw } from 'lucide-react';
-import { InventoryTransaction } from '../../types';
+import { Employee, InventoryTransaction } from '../../types';
 import { supabase } from '../../services/supabase';
+import { resolveStaffName } from '../shared/staff';
 
 interface PurchaseOrderInlineDetailProps {
   transaction: InventoryTransaction;
+  employees?: Employee[];
   onClose: () => void;
   onExport: (transactions: InventoryTransaction[]) => void;
   onPrint: (transaction: InventoryTransaction) => void;
@@ -46,6 +48,7 @@ const statusLabel: Record<string, { label: string; cls: string }> = {
 
 const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
   transaction,
+  employees = [],
   onClose,
   onExport,
   onPrint,
@@ -126,12 +129,12 @@ const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
           <div className="flex flex-wrap items-start gap-x-10 gap-y-2 px-6 pb-3 text-sm">
             <div className="flex items-center gap-2">
               <span className="text-slate-400 text-xs">Người tạo:</span>
-              <span className="text-slate-700">{transaction.staffId || '—'}</span>
+              <span className="text-slate-700">{resolveStaffName(transaction.staffId, employees) || '—'}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-slate-400 text-xs">Người nhập:</span>
               <span className="text-slate-700 bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-xs">
-                {transaction.staffId || '—'}
+                {resolveStaffName(transaction.staffId, employees) || '—'}
               </span>
             </div>
             <div className="flex items-center gap-2">

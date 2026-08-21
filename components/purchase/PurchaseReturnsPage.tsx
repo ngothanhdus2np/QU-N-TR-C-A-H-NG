@@ -14,12 +14,14 @@ import {
   StatusBadge,
   TableColumn,
 } from '../shared';
-import { InventoryTransaction, Supplier } from '../../types';
+import { Employee, InventoryTransaction, Supplier } from '../../types';
 import { useToast } from '../ui/Toast';
+import { resolveStaffName } from '../shared/staff';
 
 interface PurchaseReturnsPageProps {
   transactions: InventoryTransaction[];
   suppliers: Supplier[];
+  employees?: Employee[];
   onCreateReturn: () => void;
   onViewDetail: (transaction: InventoryTransaction) => void;
   onDeleteReturn: (id: string) => void | Promise<void>;
@@ -52,6 +54,7 @@ const getTransactionAmount = (transaction: InventoryTransaction) =>
 const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
   transactions,
   suppliers,
+  employees = [],
   onCreateReturn,
   onViewDetail,
   onDeleteReturn,
@@ -291,7 +294,7 @@ const PurchaseReturnsPage: React.FC<PurchaseReturnsPageProps> = ({
           label="Người tạo"
           options={uniqueCreators.map(creator => ({
             value: creator,
-            label: creator,
+            label: resolveStaffName(creator, employees) || creator,
             count: purchaseReturns.filter(transaction => transaction.staffId === creator).length,
           }))}
           selected={creatorFilter}

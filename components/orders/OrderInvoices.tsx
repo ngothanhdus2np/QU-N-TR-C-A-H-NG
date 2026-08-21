@@ -23,6 +23,7 @@ import { AppData, AppDataSurgicalUpdate, Employee } from '../../types';
 import { apiService } from '../../services/apiService';
 import { FilterSection, FilterDateRange, FilterCheckboxGroup } from '../shared';
 import { openPrintInvoice } from '../pos/printInvoiceFromTemplate';
+import { resolveStaffName } from '../shared/staff';
 
 interface OrderInvoicesProps {
   orders: AppData['posOrders'];
@@ -69,10 +70,7 @@ function formatOrderDateTime(value: string) {
 }
 
 export default function OrderInvoices({ orders, customers, storeName, storeAddress, storePhone, employees = [], onUpdateSurgical, onDeleteOrders, onEditInPOS, onReturnInPOS }: OrderInvoicesProps) {
-  const getStaffName = (staffId?: string) => {
-    if (!staffId) return undefined;
-    return employees.find(e => e.id === staffId)?.name;
-  };
+  const getStaffName = (staffId?: string) => resolveStaffName(staffId, employees);
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState(() => {
     const d = new Date();
