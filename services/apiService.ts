@@ -267,6 +267,7 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
     const resDateVal = item.resignedDate;
     return {
       id: item.id,
+      employee_code: item.employeeCode || item.employee_code,
       name: item.name,
       position: item.position,
       join_date: item.joinDate || item.join_date,
@@ -628,6 +629,41 @@ const fetchCustomerDebtHistory = async (): Promise<{ data: any[]; error: { messa
   }
 };
 
+export type CustomerStatRow = {
+  customerId: string;
+  sold: number;
+  returned: number;
+  debt: number;
+  lastTransactionDate: string | null;
+  spentInRange: number;
+};
+
+// Cache TTL ngắn (60s) — tránh gọi lại /api/data/customer-stats mỗi lần user chuyển tab qua lại
+// trang Khách hàng (MainContent.tsx render CustomerListPage qua switch(activeTab) nên unmount/
+// mount lại mỗi lần chuyển tab). Key theo dateFrom|dateTo vì route hỗ trợ lọc "spent in range".
+const CUSTOMER_STATS_CACHE_TTL_MS = 60_000;
+const customerStatsCache = new Map<string, { data: CustomerStatRow[]; expiresAt: number }>();
+
+const fetchCustomerStats = async (dateFrom?: string, dateTo?: string): Promise<CustomerStatRow[]> => {
+  const cacheKey = `${dateFrom || ''}|${dateTo || ''}`;
+  const cached = customerStatsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const params = new URLSearchParams();
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  const qs = params.toString();
+  const res = await fetch(`/api/data/customer-stats${qs ? `?${qs}` : ''}`, { headers: await getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+  const data: CustomerStatRow[] = json?.data || [];
+  customerStatsCache.set(cacheKey, { data, expiresAt: Date.now() + CUSTOMER_STATS_CACHE_TTL_MS });
+  return data;
+};
+
+// Gọi sau khi tạo/sửa/xóa đơn hàng hoặc ghi công nợ, để lần fetch tiếp theo không trả số liệu cũ.
+const invalidateCustomerStatsCache = () => customerStatsCache.clear();
+
 type PosOrderPageFilters = {
   search?: string;
   startDate?: string;
@@ -746,34 +782,6 @@ const buildPosOrdersSummaryQuery = (
   return applyPosOrderFilters(query, filters, ignoredColumns);
 };
 
-// Slim columns — chỉ cần cho customer stats, skip `items` (JSON nặng) và các cột không dùng
-const CUSTOMER_STAT_COLUMNS = [
-  'id', 'order_code', 'date', 'customer_id',
-  'total_amount', 'final_amount', 'discount',
-  'cash_received', 'is_return',
-].join(',');
-
-const mapCustomerStatRow = (o: any): POSOrder => ({
-  id: o.id,
-  orderCode: o.order_code || '',
-  date: o.date,
-  customerId: o.customer_id || undefined,
-  customerName: undefined,
-  items: [],
-  totalAmount: Number(o.total_amount || 0),
-  discount: Number(o.discount || 0),
-  finalAmount: Number(o.final_amount || 0),
-  paymentMethod: 'Cash',
-  staffId: '',
-  pointsEarned: 0,
-  isReturn: inferIsReturnOrder(
-    o.order_code || '',
-    Number(o.final_amount || 0),
-    o.is_return ?? undefined
-  ),
-  cashReceived: o.cash_received != null ? Number(o.cash_received) : undefined,
-});
-
 export const apiService = {
   // Fetch orders theo khoảng ngày — dùng cho báo cáo nằm ngoài bootstrap window
   async fetchPosOrdersByDateRange(startDate: string, endDate: string): Promise<{ data: POSOrder[]; error: any }> {
@@ -797,24 +805,23 @@ export const apiService = {
     }
   },
 
-  // Fetch toàn bộ orders cho customer stats — slim columns (skip `items` JSON nặng), sequential pagination
-  async fetchAllOrdersForCustomerStats(): Promise<POSOrder[]> {
-    const allRows: any[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('pos_orders')
-        .select(CUSTOMER_STAT_COLUMNS)
-        // Soft-delete: thống kê khách hàng không tính đơn đã hủy
-        .or('status.is.null,status.neq.cancelled')
-        .order('id', { ascending: true })
-        .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
-      if (error) return allRows.map(mapCustomerStatRow);
-      const page = data || [];
-      allRows.push(...page);
-      if (page.length === 0) return allRows.map(mapCustomerStatRow);
-      offset += page.length;
-    }
+  // Tổng hợp per-customer (sold/returned/debt/last-transaction) — tính ở server (routes/data.ts
+  // GET /api/data/customer-stats) thay vì kéo hết pos_orders về client, xem CustomerListPage.tsx.
+  fetchCustomerStats,
+  invalidateCustomerStatsCache,
+
+  // Đơn hàng của 1 khách hàng — dùng khi mở chi tiết khách (CustomerDetailPage), chỉ fetch theo
+  // customerId thay vì kéo hết pos_orders như trước, vì mỗi lần chỉ xem 1 khách.
+  async fetchOrdersForCustomer(customerId: string): Promise<POSOrder[]> {
+    const { data, error } = await supabase
+      .from('pos_orders')
+      .select(POS_ORDER_BOOTSTRAP_COLUMNS)
+      .eq('customer_id', customerId)
+      .or('status.is.null,status.neq.cancelled')
+      .order('date', { ascending: false })
+      .limit(DEFAULT_LIMIT);
+    if (error) throw error;
+    return (data || []).map(mapPosOrderRow);
   },
 
   // Fetch riêng shopee_inventory_out (lazy, không block main sync timeout)

@@ -548,6 +548,37 @@ async function auditLog(
   }
 }
 
+// Lấy TOÀN BỘ dòng khớp query, phân trang song song (Promise.all) — nhanh hơn nhiều so với
+// await tuần tự từng trang khi bảng lớn (độ trễ ~1 round-trip thay vì cộng dồn N round-trip).
+// PostgREST tự cap mỗi request tối đa PGRST_DB_MAX_ROWS dòng BẤT KỂ range yêu cầu rộng bao
+// nhiêu (xác nhận thực tế trên DB dev: range(0,4999) chỉ trả về 1000 dòng) — nên KHÔNG hardcode
+// kích thước trang. Trang đầu tiết lộ đúng cap thực tế qua độ dài dữ liệu trả về, các trang sau
+// dùng đúng con số đó để không bỏ sót dòng nào dù cap đổi (không phụ thuộc cấu hình cụ thể).
+async function fetchAllPagedRows<T>(
+  buildRangedQuery: (start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown; count?: number | null }>,
+  requestedPageSize: number
+): Promise<T[]> {
+  const { data: first, error, count } = await buildRangedQuery(0, requestedPageSize - 1);
+  if (error) throw error;
+  const rows = first || [];
+  const actualPageSize = rows.length;
+  if (actualPageSize === 0 || (count || 0) <= actualPageSize) return rows;
+
+  const totalPages = Math.ceil((count as number) / actualPageSize);
+  const restPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, i) => {
+      const start = (i + 1) * actualPageSize;
+      return buildRangedQuery(start, start + actualPageSize - 1);
+    })
+  );
+  const all = [...rows];
+  for (const page of restPages) {
+    if (page.error) throw page.error;
+    all.push(...(page.data || []));
+  }
+  return all;
+}
+
 export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestHandler): Router {
   const router = Router();
 
@@ -566,6 +597,120 @@ export function createDataRouter(supabase: SupabaseClient, requireAuth: RequestH
     } catch (error: unknown) {
       console.error('[DataRoute] customer-debt-history read failed:', error);
       writeErrorResponse(res, 'Không thể đọc lịch sử công nợ');
+    }
+  });
+
+  // Tổng hợp per-customer (sold/returned/debt/last-transaction/spent-in-range) ở server —
+  // trước đây trang Danh sách khách hàng (CustomerListPage.tsx) tự kéo TOÀN BỘ pos_orders về
+  // client rồi tính bằng JS mỗi lần mở trang, khiến trang này chậm hơn hẳn trang Hàng hoá dù
+  // ít bản ghi hơn (hàng hoá dùng data đã bootstrap sẵn + phân trang, không fetch thêm).
+  // Công thức PHẢI khớp với calcOrderRevenue (src/lib/reportCalculations.ts) và debtStats cũ ở
+  // CustomerListPage.tsx — nếu sửa 1 bên phải soát lại bên kia (xem FORMULAS.md).
+  router.get('/api/data/customer-stats', requireAuth, async (req, res) => {
+    try {
+      const dateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : null;
+      const dateTo = typeof req.query.date_to === 'string' ? req.query.date_to : null;
+      const hasRange = !!(dateFrom || dateTo);
+      const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+      const toTime = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
+
+      type Agg = {
+        sold: number;
+        returned: number;
+        orderDebt: number;
+        lastTransactionDate: string;
+        spentInRange: number;
+      };
+      const agg = new Map<string, Agg>();
+      const orderIds = new Set<string>();
+      const getAgg = (id: string): Agg => {
+        let a = agg.get(id);
+        if (!a) {
+          a = { sold: 0, returned: 0, orderDebt: 0, lastTransactionDate: '', spentInRange: 0 };
+          agg.set(id, a);
+        }
+        return a;
+      };
+
+      // Phân trang song song (fetchAllPagedRows, xem định nghĩa đầu file) thay vì tuần tự —
+      // bảng pos_orders shop này có thể lên tới hàng chục nghìn dòng, phân trang tuần tự (await
+      // từng trang) cộng dồn độ trễ mạng đáng kể. requestedPageSize chỉ là gợi ý ban đầu —
+      // fetchAllPagedRows tự đo kích thước trang THỰC TẾ PostgREST trả về (có thể bị cap thấp
+      // hơn, vd PGRST_DB_MAX_ROWS) nên không bao giờ bỏ sót dòng dù server cap bao nhiêu.
+      const REQUEST_PAGE_SIZE = 5000;
+
+      const processOrder = (o: any) => {
+        const cid = String(o.customer_id);
+        orderIds.add(String(o.id));
+        const a = getAgg(cid);
+        const totalAmount = Math.abs(Number(o.total_amount) || 0);
+        const finalAmount = Number(o.final_amount) || 0;
+        const cashReceived = Number(o.cash_received) || 0;
+        const isReturn = o.is_return === true;
+
+        if (isReturn) {
+          a.returned += totalAmount;
+          a.orderDebt += -(finalAmount - cashReceived);
+        } else {
+          const discount = o.discount != null
+            ? Math.abs(Number(o.discount))
+            : Math.max(0, totalAmount - finalAmount);
+          a.sold += totalAmount - discount;
+          a.orderDebt += finalAmount - cashReceived;
+          if (hasRange) {
+            const t = new Date(o.date).getTime();
+            if (Number.isFinite(t) && (fromTime == null || t >= fromTime) && (toTime == null || t <= toTime)) {
+              a.spentInRange += totalAmount - discount;
+            }
+          }
+        }
+        const date = String(o.date || '');
+        if (date && date > a.lastTransactionDate) a.lastTransactionDate = date;
+      };
+
+      const orderRows = await fetchAllPagedRows(
+        (start, end) => supabase
+          .from('pos_orders')
+          .select('id, customer_id, date, total_amount, discount, final_amount, cash_received, is_return, status', { count: 'exact' })
+          .not('customer_id', 'is', null)
+          .or('status.is.null,status.neq.cancelled')
+          .range(start, end),
+        REQUEST_PAGE_SIZE
+      );
+      orderRows.forEach(processOrder);
+
+      // Bước 2: merge customer_debt_history — bỏ bản ghi 'debt' đã gắn 1 order còn tồn tại
+      // (tránh đếm trùng khoản nợ đó, vì đã tính qua finalAmount - cashReceived ở trên).
+      const processDebtRow = (r: any) => {
+        if (!r.customer_id) return;
+        if (r.type === 'debt' && r.order_id && orderIds.has(String(r.order_id))) return;
+        const delta = r.type === 'repay' ? -Number(r.amount || 0) : Number(r.amount || 0);
+        const a = getAgg(String(r.customer_id));
+        a.orderDebt += delta;
+      };
+
+      const debtRows = await fetchAllPagedRows(
+        (start, end) => supabase
+          .from('customer_debt_history')
+          .select('customer_id, order_id, type, amount', { count: 'exact' })
+          .range(start, end),
+        REQUEST_PAGE_SIZE
+      );
+      debtRows.forEach(processDebtRow);
+
+      const result = Array.from(agg.entries()).map(([customerId, a]) => ({
+        customerId,
+        sold: a.sold,
+        returned: a.returned,
+        debt: Math.max(0, a.orderDebt),
+        lastTransactionDate: a.lastTransactionDate || null,
+        spentInRange: hasRange ? a.spentInRange : 0,
+      }));
+
+      res.json({ data: result });
+    } catch (error: unknown) {
+      console.error('[DataRoute] customer-stats read failed:', error);
+      writeErrorResponse(res, 'Không thể tổng hợp số liệu khách hàng');
     }
   });
 

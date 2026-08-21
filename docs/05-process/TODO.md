@@ -7,6 +7,14 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟡 CUSTOMER-STATS-SERVER-0821 — Trang Khách hàng chậm hơn Hàng hoá dù ít bản ghi hơn *(xong 2026-08-21, dev)*
+
+> User hỏi tại sao trang Khách hàng tải chậm hơn Hàng hoá dù ít bản ghi hơn — nguyên nhân: `CustomerListPage.tsx` (cũ) tự fetch toàn bộ `pos_orders` + tính debt/revenue bằng JS trên client mỗi lần mở trang (và mở lại mỗi lần chuyển tab, vì `MainContent.tsx` unmount/mount theo `switch(activeTab)`).
+> **Đã sửa**: chuyển tổng hợp sang route `GET /api/data/customer-stats` (server, `routes/data.ts`) + cache client 60s (`apiService.fetchCustomerStats`) + chi tiết 1 khách fetch riêng (`fetchOrdersForCustomer`) thay vì dùng chung `allOrders` toàn shop. Thêm index `idx_pos_orders_customer_id`. Xem chi tiết đầy đủ ở HISTORY.md 2026-08-21.
+> `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev — số liệu đúng.
+> Files: `routes/data.ts`, `services/apiService.ts`, `components/customers/CustomerListPage.tsx`, `components/MainContent.tsx`, `supabase_setup.sql`, `supabase_migrations/042_customer_stats_indexes.sql`, `docs/business-knowledge/FORMULAS.md`.
+> **Chưa đụng prod** — chờ user yêu cầu riêng theo quy tắc mặc định chỉ làm trên dev.
+
 ### [x] 🟡 POS-OWNER-STAFF-0820 — Thêm "Chủ cửa hàng" làm lựa chọn người bán giả trên POS, tách khỏi bảng `employees` *(xong 2026-08-20, dev)*
 
 > **Bối cảnh phát hiện**: User hỏi vì sao đăng nhập bằng tài khoản chủ (ADMIN) nhưng POS lại hiện tên nhân viên "PHẠM THỊ VUI" ở ô chọn người bán. Điều tra xác nhận: ô này (`salespersonId`/`salespersonName` gắn từng dòng SP, dùng cho KPI/hiệu năng) tách biệt hoàn toàn khỏi tài khoản đăng nhập, lưu trong `localStorage` trình duyệt (`components/shared/staff.ts`). Khi chưa từng chọn ai, `POSComputer.tsx:322-325` (cũ) **tự động gán về nhân viên đang hoạt động đầu tiên** — hiện tại chỉ có 1 người (Phạm Thị Vui), nên mọi doanh số tự bán không chọn ai bị âm thầm tính cho cô ấy. Tra SQL xác nhận bảng `employees` (dev + prod) chỉ có 2 dòng: Phạm Thị Vui (đang làm) và Cẩm Tú (nghỉ 2026-02-10) — không có "Ngô Thành Du" (tên chỉ tồn tại trong `DEFAULT_POS_STAFF`, một mapping legacy chỉ dùng hiển thị tên đúng cho đơn hàng CŨ trước khi có bảng employees, không phải nhân viên hiện tại).

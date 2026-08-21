@@ -369,7 +369,6 @@ const MainContent: React.FC<MainContentProps> = ({
         return (
           <CustomerListPage
             customers={data.posCustomers || []}
-            orders={activePosOrders}
             customerDebtHistory={data.customerDebtHistory || []}
             onUpdateCustomers={newList => updateData('posCustomers', newList)}
             onUpdateSurgical={updateSurgical}

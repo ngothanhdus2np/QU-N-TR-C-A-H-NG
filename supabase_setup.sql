@@ -977,6 +977,9 @@ ALTER TABLE staff_performance ALTER COLUMN employee_id TYPE TEXT;
 -- dữ liệu không hề vào DB, mất vĩnh viễn nếu xoá cache trình duyệt.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT;
 
+-- 2026-08-20: Mã nhân viên hiển thị dạng NV001, NV002... tự tăng (khác id UUID nội bộ).
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_code TEXT;
+
 -- ============================================================
 -- Product Cost History — 2026-05-31
 -- Lưu lịch sử giá vốn theo thời gian để tính COGS chính xác
@@ -2491,3 +2494,10 @@ DROP POLICY IF EXISTS "shopee_ads_wallet_transactions_authenticated" ON shopee_a
 CREATE POLICY "shopee_ads_wallet_transactions_authenticated"
   ON shopee_ads_wallet_transactions FOR ALL TO authenticated USING (true) WITH CHECK (true);
 REVOKE ALL ON shopee_ads_wallet_transactions FROM anon;
+
+-- Index (migration 042, 2026-08-21): phục vụ route GET /api/data/customer-stats — tổng hợp
+-- sold/returned/debt/last-transaction theo customer_id ở server thay vì client kéo hết
+-- pos_orders về tính (trang Danh sách khách hàng trước đây chậm vì lý do này).
+-- Không index customer_debt_history: role migration không phải owner của bảng đó trên DB
+-- staging, và bảng này vốn đã nhỏ/giới hạn (.limit(5000) ở route customer-debt-history cũ).
+CREATE INDEX IF NOT EXISTS idx_pos_orders_customer_id ON pos_orders(customer_id);

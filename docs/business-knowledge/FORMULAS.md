@@ -583,8 +583,8 @@ So sánh bằng `new Date().getTime()`, lấy đơn có ngày lớn nhất.
 
 ### 8.6 Nợ từng đơn hàng (Order Debt)
 
-> Source: `CustomerListPage.tsx` → `debtStats` useMemo
-> Source: `CustomerDetailPage.tsx` → `customerDebt`
+> Source: `routes/data.ts` → `GET /api/data/customer-stats` (tính ở server, xem ghi chú 8.7)
+> Source: `CustomerDetailPage.tsx` → `customerDebt` (vẫn tính client, vì đã có sẵn orders của riêng khách đó qua `apiService.fetchOrdersForCustomer`)
 
 ```
 orderDebt = finalAmount - cashReceived        (đơn bán thường)
@@ -598,8 +598,18 @@ Trong đó:
 
 ### 8.7 Nợ hiện tại của khách hàng (Customer Debt)
 
-> Source: `CustomerListPage.tsx` → `debtStats`; `CustomerDetailPage.tsx` → `customerDebt` + `DebtTab`
-> **Ba nơi PHẢI dùng đúng cùng công thức này** — nếu lệch, danh sách/chi tiết/bảng lịch sử hiện số khác nhau.
+> Source: `routes/data.ts` → `GET /api/data/customer-stats` (route backend, dùng cho trang Danh sách khách hàng)
+> Source: `CustomerDetailPage.tsx` → `customerDebt` + `DebtTab` (tính client, riêng cho 1 khách)
+> **Hai nơi PHẢI dùng đúng cùng công thức này** — nếu lệch, danh sách/chi tiết/bảng lịch sử hiện số khác nhau.
+>
+> **[2026-08-21] Chuyển tính toán từ client sang server**: trước đây `CustomerListPage.tsx` tự kéo
+> TOÀN BỘ `pos_orders` về trình duyệt rồi tính `debtStats`/`orderStats`/`lastTransactionMap` bằng JS
+> mỗi lần mở trang — đây là lý do trang Khách hàng chậm hơn hẳn trang Hàng hoá dù ít bản ghi hơn
+> (Hàng hoá dùng data đã bootstrap sẵn + phân trang, không fetch thêm). Nay route
+> `GET /api/data/customer-stats` (service-role, `requireAuth`) làm đúng công thức bên dưới bằng
+> Node, phân trang `pos_orders` + `customer_debt_history` ở server, trả về 1 dòng tổng hợp/khách
+> thay vì toàn bộ đơn hàng. `apiService.fetchCustomerStats()` cache kết quả 60s (tránh gọi lại mỗi
+> lần chuyển tab qua lại). Công thức toán học KHÔNG đổi, chỉ đổi nơi tính.
 
 ```
 recordDelta  = Σ ( type === 'repay' ? -amount : +amount )
@@ -619,7 +629,7 @@ Quy tắc:
 
 ### 8.8 Tổng nợ trang danh sách khách hàng
 
-> Source: `CustomerListPage.tsx` → `totals.debt`
+> Source: `CustomerListPage.tsx` → `totals.debt` (cộng từ `debtStats` Map, dữ liệu lấy từ `GET /api/data/customer-stats`)
 
 ```
 totalDebt = Σ customerDebt    cho tất cả khách trong danh sách đã filter
@@ -629,7 +639,7 @@ Vì `debtStats` Map chỉ chứa khách có nợ > 0, khách nợ ≤ 0 tự đ�
 
 ### 8.9 Tổng doanh thu trang danh sách
 
-> Source: `CustomerListPage.tsx` → `totals.spent`, `totals.net`
+> Source: `CustomerListPage.tsx` → `totals.spent`, `totals.net` (cộng từ `orderStats` Map, dữ liệu lấy từ `GET /api/data/customer-stats`)
 
 ```
 totalSpent = Σ (orderStats[customerId].sold)       cho tất cả khách đã filter

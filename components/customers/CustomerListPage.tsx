@@ -25,14 +25,12 @@ import {
 } from '../shared';
 import type { POSCustomer, POSOrder, CustomerDebtRecord, AppDataSurgicalUpdate } from '../../types';
 import { generateId } from '../../src/lib';
-import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import POSQuickCustomerModal, { type QuickCustomerForm } from '../pos/POSQuickCustomerModal';
 import CustomerDetailPage from './CustomerDetailPage';
-import { apiService } from '../../services/apiService';
+import { apiService, type CustomerStatRow } from '../../services/apiService';
 
 interface Props {
   customers: POSCustomer[];
-  orders: POSOrder[];
   customerDebtHistory?: CustomerDebtRecord[];
   onUpdateCustomers: (list: POSCustomer[]) => void;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
@@ -98,20 +96,25 @@ const emptyPOSForm = (): QuickCustomerForm => ({
 
 const CustomerListPage: React.FC<Props> = ({
   customers,
-  orders,
   customerDebtHistory = [],
   onUpdateCustomers,
   onUpdateSurgical,
   isLoading = false,
 }) => {
-  const [allOrders, setAllOrders] = useState<typeof orders>(orders);
-  const [ordersLoading, setOrdersLoading] = useState(true);
+  // Số liệu bán/nợ/giao dịch cuối theo khách hàng — tính sẵn ở server (GET /api/data/customer-stats)
+  // thay vì kéo hết pos_orders về client rồi tính bằng JS (nguyên nhân trang này từng chậm hơn
+  // hẳn trang Hàng hoá dù ít bản ghi hơn). Xem docs/business-knowledge/FORMULAS.md.
+  const [statsMap, setStatsMap] = useState<Map<string, CustomerStatRow>>(new Map());
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    apiService.fetchAllOrdersForCustomerStats().then(data => {
-      if (data.length > 0) setAllOrders(data);
-      setOrdersLoading(false);
-    }).catch(() => setOrdersLoading(false));
+    let cancelled = false;
+    apiService.fetchCustomerStats().then(rows => {
+      if (cancelled) return;
+      setStatsMap(new Map(rows.map(r => [r.customerId, r])));
+      setStatsLoading(false);
+    }).catch(() => { if (!cancelled) setStatsLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const [search, setSearch] = useState('');
@@ -149,6 +152,19 @@ const CustomerListPage: React.FC<Props> = ({
   const [formData, setFormData] = useState<Partial<POSCustomer>>(emptyForm());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Đơn hàng chi tiết chỉ fetch cho 1 khách khi mở dòng chi tiết (CustomerDetailPage) — không
+  // còn cần kéo toàn bộ orders của shop chỉ để hiển thị lịch sử của 1 khách.
+  const [detailOrders, setDetailOrders] = useState<POSOrder[]>([]);
+  useEffect(() => {
+    const customerId = detailCustomer?.id;
+    if (!customerId) { setDetailOrders([]); return; }
+    let cancelled = false;
+    apiService.fetchOrdersForCustomer(customerId).then(data => {
+      if (!cancelled) setDetailOrders(data);
+    }).catch(() => { if (!cancelled) setDetailOrders([]); });
+    return () => { cancelled = true; };
+  }, [detailCustomer?.id]);
+
   // Stable code map (sorted by id for consistency)
   const codeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -158,69 +174,41 @@ const CustomerListPage: React.FC<Props> = ({
     return map;
   }, [customers]);
 
-  // Per-customer order stats
+  // Per-customer order stats — lấy trực tiếp từ statsMap (đã tổng hợp sẵn ở server)
   const orderStats = useMemo(() => {
     const map = new Map<string, { sold: number; returned: number }>();
-    allOrders.forEach(o => {
-      if (!o.customerId) return;
-      const cur = map.get(o.customerId) || { sold: 0, returned: 0 };
-      if (o.isReturn) cur.returned += Math.abs(Number(o.totalAmount) || 0);
-      else cur.sold += calcOrderRevenue(o);
-      map.set(o.customerId, cur);
-    });
+    statsMap.forEach((s, id) => map.set(id, { sold: s.sold, returned: s.returned }));
     return map;
-  }, [allOrders]);
+  }, [statsMap]);
 
-  // Per-customer debt from orders: debt = finalAmount - cashReceived, floored at 0 (no negative/credit)
+  // Per-customer debt — server đã merge customer_debt_history và floor tại 0, xem
+  // routes/data.ts GET /api/data/customer-stats (công thức khớp debtStats cũ ở đây).
   const debtStats = useMemo(() => {
-    const raw = new Map<string, number>();
-    const orderIds = new Set<string>();
-    allOrders.forEach(o => {
-      if (!o.customerId) return;
-      orderIds.add(o.id);
-      const finalAmt = Number(o.finalAmount) || 0;
-      const cashRecv = Number(o.cashReceived) || 0;
-      const orderDebt = o.isReturn ? -(finalAmt - cashRecv) : (finalAmt - cashRecv);
-      if (orderDebt !== 0) {
-        raw.set(o.customerId, (raw.get(o.customerId) || 0) + orderDebt);
-      }
-    });
-    customerDebtHistory.forEach(r => {
-      if (!r.customerId) return;
-      // Bản ghi 'debt' phát sinh từ 1 đơn hàng cụ thể (orderId khớp đơn còn tồn tại) đã được
-      // tính qua finalAmount - cashReceived ở trên — cộng thêm ở đây sẽ đếm trùng khoản nợ đó.
-      // Chỉ cộng: điều chỉnh nợ thủ công (không gắn đơn) và mọi khoản thu nợ (repay không được
-      // phản ánh lại vào order.cashReceived nên chỉ nằm ở customerDebtHistory).
-      if (r.type === 'debt' && r.orderId && orderIds.has(r.orderId)) return;
-      const delta = r.type === 'repay' ? -r.amount : r.amount;
-      raw.set(r.customerId, (raw.get(r.customerId) || 0) + delta);
-    });
     const map = new Map<string, number>();
-    raw.forEach((v, k) => { if (v > 0) map.set(k, v); });
+    statsMap.forEach((s, id) => { if (s.debt > 0) map.set(id, s.debt); });
     return map;
-  }, [allOrders, customerDebtHistory]);
+  }, [statsMap]);
 
   const lastTransactionMap = useMemo(() => {
     const map = new Map<string, string>();
-    allOrders.forEach(order => {
-      if (!order.customerId) return;
-      const prev = map.get(order.customerId);
-      if (!prev || new Date(order.date).getTime() > new Date(prev).getTime()) {
-        map.set(order.customerId, order.date);
-      }
-    });
+    statsMap.forEach((s, id) => { if (s.lastTransactionDate) map.set(id, s.lastTransactionDate); });
     return map;
-  }, [allOrders]);
+  }, [statsMap]);
 
-  const spentInRangeMap = useMemo(() => {
-    const map = new Map<string, number>();
-    if (!spentFrom && !spentTo) return map;
-    allOrders.forEach(order => {
-      if (!order.customerId || order.isReturn || !inDateRange(order.date, spentFrom, spentTo)) return;
-      map.set(order.customerId, (map.get(order.customerId) || 0) + calcOrderRevenue(order));
-    });
-    return map;
-  }, [allOrders, spentFrom, spentTo]);
+  // Spent-in-range chỉ tính khi user chọn khoảng ngày — gọi lại /api/data/customer-stats kèm
+  // date_from/date_to thay vì lọc allOrders trên client.
+  const [spentInRangeMap, setSpentInRangeMap] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!spentFrom && !spentTo) { setSpentInRangeMap(new Map()); return; }
+    let cancelled = false;
+    apiService.fetchCustomerStats(spentFrom, spentTo).then(rows => {
+      if (cancelled) return;
+      const map = new Map<string, number>();
+      rows.forEach(r => { if (r.spentInRange > 0) map.set(r.customerId, r.spentInRange); });
+      setSpentInRangeMap(map);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [spentFrom, spentTo]);
 
   // Filtered + sorted list
   const filtered = useMemo(() => {
@@ -1107,7 +1095,7 @@ const CustomerListPage: React.FC<Props> = ({
           <div className="flex items-center gap-6 px-5 py-2 bg-white border-b border-slate-100 text-xs text-slate-500">
             <span className="flex-1 text-slate-700 font-medium flex items-center gap-2">
               {filtered.length} khách hàng
-              {ordersLoading && (
+              {statsLoading && (
                 <span className="text-indigo-500 flex items-center gap-1">
                   <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -1148,7 +1136,7 @@ const CustomerListPage: React.FC<Props> = ({
               <CustomerDetailPage
                 customer={detailCustomer}
                 customerCode={codeMap.get(detailCustomer.id) || '—'}
-                orders={allOrders}
+                orders={detailOrders}
                 customerDebtHistory={customerDebtHistory}
                 orderStats={orderStats.get(detailCustomer.id)}
                 onClose={() => setDetailCustomer(null)}
