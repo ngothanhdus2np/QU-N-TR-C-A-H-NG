@@ -7,6 +7,13 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 NAV-HIDDEN-SOP-0821 — Menu "Hệ thống" (Quy chuẩn/Quy trình) bị ẩn ngoài ý muốn *(xong 2026-08-21, đã deploy prod)*
+
+> User tìm không thấy "quy chuẩn quy chế cửa hàng" từng thấy trước đây. Dữ liệu vẫn còn nguyên, chỉ do nhóm menu `title: 'Hệ thống'` (Cơ chế/Quy chuẩn/Quy trình/Biểu mẫu) bị đặt `hidden: true` trong `constants/navigation.ts` từ commit `421aab9` — có vẻ là tác dụng phụ ngoài ý muốn của đợt dọn UI trước, không phải chủ đích.
+> **Đã sửa**: xóa `hidden: true`. Verify thật trên dev qua URL `/sop-standards` và `/sop-workflows` — dữ liệu cũ hiện đầy đủ.
+> Files: `constants/navigation.ts`.
+> **Đã deploy prod 2026-08-21** — user xác nhận qua AskUserQuestion, đã push + chạy `deploy-imac.sh` thành công. Chưa verify bằng browser trên prod (trang yêu cầu đăng nhập thật, không tự nhập mật khẩu) — tin tưởng dựa trên cùng bundle đã verify trên dev.
+
 ### [x] 🟢 EMPLOYEE-CODE-CARD-0821 — Mã nhân viên tự tăng (NV001...) + in thẻ nhân viên + fix tooltip Sổ cái lương *(xong 2026-08-21, đã deploy prod)*
 
 > Phát hiện việc sửa dở uncommitted từ phiên trước (không ghi HISTORY/TODO) khi user yêu cầu kiểm tra. Đã verify chạy đúng trên dev và commit theo yêu cầu user.

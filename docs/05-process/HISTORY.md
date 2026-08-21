@@ -3,6 +3,15 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-21 (4) — Deploy prod: hiện lại menu "Hệ thống" (Quy chuẩn/Quy trình) bị ẩn ngoài ý muốn
+
+- User hỏi "quy chuẩn quy chế cửa hàng" trước đây từng thấy giờ tìm không ra. Điều tra xác nhận: dữ liệu vẫn còn nguyên (PDF gốc trong `public/knowledge-previews/`, các bản ghi `KnowledgeBaseArticle` quản lý qua `components/KnowledgeManager.tsx` + `StandardsWorkflowsTab.tsx`) — vấn đề nằm ở `constants/navigation.ts`: cả nhóm menu `title: 'Hệ thống'` (Cơ chế/Quy chuẩn/Quy trình/Biểu mẫu) bị đặt `hidden: true` từ commit `421aab9` ("apply 7-session audit batch"), có vẻ là tác dụng phụ ngoài ý muốn của đợt dọn UI chứ không phải quyết định chủ đích.
+- **Đã sửa**: xóa dòng `hidden: true` ở `constants/navigation.ts` (nhóm "Hệ thống").
+- Verify thật trên `dev.phucsang.com.vn` (điều hướng thẳng URL `/sop-standards` và `/sop-workflows` — `App.tsx` lấy `activeTab` trực tiếp từ URL path): cả 2 trang hiện đầy đủ dữ liệu cũ (Nội quy lao động, Nội quy tác phong ứng xử, Mẫu thông tin hợp đồng, Bản mô tả công việc, Tiêu chí thưởng phạt...).
+- User yêu cầu deploy prod ngay, xác nhận qua `AskUserQuestion` theo đúng quy tắc "luôn hỏi trước khi deploy prod". Đã push commit `17e7949` + chạy `scripts/deploy-imac.sh` — build/restart thành công. Không verify được bằng browser trên `cfobrain.phucsang.com.vn` vì trang yêu cầu đăng nhập thật (không tự nhập mật khẩu vào form theo nguyên tắc bảo mật) — tin tưởng dựa trên cùng 1 bundle code đã verify trên dev.
+- Files: `constants/navigation.ts`.
+- Đã deploy prod 2026-08-21.
+
 ### 2026-08-21 (3) — Deploy prod: fix tốc độ trang Khách hàng + mã nhân viên/thẻ in + fix tooltip Sổ cái lương
 
 - User xác nhận qua `AskUserQuestion` trước khi deploy prod, đồng ý gộp cả 2 việc (CUSTOMER-STATS-SERVER-0821 + EMPLOYEE-CODE-CARD-0821, commit `ded556f` + `afa24bd`) lên prod cùng lúc.
