@@ -7,22 +7,22 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
-### [x] 🟢 EMPLOYEE-CODE-CARD-0821 — Mã nhân viên tự tăng (NV001...) + in thẻ nhân viên + fix tooltip Sổ cái lương *(xong 2026-08-21, dev)*
+### [x] 🟢 EMPLOYEE-CODE-CARD-0821 — Mã nhân viên tự tăng (NV001...) + in thẻ nhân viên + fix tooltip Sổ cái lương *(xong 2026-08-21, đã deploy prod)*
 
 > Phát hiện việc sửa dở uncommitted từ phiên trước (không ghi HISTORY/TODO) khi user yêu cầu kiểm tra. Đã verify chạy đúng trên dev và commit theo yêu cầu user.
-> Mã nhân viên NV001... tự gán cho nhân sự chưa có mã, hiển thị thay UUID, thêm nút in thẻ nhựa (QR code, khổ 56×88mm). Migration `041_employees_employee_code_column.sql` đã chạy dev, **chưa chạy prod**.
+> Mã nhân viên NV001... tự gán cho nhân sự chưa có mã, hiển thị thay UUID, thêm nút in thẻ nhựa (QR code, khổ 56×88mm). Migration `041_employees_employee_code_column.sql`.
 > Riêng LedgerTab.tsx: sửa tooltip "Xem logic" từ hover sang bấm-để-mở (portal), tránh bị bảng cắt mất.
-> Chi tiết đầy đủ: HISTORY.md 2026-08-21 (2).
+> Chi tiết đầy đủ: HISTORY.md 2026-08-21 (2) và (3).
 > Files: `types.ts`, `services/dataMapper.ts`, `components/StaffManager.tsx`, `components/payroll/LedgerTab.tsx`, `components/staff/employeeIdCardPrint.ts`, `supabase_migrations/041_employees_employee_code_column.sql`.
-> **Chưa đụng prod** — chờ user yêu cầu riêng.
+> **Đã deploy prod 2026-08-21** — user xác nhận qua AskUserQuestion. Migration 041 đã chạy trên DB prod, verify thật trên `app.phucsang.com.vn` — mã "NV001" hiện đúng. Riêng nút "In thẻ nhân viên" chưa verify trực tiếp được bằng browser tự động (bị chặn popup/print) — cần verify thật khi có người dùng thao tác.
 
-### [x] 🟡 CUSTOMER-STATS-SERVER-0821 — Trang Khách hàng chậm hơn Hàng hoá dù ít bản ghi hơn *(xong 2026-08-21, dev)*
+### [x] 🟡 CUSTOMER-STATS-SERVER-0821 — Trang Khách hàng chậm hơn Hàng hoá dù ít bản ghi hơn *(xong 2026-08-21, đã deploy prod)*
 
 > User hỏi tại sao trang Khách hàng tải chậm hơn Hàng hoá dù ít bản ghi hơn — nguyên nhân: `CustomerListPage.tsx` (cũ) tự fetch toàn bộ `pos_orders` + tính debt/revenue bằng JS trên client mỗi lần mở trang (và mở lại mỗi lần chuyển tab, vì `MainContent.tsx` unmount/mount theo `switch(activeTab)`).
 > **Đã sửa**: chuyển tổng hợp sang route `GET /api/data/customer-stats` (server, `routes/data.ts`) + cache client 60s (`apiService.fetchCustomerStats`) + chi tiết 1 khách fetch riêng (`fetchOrdersForCustomer`) thay vì dùng chung `allOrders` toàn shop. Thêm index `idx_pos_orders_customer_id`. Xem chi tiết đầy đủ ở HISTORY.md 2026-08-21.
-> `npm test` 448/448 sạch, `tsc --noEmit` sạch. Verify thật trên dev — số liệu đúng.
+> `npm test` 448/448 sạch, `tsc --noEmit` sạch.
 > Files: `routes/data.ts`, `services/apiService.ts`, `components/customers/CustomerListPage.tsx`, `components/MainContent.tsx`, `supabase_setup.sql`, `supabase_migrations/042_customer_stats_indexes.sql`, `docs/business-knowledge/FORMULAS.md`.
-> **Chưa đụng prod** — chờ user yêu cầu riêng theo quy tắc mặc định chỉ làm trên dev.
+> **Đã deploy prod 2026-08-21** — verify thật trên `app.phucsang.com.vn`: `GET /api/data/customer-stats` chỉ mất 297ms, 250 khách hàng số liệu đúng.
 
 ### [x] 🟡 POS-OWNER-STAFF-0820 — Thêm "Chủ cửa hàng" làm lựa chọn người bán giả trên POS, tách khỏi bảng `employees` *(xong 2026-08-20, dev)*
 

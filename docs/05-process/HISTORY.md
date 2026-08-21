@@ -3,6 +3,18 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-21 (3) — Deploy prod: fix tốc độ trang Khách hàng + mã nhân viên/thẻ in + fix tooltip Sổ cái lương
+
+- User xác nhận qua `AskUserQuestion` trước khi deploy prod, đồng ý gộp cả 2 việc (CUSTOMER-STATS-SERVER-0821 + EMPLOYEE-CODE-CARD-0821, commit `ded556f` + `afa24bd`) lên prod cùng lúc.
+- Chạy `scripts/deploy-imac.sh`: `apply-migrations.sh --prod` chạy migration 041 (`employees.employee_code`) + 042 (`idx_pos_orders_customer_id`) thành công, build + restart thành công.
+- Health-check `https://cfobrain.phucsang.com.vn/health` và `https://app.phucsang.com.vn/health` đều 200 OK.
+- Verify thật trên `app.phucsang.com.vn` (prod thật, không phải dev):
+  - Trang Khách hàng: 250 khách hàng, số liệu đúng, `GET /api/data/customer-stats` chỉ mất **297ms**.
+  - Trang Nhân sự: mã "NV001" hiển thị đúng cho Phạm Thị Vui (migration 041 áp dụng đúng trên DB prod).
+  - Trang Hàng hoá: 9.174/15.010 hàng hoá, không lỗi.
+  - Không có console error ở cả 3 trang.
+- Đã deploy prod 2026-08-21.
+
 ### 2026-08-21 (2) — Commit việc sửa dở từ phiên trước: mã nhân viên NV001 + in thẻ nhân viên, fix tooltip Sổ cái lương
 
 - Phát hiện repo có nhiều file sửa dở, uncommitted từ phiên làm việc trước (không ghi HISTORY/TODO): `types.ts`, `services/dataMapper.ts`, `components/StaffManager.tsx`, `components/payroll/LedgerTab.tsx`, file mới `components/staff/employeeIdCardPrint.ts`, migration `041_employees_employee_code_column.sql` (untracked). User yêu cầu kiểm tra và hoàn tất.
