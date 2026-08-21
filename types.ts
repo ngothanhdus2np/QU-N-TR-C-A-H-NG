@@ -148,6 +148,7 @@ export interface TetCampaign {
 
 export interface Employee {
   id: string;
+  employeeCode?: string; // Mã nhân viên hiển thị dạng NV001, NV002... tự tăng, khác id (UUID nội bộ)
   name: string;
   position: string;
   joinDate: string;

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { PayrollRecord } from '../../types';
 import { BookOpen, Archive, RotateCcw, Printer, Info } from 'lucide-react';
 
@@ -10,12 +11,43 @@ interface Props {
 
 const money = (value?: number) => (value || 0).toLocaleString();
 
+const TOOLTIP_WIDTH = 256;
+
 const LedgerTab: React.FC<Props> = ({ payrolls, handleUndoPayroll, handlePrintPayslip }) => {
+  const [activeNote, setActiveNote] = useState<{ id: string; top: number; left: number; lines: string[] } | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
   const sortedPayrolls = [...payrolls].sort((a, b) => {
     const monthCompare = b.month.localeCompare(a.month);
     if (monthCompare !== 0) return monthCompare;
     return a.employeeName.localeCompare(b.employeeName, 'vi');
   });
+
+  const toggleNote = (id: string, note: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActiveNote((prev) => {
+      if (prev?.id === id) return null;
+      const overflowsRight = rect.right + 8 + TOOLTIP_WIDTH > window.innerWidth;
+      return {
+        id,
+        top: rect.top,
+        left: overflowsRight ? rect.left - TOOLTIP_WIDTH - 8 : rect.right + 8,
+        lines: note.split(' | '),
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!activeNote) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (tooltipRef.current?.contains(target)) return;
+      if ((target as HTMLElement).closest?.('[data-note-trigger]')) return;
+      setActiveNote(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeNote]);
 
   return (
     <div className="animate-in fade-in duration-500 space-y-8">
@@ -70,15 +102,15 @@ const LedgerTab: React.FC<Props> = ({ payrolls, handleUndoPayroll, handlePrintPa
                       <p className="text-sm font-normal text-slate-800">{p.employeeName}</p>
                       <p className="text-[9px] text-slate-400 font-normal uppercase">{p.isOfficial ? 'Chính thức' : 'Học việc'}</p>
                       {p.calculationNote && (
-                        <div className="mt-2 group/note relative">
-                          <div className="flex items-center gap-1 text-[8px] text-indigo-400 font-normal cursor-help">
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            data-note-trigger
+                            onClick={toggleNote(p.id, p.calculationNote)}
+                            className="flex items-center gap-1 text-[8px] text-indigo-400 font-normal cursor-pointer w-fit hover:text-indigo-600"
+                          >
                             <Info className="w-2.5 h-2.5" /> XEM LOGIC
-                          </div>
-                          <div className="absolute left-0 top-full mt-1 w-64 p-3 bg-slate-900 text-white rounded-xl text-[9px] font-normal leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-colors z-dropdown shadow-2xl border border-white/10">
-                            {p.calculationNote.split(' | ').map((line, i) => (
-                              <div key={i} className="mb-1">• {line}</div>
-                            ))}
-                          </div>
+                          </button>
                         </div>
                       )}
                     </td>
@@ -114,6 +146,20 @@ const LedgerTab: React.FC<Props> = ({ payrolls, handleUndoPayroll, handlePrintPa
           </table>
         </div>
       </div>
+
+      {activeNote &&
+        ReactDOM.createPortal(
+          <div
+            ref={tooltipRef}
+            style={{ position: 'fixed', top: activeNote.top, left: activeNote.left, width: TOOLTIP_WIDTH, zIndex: 9999 }}
+            className="max-h-72 overflow-y-auto p-3 bg-slate-900 text-white rounded-xl text-[9px] font-normal leading-relaxed shadow-2xl border border-white/10"
+          >
+            {activeNote.lines.map((line, i) => (
+              <div key={i} className="mb-1">• {line}</div>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

@@ -3,6 +3,16 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-21 (2) — Commit việc sửa dở từ phiên trước: mã nhân viên NV001 + in thẻ nhân viên, fix tooltip Sổ cái lương
+
+- Phát hiện repo có nhiều file sửa dở, uncommitted từ phiên làm việc trước (không ghi HISTORY/TODO): `types.ts`, `services/dataMapper.ts`, `components/StaffManager.tsx`, `components/payroll/LedgerTab.tsx`, file mới `components/staff/employeeIdCardPrint.ts`, migration `041_employees_employee_code_column.sql` (untracked). User yêu cầu kiểm tra và hoàn tất.
+- **EMPLOYEE-CODE-CARD-0821 — Mã nhân viên tự tăng + in thẻ nhân viên**: thêm cột `employees.employee_code` (migration 041, đã chạy tay trên DB dev từ trước — xác nhận qua SQL, cột đã tồn tại; **chưa chạy trên prod**). `types.ts` thêm field `Employee.employeeCode`. `StaffManager.tsx`: tự động gán mã `NV001, NV002...` cho nhân sự chưa có mã (theo ngày vào làm sớm nhất trước, không tái dùng số cũ để tránh trùng với nhân sự đã nghỉ/xóa), hiển thị mã NV thay UUID rút gọn ở cả 2 view Bảng/Thẻ, thêm nút in thẻ nhựa (khổ 56×88mm, `components/staff/employeeIdCardPrint.ts`, có QR code qua `qrcode.react` — đã có sẵn trong `package.json`). Thiết kế lại thẻ nhân viên: đổi màu emerald → indigo, thu nhỏ kích thước card.
+  - Verify thật trên dev: `/staff` → bảng hiện đúng "NV001" cho Phạm Thị Vui; chuyển view "Thẻ" → render đúng, có QR code, đúng giao diện mới. Riêng nút "In thẻ" (mở cửa sổ mới + `window.print()`) không verify được bằng browser tự động (bị chặn popup/print dialog trong môi trường test) — verify thay bằng chạy trực tiếp `buildEmployeeIdCardHtml()` qua Node, xác nhận sinh đúng HTML chứa tên + mã NV.
+- **LEDGER-NOTE-TOOLTIP-0821 — Fix tooltip "Xem logic" bị bảng cắt mất**: `LedgerTab.tsx` đổi tooltip ghi chú công thức lương từ hover (`group-hover`, bị `overflow` của bảng cắt mất khi dòng gần cuối) sang bấm-để-mở, render qua `ReactDOM.createPortal` ra `document.body`, tự tính vị trí theo `getBoundingClientRect()` (lật sang trái nếu tràn phải màn hình).
+- `tsc --noEmit` sạch, `npm test` 448/448 pass (các file này đã nằm trong working tree suốt các lần chạy tsc/test trước đó trong phiên, luôn pass).
+- Files: `types.ts`, `services/dataMapper.ts`, `components/StaffManager.tsx`, `components/payroll/LedgerTab.tsx`, `components/staff/employeeIdCardPrint.ts` (mới), `supabase_migrations/041_employees_employee_code_column.sql` (mới).
+- **Chưa đụng prod** (migration 041 chỉ mới chạy dev) — chờ user yêu cầu riêng.
+
 ### 2026-08-21 — Trang Khách hàng chậm hơn Hàng hoá dù ít bản ghi hơn (CUSTOMER-STATS-SERVER-0821)
 
 - User hỏi tại sao trang "Danh sách khách hàng" tải chậm hơn "Danh sách hàng hoá" dù ít bản ghi hơn. Điều tra xác nhận: `CustomerListPage.tsx` (cũ) mỗi lần mount tự fetch **toàn bộ** `pos_orders` (không cap, không giới hạn ngày) qua `apiService.fetchAllOrdersForCustomerStats()`, rồi tính `orderStats`/`debtStats`/`lastTransactionMap`/`spentInRangeMap` bằng JS trên client — trong khi `MainContent.tsx` render trang này qua `switch(activeTab)` nên unmount/mount lại (và fetch lại từ đầu) mỗi lần chuyển tab qua lại. `GoodsInventory` không có vấn đề này vì chỉ dùng data đã bootstrap sẵn (60 ngày) + phân trang render, không fetch thêm.

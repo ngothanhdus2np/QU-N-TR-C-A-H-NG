@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Employee, SalaryPolicy, AppData, StaffPerformanceRecord } from '../types';
 import {
   Plus,
@@ -19,7 +19,6 @@ import {
   Users,
   Target,
   Camera,
-  QrCode,
   Edit3,
   Fingerprint,
   Award,
@@ -32,6 +31,7 @@ import {
   Clock,
   Gavel,
   ListChecks,
+  Printer,
   // Fix: Missing Trophy import
   Trophy,
 } from 'lucide-react';
@@ -43,6 +43,8 @@ import {
   generateId,
 } from '../src/lib';
 import { buildStaffPerformanceLedger } from '../src/lib/staffPerformanceLedger';
+import { buildEmployeeIdCardHtml } from './staff/employeeIdCardPrint';
+import { QRCodeSVG } from 'qrcode.react';
 import { Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie } from 'recharts';
 import { useStaffManagerState } from '../hooks/useStaffManagerState';
 import { useToast } from './ui/Toast';
@@ -128,6 +130,33 @@ const PAYROLL_NAV_ITEMS = [
   { id: 'payroll-ledger', label: 'Sổ cái lương', icon: Landmark },
 ];
 
+const employeeCodeNumber = (code?: string): number => {
+  const match = code?.match(/^NV(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
+const nextEmployeeCode = (employees: Employee[]): string => {
+  const maxNum = employees.reduce((max, e) => Math.max(max, employeeCodeNumber(e.employeeCode)), 0);
+  return `NV${String(maxNum + 1).padStart(3, '0')}`;
+};
+
+// Gán mã NV001, NV002... cho nhân sự chưa có mã, theo thứ tự ngày vào làm sớm nhất trước.
+// Không dùng lại số đã cấp — luôn tiếp nối từ số lớn nhất từng dùng để tránh trùng mã với
+// nhân sự cũ đã nghỉ việc/bị xóa nhưng vẫn còn trong lịch sử lương/chấm công.
+const assignMissingEmployeeCodes = (employees: Employee[]): Employee[] => {
+  let maxNum = employees.reduce((max, e) => Math.max(max, employeeCodeNumber(e.employeeCode)), 0);
+  const missingIds = [...employees]
+    .filter(e => !e.employeeCode)
+    .sort((a, b) => a.joinDate.localeCompare(b.joinDate))
+    .map(e => e.id);
+  const codeById = new Map<string, string>();
+  missingIds.forEach(id => {
+    maxNum += 1;
+    codeById.set(id, `NV${String(maxNum).padStart(3, '0')}`);
+  });
+  return employees.map(e => (codeById.has(e.id) ? { ...e, employeeCode: codeById.get(e.id) } : e));
+};
+
 const StaffManager: React.FC<Props> = ({
   list,
   policies,
@@ -157,6 +186,15 @@ const StaffManager: React.FC<Props> = ({
   const [debtFilter, setDebtFilter] = useState<'all' | 'hasDebt' | 'noDebt'>('all');
   const [staffViewMode, setStaffViewMode] = useState<'table' | 'card'>('table');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const codeBackfillRanRef = useRef(false);
+
+  useEffect(() => {
+    if (codeBackfillRanRef.current) return;
+    if (list.length === 0) return;
+    if (!list.some(e => !e.employeeCode)) return;
+    codeBackfillRanRef.current = true;
+    onUpdate(assignMissingEmployeeCodes(list));
+  }, [list, onUpdate]);
 
   const formatNumber = (num: number) => (num || 0).toLocaleString('vi-VN');
 
@@ -337,7 +375,7 @@ const StaffManager: React.FC<Props> = ({
                   name="staffStatus"
                   checked={staffStatusFilter === option.value}
                   onChange={() => setStaffStatusFilter(option.value as typeof staffStatusFilter)}
-                  className="accent-emerald-600"
+                  className="accent-indigo-600"
                 />
                 <span>{option.label}</span>
               </label>
@@ -349,7 +387,7 @@ const StaffManager: React.FC<Props> = ({
           <select
             value={positionFilter}
             onChange={event => setPositionFilter(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-300"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-300"
           >
             <option value="all">Tất cả chức vụ</option>
             {positionOptions.map(position => (
@@ -364,7 +402,7 @@ const StaffManager: React.FC<Props> = ({
           <select
             value={policyFilter}
             onChange={event => setPolicyFilter(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-300"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-300"
           >
             <option value="all">Tất cả nhóm lương</option>
             <option value="">Tự động theo thâm niên</option>
@@ -388,8 +426,8 @@ const StaffManager: React.FC<Props> = ({
                 onClick={() => setDebtFilter(option.value as typeof debtFilter)}
                 className={`flex-1 rounded-lg border py-1 text-xs transition-colors ${
                   debtFilter === option.value
-                    ? 'border-emerald-600 bg-emerald-600 text-white'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                    ? 'border-indigo-600 bg-indigo-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
                 }`}
               >
                 {option.label}
@@ -571,6 +609,7 @@ const StaffManager: React.FC<Props> = ({
 
     const newEmployee: Employee = {
       id: generateId(),
+      employeeCode: nextEmployeeCode(list),
       name: formData.name,
       position: formData.position,
       joinDate: formData.joinDate,
@@ -609,13 +648,24 @@ const StaffManager: React.FC<Props> = ({
     setEditingEmployee(null);
   };
 
+  const handlePrintIdCard = (emp: Employee) => {
+    const html = buildEmployeeIdCardHtml({ employee: emp, brandProfile: allData?.brandProfile });
+    const printWindow = window.open('', '_blank', 'width=400,height=650');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } else {
+      showToast('Vui lòng cho phép mở cửa sổ mới (Pop-up) để in thẻ nhân viên.', 'warning');
+    }
+  };
+
   const CardField = ({ label, value, icon: Icon }: any) => (
-    <div className="flex items-center text-xs">
-      <div className="w-32 font-normal text-slate-400 uppercase tracking-[0.05em] flex items-center gap-2">
-        {Icon && <Icon className="w-3.5 h-3.5 text-emerald-600" />}
+    <div className="flex items-center text-[10px]">
+      <div className="w-[84px] shrink-0 font-normal text-slate-400 uppercase tracking-[0.02em] flex items-center gap-1 whitespace-nowrap">
+        {Icon && <Icon className="w-3 h-3 text-indigo-600 shrink-0" />}
         {label}
       </div>
-      <div className="w-6 text-slate-300 font-normal">:</div>
+      <div className="w-3 text-slate-300 font-normal">:</div>
       <div className="flex-1 font-normal text-slate-700 truncate tracking-tight">
         {value || 'N/A'}
       </div>
@@ -632,27 +682,33 @@ const StaffManager: React.FC<Props> = ({
 
     return (
       <div
-        className={`relative w-full max-w-[442px] h-[660px] bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col group transition-all duration-500 hover:scale-[1.02] hover:shadow-emerald-900/10 ${isResigned ? 'grayscale opacity-80' : ''}`}
+        className={`relative w-full max-w-[300px] min-h-[420px] bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col group transition-all duration-500 hover:scale-[1.02] hover:shadow-indigo-900/10 ${isResigned ? 'grayscale opacity-80' : ''}`}
       >
-        {/* Header with Elegant Green Stripes */}
-        <div className="absolute top-0 left-0 w-full h-52 overflow-hidden z-0">
+        {/* Header with Indigo Brand Stripes */}
+        <div className="absolute top-0 left-0 w-full h-28 overflow-hidden z-0">
           <div
-            className="absolute inset-0 bg-emerald-900"
+            className="absolute inset-0 bg-indigo-700"
             style={{ clipPath: 'polygon(0 0, 100% 0, 100% 35%, 0 85%)' }}
           ></div>
           <div
-            className="absolute inset-0 bg-emerald-700 opacity-40"
+            className="absolute inset-0 bg-indigo-400 opacity-40"
             style={{ clipPath: 'polygon(0 0, 100% 0, 100% 15%, 0 65%)' }}
           ></div>
         </div>
 
         {/* Action Buttons */}
-        <div className="absolute top-8 right-8 z-50 flex flex-col gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 right-3 z-50 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => handlePrintIdCard(emp)}
+            className="p-2 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white hover:text-indigo-600 transition-all shadow-xl border border-white/20"
+          >
+            <Printer className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => setEditingEmployee(emp)}
-            className="p-3.5 bg-white/20 backdrop-blur-xl text-white rounded-2xl hover:bg-white hover:text-emerald-900 transition-all shadow-xl border border-white/20"
+            className="p-2 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white hover:text-indigo-600 transition-all shadow-xl border border-white/20"
           >
-            <Edit3 className="w-5 h-5" />
+            <Edit3 className="w-3.5 h-3.5" />
           </button>
           {!isResigned && (
             <button
@@ -663,38 +719,38 @@ const StaffManager: React.FC<Props> = ({
                     emp.id
                   );
               }}
-              className="p-3.5 bg-rose-500/20 backdrop-blur-xl text-rose-200 rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-xl border border-white/20"
+              className="p-2 bg-rose-500/20 backdrop-blur-xl text-rose-200 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-xl border border-white/20"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
         {/* Circular Avatar Section */}
-        <div className="relative flex flex-col items-center mt-12 z-10">
-          <div className="w-48 h-48 rounded-full border-[7px] border-white shadow-2xl overflow-hidden bg-slate-100 ring-4 ring-emerald-900/5 transition-transform duration-500 group-hover:scale-105">
+        <div className="relative flex flex-col items-center mt-6 z-10">
+          <div className="w-24 h-24 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-slate-100 ring-4 ring-indigo-400/40 transition-transform duration-500 group-hover:scale-105">
             {emp.photoUrl ? (
               <img src={emp.photoUrl} alt={emp.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-emerald-50">
-                <User className="w-20 h-20 text-emerald-200" />
+              <div className="w-full h-full flex items-center justify-center bg-indigo-50">
+                <User className="w-10 h-10 text-indigo-200" />
               </div>
             )}
           </div>
 
-          <div className="mt-6 text-center px-10">
-            <h2 className="text-3xl font-semibold text-slate-900 uppercase tracking-tighter leading-tight mb-2">
+          <div className="mt-3 text-center px-5">
+            <h2 className="text-base font-semibold text-slate-900 uppercase tracking-tight leading-tight mb-1.5">
               {emp.name}
             </h2>
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="inline-block px-8 py-1.5 bg-emerald-600 text-white rounded-full text-2xs font-normal uppercase tracking-widest shadow-lg shadow-emerald-600/20">
+            <div className="flex flex-col items-center gap-1">
+              <div className="inline-block px-4 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-normal uppercase tracking-widest shadow-lg shadow-indigo-600/20">
                 {emp.position}
               </div>
-              <div className="text-xs font-normal text-emerald-700 uppercase tracking-wider">
+              <div className="text-[9px] font-normal text-indigo-700 uppercase tracking-wider">
                 {currentPolicy?.name || 'Chưa xác định'}
               </div>
               {hasDebt && (
-                <div className="mt-1 bg-amber-500 text-white px-3 py-0.5 rounded-full text-[8px] font-normal uppercase tracking-widest">
+                <div className="mt-0.5 bg-amber-500 text-white px-2 py-0.5 rounded-full text-[7px] font-normal uppercase tracking-widest">
                   NỢ LƯƠNG: {(emp.carryForwardDebt || 0).toLocaleString()}đ
                 </div>
               )}
@@ -703,10 +759,10 @@ const StaffManager: React.FC<Props> = ({
         </div>
 
         {/* Detail Data Grid - Vietnamese MIS Labels */}
-        <div className="mt-10 px-14 flex-1 space-y-4">
+        <div className="mt-4 px-6 flex-1 space-y-1.5">
           <CardField
-            label="MÃ NHÂN VIÊN"
-            value={emp.id.slice(0, 8).toUpperCase()}
+            label="MÃ NV"
+            value={emp.employeeCode || emp.id.slice(0, 8).toUpperCase()}
             icon={Fingerprint}
           />
           <CardField
@@ -715,35 +771,35 @@ const StaffManager: React.FC<Props> = ({
             icon={Cake}
           />
           <CardField
-            label="NGÀY VÀO LÀM"
+            label="VÀO LÀM"
             value={emp.joinDate.split('-').reverse().join('/')}
             icon={Calendar}
           />
-          <CardField label="SỐ NGÀY LÀM" value={`${seniorityDays} ngày`} icon={Timer} />
+          <CardField label="THÂM NIÊN" value={`${seniorityDays} ngày`} icon={Timer} />
           <CardField label="ĐIỆN THOẠI" value={emp.phone || 'N/A'} icon={Phone} />
           <CardField label="EMAIL" value={displayEmail} icon={Mail} />
         </div>
 
         {/* Card Footer */}
-        <div className="mt-auto h-24 bg-emerald-900 flex items-center justify-between px-14 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-400 opacity-20"></div>
-          <div className="flex items-center gap-4">
-            <div className="p-2.5 bg-emerald-800 rounded-xl">
-              <Globe className="w-4.5 h-4.5 text-emerald-400" />
+        <div className="mt-4 h-12 bg-indigo-800 flex items-center justify-between px-6 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-indigo-400 opacity-60"></div>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-900 rounded-lg">
+              <Globe className="w-3 h-3 text-indigo-200" />
             </div>
-            <span className="text-2xs font-normal text-emerald-400 tracking-[0.2em]">
-              WWW.COMPANY.MIS
+            <span className="text-[8px] font-normal text-indigo-200 tracking-[0.15em]">
+              phucsang.com.vn
             </span>
           </div>
-          <div className="p-2.5 bg-white rounded-xl shadow-sm">
-            <QrCode className="w-9 h-9 text-emerald-900" />
+          <div className="p-1 bg-white rounded-lg shadow-sm">
+            <QRCodeSVG value="https://phucsang.com.vn" size={36} />
           </div>
         </div>
 
         {/* Resigned Overlay Effect */}
         {isResigned && (
           <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] pointer-events-none flex items-center justify-center">
-            <div className="bg-rose-600 text-white px-10 py-5 rounded-[2.5rem] font-normal uppercase text-sm tracking-[0.4em] shadow-2xl rotate-[-12deg] border-4 border-white animate-pulse">
+            <div className="bg-rose-600 text-white px-4 py-2 rounded-2xl font-normal uppercase text-[10px] tracking-[0.2em] shadow-2xl rotate-[-12deg] border-2 border-white animate-pulse">
               NGỪNG HOẠT ĐỘNG
             </div>
           </div>
@@ -839,7 +895,7 @@ const StaffManager: React.FC<Props> = ({
 
             <div className="lg:col-span-6 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl">
               <h3 className="text-xl font-semibold text-slate-900 mb-8 uppercase flex items-center gap-4">
-                <div className="p-3 bg-emerald-600 rounded-2xl text-white shadow-lg">
+                <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg">
                   <Target className="w-5 h-5" />
                 </div>{' '}
                 THƯỚC ĐO HIỆU NĂNG CÁ NHÂN
@@ -895,14 +951,14 @@ const StaffManager: React.FC<Props> = ({
         <div className="flex-1 min-w-0 min-h-0 overflow-auto custom-scrollbar space-y-8 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm animate-in slide-in-from-bottom-4 duration-700">
           <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl overflow-hidden">
             <div className="flex items-center gap-5 mb-10 border-b border-slate-50 pb-8">
-              <div className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-lg">
+              <div className="p-4 bg-indigo-600 text-white rounded-[1.5rem] shadow-lg">
                 <LayoutList className="w-6 h-6" />
               </div>
               <div>
                 <h3 className="text-2xl font-semibold text-slate-900 uppercase tracking-tight">
                   Sổ Cái Hiệu Năng Nhân Sự
                 </h3>
-                <p className="text-2xs text-emerald-600 font-normal uppercase tracking-widest mt-1">
+                <p className="text-2xs text-indigo-600 font-normal uppercase tracking-widest mt-1">
                   Lịch sử snapshot doanh số bán hàng của nhân sự theo tháng
                 </p>
               </div>
@@ -971,7 +1027,7 @@ const StaffManager: React.FC<Props> = ({
                 <input
                   type="text"
                   placeholder="Tìm tên, SĐT, email, mã NV..."
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-400 focus:bg-white transition-all placeholder:text-slate-300"
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 focus:bg-white transition-all placeholder:text-slate-300"
                   value={staffSearch}
                   onChange={event => setStaffSearch(event.target.value)}
                 />
@@ -982,7 +1038,7 @@ const StaffManager: React.FC<Props> = ({
                     onClick={() => setStaffViewMode('table')}
                     className={`flex h-8 items-center justify-center px-3 text-2xs font-semibold uppercase transition-all ${
                       staffViewMode === 'table'
-                        ? 'bg-emerald-50 text-emerald-600'
+                        ? 'bg-indigo-50 text-indigo-600'
                         : 'bg-white text-slate-400 hover:bg-slate-50'
                     }`}
                   >
@@ -992,7 +1048,7 @@ const StaffManager: React.FC<Props> = ({
                     onClick={() => setStaffViewMode('card')}
                     className={`flex h-8 items-center justify-center border-l border-slate-200 px-3 text-2xs font-semibold uppercase transition-all ${
                       staffViewMode === 'card'
-                        ? 'bg-emerald-50 text-emerald-600'
+                        ? 'bg-indigo-50 text-indigo-600'
                         : 'bg-white text-slate-400 hover:bg-slate-50'
                     }`}
                   >
@@ -1004,7 +1060,7 @@ const StaffManager: React.FC<Props> = ({
                     resetForm();
                     setShowCreateModal(true);
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold text-2xs uppercase tracking-wide shadow-md shadow-emerald-200 hover:bg-emerald-700 transition-all"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-2xs uppercase tracking-wide shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Tạo mới
@@ -1062,7 +1118,7 @@ const StaffManager: React.FC<Props> = ({
             <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
               {staffViewMode === 'card' ? (
                 <div className="min-h-full bg-slate-50 p-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 justify-items-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 justify-items-center">
                     {filteredStaff.map(emp => (
                       <StaffCard key={emp.id} emp={emp} />
                     ))}
@@ -1113,7 +1169,7 @@ const StaffManager: React.FC<Props> = ({
                             <tr key={emp.id} className="transition-colors hover:bg-slate-50">
                               <td className="px-5 py-3">
                                 <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-semibold">
+                                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-semibold">
                                     {emp.photoUrl ? (
                                       <img
                                         src={emp.photoUrl}
@@ -1129,7 +1185,7 @@ const StaffManager: React.FC<Props> = ({
                                       {emp.name}
                                     </p>
                                     <p className="text-2xs font-bold uppercase tracking-wide text-slate-400">
-                                      {emp.id.slice(0, 8).toUpperCase()}
+                                      {emp.employeeCode || emp.id.slice(0, 8).toUpperCase()}
                                     </p>
                                   </div>
                                 </div>
@@ -1165,8 +1221,14 @@ const StaffManager: React.FC<Props> = ({
                               <td className="px-5 py-3">
                                 <div className="flex justify-end gap-2">
                                   <button
+                                    onClick={() => handlePrintIdCard(emp)}
+                                    className="rounded-lg border border-slate-200 p-2 text-slate-400 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                                  >
+                                    <Printer className="h-4 w-4" />
+                                  </button>
+                                  <button
                                     onClick={() => setEditingEmployee(emp)}
-                                    className="rounded-lg border border-slate-200 p-2 text-slate-400 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
+                                    className="rounded-lg border border-slate-200 p-2 text-slate-400 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
                                   >
                                     <Edit3 className="h-4 w-4" />
                                   </button>
@@ -1214,14 +1276,14 @@ const StaffManager: React.FC<Props> = ({
               <X className="h-5 w-5" />
             </button>
             <div className="mb-8 flex items-center gap-4 border-b border-slate-100 pb-6">
-              <div className="rounded-2xl bg-emerald-600 p-3 text-white shadow-lg">
+              <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-lg">
                 <UserCircle2 className="h-7 w-7" />
               </div>
               <div>
                 <h3 className="text-xl font-semibold uppercase tracking-tight text-slate-900">
                   Thêm nhân sự mới
                 </h3>
-                <p className="mt-1 text-2xs font-bold uppercase tracking-widest text-emerald-600">
+                <p className="mt-1 text-2xs font-bold uppercase tracking-widest text-indigo-600">
                   Hồ sơ cơ bản và nhóm lương
                 </p>
               </div>
@@ -1316,7 +1378,7 @@ const StaffManager: React.FC<Props> = ({
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-xs font-semibold uppercase text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700"
+                  className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-xs font-semibold uppercase text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
                 >
                   <Plus className="h-4 w-4" />
                   Thêm nhân sự
@@ -1363,7 +1425,7 @@ const StaffManager: React.FC<Props> = ({
             <form onSubmit={handleUpdateEmployee} className="space-y-12">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                 <div className="space-y-8">
-                  <div className="flex items-center gap-3 text-emerald-600">
+                  <div className="flex items-center gap-3 text-indigo-600">
                     <User className="w-5 h-5" />
                     <h4 className="text-xs font-semibold uppercase tracking-[0.2em]">
                       Thông tin cơ bản

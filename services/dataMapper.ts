@@ -156,6 +156,7 @@ export const dataMapper = {
     const pending = (k: string) => (pendingIdsByKey ? pendingIdsByKey.get(k) || EMPTY_PENDING : undefined);
     const cloudEmployees = (results.employees || []).map(e => ({
       id: e.id,
+      employeeCode: e.employee_code || e.employeeCode,
       name: e.name,
       position: e.position,
       joinDate: e.join_date || e.joinDate,

@@ -7,6 +7,15 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 EMPLOYEE-CODE-CARD-0821 — Mã nhân viên tự tăng (NV001...) + in thẻ nhân viên + fix tooltip Sổ cái lương *(xong 2026-08-21, dev)*
+
+> Phát hiện việc sửa dở uncommitted từ phiên trước (không ghi HISTORY/TODO) khi user yêu cầu kiểm tra. Đã verify chạy đúng trên dev và commit theo yêu cầu user.
+> Mã nhân viên NV001... tự gán cho nhân sự chưa có mã, hiển thị thay UUID, thêm nút in thẻ nhựa (QR code, khổ 56×88mm). Migration `041_employees_employee_code_column.sql` đã chạy dev, **chưa chạy prod**.
+> Riêng LedgerTab.tsx: sửa tooltip "Xem logic" từ hover sang bấm-để-mở (portal), tránh bị bảng cắt mất.
+> Chi tiết đầy đủ: HISTORY.md 2026-08-21 (2).
+> Files: `types.ts`, `services/dataMapper.ts`, `components/StaffManager.tsx`, `components/payroll/LedgerTab.tsx`, `components/staff/employeeIdCardPrint.ts`, `supabase_migrations/041_employees_employee_code_column.sql`.
+> **Chưa đụng prod** — chờ user yêu cầu riêng.
+
 ### [x] 🟡 CUSTOMER-STATS-SERVER-0821 — Trang Khách hàng chậm hơn Hàng hoá dù ít bản ghi hơn *(xong 2026-08-21, dev)*
 
 > User hỏi tại sao trang Khách hàng tải chậm hơn Hàng hoá dù ít bản ghi hơn — nguyên nhân: `CustomerListPage.tsx` (cũ) tự fetch toàn bộ `pos_orders` + tính debt/revenue bằng JS trên client mỗi lần mở trang (và mở lại mỗi lần chuyển tab, vì `MainContent.tsx` unmount/mount theo `switch(activeTab)`).
