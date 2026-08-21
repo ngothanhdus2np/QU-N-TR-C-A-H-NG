@@ -188,7 +188,6 @@ export const SIDEBAR_SECTIONS = [
   },
   {
     title: 'Hệ thống',
-    hidden: true,
     groups: [
       {
         header: 'Hệ thống',
