@@ -7,6 +7,35 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [x] 🟢 GOODS-VIEW-DRAFT-0823 — Mã sản phẩm bấm được ở Phiếu nhập hàng (mở trang chi tiết KiotViet) + tự lưu nháp phiếu đang nhập dở *(xong 2026-08-23, dev)*
+
+> User muốn bấm mã sản phẩm ở Phiếu nhập hàng mở trang chi tiết kiểu KiotViet (tab mới), và không mất dữ liệu đang nhập dở khi lỡ chuyển trang.
+> **Đã làm**: (1) mã hàng ở cả 3 nơi hiển thị (inline detail, modal, form thật `GoodsPurchaseForm`) giờ mở tab mới `/goods?view=<id>` — tự xóa filter, nhảy đúng trang trong danh sách đầy đủ, mở panel `GoodsProductDetailPanel` (giống KiotViet) + tự cuộn tới, không cần vuốt. (2) Phiếu nhập hàng/Trả hàng nhập tự lưu nháp vào `localStorage` khi đang nhập dở, khôi phục khi quay lại — nhưng mặc định hiện danh sách trước, chỉ hỏi "Tiếp tục nhập / Tạo phiếu mới" (dùng `ConfirmDialog.tsx` đúng UI app, không dùng `window.confirm`) khi user bấm tạo phiếu mới hoặc mở phiếu khác.
+> Chi tiết đầy đủ từng bước sửa: HISTORY.md 2026-08-23.
+> `tsc` sạch, `npm test` 448/448 pass. Đã deploy dev.
+> Files: `components/pos/GoodsInventory.tsx`, `GoodsProductTableBody.tsx`, `GoodsPurchaseForm.tsx`, `components/purchase/PurchaseOrderDetailModal.tsx`, `PurchaseOrderInlineDetail.tsx`, `PurchaseOrdersContainer.tsx`, `components/MainContent.tsx`, `hooks/usePurchaseFormState.ts`.
+> **Chưa verify lại bằng browser thật vòng cuối** (đổi `window.confirm` → `ConfirmDialog`) — phiên test mất đăng nhập giữa chừng. Cần user tự kiểm tra trước khi yên tâm hoàn toàn.
+> **Chưa đụng prod** — chờ user xác nhận riêng.
+
+### [ ] 🔴 STORAGE-XATTR-0821 — Upload file lên Supabase Storage lỗi 500 (cả dev lẫn prod) — cần user pull image trên iMac trực tiếp
+
+> **Bối cảnh phát hiện**: User báo logo cửa hàng ở Cài đặt → Cửa hàng bị vỡ ảnh. Điều tra ra 2 lớp lỗi chồng nhau:
+> 1. `brand_profile.logo` trỏ tới project Supabase Cloud CŨ (`tqouzxlnihfjdyxqlbqs.supabase.co`, đã ngừng dùng từ khi chuyển sang self-host) → **đã sửa**: `UPDATE brand_profile SET logo = NULL` trên `supabase-db-dev`.
+> 2. Thử upload lại logo mới → lỗi "Lỗi tải ảnh lên Cloud!". Điều tra tiếp: `storage.objects` có RLS bật nhưng **0 policy nào** cho toàn schema `storage` trên dev → **đã sửa**: thêm 4 policy cho bucket `images` (`images public read/authenticated upload/update/delete`) trên `supabase-db-dev`, pattern giống `knowledge-files` đã có sẵn.
+> 3. Sau khi thêm policy, test upload thật (qua fetch trong browser, đúng flow client-side supabase-js) → vẫn lỗi, nhưng đổi sang **500 `The file system does not support extended attributes or has the feature disabled`** — đây là lỗi hạ tầng khác, sâu hơn.
+> **Root cause thật (đã xác nhận qua doc chính thức Supabase + issue GitHub `supabase/supabase#3902`, `#10745`)**: container `supabase-storage` (STORAGE_BACKEND=file) dùng **bind mount** từ thư mục thật trên iMac (`/Users/mac/supabase-dev/docker/volumes/storage` và `/Users/mac/supabase/docker/volumes/storage` cho prod) — bind mount kiểu này trên Docker Desktop macOS **không hỗ trợ extended attributes (xattr)** dù ổ đĩa APFS gốc hỗ trợ bình thường (đã tự test xattr trực tiếp trên host, hoạt động tốt — lỗi chỉ xảy ra khi đi qua lớp chia sẻ file của Docker vào container). Supabase Storage API cần xattr để lưu metadata file.
+> **Phạm vi ảnh hưởng — CẢ DEV LẪN PROD**: `docker inspect` xác nhận `supabase-storage` (prod) và `supabase-storage-dev` cùng cấu hình bind-mount, cùng version `v1.60.4`. Cả 2 thư mục storage hiện có **0 file** — nghĩa là upload qua Supabase Storage (client-side, vd logo, ảnh Marketing AI) **chưa từng thành công lần nào** từ trước tới giờ trên cả 2 môi trường (không phải mới hỏng). Không có rủi ro mất dữ liệu khi sửa.
+> **Hướng sửa đã xác định (chính thức từ Supabase, KHÔNG cần tôi tự sửa tay bind mount)**: cả `/Users/mac/supabase-dev/docker/` và `/Users/mac/supabase/docker/` đã có sẵn file override `docker-compose.rustfs.yml` (đổi `STORAGE_BACKEND` sang `s3`, dùng RustFS — S3-compatible tự host, named Docker volume thay vì bind mount, tránh hẳn lỗi xattr). Có sẵn script quản lý `run.sh` hỗ trợ bật/tắt override sạch sẽ.
+> **BỊ CHẶN — cần user**: `sh run.sh recreate rustfs rustfs-createbucket storage` lỗi khi pull image `rustfs/rustfs` + `rustfs/rc` — Docker Desktop trên iMac cần unlock Keychain để lấy credential Docker Hub, nhưng phiên SSH không tương tác nên không unlock được (`keychain cannot be accessed because the current session does not allow user interaction`). User hiện không ở gần iMac.
+> **Đã dọn dẹp trạng thái an toàn**: gỡ lại override rustfs khỏi `COMPOSE_FILE` trong `.env` dev (`sh run.sh config remove rustfs`) để tránh treo nửa chừng — container `supabase-storage` dev hiện vẫn chạy bình thường như trước (chỉ là vẫn lỗi upload cũ, không tệ hơn).
+> **Việc cần làm khi user ở gần iMac (hoặc remote desktop vào iMac)**:
+> 1. Trên iMac, mở Terminal thật (có phiên GUI, Keychain unlock được) → `docker pull rustfs/rustfs && docker pull rustfs/rc` (chỉ cần 1 lần, dùng chung cho cả dev/prod vì cùng máy).
+> 2. Báo lại — sẽ chạy tiếp cho **cả dev và prod**:
+>    - `cd /Users/mac/supabase-dev/docker && sh run.sh config add rustfs && sh run.sh recreate rustfs rustfs-createbucket storage`
+>    - `cd /Users/mac/supabase/docker && sh run.sh config add rustfs && sh run.sh recreate rustfs rustfs-createbucket storage`
+> 3. Verify: thử upload logo thật qua UI Cài đặt → Cửa hàng trên cả dev và prod, xác nhận không còn lỗi "Lỗi tải ảnh lên Cloud!".
+> Files: không đổi code app — chỉ đổi hạ tầng Docker trên iMac + dữ liệu (`brand_profile.logo`, RLS policy `storage.objects`).
+
 ### [x] 🟢 NAV-HIDDEN-SOP-0821 — Menu "Hệ thống" (Quy chuẩn/Quy trình) bị ẩn ngoài ý muốn *(xong 2026-08-21, đã deploy prod)*
 
 > User tìm không thấy "quy chuẩn quy chế cửa hàng" từng thấy trước đây. Dữ liệu vẫn còn nguyên, chỉ do nhóm menu `title: 'Hệ thống'` (Cơ chế/Quy chuẩn/Quy trình/Biểu mẫu) bị đặt `hidden: true` trong `constants/navigation.ts` từ commit `421aab9` — có vẻ là tác dụng phụ ngoài ý muốn của đợt dọn UI trước, không phải chủ đích.

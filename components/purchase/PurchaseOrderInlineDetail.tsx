@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, Copy, Tag, MoreHorizontal, Ban, ExternalLink, Save, RotateCcw } from 'lucide-react';
 import { Employee, InventoryTransaction } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -54,7 +53,6 @@ const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
   onPrint,
   onOpenOrder,
 }) => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'info' | 'payment'>('info');
   const [noteText, setNoteText] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
@@ -183,7 +181,7 @@ const PurchaseOrderInlineDetail: React.FC<PurchaseOrderInlineDetailProps> = ({
                             {item.productId ? (
                               <button
                                 type="button"
-                                onClick={() => navigate(`/goods?edit=${item.productId}`)}
+                                onClick={() => window.open(`/goods?view=${item.productId}`, '_blank')}
                                 className="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-normal"
                                 title="Mở chi tiết sản phẩm"
                               >

@@ -27,6 +27,7 @@ import {
 } from '../../src/lib';
 import { EXCEL_MAX_ROWS, assertSafeExcelBuffer, assertSafeExcelFile } from '../../src/lib/excelSafety';
 import { useToast } from '../ui/Toast';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCurrentStaffId, resolveStaffName } from '../shared/staff';
 import { exportToExcel, printToPDF } from '../../services/exportService';
 import { usePurchaseFormState } from '../../hooks/usePurchaseFormState';
@@ -116,6 +117,20 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     getReturnBillDiscountAmount,
     getReturnSupplierMustPay,
   } = purchaseFormState;
+
+  const [confirmDialog, setConfirmDialog] = React.useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant?: 'danger' | 'warning' | 'info' | 'success';
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: () => {} });
+  const openConfirm = (config: Omit<typeof confirmDialog, 'isOpen'>) =>
+    setConfirmDialog({ ...config, isOpen: true });
+  const closeConfirm = () => setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
   const {
     showQuickProductForm,
@@ -453,6 +468,38 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     setReturnItems(prev => prev.filter(item => item.productId !== id));
   };
 
+  const handleCreatePurchase = () => {
+    if (purchaseItems.length > 0 || purchaseSupplier) {
+      openConfirm({
+        title: 'Có phiếu nhập hàng đang nhập dở',
+        message: 'Bạn có 1 phiếu nhập hàng đang nhập dở chưa lưu. Chọn "Tiếp tục nhập" để mở lại, hoặc "Tạo phiếu mới" để xóa nháp cũ và bắt đầu phiếu trắng.',
+        variant: 'warning',
+        confirmLabel: 'Tạo phiếu mới',
+        cancelLabel: 'Tiếp tục nhập',
+        onConfirm: () => { resetPurchaseForm(); setShowPurchaseForm(true); closeConfirm(); },
+        onCancel: () => { setShowPurchaseForm(true); closeConfirm(); },
+      });
+      return;
+    }
+    setShowPurchaseForm(true);
+  };
+
+  const handleCreateReturn = () => {
+    if (returnItems.length > 0 || returnSupplier) {
+      openConfirm({
+        title: 'Có phiếu trả hàng nhập đang nhập dở',
+        message: 'Bạn có 1 phiếu trả hàng nhập đang nhập dở chưa lưu. Chọn "Tiếp tục nhập" để mở lại, hoặc "Tạo phiếu mới" để xóa nháp cũ và bắt đầu phiếu trắng.',
+        variant: 'warning',
+        confirmLabel: 'Tạo phiếu mới',
+        cancelLabel: 'Tiếp tục nhập',
+        onConfirm: () => { resetReturnForm(); setShowPurchaseReturnForm(true); closeConfirm(); },
+        onCancel: () => { setShowPurchaseReturnForm(true); closeConfirm(); },
+      });
+      return;
+    }
+    setShowPurchaseReturnForm(true);
+  };
+
   const handleSaveDraft = async () => {
     if (purchaseItems.length === 0) {
       showToast('Vui lòng thêm sản phẩm trước khi lưu tạm', 'warning');
@@ -506,7 +553,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     }
   };
 
-  const handleOpenOrder = (transaction: InventoryTransaction) => {
+  const openTransactionInForm = (transaction: InventoryTransaction) => {
     resetPurchaseForm();
     setEditingTransactionId(transaction.id);
     setEditingTransactionStatus(transaction.status || 'completed');
@@ -521,6 +568,22 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
     }));
     setPurchaseItems(items);
     setShowPurchaseForm(true);
+  };
+
+  const handleOpenOrder = (transaction: InventoryTransaction) => {
+    if (editingTransactionId !== transaction.id && (purchaseItems.length > 0 || purchaseSupplier)) {
+      openConfirm({
+        title: 'Có phiếu nhập hàng khác đang nhập dở',
+        message: 'Bạn có 1 phiếu nhập hàng khác đang nhập dở chưa lưu. Chọn "Mở phiếu này" để bỏ qua nháp cũ, hoặc "Ở lại" để tiếp tục nhập phiếu đang dở.',
+        variant: 'warning',
+        confirmLabel: 'Mở phiếu này',
+        cancelLabel: 'Ở lại',
+        onConfirm: () => { openTransactionInForm(transaction); closeConfirm(); },
+        onCancel: closeConfirm,
+      });
+      return;
+    }
+    openTransactionInForm(transaction);
   };
 
   const handleSaveReturnDraft = async () => {
@@ -1367,7 +1430,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
             employees={data.employees || []}
-            onCreatePurchase={() => setShowPurchaseForm(true)}
+            onCreatePurchase={handleCreatePurchase}
             onDeletePurchase={handleDeletePurchase}
             onExportPurchases={handleExportPurchases}
             onPrintPurchase={handlePrintPurchase}
@@ -1379,7 +1442,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
             transactions={data.inventoryTransactions || []}
             suppliers={data.suppliers || []}
             employees={data.employees || []}
-            onCreateReturn={() => setShowPurchaseReturnForm(true)}
+            onCreateReturn={handleCreateReturn}
             onViewDetail={handleViewDetail}
             onDeleteReturn={handleDeleteReturn}
             onExportReturns={handleExportReturns}
@@ -1395,6 +1458,7 @@ const PurchaseOrdersContainer: React.FC<PurchaseOrdersContainerProps> = ({
           onPrint={handlePrintPurchase}
         />
       )}
+      <ConfirmDialog {...confirmDialog} />
     </div>
   );
 };

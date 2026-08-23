@@ -59,6 +59,7 @@ interface GoodsInventoryProps {
   onAddTransaction?: (transaction: InventoryTransaction) => void;
   requestedTab?: 'goods' | 'purchase' | 'kho' | 'pricing' | 'warranty';
   initialProductId?: string;
+  initialViewProductId?: string;
 }
 
 const PAGE_SIZE_STORAGE_KEY = 'goods_items_per_page';
@@ -369,6 +370,7 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
   onAddTransaction,
   requestedTab,
   initialProductId,
+  initialViewProductId,
 }) => {
   // === Toast & Modal State ===
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -674,6 +676,26 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     if (prod) openProductEditor(prod);
   }, [initialProductId, products, openProductEditor]);
 
+  // Mở panel xem chi tiết sản phẩm khi có initialViewProductId từ URL (?view=<id>)
+  // — bước 1: xóa hết filter/search đang áp dụng để sản phẩm không bị che khuất,
+  // vẫn giữ nguyên toàn bộ danh sách hàng hóa (không lọc riêng theo SKU)
+  const [pendingViewProductId, setPendingViewProductId] = useState<string | undefined>(undefined);
+  const shouldScrollToViewRef = useRef(false);
+  React.useEffect(() => {
+    if (!initialViewProductId) return;
+    setFilterCategories([]);
+    setFilterBrand('');
+    setFilterStock('all');
+    setFilterLocation('');
+    setFilterAttrs([]);
+    setFilterSupplier([]);
+    setFilterPlatforms([]);
+    setSearchTags([]);
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setPendingViewProductId(initialViewProductId);
+  }, [initialViewProductId]);
+
   React.useEffect(() => {
     localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(visibleColumns));
   }, [visibleColumns]);
@@ -804,6 +826,36 @@ const GoodsInventory: React.FC<GoodsInventoryProps> = ({
     openConfirm,
     showToast,
   });
+
+  // ?view=<id> bước 2: sau khi filter đã xóa (filteredProducts cập nhật lại đầy đủ), tìm
+  // đúng trang chứa sản phẩm trong danh sách đầy đủ rồi nhảy tới + mở panel chi tiết.
+  // Nếu là biến thể (có parentId) thì tính trang theo dòng cha + tự mở rộng dòng cha.
+  React.useEffect(() => {
+    if (!pendingViewProductId) return;
+    const prod = products.find(p => p.id === pendingViewProductId);
+    if (!prod) return;
+    const rowId = prod.parentId || prod.id;
+    const idx = filteredProducts.findIndex(p => p.id === rowId);
+    if (idx === -1) return;
+    setCurrentPage(Math.floor(idx / itemsPerPage) + 1);
+    if (prod.parentId) toggleExpandedParent(prod.parentId);
+    setViewingProduct(prod);
+    setActiveFormTab('info');
+    setPendingViewProductId(undefined);
+    shouldScrollToViewRef.current = true;
+  }, [pendingViewProductId, products, filteredProducts, itemsPerPage, toggleExpandedParent]);
+
+  // Cuộn thẳng tới panel chi tiết vừa mở từ ?view=<id> — người dùng không cần tự vuốt xuống
+  React.useEffect(() => {
+    if (!shouldScrollToViewRef.current || !viewingProduct) return;
+    shouldScrollToViewRef.current = false;
+    const timer = setTimeout(() => {
+      document
+        .querySelector('[data-viewing-product-panel="true"]')
+        ?.scrollIntoView({ behavior: 'instant', block: 'start' });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [viewingProduct]);
 
   const selectedProducts = React.useMemo(
     () => products.filter(product => selectedIds.includes(product.id)),

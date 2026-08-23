@@ -1,31 +1,163 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PurchaseItem, PurchaseDiscountType } from '../components/pos/GoodsPurchaseForm';
 import { InvoiceStatus } from '../services/invoiceService';
 
+// Nháp phiếu nhập hàng/trả hàng nhập đang gõ dở — tự lưu vào localStorage để không mất
+// khi người dùng chuyển sang trang khác (unmount PurchaseOrdersContainer) mà chưa bấm
+// "Lưu tạm"/"Hoàn thành". Không lưu invoiceFile (File không serialize được qua JSON).
+const PURCHASE_DRAFT_KEY = 'cfo_brain_purchase_draft_v1';
+const RETURN_DRAFT_KEY = 'cfo_brain_purchase_return_draft_v1';
+
+type PurchaseDraft = {
+  purchaseItems: PurchaseItem[];
+  editingTransactionId: string | null;
+  editingTransactionStatus: string | null;
+  purchaseSupplier: string;
+  purchaseNote: string;
+  purchaseDiscountValue: number;
+  purchaseDiscountType: PurchaseDiscountType;
+  purchaseReferenceId: string;
+  invoiceStatus: InvoiceStatus;
+};
+
+type ReturnDraft = {
+  returnItems: PurchaseItem[];
+  returnSupplier: string;
+  returnNote: string;
+  returnDiscountValue: number;
+  returnDiscountType: PurchaseDiscountType;
+  returnReferenceId: string;
+  returnSupplierPaidAmount: number;
+  returnApplySupplierDebt: boolean;
+};
+
+function loadDraft<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(key: string, data: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // localStorage đầy/bị chặn — bỏ qua, không chặn luồng nhập liệu
+  }
+}
+
+function clearDraft(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
 export function usePurchaseFormState() {
-  // Purchase form states
+  const purchaseDraft = loadDraft<PurchaseDraft>(PURCHASE_DRAFT_KEY);
+  const returnDraft = loadDraft<ReturnDraft>(RETURN_DRAFT_KEY);
+
+  // Purchase form states — mặc định luôn hiện danh sách (false), kể cả khi có nháp cũ:
+  // chỉ mở lại form khi người dùng chủ động bấm "+ Phiếu nhập hàng" và chọn "Tiếp tục"
+  // (xem handleCreatePurchase trong PurchaseOrdersContainer.tsx).
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
-  const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
-  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
-  const [editingTransactionStatus, setEditingTransactionStatus] = useState<string | null>(null);
-  const [purchaseSupplier, setPurchaseSupplier] = useState('');
-  const [purchaseNote, setPurchaseNote] = useState('');
-  const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(0);
-  const [purchaseDiscountType, setPurchaseDiscountType] = useState<PurchaseDiscountType>('fixed');
-  const [purchaseReferenceId, setPurchaseReferenceId] = useState('');
-  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>('none');
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>(purchaseDraft?.purchaseItems ?? []);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(
+    purchaseDraft?.editingTransactionId ?? null
+  );
+  const [editingTransactionStatus, setEditingTransactionStatus] = useState<string | null>(
+    purchaseDraft?.editingTransactionStatus ?? null
+  );
+  const [purchaseSupplier, setPurchaseSupplier] = useState(purchaseDraft?.purchaseSupplier ?? '');
+  const [purchaseNote, setPurchaseNote] = useState(purchaseDraft?.purchaseNote ?? '');
+  const [purchaseDiscountValue, setPurchaseDiscountValue] = useState(purchaseDraft?.purchaseDiscountValue ?? 0);
+  const [purchaseDiscountType, setPurchaseDiscountType] = useState<PurchaseDiscountType>(
+    purchaseDraft?.purchaseDiscountType ?? 'fixed'
+  );
+  const [purchaseReferenceId, setPurchaseReferenceId] = useState(purchaseDraft?.purchaseReferenceId ?? '');
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>(purchaseDraft?.invoiceStatus ?? 'none');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   // Purchase return form states
+  // Tương tự showPurchaseForm — mặc định hiện danh sách, không tự mở form trả hàng nhập.
   const [showPurchaseReturnForm, setShowPurchaseReturnForm] = useState(false);
-  const [returnItems, setReturnItems] = useState<PurchaseItem[]>([]);
-  const [returnSupplier, setReturnSupplier] = useState('');
-  const [returnNote, setReturnNote] = useState('');
-  const [returnDiscountValue, setReturnDiscountValue] = useState(0);
-  const [returnDiscountType, setReturnDiscountType] = useState<PurchaseDiscountType>('fixed');
-  const [returnReferenceId, setReturnReferenceId] = useState('');
-  const [returnSupplierPaidAmount, setReturnSupplierPaidAmount] = useState(0);
-  const [returnApplySupplierDebt, setReturnApplySupplierDebt] = useState(true);
+  const [returnItems, setReturnItems] = useState<PurchaseItem[]>(returnDraft?.returnItems ?? []);
+  const [returnSupplier, setReturnSupplier] = useState(returnDraft?.returnSupplier ?? '');
+  const [returnNote, setReturnNote] = useState(returnDraft?.returnNote ?? '');
+  const [returnDiscountValue, setReturnDiscountValue] = useState(returnDraft?.returnDiscountValue ?? 0);
+  const [returnDiscountType, setReturnDiscountType] = useState<PurchaseDiscountType>(
+    returnDraft?.returnDiscountType ?? 'fixed'
+  );
+  const [returnReferenceId, setReturnReferenceId] = useState(returnDraft?.returnReferenceId ?? '');
+  const [returnSupplierPaidAmount, setReturnSupplierPaidAmount] = useState(
+    returnDraft?.returnSupplierPaidAmount ?? 0
+  );
+  const [returnApplySupplierDebt, setReturnApplySupplierDebt] = useState(
+    returnDraft?.returnApplySupplierDebt ?? true
+  );
+
+  // Tự lưu nháp phiếu nhập hàng mỗi khi có thay đổi
+  useEffect(() => {
+    if (!showPurchaseForm) return;
+    if (purchaseItems.length === 0 && !purchaseSupplier && !purchaseNote && !purchaseReferenceId) {
+      clearDraft(PURCHASE_DRAFT_KEY);
+      return;
+    }
+    saveDraft(PURCHASE_DRAFT_KEY, {
+      purchaseItems,
+      editingTransactionId,
+      editingTransactionStatus,
+      purchaseSupplier,
+      purchaseNote,
+      purchaseDiscountValue,
+      purchaseDiscountType,
+      purchaseReferenceId,
+      invoiceStatus,
+    } satisfies PurchaseDraft);
+  }, [
+    showPurchaseForm,
+    purchaseItems,
+    editingTransactionId,
+    editingTransactionStatus,
+    purchaseSupplier,
+    purchaseNote,
+    purchaseDiscountValue,
+    purchaseDiscountType,
+    purchaseReferenceId,
+    invoiceStatus,
+  ]);
+
+  // Tự lưu nháp phiếu trả hàng nhập mỗi khi có thay đổi
+  useEffect(() => {
+    if (!showPurchaseReturnForm) return;
+    if (returnItems.length === 0 && !returnSupplier && !returnNote && !returnReferenceId) {
+      clearDraft(RETURN_DRAFT_KEY);
+      return;
+    }
+    saveDraft(RETURN_DRAFT_KEY, {
+      returnItems,
+      returnSupplier,
+      returnNote,
+      returnDiscountValue,
+      returnDiscountType,
+      returnReferenceId,
+      returnSupplierPaidAmount,
+      returnApplySupplierDebt,
+    } satisfies ReturnDraft);
+  }, [
+    showPurchaseReturnForm,
+    returnItems,
+    returnSupplier,
+    returnNote,
+    returnDiscountValue,
+    returnDiscountType,
+    returnReferenceId,
+    returnSupplierPaidAmount,
+    returnApplySupplierDebt,
+  ]);
 
   // Helper functions
   const resetPurchaseForm = () => {
@@ -39,6 +171,7 @@ export function usePurchaseFormState() {
     setInvoiceFile(null);
     setEditingTransactionId(null);
     setEditingTransactionStatus(null);
+    clearDraft(PURCHASE_DRAFT_KEY);
   };
 
   const resetReturnForm = () => {
@@ -50,6 +183,7 @@ export function usePurchaseFormState() {
     setReturnReferenceId('');
     setReturnSupplierPaidAmount(0);
     setReturnApplySupplierDebt(true);
+    clearDraft(RETURN_DRAFT_KEY);
   };
 
   const getPurchaseItemsNetTotal = () =>

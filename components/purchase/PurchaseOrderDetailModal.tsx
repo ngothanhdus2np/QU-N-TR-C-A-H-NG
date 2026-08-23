@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FileDown, Printer, X } from 'lucide-react';
 import { Employee, InventoryTransaction } from '../../types';
 import { resolveStaffName } from '../shared/staff';
@@ -28,7 +27,6 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
   onExport,
   onPrint,
 }) => {
-  const navigate = useNavigate();
   const totalAmount = transaction.totalAmount || transaction.items.reduce((sum, item) => sum + getLineTotal(item), 0);
   const isPurchaseReturn = transaction.type === 'PurchaseReturn';
   const documentCode = transaction.referenceId || transaction.id;
@@ -124,7 +122,7 @@ const PurchaseOrderDetailModal: React.FC<PurchaseOrderDetailModalProps> = ({
                         {item.productId ? (
                           <button
                             type="button"
-                            onClick={() => navigate(`/goods?edit=${item.productId}`)}
+                            onClick={() => window.open(`/goods?view=${item.productId}`, '_blank')}
                             className="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-normal"
                             title="Mở chi tiết sản phẩm"
                           >

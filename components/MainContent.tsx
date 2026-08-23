@@ -174,6 +174,7 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
   const location = useLocation();
   const editProductId = new URLSearchParams(location.search).get('edit') ?? undefined;
+  const viewProductId = new URLSearchParams(location.search).get('view') ?? undefined;
 
   // Soft-delete: đơn 'cancelled' chỉ hiển thị ở trang Hóa đơn/Trả hàng (xem lại lịch sử).
   // Mọi trang tính toán/báo cáo/POS dùng activeData — hành vi y như thời xóa cứng, không
@@ -1298,6 +1299,7 @@ const MainContent: React.FC<MainContentProps> = ({
                         : undefined
                 }
                 initialProductId={editProductId}
+                initialViewProductId={viewProductId}
               />
             </React.Suspense>
           </ErrorBoundary>

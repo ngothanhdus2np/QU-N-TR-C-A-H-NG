@@ -117,7 +117,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
                     />
 
                     {viewingProduct?.id === variant.id && (
-                      <tr>
+                      <tr data-viewing-product-panel="true">
                         <td colSpan={colCount} className="p-0 border-l-2 border-r-2 border-indigo-400">
                           <GoodsProductDetailPanel
                             product={viewingProduct}
@@ -159,7 +159,7 @@ const GoodsProductTableBodyBase: React.FC<GoodsProductTableBodyProps> = ({
               )}
 
               {viewingProduct?.id === product.id && !isParentProduct && (
-                <tr>
+                <tr data-viewing-product-panel="true">
                   <td colSpan={colCount} className="p-0 border-l-2 border-r-2 border-b-2 border-indigo-400">
                     <GoodsProductDetailPanel
                       product={viewingProduct}

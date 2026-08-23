@@ -296,8 +296,15 @@ export const GoodsPurchaseForm: React.FC<GoodsPurchaseFormProps> = ({
                           </button>
                         </td>
                         <td className="px-3 py-2 text-slate-500 border-r text-center">{idx + 1}</td>
-                        <td className="px-3 py-2 text-indigo-600 border-r">
-                          {productById.get(item.productId)?.sku}
+                        <td className="px-3 py-2 border-r">
+                          <button
+                            type="button"
+                            onClick={() => window.open(`/goods?view=${item.productId}`, '_blank')}
+                            className="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-normal"
+                            title="Mở chi tiết sản phẩm"
+                          >
+                            {productById.get(item.productId)?.sku}
+                          </button>
                         </td>
                         <td className="px-3 py-2 font-normal border-r">{item.name}</td>
                         <td className="px-3 py-2 border-r">
