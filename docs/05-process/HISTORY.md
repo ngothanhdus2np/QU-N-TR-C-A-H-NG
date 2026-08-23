@@ -13,7 +13,7 @@
 - `tsc --noEmit` sạch xuyên suốt, `npm test` 448/448 pass sau các đợt sửa chính. Verify thật trên dev nhiều vòng qua browser (bắt `window.open` bằng spy, kiểm tra trang tự nhảy đúng số trang trong danh sách 9.176 hàng hóa, xác nhận tạo nháp → chuyển tab → quay lại còn nguyên dữ liệu).
 - **Chưa verify lại vòng cuối** (đổi `window.confirm` → `ConfirmDialog`) bằng browser thật — phiên trình duyệt test bị mất đăng nhập giữa chừng, không tự nhập lại được. Đã qua `tsc`/test sạch, đề nghị user tự kiểm tra.
 - Files: `components/pos/GoodsInventory.tsx`, `components/pos/GoodsProductTableBody.tsx`, `components/pos/GoodsPurchaseForm.tsx`, `components/purchase/PurchaseOrderDetailModal.tsx`, `components/purchase/PurchaseOrderInlineDetail.tsx`, `components/purchase/PurchaseOrdersContainer.tsx`, `components/MainContent.tsx`, `hooks/usePurchaseFormState.ts`.
-- Đã deploy dev nhiều lần trong phiên. **Chưa đụng prod.**
+- Đã deploy dev nhiều lần trong phiên. User xác nhận qua `AskUserQuestion` đồng ý deploy prod ngay dù vòng cuối (ConfirmDialog) chưa verify lại bằng browser (chỉ dựa vào `tsc`/test sạch) — đã push commit `a5f932e` + chạy `scripts/deploy-imac.sh`, build/restart thành công.
 
 ### 2026-08-21 (5) — Điều tra lỗi logo cửa hàng vỡ + upload ảnh lỗi "Lỗi tải ảnh lên Cloud!" — sửa được 2/3 lớp, còn 1 lớp cần user ở gần iMac
 

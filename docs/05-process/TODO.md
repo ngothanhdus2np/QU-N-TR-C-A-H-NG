@@ -7,15 +7,15 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
-### [x] 🟢 GOODS-VIEW-DRAFT-0823 — Mã sản phẩm bấm được ở Phiếu nhập hàng (mở trang chi tiết KiotViet) + tự lưu nháp phiếu đang nhập dở *(xong 2026-08-23, dev)*
+### [x] 🟢 GOODS-VIEW-DRAFT-0823 — Mã sản phẩm bấm được ở Phiếu nhập hàng (mở trang chi tiết KiotViet) + tự lưu nháp phiếu đang nhập dở *(xong 2026-08-23, đã deploy prod)*
 
 > User muốn bấm mã sản phẩm ở Phiếu nhập hàng mở trang chi tiết kiểu KiotViet (tab mới), và không mất dữ liệu đang nhập dở khi lỡ chuyển trang.
 > **Đã làm**: (1) mã hàng ở cả 3 nơi hiển thị (inline detail, modal, form thật `GoodsPurchaseForm`) giờ mở tab mới `/goods?view=<id>` — tự xóa filter, nhảy đúng trang trong danh sách đầy đủ, mở panel `GoodsProductDetailPanel` (giống KiotViet) + tự cuộn tới, không cần vuốt. (2) Phiếu nhập hàng/Trả hàng nhập tự lưu nháp vào `localStorage` khi đang nhập dở, khôi phục khi quay lại — nhưng mặc định hiện danh sách trước, chỉ hỏi "Tiếp tục nhập / Tạo phiếu mới" (dùng `ConfirmDialog.tsx` đúng UI app, không dùng `window.confirm`) khi user bấm tạo phiếu mới hoặc mở phiếu khác.
 > Chi tiết đầy đủ từng bước sửa: HISTORY.md 2026-08-23.
 > `tsc` sạch, `npm test` 448/448 pass. Đã deploy dev.
 > Files: `components/pos/GoodsInventory.tsx`, `GoodsProductTableBody.tsx`, `GoodsPurchaseForm.tsx`, `components/purchase/PurchaseOrderDetailModal.tsx`, `PurchaseOrderInlineDetail.tsx`, `PurchaseOrdersContainer.tsx`, `components/MainContent.tsx`, `hooks/usePurchaseFormState.ts`.
-> **Chưa verify lại bằng browser thật vòng cuối** (đổi `window.confirm` → `ConfirmDialog`) — phiên test mất đăng nhập giữa chừng. Cần user tự kiểm tra trước khi yên tâm hoàn toàn.
-> **Chưa đụng prod** — chờ user xác nhận riêng.
+> **Chưa verify lại bằng browser thật vòng cuối** (đổi `window.confirm` → `ConfirmDialog`) trước khi deploy — phiên test mất đăng nhập giữa chừng. User xác nhận qua AskUserQuestion đồng ý deploy prod dù chưa verify UI, dựa trên `tsc`/test sạch.
+> **Đã deploy prod 2026-08-23** — build/restart thành công (`https://cfobrain.phucsang.com.vn`). Chưa verify bằng browser trên prod (cần đăng nhập thật).
 
 ### [ ] 🔴 STORAGE-XATTR-0821 — Upload file lên Supabase Storage lỗi 500 (cả dev lẫn prod) — cần user pull image trên iMac trực tiếp
 
