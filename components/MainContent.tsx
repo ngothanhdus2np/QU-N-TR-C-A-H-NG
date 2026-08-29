@@ -32,7 +32,6 @@ import {
   getOrderLocalDateKey,
 } from '../services/posOrderService';
 import { supabase } from '../services/supabase';
-import { apiService } from '../services/apiService';
 
 const HelpCenter = React.lazy(() => import('./help/HelpCenter'));
 const OverviewPage = React.lazy(() => import('./overview/OverviewPage'));

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronsLeft,
   ChevronsRight,
@@ -17,11 +16,9 @@ import {
 } from 'lucide-react';
 import type { ExpenseRecord, InventoryTransaction, PayrollRecord, POSOrder, POSProduct } from '../../types';
 import ReportRangeTimeFilter from './ReportRangeTimeFilter';
-import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import {
   formatCurrency,
   formatReportNumber as formatNumber,
-  formatReportDate as formatDate,
 } from '../../src/lib/formatCurrency';
 import ReportDropdownFilter from './ReportDropdownFilter';
 

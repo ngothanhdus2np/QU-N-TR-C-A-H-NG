@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { AppData } from '../../../types';
 import { VAT_OCR_TIMEOUT_MS } from './types';
-import type { VatInvoiceOcrItem, VatInvoiceOcrResult, VatInvoiceMappingLineForm } from './types';
+import type { VatInvoiceOcrItem, VatInvoiceOcrResult } from './types';
 
 export const getPurchaseCode = (transaction: Pick<AppData['inventoryTransactions'][number], 'id'> & { referenceId?: string }) =>
   transaction.referenceId || transaction.id.slice(0, 8).toUpperCase();

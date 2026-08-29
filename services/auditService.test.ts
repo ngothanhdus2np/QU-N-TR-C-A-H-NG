@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { auditService, AuditLog } from './auditService';
+import { auditService } from './auditService';
 
 describe('AuditService', () => {
   beforeEach(() => {

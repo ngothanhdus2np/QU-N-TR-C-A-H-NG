@@ -1,7 +1,7 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
 import { VatDocument, VatCoverageRow } from '../../../types';
-import { VatCenterTab, FilingTab, ReportMode, PurchasePeriodScope } from './types';
+import { VatCenterTab, PurchasePeriodScope } from './types';
 import { formatVatDate } from './utils';
 
 type VatSuppliersRow = {

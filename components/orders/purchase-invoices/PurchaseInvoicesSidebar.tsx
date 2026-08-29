@@ -1,5 +1,5 @@
 import React from 'react';
-import { Receipt, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { FilterDateRange } from '../../shared';
 import type { TabKey, PurchasePeriodScope, PurchaseInvoicesProps } from './types';
 import { TAB_CONFIG } from './types';

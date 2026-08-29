@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Edit2, Trash2, TrendingUp, Phone, Mail, FileText, Lock, CreditCard } from 'lucide-react';
+import { X, User, Edit2, Trash2, TrendingUp, Mail, FileText, Lock, CreditCard } from 'lucide-react';
 import type { POSCustomer, POSOrder, CustomerDebtRecord } from '../../types';
 import { generateId } from '../../src/lib/businessLogic.core';
 import { getCurrentStaffId } from '../shared/staff';

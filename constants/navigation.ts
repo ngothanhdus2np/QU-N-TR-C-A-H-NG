@@ -22,7 +22,6 @@ import {
   ShoppingBag,
   RotateCcw,
   Wrench,
-  Bike,
   Activity,
   LayoutList,
   ListChecks,
@@ -36,7 +35,6 @@ import {
   Gauge,
   CalendarCheck,
   Globe,
-  Store,
   Settings,
   Link2,
 } from 'lucide-react';

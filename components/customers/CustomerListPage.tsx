@@ -3,14 +3,8 @@ import {
   Search,
   Plus,
   X,
-  Edit2,
   Trash2,
-  Phone,
-  Mail,
-  MapPin,
-  FileText,
   Star,
-  Download,
   Users,
 } from 'lucide-react';
 import {

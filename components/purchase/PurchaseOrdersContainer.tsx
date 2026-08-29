@@ -4,9 +4,9 @@ import PurchaseOrdersPage from './PurchaseOrdersPage';
 import PurchaseReturnsPage from './PurchaseReturnsPage';
 import PurchaseOrderDetailModal from './PurchaseOrderDetailModal';
 import GoodsPurchaseReturnForm from './GoodsPurchaseReturnForm';
-import { GoodsPurchaseForm, PurchaseDiscountType, PurchaseItem } from '../pos/GoodsPurchaseForm';
+import { GoodsPurchaseForm, PurchaseItem } from '../pos/GoodsPurchaseForm';
 import { GoodsCreateProductInfoTab } from '../pos/GoodsCreateProductInfoTab';
-import { GoodsCreateProductModal, CreateProductModalTab } from '../pos/GoodsCreateProductModal';
+import { GoodsCreateProductModal } from '../pos/GoodsCreateProductModal';
 import { GoodsCreateProductTextTab } from '../pos/GoodsCreateProductTextTab';
 import SupplierForm from '../suppliers/SupplierForm';
 import {
@@ -18,7 +18,6 @@ import {
   SupplierDebtRecord,
 } from '../../types';
 import {
-  AUTO_SKU_PLACEHOLDER,
   calcEffectiveUnitPrice,
   calculateNextImportPrice,
   generateId,

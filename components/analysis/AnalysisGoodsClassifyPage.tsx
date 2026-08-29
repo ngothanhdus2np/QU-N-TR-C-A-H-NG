@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Package, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Package } from 'lucide-react';
 import type { AppData } from '../../types';
 import { AiInsightPanel } from '../shared';
 import { hashData, getCachedAiResult, setCachedAiResult } from '../../services/aiCache';

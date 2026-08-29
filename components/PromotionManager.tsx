@@ -6,7 +6,7 @@ import { generateId } from '../src/lib';
 import PromotionAiPanel from './promotion/PromotionAiPanel';
 import PromotionLedgerTable from './promotion/PromotionLedgerTable';
 import PromotionSetupPanel from './promotion/PromotionSetupPanel';
-import PromotionSubTabNav, { PromotionSubTab } from './promotion/PromotionSubTabNav';
+import { PromotionSubTab } from './promotion/PromotionSubTabNav';
 import { useToast } from './ui/Toast';
 
 interface PromotionManagerProps {

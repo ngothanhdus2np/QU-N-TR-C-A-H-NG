@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WifiOff, Wifi, CloudOff, Cloud } from 'lucide-react';
+import { WifiOff, CloudOff, Cloud } from 'lucide-react';
 
 async function probeOnline(): Promise<boolean> {
   if (navigator.onLine) return true;

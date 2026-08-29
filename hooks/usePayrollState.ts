@@ -2,10 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   AppData,
   PayrollRecord,
-  Employee,
   PayrollSubTab,
 } from '../types';
-import { calculateEmployeePayroll, calculateStaffRanking, generateId } from '../src/lib';
+import { calculateEmployeePayroll, calculateStaffRanking } from '../src/lib';
 
 interface UsePayrollStateProps {
   data: AppData;

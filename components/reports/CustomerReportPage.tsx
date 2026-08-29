@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { usePosOrders } from '../../hooks/usePosOrders';
 import {
-  CalendarDays,
-  ChevronDown,
   FileText,
 } from 'lucide-react';
 import type { POSCustomer, POSOrder } from '../../types';

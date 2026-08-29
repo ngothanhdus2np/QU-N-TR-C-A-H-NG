@@ -42,7 +42,6 @@ import {
   buildCode128Svg,
   buildLabelProductName,
   normalizeCode128Text,
-  printProductLabels as printProductLabelsFromTemplate,
 } from './goods/barcodeUtils';
 import DOMPurify from 'dompurify';
 

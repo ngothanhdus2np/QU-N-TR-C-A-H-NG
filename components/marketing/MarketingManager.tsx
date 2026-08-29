@@ -31,16 +31,12 @@ import {
 } from 'lucide-react';
 import {
   ContentPlanItem,
-  ContentStrategy,
   ProductLine,
   BrandProfile,
-  StrategicAdvice,
 } from '../../types';
 import { generateContentPlan } from '../../services/marketingClaudeService';
 import {
   STRATEGY_COLORS,
-  DEFAULT_STRATEGIES,
-  DEFAULT_FOCUS_PRODUCTS,
 } from '../../constants/marketing';
 import { useSyncStorage, useCalendar } from '../../hooks/useMarketing';
 import { StrategyBadge, FacebookPreview, SkeletonPost } from './MarketingUI';

@@ -21,7 +21,7 @@ import {
 import type { AppData, POSOrder } from '../../types';
 import { calcOrderRevenue } from '../../src/lib/reportCalculations';
 import { usePosOrders } from '../../hooks/usePosOrders';
-import { CardSkeleton, Skeleton } from '../shared/ui/Skeleton';
+import { CardSkeleton } from '../shared/ui/Skeleton';
 
 interface Props {
   data: AppData;

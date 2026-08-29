@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ChevronDown,
   FileText,
 } from 'lucide-react';
 import type { InventoryTransaction, Supplier } from '../../types';

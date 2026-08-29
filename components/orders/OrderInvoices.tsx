@@ -3,7 +3,6 @@ import {
   FileText,
   Search,
   Download,
-  Eye,
   Copy,
   ChevronLeft,
   ChevronRight,

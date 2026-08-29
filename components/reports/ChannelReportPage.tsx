@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { usePosOrders } from '../../hooks/usePosOrders';
 import {
-  ChevronDown,
   FileText,
 } from 'lucide-react';
 import type { Employee, POSOrder } from '../../types';

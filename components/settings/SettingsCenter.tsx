@@ -9,20 +9,11 @@ import React, {
   useTransition,
 } from 'react';
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
   AlertTriangle,
-  ArrowLeft,
   Bell,
-  Bold,
   BrainCircuit,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Cloud,
   CloudOff,
   CreditCard,
@@ -34,7 +25,6 @@ import {
   Mail,
   MessageSquare,
   Palette,
-  Pencil,
   Plus,
   Package,
   Printer,
@@ -44,7 +34,6 @@ import {
   ServerCog,
   ShieldCheck,
   ShoppingCart,
-  SortAsc,
   Sparkles,
   Store,
   Trash2,
@@ -53,9 +42,7 @@ import {
   User,
   Users,
   WifiOff,
-  X,
   XCircle,
-  CornerDownLeft,
   Crown,
   Gem,
   Star,
@@ -68,7 +55,6 @@ import {
 } from '../../constants/defaultData';
 import { uploadImage } from '../../services/marketingStorageService';
 import { apiService } from '../../services/apiService';
-import { INVENTORY_COST_METHOD_STORAGE_KEY, InventoryCostMethod } from '../../src/lib';
 import { useToast } from '../ui/Toast';
 import type {
   AlertConfig,
