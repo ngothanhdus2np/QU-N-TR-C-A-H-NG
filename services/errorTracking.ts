@@ -65,8 +65,12 @@ function writeErrorLogFile(entry: Record<string, unknown>): void {
   }
 }
 
+// Audit 29/08/2026: bỏ 4 method chưa từng có caller nào trong toàn repo
+// (captureMessage, setUser, clearUser, addBreadcrumb) — cả 4 chỉ chứa nhánh
+// `if (this.sentryEnabled)` với sentryEnabled hard-code false, tức no-op thật sự.
+// Chỉ giữ init() + captureError() + errorHandler là phần đang thực sự chạy.
+// Khi tích hợp Sentry thật thì thêm lại theo nhu cầu lúc đó.
 class ErrorTrackingService {
-  private isProduction = process.env.NODE_ENV === 'production';
   private sentryEnabled = false; // Set to true when Sentry is configured
 
   /**
@@ -109,53 +113,6 @@ class ErrorTrackingService {
     if (typeof window === 'undefined') writeErrorLogFile(entry);
   }
 
-  /**
-   * Capture a message (non-error event)
-   */
-  captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context?: ErrorContext): void {
-    if (this.sentryEnabled) {
-      // TODO: Send to Sentry
-      // Sentry.captureMessage(message, { level, contexts: { custom: context } });
-    }
-
-    // Log to console
-    const logFn = level === 'error' ? console.error : level === 'warning' ? console.warn : console.log;
-    logFn(`[${level.toUpperCase()}]`, message, context);
-  }
-
-  /**
-   * Set user context for error tracking
-   */
-  setUser(user: { id: string; email?: string; username?: string }): void {
-    if (this.sentryEnabled) {
-      // TODO: Set Sentry user
-      // Sentry.setUser(user);
-    }
-  }
-
-  /**
-   * Clear user context
-   */
-  clearUser(): void {
-    if (this.sentryEnabled) {
-      // TODO: Clear Sentry user
-      // Sentry.setUser(null);
-    }
-  }
-
-  /**
-   * Add breadcrumb for debugging
-   */
-  addBreadcrumb(message: string, category: string, data?: Record<string, unknown>): void {
-    if (this.sentryEnabled) {
-      // TODO: Add Sentry breadcrumb
-      // Sentry.addBreadcrumb({ message, category, data });
-    }
-
-    if (!this.isProduction) {
-      console.log('[BREADCRUMB]', { message, category, data });
-    }
-  }
 }
 
 // Singleton instance

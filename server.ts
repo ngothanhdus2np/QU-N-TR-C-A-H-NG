@@ -21,7 +21,7 @@ process.on('uncaughtException', (err, origin) => {
   console.error(`Uncaught Exception: ${err}\n` + `Exception origin: ${origin}`);
 });
 
-import express, { NextFunction, Request, RequestHandler, Response } from 'express';
+import express, { Request, RequestHandler, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import path from 'path';
@@ -33,8 +33,7 @@ import helmet from 'helmet';
 import react from '@vitejs/plugin-react';
 
 import { createClient } from '@supabase/supabase-js';
-import pg from 'pg';
-import { readFile, mkdir, writeFile, unlink } from 'fs/promises';
+import { mkdir, writeFile, unlink } from 'fs/promises';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { createAiRouter } from './routes/ai';
 import { createAuthRouter } from './routes/auth';
@@ -570,15 +569,11 @@ async function startServer() {
       })
     );
 
-    app.get('/health', healthHandler);
-    app.head('/health', healthHandler);
-
-    if (!IS_PROD) {
-      app.use('/api', (req, _res, next) => {
-        console.error(`[DEV API Request] ${req.method} ${req.url}`);
-        next();
-      });
-    }
+    // /health đã được đăng ký ở module scope (trước app.listen) — Express khớp
+    // route theo thứ tự đăng ký và handler đầu tiên trả response luôn (không gọi
+    // next()), nên bản đăng ký lại ở đây không bao giờ chạy tới. Đã gỡ 29/08/2026.
+    // Cùng lúc gỡ middleware log riêng cho '/api' ở đây: logger [DEV Request] phía
+    // trên đã log MỌI request kèm timestamp, nên request /api/* bị log 2 lần.
 
     const requireAuth: RequestHandler = async (req, res, next) => {
       const apiKey = req.headers['x-api-key'] as string;
@@ -687,6 +682,13 @@ async function startServer() {
         console.error('FAILED TO INITIALIZE VITE DEV SERVER:', viteError);
       }
     } else {
+      // service-worker.js phải luôn fresh — nếu không, CDN/trình duyệt cache nó
+      // (đã gặp: Cloudflare cache 4h theo default cho .js), khiến bản SW mới sau
+      // mỗi lần deploy không bao giờ được phát hiện dù người dùng hard reload.
+      app.get('/service-worker.js', (_req, res) => {
+        res.set('Cache-Control', 'no-cache');
+        res.sendFile(path.join(__dirname, 'dist', 'service-worker.js'));
+      });
       app.use(express.static(path.join(__dirname, 'dist')));
       app.get('*all', (_req, res) => {
         res.sendFile(path.join(__dirname, 'dist', 'index.html'));

@@ -299,12 +299,6 @@ const SalesReportPage: React.FC<SalesReportPageProps> = ({
   // Reset về trang 1 khi đổi chế độ hoặc khoảng ngày
   useEffect(() => { setPage(1); }, [interestMode, reportLayout, startDate, endDate, viewMode]);
 
-  const applyWeek = () => {
-    setDateMode('week');
-    setStartDate(weekRange.start);
-    setEndDate(weekRange.end);
-  };
-
   const handleDownload = () => {
     const header = ['Thời gian', 'Doanh thu', 'Giá trị trả', 'Doanh thu thuần'];
     const csvRows = [

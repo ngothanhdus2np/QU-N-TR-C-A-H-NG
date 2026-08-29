@@ -29,24 +29,6 @@ type DateMode = 'week' | 'custom';
 const CHART_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#059669'];
 
 
-const SelectButton: React.FC<{ children: React.ReactNode; active?: boolean; disabled?: boolean; onClick?: () => void }> = ({
-  children,
-  active,
-  disabled,
-  onClick,
-}) => (
-  <button
-    disabled={disabled}
-    onClick={onClick}
-    className={`flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-left text-sm ${
-      active ? 'border-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]' : 'border-slate-200'
-    } ${disabled ? 'cursor-not-allowed text-slate-400' : 'text-slate-700'}`}
-  >
-    <span>{children}</span>
-    <ChevronDown className="h-4 w-4 text-slate-500" />
-  </button>
-);
-
 const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
   orders: bootstrapOrders,
   employees,
@@ -101,13 +83,6 @@ const ChannelReportPage: React.FC<ChannelReportPageProps> = ({
   const primaryRow = rows[0];
   const primaryPercent =
     primaryRow && totals.netRevenue > 0 ? (primaryRow.netRevenue / totals.netRevenue) * 100 : 0;
-
-  const applyWeek = () => {
-    setDateMode('week');
-    setStartDate(weekRange.start);
-    setEndDate(weekRange.end);
-  };
-
 
   const handleDownload = () => {
     const header = ['Kênh bán hàng', 'Doanh thu', 'Giá trị trả', 'Doanh thu thuần'];

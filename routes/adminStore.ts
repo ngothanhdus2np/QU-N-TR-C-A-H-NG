@@ -1,4 +1,4 @@
-import { Router, Request, Response, RequestHandler } from 'express';
+import { Router, RequestHandler } from 'express';
 import { SupabaseClient, User } from '@supabase/supabase-js';
 import { isR2Configured, uploadToR2, deleteFromR2 } from '../services/r2';
 
@@ -12,7 +12,6 @@ type VariantInput = {
 const CONTENT_ROLES: StoreRole[] = ['admin', 'content_manager'];
 const ORDER_ROLES: StoreRole[] = ['admin', 'order_staff'];
 const VIEW_ROLES: StoreRole[] = ['admin', 'content_manager', 'order_staff', 'viewer'];
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const text = (value: unknown, max = 5000) =>
   typeof value === 'string'

@@ -30,24 +30,6 @@ type ViewMode = 'chart' | 'report';
 type DateMode = 'week' | 'custom';
 
 
-const SelectButton: React.FC<{
-  children: React.ReactNode;
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-}> = ({ children, active, disabled, onClick }) => (
-  <button
-    disabled={disabled}
-    onClick={onClick}
-    className={`flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-left text-sm ${
-      active ? 'border-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]' : 'border-slate-200'
-    } ${disabled ? 'cursor-not-allowed text-slate-400' : 'text-slate-700'}`}
-  >
-    <span>{children}</span>
-    <ChevronDown className="h-4 w-4 text-slate-500" />
-  </button>
-);
-
 const HorizontalBarChart: React.FC<{
   title: string;
   rows: GoodsRow[];
@@ -221,13 +203,6 @@ const GoodsReportPage: React.FC<GoodsReportPageProps> = ({
 
   const topRevenueRows = goodsRows.slice(0, 10);
   const topQuantityRows = [...goodsRows].sort((a, b) => b.soldQty - a.soldQty || b.netRevenue - a.netRevenue).slice(0, 10);
-
-  const applyWeek = () => {
-    setDateMode('week');
-    setStartDate(weekRange.start);
-    setEndDate(weekRange.end);
-  };
-
 
   const handleDownload = () => {
     const header = ['Mã hàng', 'Tên hàng', 'SL Bán', 'Doanh thu', 'SL Trả', 'Giá trị trả', 'Doanh thu thuần'];

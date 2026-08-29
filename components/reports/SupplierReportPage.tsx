@@ -33,22 +33,6 @@ type ViewMode = 'chart' | 'report';
 type DateMode = 'week' | 'custom';
 
 
-const SelectButton: React.FC<{ children: React.ReactNode; active?: boolean; onClick?: () => void }> = ({
-  children,
-  active,
-  onClick,
-}) => (
-  <button
-    onClick={onClick}
-    className={`flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-left text-sm text-slate-700 ${
-      active ? 'border-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]' : 'border-slate-200'
-    }`}
-  >
-    <span>{children}</span>
-    <ChevronDown className="h-4 w-4 text-slate-500" />
-  </button>
-);
-
 const SupplierReportPage: React.FC<SupplierReportPageProps> = ({
   transactions,
   suppliers,
@@ -108,13 +92,6 @@ const SupplierReportPage: React.FC<SupplierReportPageProps> = ({
   const maxValue = Math.max(...topRows.map(row => row.netValue), 0);
   const axisMax = maxValue > 0 ? Math.ceil(maxValue / 1_000_000) * 1_000_000 : 0;
   const ticks = axisMax > 0 ? Array.from({ length: 6 }, (_, index) => (axisMax / 5) * index) : [];
-
-  const applyWeek = () => {
-    setDateMode('week');
-    setStartDate(weekRange.start);
-    setEndDate(weekRange.end);
-  };
-
 
   const handleDownload = () => {
     const header = ['Mã nhà cung cấp', 'Tên nhà cung cấp', 'Giá trị nhập', 'Giá trị trả', 'Giá trị thuần'];
