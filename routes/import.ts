@@ -59,22 +59,7 @@ const readSafeWorkbook = (buf: Buffer, fileName = 'Excel') => {
   });
 };
 
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object') {
-    const record = error as Record<string, unknown>;
-    const parts = [record.message, record.details, record.hint, record.code]
-      .filter(Boolean)
-      .map(String);
-    if (parts.length > 0) return parts.join(' | ');
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return 'Unknown error';
-};
+import { getErrorMessage } from './errorMessage';
 
 const parseVariantAttrText = (text: string): Record<string, string> => {
   const result: Record<string, string> = {};

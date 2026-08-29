@@ -24,22 +24,11 @@ function checkRateLimit(req: Request, maxPerMinute: number): boolean {
 
 // [FIX] Lỗi PostgrestError từ supabase.rpc()/query không phải instance Error chuẩn —
 // nhánh cũ chỉ bắt `instanceof Error` nên mất hết message thật, rơi về fallback chung chung.
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object') {
-    const record = error as Record<string, unknown>;
-    const parts = [record.message, record.details, record.hint, record.code]
-      .filter(Boolean)
-      .map(String);
-    if (parts.length > 0) return parts.join(' | ');
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return 'AI service error';
-};
+import { getErrorMessage as baseGetErrorMessage } from './errorMessage';
+
+// ai.ts dùng fallback riêng — bọc lại để mọi lời gọi cũ giữ nguyên hành vi.
+const getErrorMessage = (error: unknown): string =>
+  baseGetErrorMessage(error, 'AI service error');
 
 const AI_SERVICE_ERROR = 'AI service error';
 
