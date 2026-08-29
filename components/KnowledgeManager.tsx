@@ -932,41 +932,6 @@ const KnowledgeManager: React.FC<Props> = ({ data, onUpdateData, initialMainTab 
   );
 };
 
-const AllowanceInput = ({
-  icon: Icon,
-  label,
-  value,
-  onChange,
-  color = 'text-emerald-600',
-}: any) => (
-  <div className="bg-white p-4 rounded-2xl border border-slate-100 focus-within:border-indigo-200 transition-all shadow-sm flex items-center justify-between">
-    <div className="flex items-center gap-3">
-      <div className="p-2 bg-slate-50 rounded-xl shadow-sm">
-        <Icon className={`w-3.5 h-3.5 ${color}`} />
-      </div>
-      <span className="text-[9px] font-normal text-slate-500 uppercase tracking-tighter">
-        {label}
-      </span>
-    </div>
-    <input
-      type="number"
-      value={value || 0}
-      onChange={e => onChange(Number(e.target.value))}
-      className="w-32 bg-transparent border-none outline-none font-normal text-slate-800 text-right text-sm"
-    />
-  </div>
-);
-
-const AllowanceRow = ({ icon: Icon, label, value, color = 'text-slate-400' }: any) => (
-  <div className="flex items-center justify-between py-1 border-b border-slate-50/50 last:border-none">
-    <div className="flex items-center gap-2.5">
-      <Icon className={`w-3 h-3 ${color}`} />
-      <span className="text-2xs font-normal text-slate-500 uppercase tracking-tight">{label}</span>
-    </div>
-    <span className="text-xs font-normal text-slate-700">{(value || 0).toLocaleString()}đ</span>
-  </div>
-);
-
 const InputWrapper = ({ label, icon: Icon, children }: any) => (
   <div className="space-y-1.5 flex-1">
     <label className="text-[9px] font-normal text-slate-400 uppercase tracking-widest ml-1">

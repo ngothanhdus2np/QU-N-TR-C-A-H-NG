@@ -39,6 +39,7 @@ interface OrderReturnsProps {
 const PAYMENT_LABELS: Record<string, string> = {
   Cash: 'Tiền mặt',
   Bank: 'Chuyển khoản',
+  Card: 'Thẻ',
   Momo: 'Momo',
   Other: 'Khác',
   Split: 'Kết hợp nhiều PT',

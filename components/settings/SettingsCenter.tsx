@@ -893,14 +893,9 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
     }
   };
 
-  const toggleAllowSellOutOfStock = () => {
-    const nextSettings = {
-      ...inventoryForm,
-      allowSellOutOfStock: !inventoryForm.allowSellOutOfStock,
-    };
-    setInventoryForm(nextSettings);
-    void saveInventorySettings(nextSettings);
-  };
+  // toggleAllowSellOutOfStock đã gỡ 29/08/2026: UI bật/tắt "bán âm kho" thật sự
+  // nằm ở components/settings/tabs/GoodsTab.tsx (handler + TogglePill), bản ở đây
+  // là bản sao còn sót sau khi logic dời sang tab đó, không nút nào gọi tới.
 
   const toggleShowSalesAdvisor = () => {
     const nextSettings = {
