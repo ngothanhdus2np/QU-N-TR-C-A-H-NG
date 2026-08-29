@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   // Áp dụng cho tất cả TS/TSX
@@ -39,8 +40,18 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
+      'react-hooks': reactHooks,
     },
     rules: {
+      // --- React Hooks ---
+      // Trước 29/08/2026 codebase có sẵn comment `eslint-disable react-hooks/...`
+      // nhưng plugin CHƯA từng được cài → eslint báo "rule not found" (8 error,
+      // `npm run lint` luôn fail) và trên thực tế KHÔNG luật hook nào từng chạy
+      // trên 245 file React. Chỉ bật 2 rule kinh điển; các rule React Compiler
+      // khác của plugin v7 để lại cho đợt sau, tránh mở quá rộng một lúc.
+      'react-hooks/rules-of-hooks': 'error', // gọi hook có điều kiện = bug thật
+      'react-hooks/exhaustive-deps': 'warn', // ghi nhận trước, sửa ở đợt riêng
+
       // --- TypeScript ---
       // warn thay vì error vì codebase hiện có nhiều any — dần dần cải thiện
       '@typescript-eslint/no-explicit-any': 'warn',

@@ -3,6 +3,61 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-29 (2) — Sửa cổng chất lượng: cài `eslint-plugin-react-hooks` (chưa từng có), `npm run lint` chạy lại được
+
+- Thực hiện **Giai đoạn 1** của kế hoạch dọn codebase (xem HISTORY 2026-08-29 (1)). Mục tiêu: có lưới an toàn trước khi xoá bất cứ dòng nào ở các giai đoạn sau.
+- **Bug gốc**: codebase có sẵn comment `// eslint-disable-next-line react-hooks/exhaustive-deps` ở 6 chỗ, nhưng gói `eslint-plugin-react-hooks` **chưa từng được cài**. Hệ quả kép: (1) eslint báo 6 error `Definition for rule 'react-hooks/exhaustive-deps' was not found` khiến `npm run lint` (= `eslint . && tsc --noEmit`) luôn thoát khác 0; (2) nghiêm trọng hơn — trên 245 file React **chưa bao giờ có luật nào kiểm tra dependency array hay rules-of-hooks**. Lỗi này tồn tại lâu mà không ai chạm phải vì `.claude/rules/workflow.md` chỉ bắt buộc `tsc --noEmit` + `npm test`, không bắt `npm run lint`.
+- **Đã sửa**: cài `eslint-plugin-react-hooks@7.1.1` (bản duy nhất hỗ trợ ESLint 10 đang dùng — xác nhận qua `peerDependencies`). Khai báo trong `eslint.config.js` và **chỉ bật 2 rule kinh điển**: `rules-of-hooks: 'error'` (gọi hook có điều kiện = bug thật) và `exhaustive-deps: 'warn'`. Plugin v7 kèm ~28 rule React Compiler khác (`set-state-in-effect`, `purity`, `immutability`...) — cố ý **không bật** để tránh mở quá rộng một lúc.
+- **Kết quả quét lần đầu**: `rules-of-hooks` **0 vi phạm** (không có hook nào gọi có điều kiện — tin tốt). `exhaustive-deps` lộ ra **89 cảnh báo ở 36 file**, tập trung nhất ở `GoodsInventory.tsx` (15), `POSComputer.tsx` (8), `usePayrollState.ts` (8). Theo đúng gate của kế hoạch: **chỉ ghi nhận, chưa sửa** — sửa dependency array có thể đổi hành vi runtime nên phải tách thành task riêng (đã ghi vào TODO.md `HOOKS-DEPS-0829`).
+- Sửa kèm 2 lỗi `prefer-const` còn lại: `components/pos/printInvoiceFromTemplate.ts:346` (`opened` gán 1 lần rồi return) và `routes/channelLinks.ts:328` (`shopeeProductShopMap` chỉ bị `.set()`, là đột biến nội dung Map chứ không gán lại). Cả 2 biên dịch ra kết quả y hệt.
+- **Verify đủ 3 cổng**: `npm run lint` → **exit 0** (từ 8 error xuống 0 error, 457 warning), `npm test` → 448/448 pass, `tsc --noEmit` → exit 0.
+- Files: `eslint.config.js`, `package.json`, `package-lock.json`, `components/pos/printInvoiceFromTemplate.ts`, `routes/channelLinks.ts`.
+
+### 2026-08-29 (1) — Audit toàn diện codebase: dead code, trùng lặp, rủi ro (chỉ báo cáo, không sửa)
+
+- User yêu cầu audit toàn diện với vai trò senior engineer: tìm phần dư thừa/lỗi thời/trùng lặp/không dùng, đánh giá rủi ro, đề xuất lộ trình tối ưu. Yêu cầu rõ: **không xoá/sửa gì trước khi user duyệt**.
+- Phương pháp: 4 agent quét song song (dead code frontend, dead code backend, dependency/asset, trùng lặp & anti-pattern) + tự kiểm chứng lại từng phát hiện nặng bằng code thật theo nguyên tắc 1 của `EVALUATION_WORKFLOW.md` (không tin báo cáo).
+- **Kết quả sạch đáng ghi nhận**: 0 file mồ côi trên 309 file mã nguồn (quét 214 `.tsx` + 95 `.ts`), 0 file `.bak/.old`, 0 khối code comment-out, 0 `if (false)`, 0 test bị skip, 0 migration revert nhau. Rác nằm *bên trong* file chứ không ở cấp file.
+- **Phát hiện chính**: (1) tính năng phân bổ VAT tự động bỏ dở ~187 dòng (`PurchaseInvoices.tsx:2109/2167` + `vatCoverage.ts:101-195`, không nút nào gọi); (2) `GoodsLegacyProductFormView.tsx` 473 dòng nằm trong nhánh `case 'product_form'` không thể chạm tới; (3) logic Code128 nhân bản 3 nơi, bản dùng chung `barcodeUtils.ts:139-201` bị che khuất hoàn toàn; (4) `SelectButton`+`applyWeek` định nghĩa 7 lần ở 8 trang report, chết cả 14 lần; (5) gói `pg` hoàn toàn không dùng (chỉ 1 dòng import ở `server.ts:36`); (6) `/health` đăng ký trùng ở `server.ts:573-574`; (7) 14 endpoint không UI nào gọi; (8) 184 biến/import thừa (eslint).
+- **2 vấn đề vượt ngoài dọn rác**: (a) **giảm giá % theo sản phẩm không bao giờ lưu xuống DB** — `apiService.ts:82` và `:524` comment mất `discount_percent` kèm TODO "enable after running SQL migration", UI hiện đúng nhờ cache lạc quan rồi mất trắng khi reload (đúng khuôn mẫu lỗi `employees.email`/`debt_amount` đã gặp); (b) `npm run lint` fail + luật React Hooks chưa từng chạy (đã xử lý ở phiên (2) bên trên).
+- **Đã bác bỏ 2 kết luận sai của agent khi kiểm chứng**: toggle "bán âm kho" vẫn hoạt động bình thường (bản thật ở `GoodsTab.tsx:1055-1069`, bản trong `SettingsCenter.tsx:910` chỉ là bản sao thừa — không phải mất tính năng); 2 bản in tem mã vạch đọc cùng khoá `localStorage['barcode_label_template_settings']` nên tem in ra không sai (thuần trùng lặp, không phải bug).
+- Đo lường: 132.050 dòng TS/TSX, 1.024 file tracked; coverage 36,9% nhưng **chỉ tính file có test chạm tới** — toàn bộ 245 file component (97.354 dòng, 74% codebase) không nằm trong phép đo. 15 lỗ hổng npm (10 HIGH), trong đó `pdfjs-dist` và `xlsx` nằm đúng luồng upload PDF/import Excel đang dùng thật.
+- Báo cáo đầy đủ dạng Artifact: https://claude.ai/code/artifact/724fdfec-7996-40c2-ace9-335216a8268d
+- Không thay đổi file code nào trong phiên này.
+
+### 2026-08-23 (5) — Điều tra + sửa bug hạ tầng: service-worker.js bị Cloudflare cache 4h khiến deploy dev không thấy hiệu lực
+
+- User báo hard reload sau deploy bento nhưng không thấy đổi gì. Điều tra sâu (fetch trực tiếp qua HTTPS + SSH vào iMac kiểm tra source/dist/MD5) loại trừ được nghi ngờ ban đầu (build sai chunk — hóa ra do tự grep nhầm chunk `PurchaseOrdersContainer-*.js`, code thật của `GoodsPurchaseForm` nằm ở chunk chia sẻ khác do Rollup gộp theo `invoiceService`; build/deploy thực ra đã đúng).
+- **Root cause thật**: `public/service-worker.js` được server trả về không có header cache rõ ràng → Cloudflare tự áp `Cache-Control: public, max-age=14400` (mặc định 4h theo phần mở rộng `.js`) và ghi đè bất kỳ header origin nào gửi lên (do "Origin Cache Control" tắt) — khiến trình duyệt giữ Service Worker cũ, hard reload không đủ để nhận bản mới, mọi lần deploy sau đều có nguy cơ "tưởng chưa đổi gì".
+- **Đã sửa 2 lớp**:
+  1. Code (`server.ts`): thêm route riêng cho `GET /service-worker.js` set `Cache-Control: no-cache` tường minh trước khi rơi vào `express.static`.
+  2. Hạ tầng: hướng dẫn user tạo **Cloudflare Cache Rule** (`URI Path equals /service-worker.js` → **Bypass cache**) — áp dụng cho toàn zone `phucsang.com.vn` (không giới hạn hostname) nên tự động fix luôn cho cả dev lẫn prod dù prod chưa deploy code fix.
+- Verify: fetch trực tiếp `https://dev.phucsang.com.vn/service-worker.js` trước/sau — trước: `cache-control: max-age=14400`, `cf-cache-status: EXPIRED`; sau khi thêm Cache Rule: `cache-control: no-cache`, `cf-cache-status: DYNAMIC`.
+- `tsc` sạch, `npm test` 448/448 pass. Đã deploy dev. **Chưa deploy `server.ts` lên prod** (theo quy tắc mặc định chỉ làm trên dev) — Cache Rule Cloudflare đã fix phần hiển thị cho prod ngay cả khi chưa deploy, nhưng nên deploy code fix lên prod khi có dịp để origin cũng trả đúng header (phòng khi Cache Rule bị gỡ sau này).
+- Files: `server.ts`. Hạ tầng: Cloudflare Cache Rule "Bypass cache - service worker." trên zone `phucsang.com.vn`.
+
+### 2026-08-23 (4) — Giảm khoảng cách đáy khung Bento "Phiếu nhập hàng" để ưu tiên diện tích hiển thị
+
+- User muốn cạnh dưới của 2 ô bento gần cạnh dưới màn hình hơn. Đổi padding của row bọc 2 card từ `p-4` (đều 4 cạnh, 16px) thành `px-4 pt-4 pb-2` — giữ nguyên khoảng cách 2 bên/trên, chỉ giảm khoảng cách dưới còn 8px.
+- Verify qua computed style trên browser thật (`padding-bottom: 8px`), `tsc` sạch, `npm test` 448/448 pass. Đã deploy dev.
+- Files: `components/pos/GoodsPurchaseForm.tsx`.
+
+### 2026-08-23 (3) — Tách "Phiếu nhập hàng" thành 2 ô kiểu Bento (bảng sản phẩm + thông tin phiếu)
+
+- Tiếp nối việc đồng bộ style bên dưới: user phản hồi 2 khối (bảng sản phẩm / thông tin phiếu) vẫn dính liền nhau, muốn tách rõ kiểu "bento" (2 card riêng biệt, có khoảng cách, bo góc lớn). Trước khi sửa code, dựng 1 mockup tĩnh (HTML, publish Artifact) mô phỏng đúng cấu trúc/class thật của file, cho user xem toggle Hiện tại/Đề xuất — user duyệt ("đẹp rồi, làm đi") rồi mới code.
+- Tái cấu trúc `GoodsPurchaseForm.tsx`: đưa header (tiêu đề + tìm kiếm) ra làm thanh full-width trên cùng (trước đó header nằm lồng trong cột trái). Bên dưới header là 1 row `flex gap-4 p-4` trên nền `bg-slate-50`, chứa 2 card `bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden` riêng biệt: card bảng sản phẩm (flex-1) và card sidebar thông tin phiếu (360px, thu gọn được). Nút thu gọn sidebar (`ChevronLeft/Right`) chuyển ra 1 wrapper `relative` không `overflow-hidden` riêng để không bị bo góc/`overflow-hidden` của card bảng cắt mất.
+- Verify thật trên browser: dựng server dev cục bộ (`preview_start name=dev`), vào Mua hàng → Nhập hàng → "+ Phiếu nhập hàng" — xác nhận 2 ô tách biệt đúng như mockup, đọc computed style qua JS confirm `border-radius:16px`, `border:1px solid #e2e8f0`, `padding/gap:16px`; bấm nút thu gọn/mở lại sidebar — chuyển mượt, không còn sliver viền thừa khi thu gọn (trước đây dùng `border-l` cố định, giờ border/rounded chỉ áp khi sidebar mở).
+- `tsc --noEmit` sạch, `npm test` 448/448 pass. Đã build + restart dev.
+- Files: `components/pos/GoodsPurchaseForm.tsx`.
+
+### 2026-08-23 (2) — Đồng bộ style "Phiếu nhập hàng" (GoodsPurchaseForm.tsx) theo đúng chuẩn app
+
+- User phản hồi trang "Phiếu nhập hàng" không cùng style với các trang khác, nhìn khó chịu. Chẩn đoán 6 nhóm lỗi: màu hex tùy tiện (`bg-[#f0f2f5]`), font-weight sai chuẩn (`font-bold`/`font-semibold` thay vì `font-normal` mặc định của app), border-radius không nhất quán (`rounded-md`/`rounded-lg` lẫn lộn thay vì `rounded-xl`), border không có tông slate, header bảng không theo mẫu uppercase/tracking-widest, khối nút cuối trang dùng `grid grid-cols-2` + `uppercase` + `border-2` + `shadow-md` khác chuẩn.
+- Dùng `components/purchase/GoodsPurchaseReturnForm.tsx` (form "Trả hàng nhập" — sinh đôi chức năng, đã đúng chuẩn) làm mẫu tham chiếu, áp lại toàn bộ class Tailwind cho `GoodsPurchaseForm.tsx`: wrapper ngoài, header, thanh tìm kiếm + dropdown, `<thead>` bảng + dòng tổng, empty-state, các ô trong `<tbody>`, sidebar phải (toggle, user-info, tìm nhà cung cấp), khối "Mã phiếu nhập"/"Chứng từ đầu vào", khối tổng tiền hàng + giảm giá, textarea ghi chú, và khối nút "Lưu tạm"/"Hoàn thành" cuối trang (đổi `grid-cols-2` → `flex`, bỏ `uppercase`, `rounded-lg` → `rounded-xl`, `shadow-md` → `shadow-sm`).
+- Không đụng vào nhánh `else` (Purchase History table hiện khi `showPurchaseForm===false`) — code chết, không được `PurchaseOrdersContainer.tsx` render tới, tránh scope creep.
+- `tsc --noEmit` sạch, `npm test` 448/448 pass. Đã build + restart dev (`scripts/deploy-imac-dev.sh`) thành công.
+- Files: `components/pos/GoodsPurchaseForm.tsx`.
+
 ### 2026-08-23 — Mã sản phẩm trong Phiếu nhập hàng bấm được → mở trang chi tiết kiểu KiotViet + tự lưu nháp phiếu đang nhập dở
 
 - User muốn mã sản phẩm ở "Phiếu nhập hàng" bấm được, mở trang chi tiết sản phẩm (dẫn ảnh chụp màn hình KiotViet làm mẫu). Làm qua nhiều vòng lặp theo phản hồi trực tiếp của user:

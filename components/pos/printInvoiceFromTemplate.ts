@@ -343,7 +343,7 @@ export function openPrintInvoice(opts: PrintInvoiceOptions, copies = 1): boolean
   if (!html) return false;
 
   // Mở bản đầu ngay, các bản sau delay 350ms để browser không block popup
-  let opened = openOneWindow(html);
+  const opened = openOneWindow(html);
   for (let i = 1; i < copies; i++) {
     setTimeout(() => openOneWindow(html), i * 350);
   }

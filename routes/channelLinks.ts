@@ -325,7 +325,7 @@ export function createChannelLinksRouter(
 
       // Lấy shopee_products để biết shop_id
       const spProductIds = [...new Set(spVariants.map(v => v.shopee_product_id))];
-      let shopeeProductShopMap: Map<string, string> = new Map();
+      const shopeeProductShopMap: Map<string, string> = new Map();
       if (spProductIds.length > 0) {
         const { data: spData } = await supabase.from('shopee_products').select('id, shop_id').in('id', spProductIds);
         for (const sp of spData ?? []) {
