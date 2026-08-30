@@ -1,4 +1,3 @@
-import * as pdfjsLib from 'pdfjs-dist';
 import { Receipt, FileCheck, FileMinus, FileX } from 'lucide-react';
 import {
   AppData,
