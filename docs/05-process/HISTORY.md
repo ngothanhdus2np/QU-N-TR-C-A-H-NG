@@ -3,6 +3,20 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-30 — Vá lỗi giảm giá % không lưu xuống DB + test hồi quy (DISCOUNT-PERCENT-0829)
+
+- User chọn ưu tiên vá lỗi thật trước khi dọn tiếp dead code. Đây là Giai đoạn 4 (mục 1) của kế hoạch audit.
+- **Truy được nguồn gốc bằng git**: 2 dòng `discount_percent` trong `services/apiService.ts` (đường ghi ở `sanitizeItem`, đường đọc ở `POS_PRODUCT_BOOTSTRAP_COLUMNS`) được thêm vào **dưới dạng đã comment ngay từ đầu** ở commit `c383992` (26/06/2026) — một commit về việc hoàn toàn khác (popup tạo nhóm/thương hiệu, fix URI too long Shopee), không hề nhắc tới discount trong message. Nghĩa là tính năng **chưa từng hoạt động một lần nào**. Cột có trong `supabase_setup.sql:279` từ `861200a` (25/06/2026) nhưng **chưa bao giờ được viết thành migration** — mà `apply-migrations.sh` chỉ chạy file trong `supabase_migrations/`, nên không có gì bảo đảm cột tồn tại thật trên DB.
+- **Không verify được DB — hạ tầng đang xuống**: SSH LAN tới iMac `192.168.1.2` ping mất 100% gói; cả 4 hostname (`dev.phucsang.com.vn`, `cfobrain.phucsang.com.vn`, `app.phucsang.com.vn`, `supabase-dev.phucsang.com.vn`) đều trả **HTTP 530 / error 1033** — Cloudflare Tunnel từ iMac không kết nối, **gồm cả prod**. `.env.local` trỏ `localhost:8000` (Supabase local không chạy). Đã thử lại nhiều lần cách nhau, không phải trục trặc thoáng qua.
+- **Cách xử lý để không bị chặn**: viết `supabase_migrations/043_pos_products_discount_percent.sql` dùng `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` — **idempotent**, đúng trong CẢ hai trường hợp (cột đã có thì không làm gì, chưa có thì thêm). Nhờ vậy không cần biết trạng thái DB hiện tại vẫn sửa được an toàn, đồng thời đưa cột vào diện migration tracking để lần deploy nào cũng được bảo đảm.
+- Bỏ comment 2 dòng trong `apiService.ts`. Export `POS_PRODUCT_BOOTSTRAP_COLUMNS` (trước là private) để test khoá được danh sách cột.
+- **Thêm `tests/unit/discountPercentSyncMapping.test.ts`** (4 test) khoá cả 3 mắt xích: ghi qua `sanitizeItem`, đọc qua `dataMapper`, và cột phải có mặt trong danh sách bootstrap. Có test riêng cho trường hợp không đặt giảm giá — field vẫn phải CÓ MẶT với giá trị 0, vì vắng mặt nghĩa là không ghi đè được khi user gỡ giảm giá về 0.
+- **Đã kiểm chứng test thật sự bắt được bug** (không phải test rỗng): tạm comment lại 2 dòng → **3/4 test fail** đúng như mong đợi, rồi khôi phục. Test thứ 4 vẫn xanh vì nó khoá riêng `dataMapper` vốn không bị hỏng.
+- **Thứ tự deploy bắt buộc** (đã xác minh cả 2 script đều đúng sẵn): `deploy-imac.sh` và `deploy-imac-dev.sh` chạy `apply-migrations.sh` ở **bước 1.6 TRƯỚC** build ở bước 2, và `set -e` khiến migration lỗi là dừng deploy. Quan trọng vì deploy code mới khi thiếu cột sẽ làm **MỌI lần lưu sản phẩm fail `PGRST204`** — tệ hơn hẳn bug hiện tại.
+- `tsc --noEmit` sạch, `npm run lint` exit 0, `npm test` **452/452** (448 + 4 mới), `npm run build` exit 0.
+- **CHƯA deploy dev lẫn prod, CHƯA verify trên DB thật** — chờ iMac online lại. Chi tiết các bước còn phải làm: TODO.md mục `DISCOUNT-PERCENT-0829`.
+- Files: `supabase_migrations/043_pos_products_discount_percent.sql` (mới), `services/apiService.ts`, `tests/unit/discountPercentSyncMapping.test.ts` (mới).
+
 ### 2026-08-29 (3) — Dọn dead code Giai đoạn 2: −520 dòng thực, 4 commit rollback được
 
 - Thực hiện **Giai đoạn 2/5** kế hoạch dọn codebase. Tổng: **47 file, +95/−615 dòng** (net −520). Chia 4 commit độc lập để rollback từng phần nếu cần.

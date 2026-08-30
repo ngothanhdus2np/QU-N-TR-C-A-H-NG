@@ -1,0 +1,24 @@
+-- 2026-08-30: Chiết khấu % mặc định theo sản phẩm (Thiết lập giá) chưa từng lưu được xuống DB.
+--
+-- Bối cảnh (audit 2026-08-29, task DISCOUNT-PERCENT-0829):
+-- Người dùng đặt giảm giá % ở GoodsPriceSetupModal.tsx → GoodsInventory.tsx đóng gói vào
+-- patch gửi đi, nhưng services/apiService.ts có 2 dòng bị comment từ commit c383992
+-- (26/06/2026) kèm ghi chú "TODO: enable after running SQL migration":
+--   - dòng ~82  : discount_percent trong sanitizeItem  → KHÔNG BAO GIỜ GHI
+--   - dòng ~524 : discount_percent trong POS_PRODUCT_BOOTSTRAP_COLUMNS → KHÔNG BAO GIỜ ĐỌC
+-- Hệ quả: UI hiện giá trị mới nhờ cache lạc quan rồi mất trắng khi tải lại trang, không
+-- báo lỗi gì. Tính năng chưa từng hoạt động kể từ khi được viết.
+--
+-- Cột này ĐÃ có trong supabase_setup.sql:279 từ 25/06/2026 nhưng CHƯA BAO GIỜ được viết
+-- thành migration, mà scripts/apply-migrations.sh chỉ chạy file trong supabase_migrations/.
+-- Vì vậy không có gì bảo đảm nó đã thực sự tồn tại trên DB dev/prod — đúng khuôn mẫu đã
+-- gây ra 037_employees_email_column.sql (cột email) và bug pos_customers.debt_amount.
+--
+-- ADD COLUMN IF NOT EXISTS nên câu lệnh này an toàn trong CẢ HAI trường hợp: cột đã có thì
+-- không làm gì, cột chưa có thì thêm mới. Chạy được nhiều lần không hại.
+--
+-- THỨ TỰ QUAN TRỌNG: migration này phải chạy TRƯỚC khi deploy code bỏ comment 2 dòng trên.
+-- scripts/deploy-imac.sh đã đúng thứ tự sẵn (bước 1.6 chạy apply-migrations.sh trước khi
+-- build), và `set -e` khiến migration lỗi là dừng deploy luôn — code mới không lên khi
+-- schema chưa sẵn sàng.
+ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;

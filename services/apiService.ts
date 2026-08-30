@@ -79,7 +79,9 @@ export const sanitizeItem = (key: keyof AppData, item: any) => {
       weight_unit: item.weightUnit,
       location: item.location,
       related_sku: item.relatedSku || null,
-      // discount_percent: n(item.discountPercent || 0), // TODO: enable after running SQL migration in supabase_setup.sql
+      // Bật lại 30/08/2026 kèm migration 043_pos_products_discount_percent.sql — trước đó
+      // bị comment nên giảm giá % người dùng đặt ở Thiết lập giá không bao giờ xuống DB.
+      discount_percent: n(item.discountPercent || 0),
       customer_orders: n(item.customerOrders || 0),
       direct_sale: item.directSale !== false,
       product_type: item.productType || 'Hàng hóa',
@@ -496,7 +498,10 @@ const POS_ORDER_BOOTSTRAP_COLUMNS = [
   // Liên kết phiếu trả → đơn gốc (migration 025) — guard chống trả trùng cần sau reload
   'original_order_id', 'return_fee', 'return_other_refund',
 ].join(',');
-const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
+// Export để test hồi quy khoá được danh sách cột: nếu một cột bị bỏ khỏi đây thì
+// PostgREST không trả về, dataMapper đọc ra undefined và dữ liệu "biến mất" âm thầm
+// mà không có lỗi nào — đúng cách discount_percent từng hỏng (DISCOUNT-PERCENT-0829).
+export const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'id',
   'sku',
   'name',
@@ -521,7 +526,7 @@ const POS_PRODUCT_BOOTSTRAP_COLUMNS = [
   'location',
   'related_sku',
   'created_at',
-  // 'discount_percent', // TODO: enable after running SQL migration in supabase_setup.sql
+  'discount_percent', // bật lại 30/08/2026 cùng migration 043 — xem ghi chú ở sanitizeItem
   'customer_orders',
   'direct_sale',
   'product_type',

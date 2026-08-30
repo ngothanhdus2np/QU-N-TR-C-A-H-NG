@@ -33,12 +33,18 @@
 > **Giai đoạn 4 — vá 2 vấn đề thật**: (1) giảm giá % không lưu DB — xem `DISCOUNT-PERCENT-0829` bên dưới; (2) 15 lỗ hổng npm, ưu tiên `pdfjs-dist` + `xlsx` vì nằm đúng luồng upload PDF/import Excel.
 > **Giai đoạn 5 — gộp trùng lặp + siết kiểu**: gộp Code128 (3 bản), gộp `fmt`/`PAYMENT_LABELS`/`getCustomerCode` vào `orders/shared.ts`, viết test cho `factoryReset.ts`/`posOfflineQueue.ts`, bật `strict` từng cờ bắt đầu từ `src/lib/`.
 
-### [ ] 🔴 DISCOUNT-PERCENT-0829 — Giảm giá % theo sản phẩm KHÔNG BAO GIỜ lưu xuống DB (mất dữ liệu âm thầm)
+### [~] 🔴 DISCOUNT-PERCENT-0829 — Giảm giá % theo sản phẩm KHÔNG BAO GIỜ lưu xuống DB *(code + migration xong 2026-08-30 — CHƯA verify DB, CHƯA deploy)*
 
-> **Phát hiện qua audit 2026-08-29**, chưa sửa. Người dùng đặt `discountPercent` ở Thiết lập giá (`GoodsPriceSetupModal.tsx:289`), `GoodsInventory.tsx:1281` đóng gói vào patch gửi đi — nhưng `services/apiService.ts:82` đã **comment mất** dòng ghi `discount_percent`, và `:524` cũng loại nó khỏi danh sách cột đọc về. Cả 2 kèm ghi chú `// TODO: enable after running SQL migration in supabase_setup.sql`.
-> **Hệ quả**: UI hiện giá trị mới nhờ cache lạc quan → tải lại trang là mất trắng. Không có lỗi, không có toast — im lặng hoàn toàn.
-> **Đúng khuôn mẫu** 2 lỗi đã gặp: `employees.email` (PAYROLL-EMAIL-COL-0816) và `pos_customers.debt_amount` (DEBT-AMOUNT-COL-0818) — cột có trong `supabase_setup.sql:279` nhưng **có thể chưa từng chạy thật** trên DB.
-> **Bước đầu tiên bắt buộc**: truy `information_schema.columns` trên CẢ dev VÀ prod xem cột `pos_products.discount_percent` có tồn tại không, TRƯỚC khi sửa dòng nào. Có cột → bỏ comment 2 dòng + verify bằng cách đặt giảm giá thật rồi hard refresh. Không có cột → viết migration mới, hoặc gỡ ô nhập khỏi UI nếu tính năng không còn cần.
+> **Phát hiện qua audit 2026-08-29.** Người dùng đặt `discountPercent` ở Thiết lập giá (`GoodsPriceSetupModal.tsx:289`), `GoodsInventory.tsx:1281` đóng gói vào patch gửi đi — nhưng `services/apiService.ts` đã **comment mất** dòng ghi `discount_percent` VÀ loại nó khỏi `POS_PRODUCT_BOOTSTRAP_COLUMNS` (danh sách cột select). Cả 2 kèm `// TODO: enable after running SQL migration`.
+> **Hệ quả**: UI hiện giá trị mới nhờ cache lạc quan → tải lại trang là mất trắng. Không lỗi, không toast — im lặng hoàn toàn.
+> **Truy được nguồn gốc**: 2 dòng đó được thêm vào **dưới dạng đã comment ngay từ đầu** ở commit `c383992` (26/06/2026 — commit về việc khác hẳn, popup tạo nhóm/thương hiệu). Nghĩa là tính năng **chưa từng chạy một lần nào** kể từ khi được viết. Cột `discount_percent` có trong `supabase_setup.sql:279` từ `861200a` (25/06/2026) nhưng **chưa bao giờ được viết thành migration**, mà `apply-migrations.sh` chỉ chạy file trong `supabase_migrations/`.
+> **Đã làm 2026-08-30**: (1) thêm `supabase_migrations/043_pos_products_discount_percent.sql` dùng `ADD COLUMN IF NOT EXISTS` — **idempotent nên an toàn dù cột đã có hay chưa**, giải quyết được việc không truy vấn được DB lúc sửa; (2) bỏ comment 2 dòng trong `apiService.ts`, export `POS_PRODUCT_BOOTSTRAP_COLUMNS` để test khoá được; (3) thêm `tests/unit/discountPercentSyncMapping.test.ts` (4 test) khoá cả 3 mắt xích ghi/đọc/danh sách cột — **đã kiểm chứng test bắt được bug**: comment lại 2 dòng thì 3/4 test fail.
+> `tsc` sạch, `npm run lint` exit 0, `npm test` **452/452**, `npm run build` exit 0.
+> **CÒN LẠI — BỊ CHẶN**: chưa verify được cột thật trên DB vì iMac không tới được (SSH LAN `192.168.1.2` ping mất 100%, và cả 4 hostname `dev`/`cfobrain`/`app`/`supabase-dev` đều trả **HTTP 530 error 1033** — Cloudflare Tunnel xuống, gồm cả prod). Cần khi iMac online lại:
+> 1. Truy `information_schema.columns` trên dev + prod để biết cột đã có sẵn hay migration 043 mới thực sự tạo ra (chỉ để ghi nhận — không đổi cách sửa vì migration idempotent).
+> 2. Deploy dev (`deploy-imac-dev.sh`) — script chạy migration ở bước 1.6 TRƯỚC build ở bước 2, `set -e` nên migration lỗi là dừng deploy. **Thứ tự này bắt buộc**: deploy code mà thiếu cột sẽ khiến MỌI lần lưu sản phẩm fail `PGRST204`, tệ hơn bug hiện tại.
+> 3. Verify thật trên browser: đặt giảm giá % cho 1 SP ở Thiết lập giá → hard refresh → giá trị phải còn. Rồi SQL xác nhận `pos_products.discount_percent` có giá trị đúng.
+> 4. Hỏi user trước khi deploy prod.
 
 ### [ ] 🟡 SW-CACHE-FIX-PROD-0823 — Deploy fix `server.ts` (no-cache cho service-worker.js) lên prod
 
