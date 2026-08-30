@@ -3,6 +3,23 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-08-30 (2) — Vá lỗ hổng phụ thuộc: 15 → 1 (Giai đoạn 4 mục 2)
+
+- Thực hiện Giai đoạn 4 mục 2 kế hoạch audit. Nâng theo **từng nhóm nhỏ, mỗi nhóm 1 commit**, chạy lại đủ 4 cổng kiểm tra sau mỗi nhóm — không nâng cả loạt.
+- **`92f5cc1` — 11/15 vá được mà KHÔNG đổi `package.json`**: `npm audit fix` (không `--force`) giải quyết hết những gì nằm trong phạm vi semver sẵn có, chỉ lockfile đổi. `axios` 1.13.6→1.20.0 (DoS formDataToJSON, HIGH), `dompurify` 3.4.2→3.4.14 (bypass cross-realm, MODERATE), `postcss` 8.5.14→8.5.26 (đọc file .map tuỳ ý, HIGH), `react-router(-dom)` 7.17→7.18.3 (open redirect + RSC CSRF, HIGH), cùng các gói gián tiếp `brace-expansion`/`form-data`/`ip-address`/`nanoid`/`body-parser`/`@babel/core`.
+  - **Verify vượt ra ngoài tsc** vì `dompurify` và `react-router` đều là runtime cốt lõi: điều hướng thật tới `/report-sales` trên dev server (URL + nội dung đúng); nạp DOMPurify 3.4.14 ngay trong trang và chạy 4 payload XSS (`img/onerror`, `<script>` inline, `javascript:` href, `svg animate/onbegin`) — **cả 4 đều bị lọc sạch**.
+- **`1eeeb1f` — `pdfjs-dist` 5.7.284 → 6.3.289** (thực thi JS tuỳ ý khi mở PDF độc hại, HIGH). Đây là bản vá **major** nhưng bề mặt API app chạm vào rất hẹp và ổn định: `GlobalWorkerOptions.workerSrc`, `getDocument({data})`, `numPages`, `getPage`, `getTextContent`, `item.str`/`item.transform`. File worker vẫn ở đúng đường cũ (`build/pdf.worker.mjs`) nên import `?url` không phải sửa.
+  - **Verify bằng chức năng chứ không bằng số hiệu phiên bản**: tự dựng 1 file PDF rồi chạy qua đúng chuỗi gọi của `purchase-invoices/utils.ts:extractVatItemsFromPdfText` trong browser — trích đúng cả 5 span text, và **mọi span đều có `transform[4]`/`[5]` kiểu số**. Điểm này quan trọng: hàm trích gom span thành dòng/cột dựa trên toạ độ đó, nếu đổi hình dạng thì hoá đơn sẽ bị đọc sai một cách âm thầm chứ không ném lỗi.
+  - Gỡ kèm `import * as pdfjsLib` không dùng ở `purchase-invoices/types.tsx` — vừa là code chết vừa kéo thư viện vào chunk đó vô ích.
+- **`172d36d` — `nodemailer` 8.0.11 → 9.0.6** (CRLF injection header, HIGH). Bề mặt chỉ gồm `createTransport({service:'gmail'})` + `sendMail(...)`. Verify bằng `jsonTransport` của chính nodemailer (dựng message đầy đủ nhưng không gửi đi): from/to/subject/html/text đúng, tiêu đề tiếng Việt giữ nguyên sau mã hoá. Ghi nhận thêm: rủi ro thực tế vốn thấp — advisory nằm ở header `List-*` mà code không hề set, `from`/`to` lấy từ env chứ không từ input người dùng, và **email hiện đang tắt** (không có `EMAIL_USER`/`EMAIL_PASS`/`EMAIL_TO` trong `.env.local` nên `isEmailConfigured()` false, `sendEodEmail()` return sớm ở cả 3 điểm gọi).
+- **`xlsx` — ca khó, đã hỏi user chọn hướng**: npm registry **đóng băng ở 0.18.5 từ 2022**, SheetJS đã ngừng publish lên npm nên `fixAvailable: false` ở mọi phiên bản. Hai CVE (Prototype Pollution `<0.19.3`, ReDoS `<0.20.2`) chỉ được vá từ 0.20.2+. Đã trình bày 4 lựa chọn kèm khuyến nghị; **user chọn cài từ CDN chính thức SheetJS**. Trước khi hỏi đã test tương thích trong thư mục tạm: đủ **8/8 API** app dùng, `npm audit` báo 0 lỗ hổng.
+  - Cài `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` (0.20.3 là bản mới nhất CDN có — 0.21.x trả 404). Không phải sửa dòng code nào.
+  - **Verify**: 26 test Excel sẵn có pass (chúng vốn round-trip thật `aoa_to_sheet` → `write` base64 → `read` → `sheet_to_json`); thêm test khứ hồi trực tiếp đường **xuất** file — dữ liệu khớp 100%, tiếng Việt có dấu và em-dash giữ nguyên, số giữ đúng kiểu `number`.
+  - **LƯU Ý VẬN HÀNH**: phụ thuộc này giờ tải từ `cdn.sheetjs.com` thay vì npm registry, nên **iMac phải vào được CDN này mỗi lần deploy chạy `npm install`**. Chưa kiểm chứng được vì iMac đang offline.
+- **Kết quả: 15 lỗ hổng (10 HIGH) → 1 lỗ hổng LOW.** Còn lại duy nhất `esbuild` (gián tiếp qua vite, chỉ ảnh hưởng dev server chạy trên Windows — không áp dụng cho triển khai macOS này).
+- Sau mỗi commit: `tsc --noEmit` sạch, `npm run lint` exit 0, `npm test` 452/452, `npm run build` exit 0.
+- **CHƯA deploy dev lẫn prod** — iMac vẫn offline (đã kiểm lại: 530 + ping mất 100%).
+
 ### 2026-08-30 — Vá lỗi giảm giá % không lưu xuống DB + test hồi quy (DISCOUNT-PERCENT-0829)
 
 - User chọn ưu tiên vá lỗi thật trước khi dọn tiếp dead code. Đây là Giai đoạn 4 (mục 1) của kế hoạch audit.
