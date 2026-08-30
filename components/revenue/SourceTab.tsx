@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, ChevronsUpDown, ChevronUp, ImagePlus, Plus, 
 import { uploadImage } from '../../services/marketingStorageService';
 import SourceDetailPage from './SourceDetailPage';
 import SourceAddModal from './SourceAddModal';
+import { parseSku, BUCKET } from './helpers';
 
 interface Props {
   shopeeSourceData: ShopeeSourceItem[];
@@ -26,14 +27,7 @@ interface SkuGroup {
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
-const BUCKET = 'shopee-products';
 
-const parseSku = (sku: string) => {
-  const parts = sku.split('-');
-  if (parts.length === 1) return { parentCode: sku, color: null, size: null };
-  if (parts.length === 2) return { parentCode: parts[0], color: parts[1], size: null };
-  return { parentCode: parts[0], color: parts[1], size: parts.slice(2).join('-') };
-};
 
 const groupBySku = (items: ShopeeSourceItem[]): SkuGroup[] => {
   const map = new Map<string, ShopeeSourceItem[]>();

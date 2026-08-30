@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ExternalLink, ImagePlus, Pencil, StopCircle, Trash2 } from 'lucide-react';
 import { ShopeeInventoryInRecord, ShopeeInventoryOutRecord, ShopeeSourceItem } from '../../types';
 import { uploadImage } from '../../services/marketingStorageService';
+import { parseSku, BUCKET } from './helpers';
 
 interface Props {
   item: ShopeeSourceItem;
@@ -24,14 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'channels', label: 'Kênh bán' },
 ];
 
-const parseSku = (sku: string) => {
-  const parts = sku.split('-');
-  if (parts.length === 1) return { color: null, size: null };
-  if (parts.length === 2) return { color: parts[1], size: null };
-  return { color: parts[1], size: parts.slice(2).join('-') };
-};
 
-const BUCKET = 'shopee-products';
 
 const SourceDetailPage: React.FC<Props> = ({
   item,

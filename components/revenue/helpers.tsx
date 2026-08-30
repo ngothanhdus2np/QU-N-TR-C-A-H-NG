@@ -47,3 +47,24 @@ export const InputWrapper = ({ label, icon: Icon, children, color = "text-slate-
     </div>
   </div>
 );
+
+/**
+ * Tách SKU Shopee thành mã cha / màu / kích cỡ.
+ *
+ * Gộp 30/08/2026: trước đó `SourceTab.tsx` và `SourceDetailPage.tsx` mỗi file
+ * một bản, và hai bản ĐÃ LỆCH — bản ở SourceDetailPage thiếu `parentCode`.
+ * Bản giữ lại là bản đầy đủ của SourceTab; SourceDetailPage vốn chỉ destructure
+ * `{ color, size }` nên không đổi hành vi.
+ *
+ * Quy ước: phần sau dấu '-' thứ hai trở đi đều thuộc về size, vì tên size thật
+ * có thể chứa dấu '-' (vd "36-37").
+ */
+export const parseSku = (sku: string) => {
+  const parts = sku.split('-');
+  if (parts.length === 1) return { parentCode: sku, color: null, size: null };
+  if (parts.length === 2) return { parentCode: parts[0], color: parts[1], size: null };
+  return { parentCode: parts[0], color: parts[1], size: parts.slice(2).join('-') };
+};
+
+/** Bucket Supabase Storage chứa ảnh sản phẩm Shopee. */
+export const BUCKET = 'shopee-products';
