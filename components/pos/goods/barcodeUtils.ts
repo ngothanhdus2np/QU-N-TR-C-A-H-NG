@@ -53,7 +53,34 @@ export const normalizeCode128Text = (value: string) =>
     .replace(/[^\x20-\x7E]/g, '')
     .slice(0, 32);
 
-export const buildCode128Svg = (rawCode: string) => {
+export interface Code128SvgOptions {
+  /**
+   * Chiều cao dùng cho <rect> và viewBox. KHÔNG phải kích thước hiển thị thật —
+   * CSS mới quyết định điều đó. Nhưng nơi nào đặt `height: auto` thì con số này
+   * chính là tỉ lệ khung hình, nên đổi nó là đổi độ cao tem in ra.
+   * Mặc định 40 (giá trị lịch sử của chính file này).
+   */
+  height?: number;
+  /** Gắn aria-label vào <svg>. Mặc định true. */
+  ariaLabel?: boolean;
+}
+
+/**
+ * Sinh SVG mã vạch Code 128 (bộ B).
+ *
+ * Gộp 30/08/2026: trước đó thuật toán này tồn tại 3 bản y hệt nhau —
+ * `barcodeUtils.ts` (bản này), `GoodsInventory.tsx` và `PrintTemplatesTab.tsx`.
+ * Phần mã hoá (bảng pattern, checksum, chuỗi start/stop) giống hệt cả 3; chỉ
+ * khác `height` (40 ở đây, 50 ở 2 bản kia) và việc có aria-label hay không.
+ * Vì vậy 2 điểm khác biệt đó được đưa thành tham số để mỗi nơi gọi giữ nguyên
+ * đầu ra từng ký tự, thay vì ép tất cả về một kiểu rồi làm lệch tem đang in.
+ *
+ * Phần HTML/CSS của tem thì CỐ Ý không gộp — mỗi nơi khác nhau thật (thẻ bọc
+ * <div> vs <section>, hậu tố giá "đ" vs " VNĐ", tên sản phẩm lấy theo cách
+ * khác nhau), gộp lại sẽ đổi diện mạo tem in ra.
+ */
+export const buildCode128Svg = (rawCode: string, options: Code128SvgOptions = {}) => {
+  const { height = 40, ariaLabel = true } = options;
   const code = normalizeCode128Text(rawCode) || 'UNKNOWN';
   const values = [104, ...Array.from(code).map(char => char.charCodeAt(0) - 32)];
   const checksum =
@@ -67,7 +94,7 @@ export const buildCode128Svg = (rawCode: string) => {
       Array.from(pattern).forEach((widthChar, index) => {
         const width = Number(widthChar);
         if (index % 2 === 0) {
-          patternBars += `<rect x="${x}" y="0" width="${width}" height="40" />`;
+          patternBars += `<rect x="${x}" y="0" width="${width}" height="${height}" />`;
         }
         x += width;
       });
@@ -75,7 +102,8 @@ export const buildCode128Svg = (rawCode: string) => {
     })
     .join('');
 
-  return `<svg class="barcode" viewBox="0 0 ${x} 40" preserveAspectRatio="none" aria-label="Barcode ${escapeLabelText(code)}">${bars}</svg>`;
+  const aria = ariaLabel ? ` aria-label="Barcode ${escapeLabelText(code)}"` : '';
+  return `<svg class="barcode" viewBox="0 0 ${x} ${height}" preserveAspectRatio="none"${aria}>${bars}</svg>`;
 };
 
 export const buildLabelProductName = (product: POSProduct) => {
