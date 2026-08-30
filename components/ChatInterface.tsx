@@ -32,7 +32,14 @@ import { calcOrderRevenue } from '../src/lib/reportCalculations';
 interface ChatInterfaceProps {
   data: AppData;
   messages: ChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  // Thu hẹp 30/08/2026: khai báo cũ là React.Dispatch<React.SetStateAction<...>>,
+  // tức quảng cáo là gọi được kiểu updater `setMessages(prev => ...)`. Nhưng hàm
+  // truyền vào thật là `setChatMessages` ở hooks/useAppData.ts:397 — một dispatcher
+  // reducer chỉ nhận MẢNG (`payload: messages`). Nếu ai đó viết updater theo thói
+  // quen React, TypeScript sẽ chấp nhận còn runtime thì lưu thẳng cái HÀM vào chỗ
+  // mảng tin nhắn, làm hỏng khung chat mà không rõ nguyên nhân. Khai đúng thực tế
+  // để lỗi đó bị chặn ngay lúc biên dịch.
+  setMessages: (messages: ChatMessage[]) => void;
   isCFOReady: boolean;
 }
 

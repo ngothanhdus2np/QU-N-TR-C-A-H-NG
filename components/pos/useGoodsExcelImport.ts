@@ -8,7 +8,7 @@ import { ImportStatus } from './GoodsImportExport';
 interface UseGoodsExcelImportArgs {
   products: POSProduct[];
   onUpdateProducts: (products: POSProduct[]) => void;
-  onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
+  onPushBatch?: <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => Promise<void>;
   setImportStatus: React.Dispatch<React.SetStateAction<ImportStatus | null>>;
   fileInputRef: React.RefObject<HTMLInputElement>;
 }
@@ -192,7 +192,13 @@ export const useGoodsExcelImport = ({
           if (onPushBatch) {
             // Cập nhật: bỏ stock để giữ tồn kho DB. Tạo mới: giữ stock (tồn kho ban đầu từ file).
             if (toUpdate.length > 0)
-              await onPushBatch('posProducts', stripStockForUpdate(toUpdate));
+              // Ép kiểu CÓ CHỦ ĐÍCH: [IMPORT-02] cố tình bỏ hẳn field `stock` khỏi
+              // payload để apiService.sanitizeItem không gửi cột stock, nhờ đó
+              // PostgREST giữ nguyên tồn kho đang có trên DB thay vì ghi đè bằng số
+              // trong file Excel. Chữ ký generic của pushBatch (thêm 30/08/2026) đòi
+              // POSProduct[] đầy đủ nên phải nói rõ ngoại lệ này ở đây — trước đó
+              // chữ ký là `unknown[]` nên chênh lệch bị che hoàn toàn.
+              await onPushBatch('posProducts', stripStockForUpdate(toUpdate) as POSProduct[]);
             if (toCreate.length > 0) {
               await onPushBatch('posProducts', toCreate);
               // Tạo transaction tồn kho ban đầu (chỉ cho sản phẩm MỚI) để buildCostHistory

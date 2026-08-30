@@ -15,7 +15,11 @@ interface Props {
     type: 'fixed' | 'variable',
     id: string,
     field: string,
-    value: string | number | boolean
+    // Thu hẹp 30/08/2026: khai báo cũ có thêm `boolean` nhưng handler thật
+    // (useShopeeInventoryOut.ts) chỉ nhận string|number, và cả 3 nơi gọi đều
+    // truyền string hoặc Number(). Chênh lệch này là 1 trong 4 lỗi mà
+    // strictFunctionTypes bắt được.
+    value: string | number
   ) => void;
   handleRemoveShopeeCostItem: (type: 'fixed' | 'variable', id: string) => void;
 }

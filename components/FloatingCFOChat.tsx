@@ -7,7 +7,9 @@ import type { AppData, ChatMessage } from '../types';
 interface Props {
   data: AppData;
   messages: ChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  // Khớp với ChatInterface: hàm thật chỉ nhận mảng, không nhận updater. Xem ghi
+  // chú đầy đủ ở components/ChatInterface.tsx.
+  setMessages: (messages: ChatMessage[]) => void;
 }
 
 const FloatingCFOChat: React.FC<Props> = ({ data, messages, setMessages }) => {

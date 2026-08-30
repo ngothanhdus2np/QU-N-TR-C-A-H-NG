@@ -117,7 +117,13 @@ interface MainContentProps {
     debtRecord: CustomerDebtRecord | null,
     allowSellOutOfStock: boolean
   ) => Promise<void>;
-  pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
+  // Khai đúng dạng generic của hàm thật ở hooks/useAppData.ts. Bản cũ xoá generic
+  // đi (`items: unknown[]`) nên mất liên kết giữa `key` và kiểu phần tử — gọi
+  // pushBatch('posOrders', [nhânViên]) sẽ lọt qua trình biên dịch.
+  pushBatch: <K extends keyof AppData>(
+    key: K,
+    items: Extract<AppData[K], unknown[]>
+  ) => Promise<void>;
   loadInventoryOut?: () => Promise<void>;
   isDataReady?: boolean;
   isSyncing?: boolean;

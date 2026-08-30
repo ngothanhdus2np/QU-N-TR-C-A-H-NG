@@ -21,7 +21,11 @@ interface GoodsProductTableBodyProps {
   onOpenEditor: (product: POSProduct) => void;
   onToggleView: (product: POSProduct) => void;
   onToggleExpanded: (id: string) => void;
-  onChangeDetailTab: (tab: string) => void;
+  // Thu hẹp 30/08/2026 từ `string`: giá trị thật luôn là DetailTab do
+  // GoodsProductDetailPanel sinh ra, còn handler nhận nó (GoodsInventory) khai
+  // ProductFormTab — vốn là tập cha của DetailTab. Khai `string` ở giữa chuỗi
+  // làm mất kiểm tra kiểu ở cả hai đầu.
+  onChangeDetailTab: (tab: DetailTab) => void;
   onDeleteViewed: (id: string) => void;
   onEditViewed: (product: POSProduct) => void;
   onAddMoreVariants: (parentId: string) => void;

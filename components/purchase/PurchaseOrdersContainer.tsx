@@ -42,7 +42,7 @@ interface PurchaseOrdersContainerProps {
     idToRemove?: string
   ) => Promise<void>;
   onUpdateSurgical?: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
-  onPushBatch?: (key: keyof AppData, items: unknown[]) => Promise<void>;
+  onPushBatch?: <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => Promise<void>;
   initialView?: 'imports' | 'returns';
   onRefreshData?: () => Promise<void>;
 }

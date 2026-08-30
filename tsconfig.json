@@ -10,6 +10,13 @@
       "DOM.Iterable"
     ],
     "skipLibCheck": true,
+    // Bật 30/08/2026 (Giai đoạn 5 dọn codebase). Cờ này bắt lỗi khi hàm truyền vào
+    // một prop không tương thích với kiểu prop khai báo — đã lộ ra 5 chênh lệch thật,
+    // trong đó ChatInterface khai `Dispatch<SetStateAction>` nhưng hàm thật chỉ nhận
+    // mảng, tức viết `setMessages(prev => ...)` sẽ hỏng lúc chạy mà biên dịch vẫn qua.
+    // Các cờ strict còn lại CHƯA bật vì lớn hơn nhiều: noImplicitAny 31 lỗi,
+    // noImplicitThis 58, strictNullChecks 111, tổng `strict` 162 — xem TODO.md.
+    "strictFunctionTypes": true,
     "types": [
       "node",
       "vite/client"

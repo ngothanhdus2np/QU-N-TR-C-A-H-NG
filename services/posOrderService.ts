@@ -15,7 +15,7 @@ import { buildPosSalesRecordUpsertsForDate } from '../src/lib/posSalesAttributio
 import { getReturnedQuantitiesForOrder } from '../src/lib/returnGuards';
 
 type PosOrderCallbacks = {
-  pushBatch: (key: keyof AppData, items: unknown[]) => Promise<void>;
+  pushBatch: <K extends keyof AppData>(key: K, items: Extract<AppData[K], unknown[]>) => Promise<void>;
   updateSurgical: (updates: AppDataSurgicalUpdate[]) => Promise<void>;
   // [DATA-02] Cộng dồn doanh thu ngày theo delta atomic (chống race nhiều máy cùng ngày)
   applyRevenueDelta: (dateKey: string, delta: RevenueDelta) => Promise<void>;
