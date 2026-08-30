@@ -22,6 +22,7 @@ import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
 } from '../shared';
+import { fmt, PAYMENT_LABELS, buildCustomerCodeMap, makeGetCustomerCode } from './shared';
 
 interface OrderReturnsProps {
   orders: AppData['posOrders'];
@@ -34,19 +35,6 @@ interface OrderReturnsProps {
   onCancelLegacyReturn: (transactionId: string) => Promise<void>;
   // Tạo phiếu trả mới — điều hướng sang tab Trả hàng trong POS (luồng chuẩn duy nhất)
   onReturnInPOS: (order: AppData['posOrders'][number]) => void;
-}
-
-const PAYMENT_LABELS: Record<string, string> = {
-  Cash: 'Tiền mặt',
-  Bank: 'Chuyển khoản',
-  Card: 'Thẻ',
-  Momo: 'Momo',
-  Other: 'Khác',
-  Split: 'Kết hợp nhiều PT',
-};
-
-function fmt(n: number) {
-  return n.toLocaleString('vi-VN');
 }
 
 const isReturnInvoice = (order: AppData['posOrders'][number]) =>
@@ -110,26 +98,9 @@ export default function OrderReturns({
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
 
-  const customerCodeMap = useMemo(() => {
-    const map = new Map<string, string>();
-    [...customers]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .forEach((customer, index) => {
-        map.set(customer.id, `KH${String(index + 1).padStart(6, '0')}`);
-      });
-    return map;
-  }, [customers]);
+  const customerCodeMap = useMemo(() => buildCustomerCodeMap(customers), [customers]);
 
-  const getCustomerCode = (order: AppData['posOrders'][number]) => {
-    if (order.customerId && customerCodeMap.has(order.customerId)) {
-      return customerCodeMap.get(order.customerId) || '—';
-    }
-    if (order.customerName) {
-      const matchedCustomer = customers.find(customer => customer.name === order.customerName);
-      if (matchedCustomer) return customerCodeMap.get(matchedCustomer.id) || '—';
-    }
-    return '—';
-  };
+  const getCustomerCode = makeGetCustomerCode(customerCodeMap, customers);
 
   // Derived dates
   const todayStr = new Date().toISOString().split('T')[0];

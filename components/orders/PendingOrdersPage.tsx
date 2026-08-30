@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import type { POSOrder, POSOrderStatus } from '../../types';
 import { FilterCheckboxGroup, FilterDateRange, FilterSection } from '../shared';
+// getCustomerCode của trang này CỐ Ý không gộp: nó cắt UUID (`customerId.slice(0,8)`),
+// khác hẳn bản tra bảng mã KH000001 ở OrderInvoices/OrderReturns — không phải bản trùng.
+import { fmt, PAYMENT_LABELS, PAYMENT_METHODS } from './shared';
 
 interface PendingOrdersPageProps {
   orders: POSOrder[];
@@ -30,17 +33,6 @@ const STATUS_META: Record<POSOrderStatus, { label: string; className: string }> 
   cancelled: { label: 'Đã hủy', className: 'bg-rose-50 text-rose-700' },
 };
 
-const PAYMENT_LABELS: Record<POSOrder['paymentMethod'], string> = {
-  Cash: 'Tiền mặt',
-  Bank: 'Chuyển khoản',
-  Card: 'Thẻ',
-  Momo: 'Momo',
-  Other: 'Khác',
-  Split: 'Kết hợp nhiều PT',
-};
-
-const PAYMENT_METHODS: POSOrder['paymentMethod'][] = ['Cash', 'Bank', 'Card', 'Momo', 'Other'];
-
 type OrderExtraFilters = {
   shippingUnit?: string;
   shipDate?: string;
@@ -48,10 +40,6 @@ type OrderExtraFilters = {
   receiverId?: string;
   receiverName?: string;
 };
-
-function fmt(n: number) {
-  return n.toLocaleString('vi-VN');
-}
 
 function formatOrderDateTime(value: string) {
   const d = new Date(value);

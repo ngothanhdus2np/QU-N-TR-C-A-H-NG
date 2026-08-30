@@ -23,6 +23,13 @@ import { apiService } from '../../services/apiService';
 import { FilterSection, FilterDateRange, FilterCheckboxGroup } from '../shared';
 import { openPrintInvoice } from '../pos/printInvoiceFromTemplate';
 import { resolveStaffName } from '../shared/staff';
+import {
+  fmt,
+  PAYMENT_LABELS,
+  PAYMENT_METHODS,
+  buildCustomerCodeMap,
+  makeGetCustomerCode,
+} from './shared';
 
 interface OrderInvoicesProps {
   orders: AppData['posOrders'];
@@ -41,20 +48,6 @@ interface OrderInvoicesProps {
 
 const PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
 
-const PAYMENT_LABELS: Record<string, string> = {
-  Cash: 'Tiền mặt',
-  Bank: 'Chuyển khoản',
-  Card: 'Thẻ',
-  Momo: 'Momo',
-  Other: 'Khác',
-  Split: 'Kết hợp nhiều PT',
-};
-
-const PAYMENT_METHODS = ['Cash', 'Bank', 'Card', 'Momo', 'Other'] as const;
-
-function fmt(n: number) {
-  return n.toLocaleString('vi-VN');
-}
 
 function formatOrderDateTime(value: string) {
   const d = new Date(value);
@@ -223,26 +216,9 @@ export default function OrderInvoices({ orders, customers, storeName, storeAddre
   const getOrderCustomer = (order: AppData['posOrders'][number]) =>
     customers.find(c => c.id === order.customerId);
 
-  const customerCodeMap = useMemo(() => {
-    const map = new Map<string, string>();
-    [...customers]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .forEach((customer, index) => {
-        map.set(customer.id, `KH${String(index + 1).padStart(6, '0')}`);
-      });
-    return map;
-  }, [customers]);
+  const customerCodeMap = useMemo(() => buildCustomerCodeMap(customers), [customers]);
 
-  const getCustomerCode = (order: AppData['posOrders'][number]) => {
-    if (order.customerId && customerCodeMap.has(order.customerId)) {
-      return customerCodeMap.get(order.customerId) || '—';
-    }
-    if (order.customerName) {
-      const matchedCustomer = customers.find(customer => customer.name === order.customerName);
-      if (matchedCustomer) return customerCodeMap.get(matchedCustomer.id) || '—';
-    }
-    return '—';
-  };
+  const getCustomerCode = makeGetCustomerCode(customerCodeMap, customers);
 
   // checkbox + star + mã HĐ + thời gian + mã trả hàng + mã KH + khách hàng + tổng + giảm + sau giảm + khách trả + [thanh toán]
   const tableColumnCount = showPaymentColumn ? 12 : 11;
