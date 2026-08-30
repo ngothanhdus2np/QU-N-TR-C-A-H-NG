@@ -32,7 +32,21 @@
 > **Giai đoạn 3 — 4 câu hỏi CẦN USER QUYẾT** (không phải kỹ thuật): (a) tính năng phân bổ VAT tự động ~187 dòng còn định làm không? (b) 7 trang không có lối vào menu (`brand`, `delivery-partners`, `website-orders`, `product-groups`, `store-revenue`, `expenses`, `shipping-orders`) — gắn lại hay xoá? (c) `GoodsProductForm.tsx` đã thay hoàn toàn `GoodsLegacyProductFormView.tsx` (473 dòng chết) chưa? (d) 7 endpoint vận hành (`recalculate-revenue-from-orders`, `kiotviet-revenue`...) còn chạy tay bằng curl không?
 > **Giai đoạn 4 — XONG 2026-08-30**: (1) giảm giá % không lưu DB — xem `DISCOUNT-PERCENT-0829` bên dưới (code xong, chờ deploy); (2) lỗ hổng npm **15 (10 HIGH) → 1 (LOW)** qua 4 commit `92f5cc1`/`1eeeb1f`/`172d36d` + đổi nguồn `xlsx`; chi tiết HISTORY.md 2026-08-30 (2). Còn lại duy nhất `esbuild` LOW (gián tiếp qua vite, chỉ ảnh hưởng dev server trên Windows — không áp dụng cho macOS).
 > ⚠️ **Lưu ý vận hành mới**: `xlsx` giờ cài từ `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` thay vì npm registry (npm đóng băng 0.18.5 từ 2022, không có bản vá). **iMac phải vào được `cdn.sheetjs.com` mỗi lần deploy chạy `npm install`** — chưa kiểm chứng được vì iMac đang offline. Nếu deploy fail ở bước `npm install`, đây là nghi phạm đầu tiên.
-> **Giai đoạn 5 — gộp trùng lặp + siết kiểu**: gộp Code128 (3 bản), gộp `fmt`/`PAYMENT_LABELS`/`getCustomerCode` vào `orders/shared.ts`, viết test cho `factoryReset.ts`/`posOfflineQueue.ts`, bật `strict` từng cờ bắt đầu từ `src/lib/`.
+> **Giai đoạn 5 — XONG 2026-08-30** (5 commit `908706b`/`fae13b8`/`b658d7b`/`a891f02`/`b4e8fae`; net ~−200 dòng, test **452 → 486**; chi tiết HISTORY.md 2026-08-30 (3)). Đã làm: gộp Code128 3 bản → 1 (tham số hoá height/aria để giữ nguyên đầu ra từng nơi), gộp helper `orders/` vào `orders/shared.ts`, gộp `parseSku`/`BUCKET` ở `revenue/`, 8 test HTTP cho `factoryReset.ts`, 13 test cho `posOfflineQueue.ts`, bật `strictFunctionTypes` + sửa 5 chênh lệch kiểu.
+> **Còn nợ từ Giai đoạn 5** (cố ý dừng): xem `STRICT-MODE-0830` bên dưới. Ngoài ra `CashLedgerPage.tsx:109` vẫn tự viết lại `SingleDatePicker` dù `components/shared/filters/SingleDatePicker.tsx` đã có — chưa gộp vì là component UI có popup tự định vị, gộp phải verify lại giao diện kỹ, để dịp khác.
+
+### [ ] 🟡 STRICT-MODE-0830 — Bật nốt các cờ `strict` còn lại của TypeScript
+
+> `strictFunctionTypes` đã bật 30/08/2026 (commit `b4e8fae`). Các cờ còn lại đã **đo sẵn số lỗi** để lượng sức trước khi làm:
+> | Cờ | Số lỗi |
+> |---|---|
+> | `noImplicitAny` | 31 |
+> | `noImplicitThis` | 58 |
+> | `strictNullChecks` | 111 |
+> | `strict` (đủ bộ) | 162 |
+> **Vì sao đáng làm**: app tài chính 132k dòng mà không có `strictNullChecks` — `undefined` lọt vào phép tính tiền mà trình biên dịch không cảnh báo. Nhìn lại lịch sử bug: `dob: ''` gửi vào cột `date`, `status` NULL làm sai so sánh — đều thuộc nhóm strict mode có khả năng chặn từ đầu.
+> **Cách làm khuyến nghị**: từng cờ một, mỗi cờ 1 commit riêng, KHÔNG bật `strict` đủ bộ một lần. Thứ tự dễ → khó: `noImplicitAny` (31) → `noImplicitThis` (58) → `strictNullChecks` (111). Với `strictNullChecks` nên ưu tiên xử lý `src/lib/` trước vì đó là nơi có test bọc dày nhất.
+> **Cảnh báo**: đừng sửa bằng cách rải `!` (non-null assertion) hay `as any` — làm vậy là tắt đúng thứ mình vừa bật. Mỗi chỗ phải quyết định thật: giá trị đó có thể null không, và nếu null thì đúng ra phải làm gì.
 
 ### [~] 🔴 DISCOUNT-PERCENT-0829 — Giảm giá % theo sản phẩm KHÔNG BAO GIỜ lưu xuống DB *(code + migration xong 2026-08-30 — CHƯA verify DB, CHƯA deploy)*
 
