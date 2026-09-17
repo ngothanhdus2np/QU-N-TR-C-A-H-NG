@@ -430,3 +430,239 @@ html[data-theme="prestige"] .shadow-xl,
 html[data-theme="prestige"] .shadow-2xl {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
 }
+
+/* ============================================================
+   ASTRYX NEUTRAL THEME
+   Token lấy nguyên từ @astryxdesign/theme-neutral@0.6.2
+   (nhánh sáng của light-dark(); không dùng light-dark() vì cần
+   Safari 17.5+ — máy bán hàng cũ sẽ không hiểu).
+
+   Cách làm giống hệt theme "codex": map class Tailwind app đang
+   dùng sang biến CSS. KHÁC codex ở chỗ màu trạng thái được map
+   sang đúng dải màu trạng thái của Astryx thay vì bị nuốt thành
+   xám — lãi/lỗ/cảnh báo phải giữ nghĩa.
+   ============================================================ */
+html[data-theme="astryx"] {
+  /* --- Nền & màu nhấn --- */
+  --ax-accent: #1b1b1b;
+  --ax-accent-hover: #000000;
+  --ax-accent-muted: #f1f1f1;
+  --ax-body: #f1f1f1;
+  --ax-card: #ffffff;
+  --ax-surface: #ffffff;
+  --ax-muted: #f1f1f1;
+
+  /* --- Chữ --- */
+  --ax-text: #000000;
+  --ax-text-muted: #474747;
+  --ax-text-disabled: #919191;
+
+  /* --- Viền --- */
+  --ax-border: rgba(0, 0, 0, 0.08);
+  --ax-border-strong: #d4d4d4;
+  --ax-focus-ring: rgba(0, 0, 0, 0.08);
+
+  /* --- Bo góc (radius-inner/element/container/page của Astryx) --- */
+  --ax-radius-inner: 0.375rem;
+  --ax-radius-element: 0.625rem;
+  --ax-radius-container: 0.75rem;
+  --ax-radius-page: 1.75rem;
+
+  /* --- Màu trạng thái --- */
+  --ax-bg-green: #bce0bb;
+  --ax-border-green: #aad4a9;
+  --ax-text-green: #00490b;
+  --ax-bg-red: #ffc4be;
+  --ax-border-red: #ffaea7;
+  --ax-text-red: #76000c;
+  --ax-bg-yellow: #fae19e;
+  --ax-border-yellow: #e3c36c;
+  --ax-text-yellow: #4b3900;
+  --ax-bg-blue: #b9d7ff;
+  --ax-border-blue: #a1caff;
+  --ax-text-blue: #003978;
+}
+
+html[data-theme="astryx"] body {
+  background-color: var(--ax-body);
+  color: var(--ax-text);
+  font-family: 'Figtree', 'Inter', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  letter-spacing: 0;
+}
+
+/* Astryx không dùng chữ siêu đậm; font-black bị hạ xuống 600 như trên trang gốc. */
+html[data-theme="astryx"] .font-black {
+  font-weight: 600 !important;
+}
+
+html[data-theme="astryx"] .tracking-wider,
+html[data-theme="astryx"] .tracking-widest,
+html[data-theme="astryx"] .tracking-tight,
+html[data-theme="astryx"] [class*="tracking-["] {
+  letter-spacing: 0 !important;
+}
+
+/* --- Nền --- */
+html[data-theme="astryx"] .bg-white {
+  background-color: var(--ax-card) !important;
+}
+
+html[data-theme="astryx"] .bg-slate-50,
+html[data-theme="astryx"] .bg-slate-100 {
+  background-color: var(--ax-body) !important;
+}
+
+html[data-theme="astryx"] .bg-indigo-50,
+html[data-theme="astryx"] .bg-indigo-100,
+html[data-theme="astryx"] .bg-blue-50,
+html[data-theme="astryx"] .bg-violet-50 {
+  background-color: var(--ax-accent-muted) !important;
+}
+
+html[data-theme="astryx"] .bg-indigo-500,
+html[data-theme="astryx"] .bg-indigo-600,
+html[data-theme="astryx"] .bg-indigo-700,
+html[data-theme="astryx"] .bg-blue-600,
+html[data-theme="astryx"] .bg-violet-600,
+html[data-theme="astryx"] .hover\:bg-indigo-600:hover,
+html[data-theme="astryx"] .hover\:bg-indigo-700:hover {
+  background-color: var(--ax-accent) !important;
+}
+
+html[data-theme="astryx"] .hover\:bg-indigo-50:hover,
+html[data-theme="astryx"] .hover\:bg-slate-50:hover {
+  background-color: var(--ax-muted) !important;
+}
+
+/* --- Chữ --- */
+html[data-theme="astryx"] .text-indigo-400,
+html[data-theme="astryx"] .text-indigo-500,
+html[data-theme="astryx"] .text-indigo-600,
+html[data-theme="astryx"] .text-indigo-700,
+html[data-theme="astryx"] .text-violet-600 {
+  color: var(--ax-accent) !important;
+}
+
+html[data-theme="astryx"] .text-slate-400,
+html[data-theme="astryx"] .text-slate-500 {
+  color: var(--ax-text-muted) !important;
+}
+
+/* --- Màu trạng thái: giữ NGHĨA, chỉ đổi sang dải màu Astryx --- */
+html[data-theme="astryx"] .text-emerald-500,
+html[data-theme="astryx"] .text-emerald-600,
+html[data-theme="astryx"] .text-emerald-700,
+html[data-theme="astryx"] .text-green-600,
+html[data-theme="astryx"] .text-green-700,
+html[data-theme="astryx"] .text-teal-600 {
+  color: var(--ax-text-green) !important;
+}
+
+html[data-theme="astryx"] .bg-emerald-50,
+html[data-theme="astryx"] .bg-green-50,
+html[data-theme="astryx"] .bg-teal-50 {
+  background-color: var(--ax-bg-green) !important;
+}
+
+html[data-theme="astryx"] .text-rose-500,
+html[data-theme="astryx"] .text-rose-600,
+html[data-theme="astryx"] .text-rose-700,
+html[data-theme="astryx"] .text-red-500,
+html[data-theme="astryx"] .text-red-600,
+html[data-theme="astryx"] .text-red-700 {
+  color: var(--ax-text-red) !important;
+}
+
+html[data-theme="astryx"] .bg-rose-50,
+html[data-theme="astryx"] .bg-red-50 {
+  background-color: var(--ax-bg-red) !important;
+}
+
+html[data-theme="astryx"] .text-amber-500,
+html[data-theme="astryx"] .text-amber-600,
+html[data-theme="astryx"] .text-amber-700,
+html[data-theme="astryx"] .text-orange-500,
+html[data-theme="astryx"] .text-orange-600,
+html[data-theme="astryx"] .text-yellow-600 {
+  color: var(--ax-text-yellow) !important;
+}
+
+html[data-theme="astryx"] .bg-amber-50,
+html[data-theme="astryx"] .bg-orange-50,
+html[data-theme="astryx"] .bg-yellow-50 {
+  background-color: var(--ax-bg-yellow) !important;
+}
+
+/* --- Viền --- */
+html[data-theme="astryx"] .border-slate-100,
+html[data-theme="astryx"] .border-slate-200,
+html[data-theme="astryx"] .border-indigo-100,
+html[data-theme="astryx"] .border-indigo-200 {
+  border-color: var(--ax-border) !important;
+}
+
+html[data-theme="astryx"] .border-slate-300,
+html[data-theme="astryx"] .border-indigo-500,
+html[data-theme="astryx"] .border-indigo-600 {
+  border-color: var(--ax-border-strong) !important;
+}
+
+html[data-theme="astryx"] .border-emerald-200,
+html[data-theme="astryx"] .border-green-200 {
+  border-color: var(--ax-border-green) !important;
+}
+
+html[data-theme="astryx"] .border-rose-200,
+html[data-theme="astryx"] .border-red-200 {
+  border-color: var(--ax-border-red) !important;
+}
+
+html[data-theme="astryx"] .border-amber-200,
+html[data-theme="astryx"] .border-orange-200 {
+  border-color: var(--ax-border-yellow) !important;
+}
+
+/* --- Focus --- */
+html[data-theme="astryx"] .focus\:border-indigo-500:focus,
+html[data-theme="astryx"] .focus\:ring-indigo-500:focus {
+  border-color: var(--ax-accent) !important;
+  box-shadow: 0 0 0 3px var(--ax-focus-ring) !important;
+}
+
+/* --- Bo góc theo thang của Astryx --- */
+html[data-theme="astryx"] .rounded-md {
+  border-radius: var(--ax-radius-inner) !important;
+}
+
+html[data-theme="astryx"] .rounded-lg {
+  border-radius: var(--ax-radius-element) !important;
+}
+
+html[data-theme="astryx"] .rounded-xl,
+html[data-theme="astryx"] .rounded-2xl {
+  border-radius: var(--ax-radius-container) !important;
+}
+
+html[data-theme="astryx"] .rounded-3xl {
+  border-radius: var(--ax-radius-page) !important;
+}
+
+/* Astryx dùng viền mảnh thay cho đổ bóng. */
+html[data-theme="astryx"] .shadow-sm,
+html[data-theme="astryx"] .shadow-md {
+  box-shadow: none !important;
+}
+
+html[data-theme="astryx"] .shadow-lg,
+html[data-theme="astryx"] .shadow-xl,
+html[data-theme="astryx"] .shadow-2xl {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme="astryx"] input,
+html[data-theme="astryx"] select,
+html[data-theme="astryx"] textarea {
+  border-color: var(--ax-border-strong) !important;
+  color: var(--ax-text) !important;
+}

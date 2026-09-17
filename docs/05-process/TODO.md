@@ -7,6 +7,14 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [~] 🟡 ASTRYX-UI-0917 — Trang Cài đặt giao diện theo Astryx *(bước 1 xong 2026-09-17 — CHƯA deploy)*
+
+> **Bước 1 — XONG**: dựng lại `AppearanceTab.tsx` thành studio 2 cột theo bố cục theme editor của `astryx.atmeta.com` + thêm theme `astryx` (token lấy nguyên từ `@astryxdesign/theme-neutral@0.6.2`). Chi tiết HISTORY.md 2026-09-17.
+> **Kết luận kỹ thuật cần nhớ**: KHÔNG cài được `@astryxdesign/core` ở tình trạng hiện tại. Cầu nối Tailwind của Astryx ghi rõ "Requires: Tailwind CSS v4+", mà app đang Tailwind 3.4.19 xuất CSS không-layer — style không-layer luôn thắng style có-layer, nên preflight v3 sẽ đè bẹp `@layer astryx-base`. Muốn dùng component Astryx thật thì **phải nâng Tailwind 3→4 trước** (đụng 12.551 chỗ `className`) — đó là dự án riêng, không gộp vào việc này.
+> **Bước 2 — CHƯA LÀM**: biến bảng token trong panel trái thành điều khiển chỉnh tay (màu, bo góc, mật độ, cỡ chữ, chuyển động), ghi thẳng lên `documentElement.style` + lưu `localStorage`, và mở rộng bảng map class Tailwind → biến CSS trong `index.css`. Trường `tokens` trong `constants/themes.ts` đã dựng sẵn cho việc này.
+> **BỊ CHẶN — chưa deploy dev**: iMac ping được (0% mất gói) nhưng SSH port 22 **Connection refused**, `scripts/deploy-imac-dev.sh` không chạy được. Cần bật lại Remote Login trên iMac: System Settings → General → Sharing → bật **Remote Login**. Hai site `dev.phucsang.com.vn` và `app.phucsang.com.vn` vẫn HTTP 200 vì launchd chạy độc lập với sshd.
+> **Việc phụ phát hiện được**: `index.html` còn 57 dòng CSS cho `data-theme="prestige"` nhưng không theme id nào tên `prestige` — CSS chết, xoá được.
+
 ### [x] 🟢 LINT-GATE-0829 — Cài `eslint-plugin-react-hooks` (chưa từng có), sửa `npm run lint` đang fail *(xong 2026-08-29, local — chưa deploy)*
 
 > **Giai đoạn 1/5** của kế hoạch dọn codebase (xem `CODEBASE-CLEANUP-0829` bên dưới). Làm trước tiên để có lưới an toàn cho các giai đoạn xoá code sau.

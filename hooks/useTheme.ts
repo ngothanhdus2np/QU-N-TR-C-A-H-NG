@@ -3,8 +3,9 @@ import { APP_THEMES, DEFAULT_THEME, AppThemeId } from '../constants/themes';
 
 const STORAGE_KEY = 'cfo-brain-theme';
 
+// Suy ra từ APP_THEMES để thêm theme mới không phải sửa 2 chỗ (bản cũ liệt kê tay đã lệch một lần).
 const isAppThemeId = (value: string | null): value is AppThemeId =>
-  value === 'classic' || value === 'codex' || value === 'phuc-sang' || value === 'traework';
+  value !== null && APP_THEMES.some(theme => theme.id === value);
 
 export const useTheme = () => {
   const [themeId, setThemeId] = useState<AppThemeId>(() => {

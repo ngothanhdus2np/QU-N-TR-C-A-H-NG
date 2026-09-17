@@ -204,12 +204,9 @@ const SECTION_LINKS: Record<SettingsTab, { id: string; label: string }[]> = {
     { id: 'print-template-editor', label: 'Mẫu hóa đơn' },
     { id: 'print-template-preview', label: 'Xem trước' },
   ],
-  appearance: [
-    { id: 'appearance-theme', label: 'Theme giao diện' },
-    { id: 'appearance-typography', label: 'Typography' },
-    { id: 'appearance-colors', label: 'Màu sắc' },
-    { id: 'appearance-components', label: 'Thành phần UI' },
-  ],
+  // Trang Giao diện là studio 2 cột, điều hướng bằng tab trong panel chứ không
+  // phải anchor cuộn dọc — để rỗng cho cột mục lục tự ẩn (xem `links.length <= 1`).
+  appearance: [],
   notifications: [
     { id: 'notification-channels', label: 'Kênh thông báo' },
     { id: 'notification-alerts', label: 'Ngưỡng cảnh báo' },

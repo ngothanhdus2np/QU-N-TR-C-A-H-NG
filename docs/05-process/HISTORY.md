@@ -3,6 +3,22 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-09-17 — Dựng lại trang Cài đặt giao diện theo Astryx (Meta) + theme Astryx Neutral
+
+- User muốn trang Cài đặt giao diện giống thiết kế của `astryx.atmeta.com` và dùng nó để chỉnh giao diện toàn app. Đây là **bước 1/2** đã thống nhất trước khi code.
+- **Khảo sát trước khi quyết**: đọc docs Astryx + tải thẳng gói npm về đọc CSS. Chốt được điểm chặn cứng: cầu nối Tailwind của Astryx (`@astryxdesign/core/tailwind-theme.css`) ghi rõ **"Requires: Tailwind CSS v4+"** và cần cú pháp `@import "tailwindcss/preflight.css" layer(base)`; app đang **Tailwind 3.4.19** xuất CSS **không nằm trong layer**, mà style không-layer luôn thắng style có-layer. Nghĩa là cài `@astryxdesign/core` vào lúc này thì preflight Tailwind v3 sẽ đè bẹp `@layer astryx-base` — component Astryx hiện ra trần trụi. Chính docs Astryx cảnh báo đúng điều này. → **Không cài gói nào**, tái tạo bằng Tailwind sẵn có.
+- **Theme `astryx` mới** (`index.css`, +236 dòng): token lấy nguyên từ `@astryxdesign/theme-neutral@0.6.2`. Cách map class Tailwind → biến CSS giống hệt theme `codex` đã chạy, không phát minh kiến trúc mới.
+  - **Cố ý KHÔNG dùng `light-dark()`** dù gói gốc dùng — hàm này cần Safari 17.5+/Chrome 123+, máy bán hàng cũ không hiểu. Đã tách sẵn nhánh sáng.
+  - **Cố ý KHÔNG nuốt màu trạng thái thành xám** như `codex` đang làm: lãi/lỗ/cảnh báo map sang đúng dải màu trạng thái của Astryx (`--ax-text-green/red/yellow`). Đổi màu lãi/lỗ theo theme là rủi ro đọc sai số liệu tài chính.
+- **`AppearanceTab.tsx` dựng lại** thành studio 2 cột theo bố cục theme editor của Astryx: panel trái `w-80` với 3 tab *Cơ bản / Thành phần / Nâng cao* + danh sách theme kèm swatch 2 tông + bảng token hiện đúng tên biến CSS gốc (`--color-accent`, `--color-background-body`…); cột phải là khung xem trước live render bằng token của theme **đang xem** (không phụ thuộc `data-theme` trên `<html>`), có nút máy tính/điện thoại. Nội dung Typography + Màu sắc + Thành phần UI của bản cũ được giữ lại, chuyển vào tab *Nâng cao* và *Thành phần*.
+- **`constants/themes.ts`**: thêm trường `tokens` cho cả 5 theme (màu/chữ/viền/bo góc/font) — bước 2 sẽ biến các giá trị này thành điều khiển chỉnh tay.
+- **`hooks/useTheme.ts`**: guard `isAppThemeId` suy ra từ `APP_THEMES` thay vì liệt kê tay 4 id. Bản cũ liệt kê tay nên thêm theme mới là phải sửa 2 chỗ.
+- **`SettingsCenter.tsx`**: `SECTION_LINKS.appearance` để rỗng — 4 anchor cũ (`appearance-theme`, `appearance-typography`…) đã trỏ vào section không còn tồn tại; cột mục lục tự ẩn nhờ `links.length <= 1`.
+- **Verify thật trên browser** sau khi restart server: bấm Astryx Neutral → khung xem trước đổi ngay; bấm Áp dụng → `data-theme="astryx"`, `localStorage` lưu `astryx`, `body` nền `rgb(241,241,241)`, font computed = **Figtree**. Kiểm `/settings` và `/goods` đều render đủ, không lỗi JS. Dữ liệu thật không tải được (Supabase dev trả 401 + CORS chặn header `accept-profile`) nên mới verify được giao diện.
+- `tsc` sạch, `eslint` 0 error, `npm test` **486/486**.
+- **CHƯA deploy dev**: iMac ping được (0% mất gói) nhưng **SSH port 22 Connection refused** — Remote Login đang tắt. Hai site `dev`/`app` vẫn trả HTTP 200 vì launchd chạy độc lập với sshd.
+- Files: `constants/themes.ts`, `hooks/useTheme.ts`, `index.css`, `index.html`, `components/settings/tabs/AppearanceTab.tsx`, `components/settings/SettingsCenter.tsx`.
+
 ### 2026-08-30 (3) — Giai đoạn 5: gộp trùng lặp, thêm 34 test, bật `strictFunctionTypes`
 
 - Giai đoạn cuối kế hoạch dọn codebase. 6 commit, mỗi commit tự đứng được và rollback riêng được.
