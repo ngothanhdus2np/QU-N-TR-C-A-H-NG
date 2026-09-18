@@ -132,3 +132,109 @@ export const APP_THEMES: AppTheme[] = [
 ];
 
 export const DEFAULT_THEME: AppThemeId = 'classic';
+
+/* ============================================================
+   Bước 2 — token chỉnh tay
+   Giá trị người dùng chỉnh được ghi thẳng lên <html> dưới dạng
+   biến CSS `--ux-*`, và khối `html[data-custom="1"][data-theme]`
+   ở cuối index.css map chúng ra toàn app.
+   ============================================================ */
+
+export interface ThemeCustomization {
+  accent: string;
+  body: string;
+  card: string;
+  muted: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  /** Bo góc thẻ/panel, đơn vị px. */
+  radius: number;
+  /** Tên font (khớp một mục trong FONT_OPTIONS). */
+  fontFamily: string;
+  /** Cỡ chữ nền, đơn vị px. */
+  fontSize: number;
+  /** Hệ số mật độ — nhân vào padding/gap của các lớp hay dùng. */
+  density: number;
+  /** Hệ số thời lượng chuyển động. */
+  duration: number;
+}
+
+export const COLOR_KEYS = [
+  'accent',
+  'body',
+  'card',
+  'muted',
+  'text',
+  'textMuted',
+  'border',
+] as const;
+
+export type ThemeColorKey = (typeof COLOR_KEYS)[number];
+
+export const FONT_OPTIONS: { label: string; value: string; stack: string }[] = [
+  { label: 'Inter', value: 'Inter', stack: "'Inter', ui-sans-serif, system-ui, sans-serif" },
+  { label: 'Figtree', value: 'Figtree', stack: "'Figtree', 'Inter', ui-sans-serif, sans-serif" },
+  { label: 'Hệ thống', value: 'system', stack: 'ui-sans-serif, system-ui, -apple-system, sans-serif' },
+];
+
+export const RADIUS_PRESETS = [
+  { label: 'S', value: 4 },
+  { label: 'M', value: 8 },
+  { label: 'L', value: 12 },
+  { label: 'XL', value: 20 },
+];
+
+export const FONT_SIZE_PRESETS = [
+  { label: 'S', value: 13 },
+  { label: 'M', value: 14.5 },
+  { label: 'L', value: 16 },
+  { label: 'XL', value: 18 },
+];
+
+export const DENSITY_PRESETS = [
+  { label: 'Gọn', value: 0.85 },
+  { label: 'Mặc định', value: 1 },
+  { label: 'Thoáng', value: 1.15 },
+];
+
+export const DURATION_PRESETS = [
+  { label: '0.5×', value: 0.5 },
+  { label: '1×', value: 1 },
+  { label: '1.5×', value: 1.5 },
+  { label: '2×', value: 2 },
+];
+
+/** Giới hạn để ô nhập tay không đẩy giao diện ra ngoài vùng dùng được. */
+export const CUSTOM_LIMITS = {
+  radius: { min: 0, max: 28 },
+  fontSize: { min: 12, max: 19 },
+  density: { min: 0.85, max: 1.15 },
+  duration: { min: 0.5, max: 2 },
+};
+
+const radiusToPx = (radius: string): number => {
+  const value = parseFloat(radius);
+  if (Number.isNaN(value)) return 12;
+  return radius.includes('rem') ? Math.round(value * 16) : Math.round(value);
+};
+
+/**
+ * Bộ token chỉnh tay luôn được seed ĐẦY ĐỦ từ theme đang dùng, không để trống
+ * phần nào — vì CSS map bằng `var(--ux-*)` không có fallback, thiếu một biến là
+ * nguyên khai báo đó hỏng.
+ */
+export const createCustomization = (theme: AppTheme): ThemeCustomization => ({
+  accent: theme.tokens.accent,
+  body: theme.tokens.body,
+  card: theme.tokens.card,
+  muted: theme.tokens.muted,
+  text: theme.tokens.text,
+  textMuted: theme.tokens.textMuted,
+  border: theme.tokens.border,
+  radius: radiusToPx(theme.tokens.radius),
+  fontFamily: theme.tokens.font === 'Figtree' ? 'Figtree' : 'Inter',
+  fontSize: 14.5,
+  density: 1,
+  duration: 1,
+});

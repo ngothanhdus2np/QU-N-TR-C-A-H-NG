@@ -1,10 +1,28 @@
 import React, { useMemo, useState } from 'react';
-import { Check, Monitor, Smartphone, Sparkles } from 'lucide-react';
-import { APP_THEMES, AppTheme, AppThemeId, AppThemeTokens } from '../../../constants/themes';
+import { Check, Copy, Monitor, RotateCcw, Smartphone } from 'lucide-react';
+import {
+  APP_THEMES,
+  AppTheme,
+  AppThemeId,
+  AppThemeTokens,
+  COLOR_KEYS,
+  CUSTOM_LIMITS,
+  DENSITY_PRESETS,
+  DURATION_PRESETS,
+  FONT_OPTIONS,
+  FONT_SIZE_PRESETS,
+  RADIUS_PRESETS,
+  ThemeColorKey,
+  ThemeCustomization,
+  createCustomization,
+} from '../../../constants/themes';
 
 interface AppearanceTabProps {
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
+  customization: ThemeCustomization | null;
+  onCustomizationChange: (patch: Partial<ThemeCustomization>) => void;
+  onCustomizationReset: () => void;
 }
 
 type StudioTab = 'base' | 'components' | 'advanced';
@@ -16,19 +34,22 @@ const STUDIO_TABS: { id: StudioTab; label: string }[] = [
   { id: 'advanced', label: 'Nâng cao' },
 ];
 
-/**
- * Các token được bày ra trong panel trái, kèm tên biến CSS gốc của Astryx
- * để bước 2 nối thẳng vào biến thật mà không phải đặt lại tên.
- */
-const TOKEN_ROWS: { key: keyof AppThemeTokens; label: string; cssVar: string }[] = [
-  { key: 'accent', label: 'Màu nhấn', cssVar: '--color-accent' },
-  { key: 'body', label: 'Nền trang', cssVar: '--color-background-body' },
-  { key: 'card', label: 'Nền thẻ', cssVar: '--color-background-card' },
-  { key: 'muted', label: 'Nền phụ', cssVar: '--color-background-muted' },
-  { key: 'text', label: 'Chữ chính', cssVar: '--color-text-primary' },
-  { key: 'textMuted', label: 'Chữ phụ', cssVar: '--color-text-secondary' },
-  { key: 'border', label: 'Viền', cssVar: '--color-border' },
-];
+/** Tên biến CSS gốc của Astryx, bày ra để đối chiếu được với tài liệu của họ. */
+const COLOR_LABELS: Record<ThemeColorKey, { label: string; cssVar: string }> = {
+  accent: { label: 'Màu nhấn', cssVar: '--color-accent' },
+  body: { label: 'Nền trang', cssVar: '--color-background-body' },
+  card: { label: 'Nền thẻ', cssVar: '--color-background-card' },
+  muted: { label: 'Nền phụ', cssVar: '--color-background-muted' },
+  text: { label: 'Chữ chính', cssVar: '--color-text-primary' },
+  textMuted: { label: 'Chữ phụ', cssVar: '--color-text-secondary' },
+  border: { label: 'Viền', cssVar: '--color-border' },
+};
+
+/** `<input type="color">` chỉ nhận #rrggbb — token dạng rgba() phải có giá trị thay thế. */
+const toHexInput = (value: string): string =>
+  /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : '#000000';
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const PanelSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   title,
@@ -40,7 +61,6 @@ const PanelSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   </section>
 );
 
-/** Ô vuông 2 tông giống thẻ theme trên trang Themes của Astryx. */
 const ThemeSwatch: React.FC<{ theme: AppTheme }> = ({ theme }) => (
   <span
     className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-200"
@@ -51,16 +71,116 @@ const ThemeSwatch: React.FC<{ theme: AppTheme }> = ({ theme }) => (
   </span>
 );
 
+/** Hàng chọn màu: ô màu + ô hex gõ tay. */
+const ColorRow: React.FC<{
+  colorKey: ThemeColorKey;
+  value: string;
+  editable: boolean;
+  onChange: (value: string) => void;
+}> = ({ colorKey, value, editable, onChange }) => {
+  const meta = COLOR_LABELS[colorKey];
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-slate-700">{meta.label}</span>
+        <span className="block truncate font-mono text-[10px] text-slate-400">{meta.cssVar}</span>
+      </span>
+      <span className="relative h-6 w-6 shrink-0">
+        <span
+          className="block h-6 w-6 rounded-md border border-slate-200"
+          style={{ backgroundColor: value }}
+        />
+        {editable && (
+          <input
+            type="color"
+            aria-label={meta.label}
+            value={toHexInput(value)}
+            onChange={event => onChange(event.target.value)}
+            className="absolute inset-0 h-6 w-6 cursor-pointer opacity-0"
+          />
+        )}
+      </span>
+      <input
+        type="text"
+        aria-label={`${meta.label} — mã màu`}
+        value={value}
+        readOnly={!editable}
+        onChange={event => onChange(event.target.value)}
+        className={`w-[112px] shrink-0 rounded-md border px-2 py-1 text-right font-mono text-[10px] outline-none ${
+          editable
+            ? 'border-slate-200 bg-white text-slate-700 focus:border-indigo-300'
+            : 'border-slate-200 bg-slate-50 text-slate-500'
+        }`}
+      />
+    </div>
+  );
+};
+
+/** Hàng preset S/M/L/XL kèm ô số gõ tay — đúng dạng điều khiển của Astryx. */
+const ScaleRow: React.FC<{
+  label: string;
+  presets: { label: string; value: number }[];
+  value: number;
+  unit: string;
+  step?: number;
+  limits: { min: number; max: number };
+  editable: boolean;
+  onChange: (value: number) => void;
+}> = ({ label, presets, value, unit, step = 1, limits, editable, onChange }) => (
+  <div>
+    <div className="mb-1.5 flex items-center justify-between gap-2">
+      <span className="text-xs text-slate-700">{label}</span>
+      <span className="flex items-center gap-1">
+        <input
+          type="number"
+          aria-label={label}
+          value={value}
+          step={step}
+          min={limits.min}
+          max={limits.max}
+          disabled={!editable}
+          onChange={event => {
+            const next = parseFloat(event.target.value);
+            if (!Number.isNaN(next)) onChange(clamp(next, limits.min, limits.max));
+          }}
+          className={`w-16 rounded-md border px-2 py-1 text-right font-mono text-[10px] outline-none ${
+            editable
+              ? 'border-slate-200 bg-white text-slate-700 focus:border-indigo-300'
+              : 'border-slate-200 bg-slate-50 text-slate-500'
+          }`}
+        />
+        <span className="w-3 font-mono text-[10px] text-slate-400">{unit}</span>
+      </span>
+    </div>
+    <div className="flex gap-1">
+      {presets.map(preset => (
+        <button
+          key={preset.label}
+          type="button"
+          disabled={!editable}
+          onClick={() => onChange(preset.value)}
+          className={`flex-1 rounded-md border px-1 py-1 text-[11px] transition-colors ${
+            value === preset.value
+              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+              : 'border-slate-200 bg-white text-slate-600'
+          } ${editable ? 'hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}
+        >
+          {preset.label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 /* ============================================================
-   Khung xem trước — render bằng token của theme ĐANG XEM,
-   không phụ thuộc data-theme trên <html>, nên xem được theme
-   khác trước khi bấm áp dụng.
+   Khung xem trước
    ============================================================ */
 
-const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewport }> = ({
-  tokens,
-  viewport,
-}) => {
+const PreviewCanvas: React.FC<{
+  tokens: AppThemeTokens;
+  fontSize: number;
+  viewport: PreviewViewport;
+}> = ({ tokens, fontSize, viewport }) => {
   const vars = {
     '--p-accent': tokens.accent,
     '--p-body': tokens.body,
@@ -71,6 +191,7 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
     '--p-border': tokens.border,
     '--p-radius': tokens.radius,
     fontFamily: `'${tokens.font}', ui-sans-serif, system-ui, sans-serif`,
+    fontSize: `${fontSize}px`,
   } as React.CSSProperties;
 
   const rows = [
@@ -79,104 +200,80 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
     { name: 'Dép quai ngang nữ 115', group: 'Dép nữ', status: 'Ngừng bán', stock: '0' },
   ];
 
+  const boxed = {
+    backgroundColor: 'var(--p-card)',
+    border: '1px solid var(--p-border)',
+    borderRadius: 'var(--p-radius)',
+  };
+
   return (
     <div
       className="mx-auto w-full transition-all"
       style={{ maxWidth: viewport === 'mobile' ? 390 : '100%' }}
     >
       <div className="overflow-hidden p-4" style={{ ...vars, backgroundColor: 'var(--p-body)' }}>
-        {/* Thanh điều hướng */}
-        <div
-          className="mb-3 flex items-center justify-between px-3 py-2"
-          style={{
-            backgroundColor: 'var(--p-card)',
-            border: '1px solid var(--p-border)',
-            borderRadius: 'var(--p-radius)',
-          }}
-        >
-          <span className="text-sm font-bold" style={{ color: 'var(--p-text)' }}>
+        <div className="mb-3 flex items-center justify-between px-3 py-2" style={boxed}>
+          <span className="font-bold" style={{ color: 'var(--p-text)' }}>
             Quản lý hàng hóa
           </span>
           <span
-            className="px-3 py-1.5 text-xs"
+            className="px-3 py-1.5"
             style={{
               backgroundColor: 'var(--p-accent)',
               color: '#ffffff',
               borderRadius: 'var(--p-radius)',
+              fontSize: '0.85em',
             }}
           >
             Thêm hàng
           </span>
         </div>
 
-        {/* Thẻ số liệu */}
-        <div
-          className={`mb-3 grid gap-2 ${viewport === 'mobile' ? 'grid-cols-2' : 'grid-cols-3'}`}
-        >
+        <div className={`mb-3 grid gap-2 ${viewport === 'mobile' ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {[
             { label: 'Doanh thu hôm nay', value: '12.480.000' },
             { label: 'Số đơn', value: '37' },
             { label: 'Tồn kho', value: '1.284' },
           ].map(stat => (
-            <div
-              key={stat.label}
-              className="px-3 py-2.5"
-              style={{
-                backgroundColor: 'var(--p-card)',
-                border: '1px solid var(--p-border)',
-                borderRadius: 'var(--p-radius)',
-              }}
-            >
-              <p className="text-[11px]" style={{ color: 'var(--p-text-muted)' }}>
-                {stat.label}
-              </p>
-              <p className="mt-1 text-base font-bold" style={{ color: 'var(--p-text)' }}>
+            <div key={stat.label} className="px-3 py-2.5" style={boxed}>
+              <p style={{ color: 'var(--p-text-muted)', fontSize: '0.8em' }}>{stat.label}</p>
+              <p className="mt-1 font-bold" style={{ color: 'var(--p-text)', fontSize: '1.1em' }}>
                 {stat.value}
               </p>
             </div>
           ))}
         </div>
 
-        {/* Thanh công cụ */}
         <div className="mb-3 flex gap-2">
           <div
-            className="flex-1 px-3 py-2 text-xs"
-            style={{
-              backgroundColor: 'var(--p-card)',
-              border: '1px solid var(--p-border)',
-              borderRadius: 'var(--p-radius)',
-              color: 'var(--p-text-muted)',
-            }}
+            className="flex-1 px-3 py-2"
+            style={{ ...boxed, color: 'var(--p-text-muted)', fontSize: '0.85em' }}
           >
             Tìm theo tên, mã hàng...
           </div>
           <div
-            className="px-3 py-2 text-xs"
+            className="px-3 py-2"
             style={{
+              ...boxed,
               backgroundColor: 'var(--p-muted)',
-              border: '1px solid var(--p-border)',
-              borderRadius: 'var(--p-radius)',
               color: 'var(--p-text)',
+              fontSize: '0.85em',
             }}
           >
             Bộ lọc
           </div>
         </div>
 
-        {/* Bảng */}
-        <div
-          className="overflow-hidden"
-          style={{
-            backgroundColor: 'var(--p-card)',
-            border: '1px solid var(--p-border)',
-            borderRadius: 'var(--p-radius)',
-          }}
-        >
+        <div className="overflow-hidden" style={boxed}>
           <div
-            className={`grid gap-2 px-3 py-2 text-[11px] font-bold ${
+            className={`grid gap-2 px-3 py-2 font-bold ${
               viewport === 'mobile' ? 'grid-cols-[1fr_70px]' : 'grid-cols-[1.4fr_1fr_1fr_70px]'
             }`}
-            style={{ backgroundColor: 'var(--p-muted)', color: 'var(--p-text)' }}
+            style={{
+              backgroundColor: 'var(--p-muted)',
+              color: 'var(--p-text)',
+              fontSize: '0.8em',
+            }}
           >
             <span>Tên hàng</span>
             {viewport === 'desktop' && <span>Nhóm</span>}
@@ -186,10 +283,14 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
           {rows.map(row => (
             <div
               key={row.name}
-              className={`grid items-center gap-2 px-3 py-2.5 text-xs ${
+              className={`grid items-center gap-2 px-3 py-2.5 ${
                 viewport === 'mobile' ? 'grid-cols-[1fr_70px]' : 'grid-cols-[1.4fr_1fr_1fr_70px]'
               }`}
-              style={{ borderTop: '1px solid var(--p-border)', color: 'var(--p-text)' }}
+              style={{
+                borderTop: '1px solid var(--p-border)',
+                color: 'var(--p-text)',
+                fontSize: '0.85em',
+              }}
             >
               <span className="truncate">{row.name}</span>
               {viewport === 'desktop' && (
@@ -197,11 +298,12 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
               )}
               {viewport === 'desktop' && (
                 <span
-                  className="w-fit whitespace-nowrap px-2 py-0.5 text-[11px]"
+                  className="w-fit whitespace-nowrap px-2 py-0.5"
                   style={{
                     borderRadius: 999,
                     backgroundColor: row.stock === '0' ? '#ffc4be' : '#bce0bb',
                     color: row.stock === '0' ? '#76000c' : '#00490b',
+                    fontSize: '0.9em',
                   }}
                 >
                   {row.status}
@@ -212,10 +314,9 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
           ))}
         </div>
 
-        {/* Nút */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2" style={{ fontSize: '0.85em' }}>
           <span
-            className="px-3 py-1.5 text-xs"
+            className="px-3 py-1.5"
             style={{
               backgroundColor: 'var(--p-accent)',
               color: '#ffffff',
@@ -224,25 +325,12 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
           >
             Lưu thay đổi
           </span>
-          <span
-            className="px-3 py-1.5 text-xs"
-            style={{
-              backgroundColor: 'var(--p-card)',
-              border: '1px solid var(--p-border)',
-              color: 'var(--p-text)',
-              borderRadius: 'var(--p-radius)',
-            }}
-          >
+          <span className="px-3 py-1.5" style={{ ...boxed, color: 'var(--p-text)' }}>
             Hủy
           </span>
           <span
-            className="px-3 py-1.5 text-xs"
-            style={{
-              backgroundColor: 'var(--p-card)',
-              border: '1px solid #ffaea7',
-              color: '#76000c',
-              borderRadius: 'var(--p-radius)',
-            }}
+            className="px-3 py-1.5"
+            style={{ ...boxed, border: '1px solid #ffaea7', color: '#76000c' }}
           >
             Xóa
           </span>
@@ -253,19 +341,22 @@ const PreviewCanvas: React.FC<{ tokens: AppThemeTokens; viewport: PreviewViewpor
 };
 
 /* ============================================================
-   Nội dung 3 tab của panel trái
+   Tab "Cơ bản" — nơi chỉnh token
    ============================================================ */
 
 const BaseStylesTab: React.FC<{
-  themes: AppTheme[];
   previewTheme: AppTheme;
   activeThemeId: AppThemeId;
+  values: ThemeCustomization;
+  editable: boolean;
   onPreview: (id: AppThemeId) => void;
-}> = ({ themes, previewTheme, activeThemeId, onPreview }) => (
+  onApplyPreview: () => void;
+  onChange: (patch: Partial<ThemeCustomization>) => void;
+}> = ({ previewTheme, activeThemeId, values, editable, onPreview, onApplyPreview, onChange }) => (
   <>
     <PanelSection title="Theme">
       <div className="space-y-2">
-        {themes.map(theme => {
+        {APP_THEMES.map(theme => {
           const isPreviewing = theme.id === previewTheme.id;
           return (
             <button
@@ -301,51 +392,99 @@ const BaseStylesTab: React.FC<{
       </div>
     </PanelSection>
 
+    {!editable && (
+      <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-3">
+        <p className="text-[11px] leading-relaxed text-slate-600">
+          Đang xem trước <strong>{previewTheme.name}</strong>. Muốn chỉnh tay các token bên dưới
+          thì áp dụng theme này trước.
+        </p>
+        <button
+          type="button"
+          onClick={onApplyPreview}
+          className="mt-2 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] text-white hover:bg-indigo-700"
+        >
+          Áp dụng để chỉnh
+        </button>
+      </div>
+    )}
+
     <PanelSection title="Màu">
       <div className="space-y-1.5">
-        {TOKEN_ROWS.map(row => {
-          const value = previewTheme.tokens[row.key];
-          return (
-            <div key={row.key} className="flex items-center gap-2.5">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs text-slate-700">{row.label}</span>
-                <span className="block truncate font-mono text-[10px] text-slate-400">
-                  {row.cssVar}
-                </span>
-              </span>
-              <span
-                className="h-6 w-6 shrink-0 rounded-md border border-slate-200"
-                style={{ backgroundColor: value }}
-              />
-              <span className="w-[112px] shrink-0 truncate rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right font-mono text-[10px] text-slate-600">
-                {value}
-              </span>
-            </div>
-          );
-        })}
+        {COLOR_KEYS.map(key => (
+          <ColorRow
+            key={key}
+            colorKey={key}
+            value={values[key]}
+            editable={editable}
+            onChange={value => onChange({ [key]: value })}
+          />
+        ))}
       </div>
     </PanelSection>
 
-    <PanelSection title="Kiểu chữ & bo góc">
-      <div className="space-y-1.5">
-        {[
-          { label: 'Font chữ', value: previewTheme.tokens.font },
-          { label: 'Bo góc thẻ', value: previewTheme.tokens.radius },
-        ].map(item => (
-          <div key={item.label} className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-700">{item.label}</span>
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-600">
-              {item.value}
-            </span>
-          </div>
-        ))}
+    <PanelSection title="Kiểu chữ">
+      <label className="mb-3 block">
+        <span className="mb-1.5 block text-xs text-slate-700">Font chữ</span>
+        <select
+          value={values.fontFamily}
+          disabled={!editable}
+          onChange={event => onChange({ fontFamily: event.target.value })}
+          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-300 disabled:bg-slate-50 disabled:text-slate-500"
+        >
+          {FONT_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <ScaleRow
+        label="Cỡ chữ"
+        presets={FONT_SIZE_PRESETS}
+        value={values.fontSize}
+        unit="px"
+        step={0.5}
+        limits={CUSTOM_LIMITS.fontSize}
+        editable={editable}
+        onChange={fontSize => onChange({ fontSize })}
+      />
+    </PanelSection>
+
+    <PanelSection title="Hình khối">
+      <div className="space-y-3.5">
+        <ScaleRow
+          label="Bo góc"
+          presets={RADIUS_PRESETS}
+          value={values.radius}
+          unit="px"
+          limits={CUSTOM_LIMITS.radius}
+          editable={editable}
+          onChange={radius => onChange({ radius })}
+        />
+        <ScaleRow
+          label="Mật độ"
+          presets={DENSITY_PRESETS}
+          value={values.density}
+          unit="×"
+          step={0.05}
+          limits={CUSTOM_LIMITS.density}
+          editable={editable}
+          onChange={density => onChange({ density })}
+        />
+        <ScaleRow
+          label="Chuyển động"
+          presets={DURATION_PRESETS}
+          value={values.duration}
+          unit="×"
+          step={0.1}
+          limits={CUSTOM_LIMITS.duration}
+          editable={editable}
+          onChange={duration => onChange({ duration })}
+        />
       </div>
-      <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-500">
-        <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
-        <span>
-          Bước 2 sẽ mở khoá chỉnh tay từng token (màu, bo góc, mật độ, cỡ chữ) và ghi thẳng ra
-          toàn app.
-        </span>
+      <p className="mt-3 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-500">
+        Mật độ chỉ nới/thu khung chứa, <strong>không đụng nút và ô nhập</strong> — đổi padding của
+        chúng là đổi vùng chạm trên máy bán hàng.
       </p>
     </PanelSection>
   </>
@@ -398,57 +537,99 @@ const ComponentsTab: React.FC = () => (
   </>
 );
 
-const AdvancedTab: React.FC = () => (
-  <>
-    <PanelSection title="Cấp chữ">
-      <div className="space-y-2.5">
-        {[
-          { name: 'Tiêu đề trang', sample: 'Quản lý hàng hóa', cls: 'text-xl font-bold text-slate-950' },
-          { name: 'Tiêu đề section', sample: 'Thông tin hàng hóa', cls: 'text-base font-bold text-slate-900' },
-          { name: 'Tiêu đề cột bảng', sample: 'Số tài khoản', cls: 'text-xs font-bold text-slate-900' },
-          { name: 'Nội dung thường', sample: 'VietinBank - 1058844239173', cls: 'text-xs font-normal text-slate-800' },
-          { name: 'Mô tả / helper', sample: 'Áp dụng cho toàn hệ thống', cls: 'text-[11px] font-normal text-slate-500' },
-        ].map(item => (
-          <div key={item.name}>
-            <p className="text-[10px] text-slate-400">{item.name}</p>
-            <p className={item.cls}>{item.sample}</p>
-          </div>
-        ))}
-      </div>
-    </PanelSection>
+const AdvancedTab: React.FC<{ values: ThemeCustomization; hasCustom: boolean }> = ({
+  values,
+  hasCustom,
+}) => {
+  const [copied, setCopied] = useState(false);
 
-    <PanelSection title="Màu trạng thái nghiệp vụ">
-      <div className="space-y-2">
-        {[
-          { name: 'Thành công / Lãi', token: 'Emerald', bg: 'bg-emerald-600', usage: 'Lãi, hoàn tất, online.' },
-          { name: 'Cảnh báo', token: 'Amber', bg: 'bg-amber-500', usage: 'Tồn kho thấp, cần chú ý.' },
-          { name: 'Lỗi / Lỗ', token: 'Rose', bg: 'bg-rose-600', usage: 'Lỗi, lỗ, xóa dữ liệu.' },
-        ].map(color => (
-          <div key={color.name} className="flex items-start gap-2.5">
-            <span className={`mt-0.5 h-6 w-6 shrink-0 rounded-lg ${color.bg}`} />
-            <span className="min-w-0">
-              <span className="block text-xs text-slate-800">
-                {color.name}{' '}
-                <span className="font-mono text-[10px] text-slate-400">{color.token}</span>
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(values, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <>
+      <PanelSection title="Cấu hình hiện tại">
+        <pre className="max-h-48 overflow-auto rounded-lg border border-slate-100 bg-slate-50 p-2.5 font-mono text-[10px] leading-relaxed text-slate-600">
+          {JSON.stringify(values, null, 2)}
+        </pre>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="mt-2 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-700 hover:bg-slate-50"
+        >
+          <Copy className="h-3 w-3" />
+          {copied ? 'Đã chép' : 'Chép cấu hình'}
+        </button>
+        {!hasCustom && (
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            Đây là giá trị gốc của theme — chưa có chỉnh tay nào được lưu.
+          </p>
+        )}
+      </PanelSection>
+
+      <PanelSection title="Cấp chữ">
+        <div className="space-y-2.5">
+          {[
+            { name: 'Tiêu đề trang', sample: 'Quản lý hàng hóa', cls: 'text-xl font-bold text-slate-950' },
+            { name: 'Tiêu đề section', sample: 'Thông tin hàng hóa', cls: 'text-base font-bold text-slate-900' },
+            { name: 'Tiêu đề cột bảng', sample: 'Số tài khoản', cls: 'text-xs font-bold text-slate-900' },
+            { name: 'Nội dung thường', sample: 'VietinBank - 1058844239173', cls: 'text-xs font-normal text-slate-800' },
+            { name: 'Mô tả / helper', sample: 'Áp dụng cho toàn hệ thống', cls: 'text-[11px] font-normal text-slate-500' },
+          ].map(item => (
+            <div key={item.name}>
+              <p className="text-[10px] text-slate-400">{item.name}</p>
+              <p className={item.cls}>{item.sample}</p>
+            </div>
+          ))}
+        </div>
+      </PanelSection>
+
+      <PanelSection title="Màu trạng thái nghiệp vụ">
+        <div className="space-y-2">
+          {[
+            { name: 'Thành công / Lãi', token: 'Emerald', bg: 'bg-emerald-600', usage: 'Lãi, hoàn tất, online.' },
+            { name: 'Cảnh báo', token: 'Amber', bg: 'bg-amber-500', usage: 'Tồn kho thấp, cần chú ý.' },
+            { name: 'Lỗi / Lỗ', token: 'Rose', bg: 'bg-rose-600', usage: 'Lỗi, lỗ, xóa dữ liệu.' },
+          ].map(color => (
+            <div key={color.name} className="flex items-start gap-2.5">
+              <span className={`mt-0.5 h-6 w-6 shrink-0 rounded-lg ${color.bg}`} />
+              <span className="min-w-0">
+                <span className="block text-xs text-slate-800">
+                  {color.name}{' '}
+                  <span className="font-mono text-[10px] text-slate-400">{color.token}</span>
+                </span>
+                <span className="block text-[11px] leading-relaxed text-slate-500">
+                  {color.usage}
+                </span>
               </span>
-              <span className="block text-[11px] leading-relaxed text-slate-500">
-                {color.usage}
-              </span>
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-500">
-        Màu trạng thái nghiệp vụ được giữ nguyên nghĩa ở mọi theme — đổi màu lãi/lỗ theo theme là
-        rủi ro đọc sai số liệu.
-      </p>
-    </PanelSection>
-  </>
-);
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-500">
+          Màu trạng thái nghiệp vụ <strong>không chỉnh được</strong> và giữ nguyên nghĩa ở mọi
+          theme — đổi màu lãi/lỗ là rủi ro đọc sai số liệu.
+        </p>
+      </PanelSection>
+    </>
+  );
+};
 
 /* ============================================================ */
 
-const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeChange }) => {
+const AppearanceTab: React.FC<AppearanceTabProps> = ({
+  activeThemeId,
+  onThemeChange,
+  customization,
+  onCustomizationChange,
+  onCustomizationReset,
+}) => {
   const [studioTab, setStudioTab] = useState<StudioTab>('base');
   const [viewport, setViewport] = useState<PreviewViewport>('desktop');
   const [previewThemeId, setPreviewThemeId] = useState<AppThemeId>(activeThemeId);
@@ -460,6 +641,31 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
 
   const isApplied = previewThemeId === activeThemeId;
 
+  // Chỉ chỉnh được token của theme ĐANG DÙNG — chỉnh token của theme chỉ-đang-xem
+  // sẽ không thấy tác dụng gì trên app, rất dễ tưởng là hỏng.
+  const editable = isApplied;
+
+  const values = useMemo<ThemeCustomization>(
+    () => (editable && customization ? customization : createCustomization(previewTheme)),
+    [customization, editable, previewTheme]
+  );
+
+  // Khung xem trước dùng đúng giá trị đang hiển thị trong panel.
+  const previewTokens = useMemo<AppThemeTokens>(
+    () => ({
+      accent: values.accent,
+      body: values.body,
+      card: values.card,
+      muted: values.muted,
+      text: values.text,
+      textMuted: values.textMuted,
+      border: values.border,
+      radius: `${values.radius}px`,
+      font: values.fontFamily === 'system' ? 'Inter' : values.fontFamily,
+    }),
+    [values]
+  );
+
   return (
     <div className="flex min-h-0 flex-col gap-4 xl:flex-row xl:items-start">
       {/* ---------- Panel điều khiển ---------- */}
@@ -467,7 +673,7 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
         <div className="border-b border-slate-100 px-4 py-3">
           <h3 className="text-sm font-bold text-slate-900">Giao diện</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-            Chọn theme rồi xem trước bên phải trước khi áp dụng cho toàn app.
+            Chỉnh token ở đây là toàn app đổi theo ngay.
           </p>
         </div>
 
@@ -491,37 +697,53 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
         <div className="max-h-[560px] overflow-y-auto">
           {studioTab === 'base' && (
             <BaseStylesTab
-              themes={APP_THEMES}
               previewTheme={previewTheme}
               activeThemeId={activeThemeId}
+              values={values}
+              editable={editable}
               onPreview={setPreviewThemeId}
+              onApplyPreview={() => onThemeChange(previewThemeId)}
+              onChange={onCustomizationChange}
             />
           )}
           {studioTab === 'components' && <ComponentsTab />}
-          {studioTab === 'advanced' && <AdvancedTab />}
+          {studioTab === 'advanced' && (
+            <AdvancedTab values={values} hasCustom={Boolean(editable && customization)} />
+          )}
         </div>
 
         <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-          <button
-            type="button"
-            disabled={isApplied}
-            onClick={() => onThemeChange(previewThemeId)}
-            className={`flex-1 rounded-xl px-3 py-2 text-sm font-normal transition-colors ${
-              isApplied
-                ? 'cursor-default bg-slate-100 text-slate-400'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700'
-            }`}
-          >
-            {isApplied ? 'Đang dùng theme này' : `Áp dụng ${previewTheme.name}`}
-          </button>
-          {!isApplied && (
+          {isApplied ? (
             <button
               type="button"
-              onClick={() => setPreviewThemeId(activeThemeId)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-600 hover:bg-slate-50"
+              disabled={!customization}
+              onClick={onCustomizationReset}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-normal transition-colors ${
+                customization
+                  ? 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  : 'cursor-default bg-slate-100 text-slate-400'
+              }`}
             >
-              Bỏ
+              <RotateCcw className="h-3.5 w-3.5" />
+              {customization ? 'Khôi phục mặc định' : 'Chưa có chỉnh tay nào'}
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onThemeChange(previewThemeId)}
+                className="flex-1 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-normal text-white hover:bg-indigo-700"
+              >
+                Áp dụng {previewTheme.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewThemeId(activeThemeId)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-600 hover:bg-slate-50"
+              >
+                Bỏ
+              </button>
+            </>
           )}
         </div>
       </aside>
@@ -532,7 +754,8 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-slate-900">Xem trước</p>
             <p className="truncate text-xs text-slate-500">
-              {previewTheme.name} — {previewTheme.description}
+              {previewTheme.name}
+              {editable && customization ? ' — đã chỉnh tay' : ` — ${previewTheme.description}`}
             </p>
           </div>
           <div className="flex shrink-0 gap-1 rounded-lg bg-slate-100 p-0.5">
@@ -560,7 +783,11 @@ const AppearanceTab: React.FC<AppearanceTabProps> = ({ activeThemeId, onThemeCha
         </div>
 
         <div className="bg-slate-100/60 p-4">
-          <PreviewCanvas tokens={previewTheme.tokens} viewport={viewport} />
+          <PreviewCanvas
+            tokens={previewTokens}
+            fontSize={values.fontSize}
+            viewport={viewport}
+          />
         </div>
       </div>
     </div>

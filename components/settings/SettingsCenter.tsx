@@ -48,7 +48,7 @@ import {
   Star,
   Info,
 } from 'lucide-react';
-import { AppThemeId } from '../../constants/themes';
+import { AppThemeId, ThemeCustomization } from '../../constants/themes';
 import {
   DEFAULT_POS_INVENTORY_SETTINGS,
   normalizePOSPaymentSettings,
@@ -95,6 +95,9 @@ interface SettingsCenterProps {
   onNavigate: (id: string) => void;
   activeThemeId: AppThemeId;
   onThemeChange: (themeId: AppThemeId) => void;
+  customization: ThemeCustomization | null;
+  onCustomizationChange: (patch: Partial<ThemeCustomization>) => void;
+  onCustomizationReset: () => void;
   isCloudConnected: boolean;
   isSyncing: boolean;
   syncErrors: string[] | null;
@@ -547,6 +550,9 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
   onNavigate,
   activeThemeId,
   onThemeChange,
+  customization,
+  onCustomizationChange,
+  onCustomizationReset,
   isCloudConnected,
   isSyncing,
   syncErrors,
@@ -1697,7 +1703,13 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
                     <PrintTemplatesTab brandProfile={brandProfile} />
                   )}
                   {activeTab === 'appearance' && (
-                    <AppearanceTab activeThemeId={activeThemeId} onThemeChange={onThemeChange} />
+                    <AppearanceTab
+                      activeThemeId={activeThemeId}
+                      onThemeChange={onThemeChange}
+                      customization={customization}
+                      onCustomizationChange={onCustomizationChange}
+                      onCustomizationReset={onCustomizationReset}
+                    />
                   )}
                   {activeTab === 'migration' && (
                     <MigrationTab onRefresh={onImportRefresh ?? onRefresh} />

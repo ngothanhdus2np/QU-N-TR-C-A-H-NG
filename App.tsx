@@ -101,7 +101,8 @@ const App: React.FC = () => {
 
   useRealtimeSync(mergeRemoteUpdate);
 
-  const { themeId, setThemeId } = useTheme();
+  const { themeId, setThemeId, customization, updateCustomization, resetCustomization } =
+    useTheme();
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
   const [userRole, setUserRole] = useState<string>('owner');
   const [userDisplayName, setUserDisplayName] = useState<string>('');
@@ -268,6 +269,9 @@ const App: React.FC = () => {
               userRole={userRole}
               activeThemeId={themeId}
               onThemeChange={setThemeId}
+              customization={customization}
+              onCustomizationChange={updateCustomization}
+              onCustomizationReset={resetCustomization}
               isCloudConnected={isCloudConnected}
               isSyncing={isSyncing || isDraining}
               syncErrors={syncErrors}

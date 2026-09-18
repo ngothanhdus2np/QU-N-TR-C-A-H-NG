@@ -666,3 +666,164 @@ html[data-theme="astryx"] textarea {
   border-color: var(--ax-border-strong) !important;
   color: var(--ax-text) !important;
 }
+
+/* ============================================================
+   LỚP TOKEN CHỈNH TAY (bước 2)
+   Bật khi <html data-custom="1">. Biến `--ux-*` do trang Cài đặt
+   giao diện ghi ra bằng JS.
+
+   Selector cố ý gắn thêm [data-theme] để có specificity (0,3,x),
+   cao hơn mọi khối theme (0,2,x) — nhờ vậy lớp này luôn thắng bất
+   kể thứ tự file CSS được nạp ở bản build production.
+   ============================================================ */
+
+html[data-custom="1"][data-theme] body {
+  background-color: var(--ux-body);
+  color: var(--ux-text);
+  font-family: var(--ux-font);
+  font-size: var(--ux-font-size);
+}
+
+/* --- Nền --- */
+html[data-custom="1"][data-theme] .bg-white {
+  background-color: var(--ux-card) !important;
+}
+
+html[data-custom="1"][data-theme] .bg-slate-50,
+html[data-custom="1"][data-theme] .bg-slate-100 {
+  background-color: var(--ux-body) !important;
+}
+
+html[data-custom="1"][data-theme] .bg-indigo-50,
+html[data-custom="1"][data-theme] .bg-indigo-100,
+html[data-custom="1"][data-theme] .bg-blue-50,
+html[data-custom="1"][data-theme] .bg-violet-50 {
+  background-color: var(--ux-muted) !important;
+}
+
+html[data-custom="1"][data-theme] .bg-indigo-500,
+html[data-custom="1"][data-theme] .bg-indigo-600,
+html[data-custom="1"][data-theme] .bg-indigo-700,
+html[data-custom="1"][data-theme] .bg-blue-600,
+html[data-custom="1"][data-theme] .bg-violet-600,
+html[data-custom="1"][data-theme] .hover\:bg-indigo-600:hover,
+html[data-custom="1"][data-theme] .hover\:bg-indigo-700:hover {
+  background-color: var(--ux-accent) !important;
+  color: var(--ux-on-accent) !important;
+}
+
+html[data-custom="1"][data-theme] .hover\:bg-indigo-50:hover,
+html[data-custom="1"][data-theme] .hover\:bg-slate-50:hover {
+  background-color: var(--ux-muted) !important;
+}
+
+/* --- Chữ --- */
+html[data-custom="1"][data-theme] .text-slate-700,
+html[data-custom="1"][data-theme] .text-slate-800,
+html[data-custom="1"][data-theme] .text-slate-900,
+html[data-custom="1"][data-theme] .text-slate-950 {
+  color: var(--ux-text) !important;
+}
+
+html[data-custom="1"][data-theme] .text-slate-400,
+html[data-custom="1"][data-theme] .text-slate-500,
+html[data-custom="1"][data-theme] .text-slate-600 {
+  color: var(--ux-text-muted) !important;
+}
+
+html[data-custom="1"][data-theme] .text-indigo-400,
+html[data-custom="1"][data-theme] .text-indigo-500,
+html[data-custom="1"][data-theme] .text-indigo-600,
+html[data-custom="1"][data-theme] .text-indigo-700,
+html[data-custom="1"][data-theme] .text-violet-600 {
+  color: var(--ux-accent) !important;
+}
+
+/* Chữ trắng nằm trên nền màu nhấn phải đảo theo độ sáng của màu đó. */
+html[data-custom="1"][data-theme] .bg-indigo-500 .text-white,
+html[data-custom="1"][data-theme] .bg-indigo-600 .text-white,
+html[data-custom="1"][data-theme] .bg-indigo-700 .text-white {
+  color: var(--ux-on-accent) !important;
+}
+
+/* --- Viền --- */
+html[data-custom="1"][data-theme] .border-slate-100,
+html[data-custom="1"][data-theme] .border-slate-200,
+html[data-custom="1"][data-theme] .border-slate-300,
+html[data-custom="1"][data-theme] .border-indigo-100,
+html[data-custom="1"][data-theme] .border-indigo-200 {
+  border-color: var(--ux-border) !important;
+}
+
+html[data-custom="1"][data-theme] .focus\:border-indigo-500:focus,
+html[data-custom="1"][data-theme] .focus\:ring-indigo-500:focus {
+  border-color: var(--ux-accent) !important;
+}
+
+/* --- Bo góc --- */
+html[data-custom="1"][data-theme] .rounded-md {
+  border-radius: calc(var(--ux-radius) * 0.5) !important;
+}
+
+html[data-custom="1"][data-theme] .rounded-lg {
+  border-radius: calc(var(--ux-radius) * 0.75) !important;
+}
+
+html[data-custom="1"][data-theme] .rounded-xl,
+html[data-custom="1"][data-theme] .rounded-2xl {
+  border-radius: var(--ux-radius) !important;
+}
+
+html[data-custom="1"][data-theme] .rounded-3xl {
+  border-radius: calc(var(--ux-radius) * 1.6) !important;
+}
+
+/* --- Cỡ chữ ---
+   Phải ghi đè cả .text-xs/.text-sm vì index.html đã ghim chúng bằng px !important,
+   nếu chỉ đổi font-size của body thì hai cấp chữ dùng nhiều nhất sẽ không nhúc nhích. */
+html[data-custom="1"][data-theme] .text-xs {
+  font-size: calc(var(--ux-font-size) * 0.92) !important;
+}
+
+html[data-custom="1"][data-theme] .text-sm {
+  font-size: var(--ux-font-size) !important;
+}
+
+html[data-custom="1"][data-theme] .text-base {
+  font-size: calc(var(--ux-font-size) * 1.1) !important;
+}
+
+/* --- Mật độ ---
+   CỐ Ý chỉ áp lên các lớp padding/gap của khung chứa, KHÔNG áp lên
+   nút và ô nhập: đổi padding của chúng là đổi vùng chạm trên máy POS. */
+html[data-custom="1"][data-theme] .p-3 {
+  padding: calc(0.75rem * var(--ux-density)) !important;
+}
+
+html[data-custom="1"][data-theme] .p-4 {
+  padding: calc(1rem * var(--ux-density)) !important;
+}
+
+html[data-custom="1"][data-theme] .p-5 {
+  padding: calc(1.25rem * var(--ux-density)) !important;
+}
+
+html[data-custom="1"][data-theme] .gap-3 {
+  gap: calc(0.75rem * var(--ux-density)) !important;
+}
+
+html[data-custom="1"][data-theme] .gap-4 {
+  gap: calc(1rem * var(--ux-density)) !important;
+}
+
+html[data-custom="1"][data-theme] .space-y-4 > * + * {
+  margin-top: calc(1rem * var(--ux-density)) !important;
+}
+
+/* --- Chuyển động --- */
+html[data-custom="1"][data-theme] .transition,
+html[data-custom="1"][data-theme] .transition-all,
+html[data-custom="1"][data-theme] .transition-colors,
+html[data-custom="1"][data-theme] .transition-transform {
+  transition-duration: calc(150ms * var(--ux-duration)) !important;
+}
