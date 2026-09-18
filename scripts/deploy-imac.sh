@@ -11,7 +11,7 @@
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.2"
+IMAC_HOST="${CFOBRAIN_IMAC_HOST:-imac-ca-mac}"
 IMAC_DIR="~/cfobrain"
 BACKUP_DIR="~/cfobrain-backup-prev"
 APP_LABEL="com.cfobrain.app"
@@ -22,7 +22,7 @@ echo "🚀 Bắt đầu deploy lên iMac..."
 # Bước 0: Backup bản đang chạy (hardlink, giữ đúng 1 bản gần nhất) — có thể fail vô hại
 # nếu đây là lần deploy đầu tiên (chưa có gì để backup).
 echo "🧷 Backup bản hiện tại (để rollback nếu cần)..."
-ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "rm -rf $BACKUP_DIR && cp -Rl $IMAC_DIR $BACKUP_DIR" \
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "rm -rf $BACKUP_DIR && cp -Rl $IMAC_DIR $BACKUP_DIR" \
   && echo "✅ Backup xong" \
   || echo "⚠️  Không backup được (có thể là lần deploy đầu tiên) — tiếp tục, không rollback được nếu lần này lỗi"
 
@@ -36,7 +36,7 @@ rsync -az --delete \
   --exclude='supabase' \
   --exclude='.env.local' \
   "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/" \
-  "$IMAC_USER@$IMAC_IP:$IMAC_DIR/"
+  "$IMAC_USER@$IMAC_HOST:$IMAC_DIR/"
 
 echo "✅ Copy xong"
 
@@ -48,17 +48,17 @@ echo "🗃  Kiểm tra & chạy migration trên DB prod..."
 # Bước 1.5: Inject build timestamp vào Service Worker để browser phát hiện version mới
 BUILD_TIME=$(date +%Y%m%d%H%M%S)
 echo "🔖 SW version: $BUILD_TIME"
-ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "sed -i '' \"s/cfo-brain-v[0-9a-zA-Z.]*/cfo-brain-v$BUILD_TIME/g\" $IMAC_DIR/public/service-worker.js"
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "sed -i '' \"s/cfo-brain-v[0-9a-zA-Z.]*/cfo-brain-v$BUILD_TIME/g\" $IMAC_DIR/public/service-worker.js"
 
 # Bước 2: Build trên iMac
 echo "🔨 Đang build trên iMac..."
-ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH && cd $IMAC_DIR && npm install --silent && npm run build"
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH && cd $IMAC_DIR && npm install --silent && npm run build"
 
 echo "✅ Build xong"
 
 # Bước 3: Restart app
 echo "🔄 Đang restart app..."
-ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH && launchctl kickstart -k gui/\$(id -u)/$APP_LABEL 2>/dev/null || launchctl start $APP_LABEL"
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH && launchctl kickstart -k gui/\$(id -u)/$APP_LABEL 2>/dev/null || launchctl start $APP_LABEL"
 
 echo "✅ Restart xong"
 
@@ -71,7 +71,7 @@ echo "✅ Restart xong"
 # sẽ THOÁT NGAY khi gán biến, bỏ qua toàn bộ logic rollback bên dưới (đã xảy ra thật —
 # exit code 7 — ở lần chạy đầu tiên 2026-07-10 lúc 23:51).
 wait_for_health() {
-  ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" '
+  ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" '
     for i in $(seq 1 15); do
       STATUS=$(curl -s http://localhost:3000/health 2>/dev/null || echo CURL_FAILED)
       if [ "$STATUS" = "OK" ]; then echo OK; exit 0; fi
@@ -88,21 +88,21 @@ if [ "$STATUS" = "OK" ]; then
   echo ""
   echo "✅ Deploy thành công! App đang chạy tại:"
   echo "   🌐 https://cfobrain.phucsang.com.vn"
-  echo "   🏠 http://$IMAC_IP:3000"
+  echo "   🏠 http://$IMAC_HOST:3000"
   exit 0
 fi
 
 # Bước 5: Health-check fail → thử tự động rollback về bản backup (nếu có)
 echo "⚠️  App chưa phản hồi đúng (trả về: '$STATUS') — thử rollback tự động..."
-HAS_BACKUP=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "[ -d $BACKUP_DIR ] && echo yes || echo no")
+HAS_BACKUP=$(ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "[ -d $BACKUP_DIR ] && echo yes || echo no")
 if [ "$HAS_BACKUP" != "yes" ]; then
   echo "❌ Không có bản backup để rollback (có thể là lần deploy đầu tiên)."
-  echo "   Kiểm tra log: ssh -i $SSH_KEY $IMAC_USER@$IMAC_IP 'tail -50 /tmp/cfobrain-app.log'"
+  echo "   Kiểm tra log: ssh -i $SSH_KEY $IMAC_USER@$IMAC_HOST 'tail -50 /tmp/cfobrain-app.log'"
   echo "   Xem thêm: docs/03-deployment/ROLLBACK_RUNBOOK.md"
   exit 1
 fi
 
-ssh -i $SSH_KEY "$IMAC_USER@$IMAC_IP" "
+ssh -i $SSH_KEY "$IMAC_USER@$IMAC_HOST" "
   rm -rf ${IMAC_DIR}-failed
   mv $IMAC_DIR ${IMAC_DIR}-failed
   mv $BACKUP_DIR $IMAC_DIR
@@ -116,7 +116,7 @@ if [ "$STATUS2" = "OK" ]; then
   exit 1
 else
   echo "❌ Rollback cũng thất bại — CẦN CAN THIỆP THỦ CÔNG NGAY."
-  echo "   SSH vào máy: ssh -i $SSH_KEY $IMAC_USER@$IMAC_IP"
+  echo "   SSH vào máy: ssh -i $SSH_KEY $IMAC_USER@$IMAC_HOST"
   echo "   Xem: docs/03-deployment/ROLLBACK_RUNBOOK.md"
   exit 1
 fi

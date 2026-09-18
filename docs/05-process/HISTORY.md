@@ -3,6 +3,38 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-09-18 — Tìm lại iMac sau khi đổi subnet, bỏ IP cứng trong script, deploy dev
+
+- **Nguyên nhân thật sự khiến deploy chết suốt từ 30/08**: iMac không hề offline — nó **đổi hẳn subnet** từ `192.168.1.x` sang `192.168.88.x` (nhà đổi thiết bị mạng, gateway tên `vnpt`). `192.168.1.2` vẫn ping được vì **thiết bị khác đã chiếm IP đó**, nên mọi lần kiểm tra trước đây đều kết luận nhầm là "iMac online nhưng SSH tắt".
+- **Cách tìm lại**: quét cổng 22 toàn dải `192.168.1.x` chỉ thấy `.3` mở — nhưng đối chiếu vân tay thì **`.3` là máy lạ** (ED25519 `oU8lTGHa…`, RSA 2048-bit) khác hẳn iMac (`yznsrr9W…`, RSA 3072-bit), nên KHÔNG đăng nhập vào đó. Tìm ra iMac bằng Bonjour (`dns-sd -B _ssh._tcp`) → `iMac-cua-mac.local`, vân tay khớp chính xác bản ghi cũ.
+- **Bỏ IP cứng khỏi 6 script**: `deploy-imac.sh`, `deploy-imac-dev.sh`, `apply-migrations.sh`, `sync-prod-to-dev.sh`, `sync-prod-to-staging.sh`, `backup-pull-offsite.sh` → `${CFOBRAIN_IMAC_HOST:-imac-ca-mac}` (Tailscale MagicDNS). Ban đầu đặt là `iMac-cua-mac.local` (Bonjour), nhưng sau khi user đăng nhập Tailscale trên iMac thì đổi sang tên Tailscale vì nó phủ được cả hai trường hợp — cùng mạng nhà VÀ ở ngoài — còn `.local` chỉ chạy khi cùng mạng. Tên `.local` vẫn dùng được qua biến `CFOBRAIN_IMAC_HOST` nếu Tailscale tắt. Đổi tên biến `IMAC_IP` → `IMAC_HOST` ở 3 script vì nó không còn chứa IP nữa. **Đây là lần thứ ba** codebase phải sửa IP cứng (trước đó `192.168.1.6`, `192.168.88.112`) — dùng hostname là để không có lần thứ tư.
+- Cập nhật `~/.ssh/config` (alias `imac-cfobrain`) và 2 runbook `BACKUP_RUNBOOK.md`, `ROLLBACK_RUNBOOK.md`.
+- **Tailscale**: user đăng nhập trên iMac (`imac-ca-mac`, `100.112.33.33`); MacBook là `apples-macbook-pro` (`100.86.15.39`). Đã kiểm chứng SSH vào được qua cả IP Tailscale lẫn tên ngắn MagicDNS. **CLI không đăng nhập hộ được qua SSH** — app GUI của Tailscale bắt buộc chạy trong phiên màn hình (`Tailscale.CLIError error 3`), nên bước này phải do user làm tại chỗ. Ghi chú bẫy: MacBook có **hai bản Tailscale song song** (CLI ở `/usr/local/bin` đã đăng nhập, app GUI thì chưa) — trạng thái riêng biệt, dễ tưởng là hỏng.
+- **Deploy dev XONG** — bản đầu tiên kể từ 30/08. Deploy lần hai qua đúng đường Tailscale sau khi đổi mặc định, cũng chạy tốt. Verify: `/health` trả OK, `dev.phucsang.com.vn` HTTP 200, CSS đã build chứa 85 selector `data-theme=astryx`, `index.html` có Figtree, build lúc 21:10 ngày 18/09. Prod không đụng tới (vẫn HTTP 200).
+- **Gỡ được 1 nghi vấn treo**: iMac vào `cdn.sheetjs.com` trả **HTTP 200** → gói `xlsx` cài từ CDN không phải rủi ro deploy như đã lo từ 30/08.
+- **Xác nhận 5 chỗ hardcode IP cũ trong `server.ts`/`channelManagement.ts` là fallback chết**: cả hai `.env.local` trên iMac đều set `SUPABASE_URL` tường minh (prod `http://localhost:8000`, dev `https://supabase-dev.phucsang.com.vn`) nên nhánh fallback không bao giờ chạy. Cố ý chưa sửa vì không cần thiết và đụng vào CSP ngay trước lúc deploy là rủi ro thừa.
+- **DISCOUNT-PERCENT-0829 — trả lời xong câu hỏi treo từ 30/08**: DB **dev CÓ** cột `discount_percent` (`numeric`); DB **prod KHÔNG CÓ** — user tự chạy truy vấn trên Terminal iMac, trả về `(0 rows)`. Nghĩa là cột trong `supabase_setup.sql:279` từ 25/06 **chưa bao giờ tới được prod**, đúng như nghi ngờ: file đó không phải migration nên `apply-migrations.sh` không chạy.
+- **Nhưng KHÔNG cần can thiệp tay**: `deploy-imac.sh` chạy `apply-migrations.sh --prod` ở **Bước 1.6, TRƯỚC bước build**, kèm `set -e`. Migration `043` dùng `ADD COLUMN IF NOT EXISTS` nên idempotent. Thứ tự này đúng chiều: schema có cột trước, code mới lên sau — ngược lại là mọi thao tác lưu sản phẩm fail `PGRST204`. Cố ý KHÔNG chạy migration tay lên prod: để đúng luồng deploy có `set -e` bảo vệ, và prod chỉ đụng khi user yêu cầu riêng.
+
+### 2026-09-17 (2) — Bước 2: token giao diện chỉnh tay được, áp ra toàn app
+
+- Hoàn tất bước 2 của `ASTRYX-UI-0917`. Bảng token ở panel trái từ chỗ chỉ để xem nay chỉnh được, và chỉnh tới đâu toàn app đổi tới đó ngay lập tức.
+- **Cơ chế**: `useTheme` ghi 13 biến `--ux-*` lên `documentElement.style` + đặt `data-custom="1"`; khối CSS mới cuối `index.css` map các lớp Tailwind sang những biến đó.
+  - **Specificity là chỗ dễ sập nhất**: selector cố ý viết `html[data-custom="1"][data-theme]` để có (0,3,x), cao hơn mọi khối theme (0,2,x). Nếu chỉ dựa vào thứ tự file thì bản build production nạp CSS khác bản dev và lớp chỉnh tay sẽ thua im lặng.
+  - **Seed phải ĐẦY ĐỦ**: CSS map bằng `var(--ux-*)` không có giá trị dự phòng, thiếu một biến là nguyên khai báo đó vô hiệu → `createCustomization` luôn seed hết mọi trường từ theme đang dùng chứ không để trống phần nào.
+- **Chỉnh được**: 7 màu (ô chọn màu + gõ hex), font (Inter/Figtree/hệ thống), cỡ chữ, bo góc, mật độ, thời lượng chuyển động — mỗi thứ đều có preset S/M/L/XL kèm ô số, đúng dạng điều khiển của theme editor Astryx.
+- **Ba giới hạn cố ý**:
+  - **Mật độ không đụng nút và ô nhập** — chỉ nới/thu padding khung chứa. Đổi padding của nút là đổi vùng chạm trên máy bán hàng.
+  - **Màu trạng thái nghiệp vụ không cho chỉnh** — lãi/lỗ/cảnh báo giữ nguyên nghĩa ở mọi theme.
+  - **Chỉ chỉnh được theme ĐANG DÙNG**; xem trước theme khác thì điều khiển bị khoá kèm nút "Áp dụng để chỉnh". Chỉnh token của theme chỉ-đang-xem sẽ không thấy tác dụng gì, rất dễ tưởng là hỏng.
+- **Chữ trên nền màu nhấn tự đảo** theo độ sáng (BT.601): chọn màu nhấn sáng thì chữ chuyển sang đen. Không có cái này thì chọn màu vàng là chữ trắng trên nền vàng — nút vẫn bấm được nên lỗi không lộ ra.
+- Chỉnh tay lưu **riêng cho từng theme** trong `localStorage` (`cfo-brain-theme-custom`), đổi theme là áp đúng bộ của theme đó.
+- **Verify thật trên browser** (restart server trước): đổi màu nhấn → `.bg-indigo-600` thật trong app computed ra `rgb(194,65,12)`; đặt bo góc 20px → `.rounded-xl` = 20px; cỡ chữ 16px → `.text-sm` = 16px (thắng được cả dòng `!important` ghim px trong `index.html`); mật độ 1.15 → `.p-4` = 18.4px trong khi **padding nút vẫn nguyên 8px 12px**; màu nhấn `#fde047` → `--ux-on-accent` tự thành `#111111`; tải lại trang vẫn giữ nguyên; bấm Khôi phục mặc định → `data-custom` mất, storage về `{}`, nút trở lại `rgb(27,27,27)`. Xem trước theme khác thì ô màu bị ẩn và ô số `disabled`. Không lỗi JS.
+- **8 test mới** (`tests/unit/themeCustomization.test.ts`), tổng **486 → 494**. Đã kiểm chứng test bắt được lỗi thật: đảo ngưỡng tương phản → 3 test fail; bỏ seed trường `density` → 2 test fail và `tsc` cũng bắt.
+- `tsc` sạch, `eslint` 0 error.
+- **CHƯA deploy** — iMac ping được nhưng SSH port 22 Connection refused, Remote Login đang tắt. Đã kiểm thêm: mọi cổng vào đều đóng (SMB 445, AFP 548, VNC 5900), không có bản ghi DNS cho SSH qua Cloudflare Tunnel, và tailnet Tailscale chỉ có mỗi MacBook — iMac không có trong đó.
+- Files: `constants/themes.ts`, `hooks/useTheme.ts`, `index.css`, `App.tsx`, `components/settings/SettingsCenter.tsx`, `components/settings/tabs/AppearanceTab.tsx`, `tests/unit/themeCustomization.test.ts`.
+
 ### 2026-09-17 — Dựng lại trang Cài đặt giao diện theo Astryx (Meta) + theme Astryx Neutral
 
 - User muốn trang Cài đặt giao diện giống thiết kế của `astryx.atmeta.com` và dùng nó để chỉnh giao diện toàn app. Đây là **bước 1/2** đã thống nhất trước khi code.

@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-IMAC="mac@192.168.1.2"
+IMAC="mac@${CFOBRAIN_IMAC_HOST:-imac-ca-mac}"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 DEV_DOCKER_DIR="$HOME/supabase-dev/docker"
 BACKUP_DIR="$HOME/backups/cfobrain"

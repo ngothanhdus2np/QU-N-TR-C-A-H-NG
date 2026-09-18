@@ -16,7 +16,7 @@
 set -e
 
 IMAC_USER="mac"
-IMAC_IP="192.168.1.2"
+IMAC_HOST="${CFOBRAIN_IMAC_HOST:-imac-ca-mac}"
 SSH_KEY="$HOME/.ssh/imac_deploy"
 
 echo "⚠️  Script này sẽ GHI ĐÈ toàn bộ dữ liệu hiện có trên DEV/STAGING (supabase-db-dev"
@@ -29,7 +29,7 @@ if [ "$CONFIRM" != "yes" ]; then
 fi
 
 echo "📦 Đang dump dữ liệu từ PROD (chỉ đọc, không ảnh hưởng prod)..."
-ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_IP" bash <<'REMOTE'
+ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_HOST" bash <<'REMOTE'
 set -e
 export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
 DUMP_FILE="/tmp/prod_to_staging_$(date +%Y%m%d%H%M%S).sql"
@@ -39,7 +39,7 @@ echo "✅ Dump xong: $(du -h "$DUMP_FILE" | cut -f1)"
 REMOTE
 
 echo "📥 Đang restore vào DEV/STAGING (supabase-db-dev)..."
-ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_IP" bash <<'REMOTE'
+ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_HOST" bash <<'REMOTE'
 set -e
 export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
 DUMP_FILE=$(cat /tmp/cfobrain_staging_sync_dumpfile.txt)
@@ -52,7 +52,7 @@ rm -f "$DUMP_FILE"
 REMOTE
 
 echo "🔍 Verify số dòng khớp giữa prod và dev/staging..."
-ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_IP" bash <<'REMOTE'
+ssh -i "$SSH_KEY" "$IMAC_USER@$IMAC_HOST" bash <<'REMOTE'
 export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
 echo "table | prod | dev/staging"
 for t in pos_orders customers shopee_inventory_out revenue_records audit_logs; do
