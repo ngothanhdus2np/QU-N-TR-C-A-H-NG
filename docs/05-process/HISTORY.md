@@ -3,6 +3,14 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-09-29 — Deploy PROD: bản đầu tiên sau hơn một tháng, gỡ 2 lỗi đang âm thầm gây hại
+
+- Deploy prod theo yêu cầu user (đã xác nhận trước khi chạy, đúng quy trình). Trước khi bấm có đo: 11:12 thứ Ba, **prod hôm nay mới 0 đơn** nên rủi ro thấp; bản đang chạy trên prod là build **23/08** — cũ hơn một tháng.
+- **Migration 043 chạy thành công** — xác nhận sau deploy: `information_schema.columns` trên DB prod nay **CÓ** cột `discount_percent`. Đây là mấu chốt: từ 25/06 cột này chưa bao giờ tới được prod, nên nhân viên đặt giảm giá % là mất trắng, im lặng, không báo lỗi. Thứ tự Bước 1.6 (migration) → Bước 2 (build) của `deploy-imac.sh` đã làm đúng việc của nó.
+- **Verify sau deploy**: `app.phucsang.com.vn` 200, `cfobrain.phucsang.com.vn` 200, `/health` OK, app còn đúng 1 tiến trình trong launchd. CSS đã build có **85 selector `data-theme=astryx`** + **59 selector token chỉnh tay**, `index.html` có Figtree, build lúc 11:16. `POST /api/brand/logo` trả **401** (đã mount, có gác) thay vì 404. R2 trên prod đủ **5/5 biến**. Không có lỗi runtime mới trong log.
+- **Nội dung bản này lên prod**: vá giảm giá % (043 + code), trang Cài đặt giao diện mới + theme Astryx + token chỉnh tay, logo chuyển sang R2, script deploy bỏ IP cứng dùng hostname Tailscale, bộ backup off-site.
+- **Chưa nghiệm thu logo bằng ảnh thật** — cố ý để user tự tải logo lên, vừa là phép thử đúng nhất vừa tránh ghi object rác vào R2 của cửa hàng.
+
 ### 2026-09-19 — Logo báo lỗi: truy ra Storage chết toàn bộ, gỡ logo sang Cloudflare R2
 
 - User hỏi vì sao logo trong Cài đặt cửa hàng báo lỗi. Đào ra thì **toàn bộ Supabase Storage đang chết ở cả dev lẫn prod**, không riêng logo.
