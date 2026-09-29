@@ -4,7 +4,7 @@ import {
   UploadCloud, MessageSquare, Users, Loader2, Sparkles
 } from 'lucide-react';
 import { BrandProfile } from '../../types';
-import { uploadImage } from '../../services/marketingStorageService';
+import { authedRequest } from '../../services/apiRequest';
 
 interface BrandManagerProps {
   brandProfile: BrandProfile;
@@ -28,22 +28,35 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brandProfile, onUpdate }) =
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
         
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            // Add timestamp to filename to bypass cache and ensure uniqueness
-            const timestamp = Date.now();
-            const fileName = `logo_${timestamp}_${file.name}`;
-            const publicUrl = await uploadImage('brand-assets', 'images', fileName, blob);
-            if (publicUrl) {
-              callback(publicUrl);
-            } else {
-              alert("Lỗi tải ảnh lên Cloud!");
-            }
-            setLoading(false);
-          }
-        }, 'image/jpeg', 0.7); // Reduced quality from 0.8 to 0.7 for better compression
+        // Đi qua backend lên R2 giống hệt logo ở Cài đặt cửa hàng — Supabase Storage
+        // tự host đang hỏng cả dev lẫn prod (xattr, xem STORAGE-XATTR-0918).
+        const dataBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        try {
+          const { url } = await authedRequest<{ url: string }>('/api/brand/logo', {
+            method: 'POST',
+            body: JSON.stringify({
+              filename: `logo_${file.name}`,
+              contentType: 'image/jpeg',
+              dataBase64,
+            }),
+          });
+          callback(url);
+        } catch (error) {
+          alert((error as Error).message || 'Lỗi tải ảnh lên Cloud!');
+        } finally {
+          setLoading(false);
+        }
+      };
+      // Không có onerror thì ảnh hỏng/định dạng lạ (vd HEIC) làm spinner quay mãi.
+      img.onerror = () => {
+        alert('Không đọc được tệp ảnh này. Thử lại với JPG hoặc PNG.');
+        setLoading(false);
       };
       img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      alert('Không đọc được tệp.');
+      setLoading(false);
     };
     reader.readAsDataURL(file);
   };

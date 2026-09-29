@@ -46,6 +46,7 @@ import { createImportRouter } from './routes/import';
 import { createNotificationsRouter, runNotificationScheduler } from './routes/notifications';
 import { createStoreRouter } from './routes/store';
 import { createAdminStoreRouter } from './routes/adminStore';
+import { createBrandAssetsRouter } from './routes/brandAssets';
 import { createShopeeProductsCrudRouter } from './routes/shopeeProductsCrud';
 import { createShopeeSyncRouter } from './routes/shopeeSync';
 import { createInventoryOutSyncRouter, runInventoryOutSync } from './routes/inventoryOutSync';
@@ -609,6 +610,7 @@ async function startServer() {
     app.use(createNotificationsRouter(supabase, requireAuth));
     app.use(createImportRouter(supabase, requireAuth));
     app.use(createFactoryResetRouter(supabase, requireAuth));
+    app.use(createBrandAssetsRouter(supabase, requireAuth));
     app.use(createStoreRouter(supabase));
     app.use(createAdminStoreRouter(supabase, requireAuth));
     app.use(createShopeeProductsCrudRouter(supabase, requireAuth));

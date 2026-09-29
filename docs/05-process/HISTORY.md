@@ -3,6 +3,40 @@
 > Chỉ ghi việc đã **hoàn thành**. Không ghi kế hoạch, không ghi TODO.
 > Agent cuối ca → thêm phiên mới lên **đầu file**.
 
+### 2026-09-19 — Logo báo lỗi: truy ra Storage chết toàn bộ, gỡ logo sang Cloudflare R2
+
+- User hỏi vì sao logo trong Cài đặt cửa hàng báo lỗi. Đào ra thì **toàn bộ Supabase Storage đang chết ở cả dev lẫn prod**, không riêng logo.
+- **Hai lỗi chồng nhau**: (1) ảnh cũ trả 500 `ENOENT` — dòng trong `storage.objects` còn nhưng file thật mất sạch (đếm thực tế: volume có **0 file**); (2) upload mới cũng 500 — đã test thật bằng service role key ngay trên iMac: `The file system does not support extended attributes or has the feature disabled`. Nghĩa là **không thể sửa bằng cách tải lại logo**.
+- **Nguyên nhân gốc**: volume storage là bind-mount từ macOS vào container Linux; lớp chia sẻ file của Docker Desktop không hỗ trợ extended attributes mà `FileBackend` bắt buộc cần. Cùng họ với bẫy bind-mount PGDATA đã gặp.
+- **Phát hiện đổi cục diện**: repo **đã có sẵn** `services/r2.ts` (Cloudflare R2 qua S3 API) và **prod đã cấu hình đủ 5 biến R2_***, đang dùng thật ở `routes/adminStore.ts` cho ảnh sản phẩm website — đó là lý do ảnh sản phẩm KHÔNG bị ảnh hưởng. Chỉ những đường còn đi qua Supabase Storage mới chết.
+- **Chọn phương án c1** (đưa logo sang R2) thay vì c2 (đổi backend của chính Storage sang S3): c1 sao lại khuôn đã chạy ổn định nhiều tháng trên prod, không đụng Docker, không restart gì; c2 gọn hơn về lý thuyết nhưng chưa ai kiểm chứng `storage-api` của Supabase chạy trơn với R2 — không đáng thử trên prod của cửa hàng đang bán hàng.
+- Thêm `routes/brandAssets.ts` (`POST /api/brand/logo`, sau `requireAuth`), tách `authedRequest` ra `services/apiRequest.ts` để không nhân đôi phần gắn token.
+- **Sửa 2 màn hình** cùng dính: `SettingsCenter.tsx` và `BrandManager.tsx` — bản thứ hai là mã sao chép gần như y hệt; sửa một chỗ bỏ chỗ kia thì user vẫn gặp lại lỗi từ màn hình khác.
+- **Vá kèm lỗi kẹt spinner vô hạn** ở cả hai: thiếu `img.onerror` nên ảnh hỏng/định dạng lạ (HEIC) làm vòng xoay quay mãi, không báo gì.
+- **7 test HTTP thật** — repo trước nay chỉ có test khớp chuỗi mã nguồn cho route; lần này dựng express server và gọi HTTP thật bằng `express` sẵn có, không thêm gói. Tổng **494 → 501**.
+- **Test bắt lỗi ngay khi viết**: bộ lọc tên tệp giữ lại `..`. Không phải traversal (key R2 là chuỗi opaque), nhưng đường xoá ảnh ở `adminStore.ts` từ chối mọi path chứa `..` ⇒ tạo ra object **không bao giờ xoá được** bằng giao diện. Đã thêm bước thu gọn chuỗi dấu chấm.
+- Kiểm chứng test cắn: bỏ `requireAuth`, nới giới hạn 5MB, bỏ kiểm tra contentType — mỗi cái đúng 1 test fail.
+- `tsc` sạch, `eslint` 0 error, `npm test` 501/501. Deploy dev xong: `POST /api/brand/logo` trả 401 (đã mount, có gác) thay vì 404. Prod HTTP 200, không đụng.
+- Files: `routes/brandAssets.ts`, `services/apiRequest.ts`, `services/adminStoreApi.ts`, `components/settings/SettingsCenter.tsx`, `components/marketing/BrandManager.tsx`, `server.ts`, `tests/unit/brandAssetsRoute.test.ts`.
+
+### 2026-09-18 (2) — Backup off-site: phát hiện 60 ngày không chạy, hẹn giờ lại và thêm cảnh báo
+
+- User hỏi "backup off-site có chạy đều không". Trả lời: **không**, và hỏng ở hai tầng độc lập.
+- **Tầng 1 — bản off-site đứng yên từ 20/07, đúng 60 ngày**: file mới nhất trên MacBook là `db-20260720-145130.sql.gz`. Nguyên nhân: **không có LaunchAgent, không cron, không gì cả**. `backup-pull-offsite.sh` viết từ 20/07, trong comment của chính nó ghi "có thể hẹn giờ bằng launchd" — nhưng plist chưa bao giờ được tạo. `BACKUP_RUNBOOK.md` mục 3 cũng ghi là "(Tuỳ chọn)". Script có sẵn mà không ai gọi thì cũng như không có.
+- **Tầng 2 — backup trên chính iMac thủng 18 ngày**: có file 25→29/08, mất hẳn 30/08→16/09, 17/09 mới có lại. `launchctl print` cho `runs = 2` kể từ lần boot gần nhất. Cùng nguyên nhân `REBOOT-RECOVERY-0918`: job nằm trong gui domain.
+- **Mức độ**: nếu ổ iMac hỏng hôm trước, bản sao duy nhất ngoài iMac là từ 20/07 — mất gần 2 tháng dữ liệu của DB đang có 70.524 đơn hàng.
+- **Xử lý ngay**: chạy tay `backup-pull-offsite.sh` → MacBook có 17 bản, mới nhất 18/09.
+- **Xử lý gốc**: thêm `com.cfobrain.backup-pull.plist` (LaunchAgent MacBook, chu kỳ 6 tiếng + `RunAtLoad`), `backup-offsite-job.sh` (kéo → kiểm tra), `backup-check-offsite.sh` (quá 3 ngày thì kêu).
+  - **Chu kỳ thay vì mốc giờ cố định**: MacBook hay ngủ, trượt mốc là mất luôn ngày đó.
+  - **Bước kiểm tra chạy kể cả khi bước kéo thất bại** — iMac không tới được nhiều ngày chính là ca cần báo nhất.
+  - **Kênh báo là thông báo macOS, không phải Zalo**: phát hiện `ZALO_OA_ACCESS_TOKEN` trong `.env.local` **vẫn TRỐNG**, nghĩa là `health-alert.sh` chạy từ tháng 7 tới nay **chưa từng báo được cho ai** — `send_zalo()` chỉ ghi log rồi thôi. Cảnh báo mới mà chỉ dựa vào Zalo là lặp lại đúng cái im lặng đó.
+  - **Tuổi tính theo tên file** `db-YYYYMMDD-HHMMSS` chứ không theo mtime, để bản bị chép lại không làm sai phép đo. Kiểm chứng bằng cách `touch` một file tên cũ: vẫn ra đúng 60 ngày.
+  - **Một phép đo bắt cả hai tầng**: off-site là bản sao của bản iMac nên tầng nào đứt, tuổi file cũng tăng như nhau.
+- Đã cài và nạp thật (`launchctl bootstrap`), chạy lần đầu thành công. Kiểm chứng 4 ca: mới → im; cũ 60 ngày → báo; gọi lại ngay → im (chống spam 12h); thư mục rỗng → báo.
+- Viết lại `BACKUP_RUNBOOK.md` mục 3 từ "(Tuỳ chọn)" thành **BẮT BUỘC** — chính chữ đó là lý do việc này bị bỏ quên.
+- **Phát hiện kèm, chưa xử lý**: `REBOOT-RECOVERY-0918` — FileVault đang bật (cấm tự đăng nhập) + cả 5 service nằm trong gui domain ⇒ mất điện là prod nằm im tới khi có người tới gõ mật khẩu. Đã trình bày 3 hướng cho user chọn.
+- Files: `scripts/com.cfobrain.backup-pull.plist`, `scripts/backup-offsite-job.sh`, `scripts/backup-check-offsite.sh`, `docs/03-deployment/BACKUP_RUNBOOK.md`, `docs/05-process/TODO.md`.
+
 ### 2026-09-18 — Tìm lại iMac sau khi đổi subnet, bỏ IP cứng trong script, deploy dev
 
 - **Nguyên nhân thật sự khiến deploy chết suốt từ 30/08**: iMac không hề offline — nó **đổi hẳn subnet** từ `192.168.1.x` sang `192.168.88.x` (nhà đổi thiết bị mạng, gateway tên `vnpt`). `192.168.1.2` vẫn ping được vì **thiết bị khác đã chiếm IP đó**, nên mọi lần kiểm tra trước đây đều kết luận nhầm là "iMac online nhưng SSH tắt".

@@ -7,6 +7,69 @@
 
 ## 🔴 P0 — Ưu tiên cao (làm trước)
 
+### [~] 🔴 STORAGE-XATTR-0918 — Supabase Storage hỏng hoàn toàn trên CẢ dev lẫn prod *(logo đã gỡ sang R2 19/09; VAT + tri thức còn treo)*
+
+> **Phát hiện 2026-09-18** khi user hỏi vì sao logo trong Cài đặt cửa hàng báo lỗi. Đào ra thì vấn đề lớn hơn cái logo nhiều — **toàn bộ Storage đang chết ở cả hai môi trường**.
+> **Triệu chứng 1 — ảnh cũ trả HTTP 500**: `GET /storage/v1/object/public/images/brand-assets/*.jpg` → 500. Log storage:
+> `ENOENT: no such file or directory, stat '/var/lib/storage/stub/stub/images/brand-assets/<tên>/<uuid>'`
+> Nghĩa là **dòng trong `storage.objects` còn, nhưng FILE THẬT trên đĩa đã mất**. Đếm thực tế: `~/supabase/docker/volumes/storage` và bản dev đều có **0 file**. App vẫn dựng thẻ `<img src>` từ DB nên hiện ra ảnh vỡ.
+> **Triệu chứng 2 — upload mới cũng hỏng (quan trọng hơn)**: đã test thật bằng service role key ngay trên iMac →
+> `HTTP 500 {"message":"The file system does not support extended attributes or has the feature disabled."}`
+> ⇒ **KHÔNG thể sửa bằng cách tải lại logo**. Mọi ảnh sản phẩm, hóa đơn VAT, file tri thức tải lên từ nay đều fail.
+> **Nguyên nhân gốc**: volume storage là **bind-mount từ macOS** vào container Linux (`/Users/mac/supabase/docker/volumes/storage => /var/lib/storage`). Lớp chia sẻ file của Docker Desktop **không hỗ trợ extended attributes**, mà `FileBackend` của Supabase Storage bắt buộc cần. Cùng họ với bẫy bind-mount PGDATA đã gặp trước đây.
+> **Thiệt hại đã xảy ra**: 9 object mất file ở mỗi môi trường — 4 logo (`images/brand-assets`), 4 `vat-documents`, 1 `knowledge-files`. Không khôi phục được vì backup chỉ dump DB, **không sao lưu file storage**.
+> **Hướng sửa (chưa làm, chờ user duyệt vì đụng prod)**:
+> (a) **Khuyến nghị** — đổi sang **named Docker volume** cho storage (nằm trong ext4 của Docker VM ⇒ có xattr). File cũ đã mất sẵn nên không phải di trú gì. Sửa `docker-compose.yml` + restart container storage.
+> (b) Đổi cơ chế chia sẻ file của Docker Desktop sang VirtioFS — nhẹ hơn nhưng không chắc xattr có được hỗ trợ.
+> (c) Chuyển sang backend S3 (repo đã có sẵn `@aws-sdk/client-s3`) — nặng nhất, nhưng hết phụ thuộc đĩa cục bộ.
+> **Dọn kèm khi sửa**: xoá 9 dòng mồ côi trong `storage.objects` và set `brand_profile.logo = NULL`, để UI hiện ô tải lên thay vì ảnh vỡ.
+> **ĐÃ LÀM 2026-09-19 — phương án c1 (logo đi qua R2)**:
+> - `routes/brandAssets.ts` — `POST /api/brand/logo`, nằm sau `requireAuth`, đẩy lên R2 với key `brand-assets/<ts>-<tên>`. Sao đúng khuôn `routes/adminStore.ts` đã chạy ổn định nhiều tháng trên prod.
+> - `services/apiRequest.ts` — tách `authedRequest` ra khỏi `adminStoreRequest` để hai nơi dùng chung một cách gắn token thay vì nhân đôi.
+> - Sửa **2 màn hình** cùng dính lỗi: `SettingsCenter.tsx` (Cài đặt cửa hàng) và `BrandManager.tsx` (Marketing) — bản thứ hai là mã gần như sao chép y hệt, sửa một chỗ mà bỏ chỗ kia thì user vẫn gặp lại lỗi từ màn hình khác.
+> - **Vá kèm lỗi kẹt spinner vô hạn**: cả hai hàm đều thiếu `img.onerror`, nên ảnh hỏng hoặc định dạng lạ (vd HEIC từ iPhone) làm vòng xoay quay mãi, không báo gì.
+> - **7 test HTTP thật** (`tests/unit/brandAssetsRoute.test.ts`) — dựng express server và gọi HTTP, không khớp chuỗi mã nguồn. Repo trước đây chưa có khung test HTTP nào; dùng `express` sẵn có, không thêm gói. Tổng 494 → **501**.
+> - **Test bắt được lỗi thật ngay khi viết**: bộ lọc tên tệp giữ lại `..` (vd `../../etc/passwd` → key chứa `..`). Không phải lỗ hổng traversal vì key R2 là chuỗi opaque, NHƯNG đường xoá ảnh ở `adminStore.ts` từ chối mọi path chứa `..` ⇒ object đó sẽ **không bao giờ xoá được** bằng giao diện. Đã thêm bước thu gọn chuỗi dấu chấm.
+> - Kiểm chứng test cắn: bỏ `requireAuth` → 1 fail; nới giới hạn 5MB → 1 fail; bỏ kiểm tra contentType → 1 fail.
+> - Đã deploy dev, `POST /api/brand/logo` trả **401** (mounted + có gác) thay vì 404. Prod chưa đụng.
+> **CÒN LẠI**:
+> - **Dev chưa cấu hình R2** ⇒ trên dev logo vẫn lỗi, nhưng nay báo đúng nguyên nhân thay vì im lặng. Cần user quyết: dùng chung bucket prod với prefix riêng, hay tạo bucket R2 riêng cho dev.
+> - **Prod chưa deploy** — cần user yêu cầu riêng.
+> - `vat-documents` và `knowledge-files` vẫn đi qua Supabase Storage nên vẫn hỏng. `MarketingManager.tsx` và `SourceDetailPage.tsx` cũng còn dùng `uploadImage()` cũ.
+> **Việc cần làm riêng**: `backup-db.sh` hiện **không sao lưu thư mục storage** — nên dù sửa xong, lần mất file sau vẫn không có gì để khôi phục.
+
+### [x] 🔴 BACKUP-OFFSITE-0918 — Backup off-site CHƯA TỪNG được hẹn giờ: 60 ngày không có bản nào ngoài iMac *(xong 2026-09-18)*
+
+> **Phát hiện 2026-09-18.** User hỏi "backup off-site có chạy đều không" — câu trả lời là **không**, và hỏng ở hai tầng độc lập.
+> **Tầng 1 — bản off-site trên MacBook đứng yên từ 20/07 (60 ngày)**: file mới nhất là `db-20260720-145130.sql.gz`. Lý do: **không có LaunchAgent, không có cron, không có gì hẹn giờ cả**. `scripts/backup-pull-offsite.sh` viết xong từ 20/07 và trong chính comment của nó có ghi "có thể hẹn giờ bằng launchd (`com.cfobrain.backup-pull.plist`)" — nhưng plist đó **chưa bao giờ được tạo**. Script chỉ chạy đúng 1 lần lúc viết ra.
+> **Tầng 2 — backup trên chính iMac thủng 18 ngày**: có file ngày 25→29/08, rồi **mất hẳn 30/08 → 16/09**, đến 17/09 mới có lại. `launchctl print com.cfobrain.backup` cho thấy `runs = 2` kể từ lần khởi động gần nhất (máy mới up 2 ngày). Cùng nguyên nhân với `REBOOT-RECOVERY-0918`: job nằm trong gui domain nên máy khởi động lại mà không ai đăng nhập là không chạy. **Không ai phát hiện suốt 18 ngày.**
+> **Mức độ nguy hiểm**: nếu ổ iMac hỏng hôm qua, bản sao duy nhất nằm ngoài iMac là **từ 20/07** — mất gần 2 tháng dữ liệu kinh doanh của một DB đang có 70.524 đơn hàng.
+> **ĐÃ XỬ LÝ TẠM 2026-09-18**: chạy tay `backup-pull-offsite.sh` → MacBook giờ có 17 bản, mới nhất `db-20260918-023000.sql.gz`. Lỗ hổng cấp bách đã bịt.
+> **ĐÃ XONG 2026-09-18 (mục 1 + 2)**:
+> - `scripts/com.cfobrain.backup-pull.plist` — LaunchAgent trên MacBook, chu kỳ **6 tiếng** + `RunAtLoad`. Cố ý KHÔNG dùng mốc giờ cố định: MacBook hay ngủ, trượt mốc là mất luôn ngày đó.
+> - `scripts/backup-offsite-job.sh` — kéo rồi kiểm tra. Bước kiểm tra chạy **kể cả khi bước kéo thất bại**, vì iMac không tới được nhiều ngày chính là trường hợp cần báo nhất.
+> - `scripts/backup-check-offsite.sh` — quá 3 ngày không có bản mới thì kêu lên. Kênh báo là **thông báo macOS** (+ Zalo nếu có), CỐ Ý không phụ thuộc mỗi Zalo: token Zalo trong `.env.local` vẫn TRỐNG, nên `health-alert.sh` chạy bao lâu nay chưa từng báo được cho ai — cảnh báo mới mà chỉ dựa vào Zalo thì lại im lặng y như cũ.
+> - Tuổi backup tính theo **tên file** (`db-YYYYMMDD-HHMMSS`) chứ không theo mtime, để file bị chép lại về sau không làm sai phép đo.
+> - Một phép đo bắt được **cả hai tầng hỏng**: bản off-site là bản sao của bản iMac, nên tầng nào đứt thì tuổi file cũng tăng như nhau.
+> - Đã cài và nạp thật trên MacBook (`launchctl list` thấy `com.cfobrain.backup-pull`), chạy ngay lần đầu thành công. Kiểm chứng 4 tình huống: backup mới → im; cũ 60 ngày → cảnh báo; gọi lại ngay → im (chống spam 12h); thư mục rỗng → cảnh báo.
+> - Viết lại mục 3 `BACKUP_RUNBOOK.md` từ "khuyến nghị mạnh / tuỳ chọn" thành **BẮT BUỘC** — chính chữ "tuỳ chọn" là lý do việc này bị bỏ quên 60 ngày.
+> **CÒN LẠI**: các bản 30/08→16/09 **mất vĩnh viễn**, không tạo lại được (dữ liệu hiện tại vẫn nguyên, chỉ thiếu ảnh chụp của những ngày đó). Tầng backup trên iMac vẫn có thể đứt lại nếu máy khởi động mà không ai đăng nhập — xem `REBOOT-RECOVERY-0918`.
+> **Lưu ý thiết kế**: bản pull vốn là best-effort (chỉ chạy khi MacBook bật và iMac tới được), nên nó KHÔNG thay thế được việc backup trên iMac phải chạy đều.
+
+### [ ] 🔴 REBOOT-RECOVERY-0918 — iMac KHÔNG tự phục hồi sau mất điện: prod nằm im tới khi có người tới gõ mật khẩu
+
+> **Phát hiện 2026-09-18** khi kiểm tra Tailscale. Đây là rủi ro vận hành lớn nhất hiện nay, và nhiều khả năng là nguyên nhân các lần "sập cả dev lẫn prod" trong lịch sử.
+> **Sự thật đo được trên iMac**:
+> - `fdesetup status` → **FileVault is On** ⇒ macOS **cấm** bật tự đăng nhập. Sau khi khởi động, đĩa phải được mở khóa bằng mật khẩu ngay tại màn hình đăng nhập.
+> - Cả **5 service** (`com.cfobrain.app` ← PROD, `app.dev`, `cloudflared`, `backup`, `health`) đều nằm trong **gui domain** (`launchctl ... gui/$(id -u)`) ⇒ chỉ chạy khi có người đăng nhập vào màn hình.
+> **Hệ quả**: mất điện hoặc máy tự khởi động lại sau cập nhật ⇒ **toàn bộ hệ thống nằm im**, không có cách nào bật từ xa, phải có người tới tận nơi gõ mật khẩu FileVault rồi đăng nhập.
+> **Lưu ý quan trọng**: chuyển service sang LaunchDaemon cấp hệ thống **KHÔNG giải quyết triệt để** — vì còn FileVault thì đĩa chưa mở khóa, chưa có gì chạy được. Nó chỉ bỏ được bước "phải đăng nhập desktop" sau khi đã mở khóa.
+> **Ba hướng, cần user quyết vì là đánh đổi bảo mật ↔ thời gian chết**:
+> (a) **Giữ nguyên** — chấp nhận phải có người tới. Rẻ nhất, nhưng cửa hàng đứng máy cho tới lúc đó.
+> (b) **Mua UPS** — sống sót qua mất điện chớp nhoáng (nguyên nhân phổ biến nhất). Không cứu được lần mất điện dài.
+> (c) **Tắt FileVault + bật tự đăng nhập** — máy tự hồi phục hoàn toàn, nhưng **đĩa chứa DB tài chính và dữ liệu khách hàng sẽ không mã hóa**; máy đặt ở cửa hàng nên mất máy là mất sạch dữ liệu.
+> Gợi ý của agent: (b) trước, vì nó xử lý được nguyên nhân hay gặp nhất mà không phải đánh đổi bảo mật. Cân nhắc (c) chỉ khi chấp nhận được rủi ro mất máy.
+
 ### [x] 🟡 ASTRYX-UI-0917 — Trang Cài đặt giao diện theo Astryx *(bước 1 + 2 xong 2026-09-17, deploy dev 2026-09-18)*
 
 > **Bước 1 — XONG**: dựng lại `AppearanceTab.tsx` thành studio 2 cột theo bố cục theme editor của `astryx.atmeta.com` + thêm theme `astryx` (token lấy nguyên từ `@astryxdesign/theme-neutral@0.6.2`). Chi tiết HISTORY.md 2026-09-17.

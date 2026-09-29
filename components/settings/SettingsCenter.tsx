@@ -53,7 +53,7 @@ import {
   DEFAULT_POS_INVENTORY_SETTINGS,
   normalizePOSPaymentSettings,
 } from '../../constants/defaultData';
-import { uploadImage } from '../../services/marketingStorageService';
+import { authedRequest } from '../../services/apiRequest';
 import { apiService } from '../../services/apiService';
 import { useToast } from '../ui/Toast';
 import type {
@@ -784,29 +784,38 @@ const SettingsCenter: React.FC<SettingsCenterProps> = ({
         canvas.height = height;
         canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
 
-        canvas.toBlob(
-          async blob => {
-            if (!blob) {
-              setLogoUploading(false);
-              return;
-            }
-            const publicUrl = await uploadImage(
-              'brand-assets',
-              'images',
-              `logo_${Date.now()}_${file.name}`,
-              blob
-            );
-            if (publicUrl) onUpdateBrand({ ...brandProfile, logo: publicUrl });
-            else showToast('Lỗi tải ảnh lên Cloud!', 'error');
-            setLogoUploading(false);
-          },
-          'image/jpeg',
-          0.7
-        );
+        // Gửi qua backend thay vì ghi thẳng vào Supabase Storage: Storage tự host đang
+        // hỏng ở cả dev lẫn prod (xattr — xem STORAGE-XATTR-0918), còn khóa R2 chỉ có
+        // ở server-side. Route này đi cùng đường với ảnh sản phẩm website đã chạy ổn.
+        const dataBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        try {
+          const { url } = await authedRequest<{ url: string }>('/api/brand/logo', {
+            method: 'POST',
+            body: JSON.stringify({
+              filename: `logo_${file.name}`,
+              contentType: 'image/jpeg',
+              dataBase64,
+            }),
+          });
+          onUpdateBrand({ ...brandProfile, logo: url });
+        } catch (error) {
+          showToast((error as Error).message || 'Lỗi tải logo lên!', 'error');
+        } finally {
+          setLogoUploading(false);
+        }
+      };
+      // Thiếu onerror thì ảnh hỏng/định dạng lạ (vd HEIC từ iPhone) sẽ không bao giờ
+      // kích hoạt onload — spinner quay mãi, không báo gì, người dùng tưởng treo máy.
+      img.onerror = () => {
+        showToast('Không đọc được tệp ảnh này. Thử lại với JPG hoặc PNG.', 'error');
+        setLogoUploading(false);
       };
       img.src = e.target?.result as string;
     };
-    reader.onerror = () => setLogoUploading(false);
+    reader.onerror = () => {
+      showToast('Không đọc được tệp.', 'error');
+      setLogoUploading(false);
+    };
     reader.readAsDataURL(file);
   };
 
