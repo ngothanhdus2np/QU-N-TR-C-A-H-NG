@@ -46,19 +46,47 @@ launchctl list | grep com.cfobrain.backup
 
 ---
 
-## 3. Cài đặt off-site trên MACBOOK (khuyến nghị mạnh)
+## 3. Cài đặt off-site trên MACBOOK (BẮT BUỘC — không phải tuỳ chọn)
+
+> ⚠️ Mục này trước đây ghi là "tuỳ chọn" và hậu quả là **bản off-site đứng yên từ 20/07 đến
+> 18/09/2026 — 60 ngày — mà không ai biết**. Script `backup-pull-offsite.sh` đã có từ 20/07
+> nhưng chưa bao giờ được hẹn giờ. Script không ai gọi thì cũng như không tồn tại.
+> Đã sửa 18/09/2026: có plist sẵn trong repo và có cảnh báo khi backup quá cũ.
 
 ```bash
-# Chạy thử: kéo bản mới nhất từ iMac về ~/backups/cfobrain/ trên MacBook
-bash ~/"phucsang app/QU-N-TR-C-A-H-NG"/scripts/backup-pull-offsite.sh
+cd ~/"phucsang app/QU-N-TR-C-A-H-NG"
 
-# (Tuỳ chọn) hẹn giờ hằng ngày trên MacBook — vd 09:00 sáng khi MacBook thường đã bật.
-# Tạo ~/Library/LaunchAgents/com.cfobrain.backup-pull.plist trỏ tới script trên,
-# StartCalendarInterval Hour=9. Máy tắt lúc 09:00 thì launchd chạy bù khi bật lại.
+# 1. Chạy thử bằng tay (chỉ ĐỌC từ iMac, không ghi gì lên đó)
+bash scripts/backup-offsite-job.sh
+
+# 2. Cài lịch tự động
+cp scripts/com.cfobrain.backup-pull.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cfobrain.backup-pull.plist
+
+# 3. Xác nhận đã nạp
+launchctl list | grep cfobrain        # kỳ vọng: com.cfobrain.backup-pull
+tail -12 /tmp/cfobrain-backup-pull.log
 ```
 
-MacBook không phải lúc nào cũng bật → coi đây là bản off-site **best-effort**. Bản chính (đều đặn)
-vẫn là bản trên iMac. Muốn off-site chắc chắn hơn nữa → thêm cloud (xem mục 6).
+**Job này làm hai việc mỗi 6 tiếng** (và ngay khi máy bật):
+
+| Script | Việc |
+|---|---|
+| `backup-pull-offsite.sh` | Kéo bản mới từ iMac về `~/backups/cfobrain/` (giữ 30 bản) |
+| `backup-check-offsite.sh` | Đo tuổi bản mới nhất; quá 3 ngày → **thông báo macOS** (+ Zalo nếu đã cấu hình) |
+
+**Vì sao chu kỳ 6 tiếng chứ không phải một mốc giờ cố định**: MacBook hay ngủ/tắt, trượt mốc là
+mất luôn ngày đó. Chu kỳ + `RunAtLoad` nghĩa là máy thức lúc nào thì bắt kịp lúc đó.
+
+**Vì sao cảnh báo dùng thông báo macOS chứ không chỉ Zalo**: tính tới 18/09/2026 token Zalo trong
+`.env.local` vẫn **trống**, nên `health-alert.sh` chạy bao lâu nay mà chưa từng báo được cho ai.
+Cảnh báo nào chỉ dựa vào Zalo là lại im lặng y như cũ.
+
+**Một phép đo bắt được cả hai tầng hỏng**: bản off-site là bản sao của bản trên iMac, nên job
+backup trên iMac chết hay bản kéo chết thì tuổi file mới nhất đều tăng lên như nhau.
+
+MacBook không phải lúc nào cũng bật → bản off-site vẫn là **best-effort**, KHÔNG thay thế được
+việc backup trên iMac phải chạy đều. Muốn chắc chắn hơn nữa → thêm cloud (xem mục 6).
 
 ---
 

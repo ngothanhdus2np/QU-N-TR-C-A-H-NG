@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job KÉO BACKUP OFF-SITE — CÀI TRÊN MACBOOK (user `apple`), KHÔNG phải iMac.
+  Chạy scripts/backup-offsite-job.sh: kéo bản backup mới từ iMac về, rồi kêu lên
+  nếu bản mới nhất đã quá cũ.
+
+  Vì sao có file này: ngày 18/09/2026 phát hiện bản off-site đứng yên từ 20/07 —
+  60 ngày — vì backup-pull-offsite.sh viết ra từ 20/07 nhưng CHƯA BAO GIỜ được
+  hẹn giờ. Script có sẵn mà không có ai gọi thì cũng như không có.
+
+  Cài đặt:
+    cp scripts/com.cfobrain.backup-pull.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.cfobrain.backup-pull.plist
+
+  Sửa đường dẫn nếu repo KHÔNG ở "/Users/apple/phucsang app/QU-N-TR-C-A-H-NG".
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cfobrain.backup-pull</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/apple/phucsang app/QU-N-TR-C-A-H-NG/scripts/backup-offsite-job.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <!--
+    MacBook hay ngủ/tắt, nên KHÔNG dùng StartCalendarInterval một mốc giờ cố định
+    (trượt mốc là mất luôn ngày đó). Dùng chu kỳ 6 tiếng + chạy ngay khi nạp:
+    máy thức lúc nào là bắt kịp lúc đó. Bước kéo rất nhẹ — rsync --ignore-existing,
+    và tự thoát êm nếu iMac không tới được.
+  -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cfobrain-backup-pull.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cfobrain-backup-pull.log</string>
+</dict>
+</plist>
